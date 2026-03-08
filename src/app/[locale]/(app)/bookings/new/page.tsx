@@ -182,7 +182,7 @@ export default function NewBookingPage() {
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Status</label>
                             <select name="status" className={selectClass}>
-                                {["Pending", "DP", "Terjadwal", "Selesai", "Batal"].map(s => <option key={s} value={s}>{s}</option>)}
+                                {["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"].map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
                         <div className="col-span-full space-y-2">

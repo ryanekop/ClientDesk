@@ -14,7 +14,7 @@ const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border
 const selectClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 
 const EVENT_TYPES = ["Umum", "Wedding", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
-const STATUSES = ["Pending", "DP", "Terjadwal", "Selesai", "Batal"];
+const STATUSES = ["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"];
 
 const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: string; isLocation?: boolean }[]> = {
     Wisuda: [
