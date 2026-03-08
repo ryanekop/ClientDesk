@@ -3,10 +3,11 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
-import { ArrowLeft, MapPin, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
+import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -15,7 +16,7 @@ const selectClass = "placeholder:text-muted-foreground dark:bg-input/30 border-i
 const EVENT_TYPES = ["Umum", "Wedding", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 const STATUSES = ["Pending", "DP", "Terjadwal", "Selesai", "Batal"];
 
-const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: string }[]> = {
+const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: string; isLocation?: boolean }[]> = {
     Wisuda: [
         { key: "universitas", label: "Universitas", labelEn: "University" },
         { key: "fakultas", label: "Fakultas", labelEn: "Faculty" },
@@ -23,8 +24,8 @@ const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: st
     ],
     Wedding: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" },
-        { key: "tempat_akad", label: "Tempat Akad", labelEn: "Akad Venue" },
-        { key: "tempat_resepsi", label: "Tempat Resepsi", labelEn: "Reception Venue" },
+        { key: "tempat_akad", label: "Tempat Akad", labelEn: "Akad Venue", isLocation: true },
+        { key: "tempat_resepsi", label: "Tempat Resepsi", labelEn: "Reception Venue", isLocation: true },
     ],
     Maternity: [
         { key: "usia_kehamilan", label: "Usia Kehamilan", labelEn: "Pregnancy Age" },
@@ -181,14 +182,22 @@ export default function EditBookingPage() {
                     {currentExtraFields.length > 0 && (
                         <div className="grid gap-4 sm:grid-cols-2">
                             {currentExtraFields.map(f => (
-                                <div key={f.key} className="space-y-2">
+                                <div key={f.key} className={`space-y-2 ${f.isLocation ? "col-span-full" : ""}`}>
                                     <label className="text-sm font-medium">{locale === "id" ? f.label : f.labelEn}</label>
-                                    <input
-                                        placeholder={f.label}
-                                        value={extraFields[f.key] || ""}
-                                        onChange={e => setExtraFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                                        className={inputClass}
-                                    />
+                                    {f.isLocation ? (
+                                        <LocationAutocomplete
+                                            value={extraFields[f.key] || ""}
+                                            onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))}
+                                            placeholder={`Cari ${f.label.toLowerCase()}...`}
+                                        />
+                                    ) : (
+                                        <input
+                                            placeholder={f.label}
+                                            value={extraFields[f.key] || ""}
+                                            onChange={e => setExtraFields(prev => ({ ...prev, [f.key]: e.target.value }))}
+                                            className={inputClass}
+                                        />
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -210,13 +219,7 @@ export default function EditBookingPage() {
                         </div>
                         <div className="col-span-full space-y-2">
                             <label className="text-sm font-medium">Lokasi</label>
-                            <div className="flex gap-2">
-                                <input placeholder="Nama tempat atau alamat..." value={location} onChange={e => setLocation(e.target.value)} className={inputClass} />
-                                <Button type="button" variant="outline" size="icon" title="Buka di Google Maps"
-                                    onClick={() => location && window.open(`https://maps.google.com/maps?q=${encodeURIComponent(location)}`, "_blank")}>
-                                    <MapPin className="w-4 h-4" />
-                                </Button>
-                            </div>
+                            <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi sesi foto..." />
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Paket / Layanan</label>
