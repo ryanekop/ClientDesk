@@ -98,6 +98,7 @@ export default function NewBookingPage() {
     const [services, setServices] = React.useState<Service[]>([]);
     const [freelancers, setFreelancers] = React.useState<Freelance[]>([]);
 
+    const [clientName, setClientName] = React.useState("");
     const [eventType, setEventType] = React.useState("Umum");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
     const [location, setLocation] = React.useState("");
@@ -107,6 +108,10 @@ export default function NewBookingPage() {
     const [selectedFreelancerId, setSelectedFreelancerId] = React.useState("");
     const [countryCode, setCountryCode] = React.useState("+62");
     const [phoneNumber, setPhoneNumber] = React.useState("");
+    const [instagram, setInstagram] = React.useState("");
+    const [sessionDate, setSessionDate] = React.useState("");
+    const [statusVal, setStatusVal] = React.useState("Pending");
+    const [notes, setNotes] = React.useState("");
 
     // Custom popups
     const [showCustomServicePopup, setShowCustomServicePopup] = React.useState(false);
@@ -190,13 +195,12 @@ export default function NewBookingPage() {
         setSavingCustomFreelancer(false);
     }
 
-    async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         setSaving(true);
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) { setSaving(false); return; }
 
-        const fd = new FormData(e.currentTarget);
         const bookingCode = generateBookingCode();
         const invoiceCode = `INV-${bookingCode}`;
         const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
@@ -204,18 +208,18 @@ export default function NewBookingPage() {
         const { data: booking, error } = await supabase.from("bookings").insert({
             user_id: user.id,
             booking_code: invoiceCode,
-            client_name: fd.get("client_name") as string,
+            client_name: clientName,
             client_whatsapp: fullPhone,
-            session_date: (fd.get("session_date") as string) || null,
+            session_date: sessionDate || null,
             location: location || null,
-            instagram: (fd.get("instagram") as string) || null,
+            instagram: instagram || null,
             event_type: eventType,
             service_id: selectedServiceId || null,
             freelancer_id: selectedFreelancerId || null,
             total_price: parseFloat(totalPrice.toString()) || 0,
             dp_paid: parseFloat(dpPaid.toString()) || 0,
-            status: (fd.get("status") as string) || "Pending",
-            notes: (fd.get("notes") as string) || null,
+            status: statusVal,
+            notes: notes || null,
             extra_fields: Object.keys(extraFields).length > 0 ? extraFields : null,
         }).select("id").single();
 
@@ -249,7 +253,7 @@ export default function NewBookingPage() {
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Nama{reqMark}</label>
-                            <input name="client_name" required placeholder="Nama lengkap klien" className={inputClass} />
+                            <input value={clientName} onChange={e => setClientName(e.target.value)} required placeholder="Nama lengkap klien" className={inputClass} />
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Nomor WhatsApp{reqMark}</label>
@@ -271,7 +275,7 @@ export default function NewBookingPage() {
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Instagram</label>
-                            <input name="instagram" placeholder="@username" className={inputClass} />
+                            <input value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@username" className={inputClass} />
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
@@ -304,11 +308,11 @@ export default function NewBookingPage() {
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Jadwal Sesi{reqMark}</label>
-                            <input name="session_date" required type="datetime-local" className={cn(inputClass, "block")} />
+                            <input value={sessionDate} onChange={e => setSessionDate(e.target.value)} required type="datetime-local" className={cn(inputClass, "block")} />
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Status{reqMark}</label>
-                            <select name="status" required className={selectClass}>
+                            <select value={statusVal} onChange={e => setStatusVal(e.target.value)} required className={selectClass}>
                                 {["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"].map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
@@ -375,7 +379,7 @@ export default function NewBookingPage() {
                     <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                         <StickyNote className="w-4 h-4" /> Catatan
                     </h3>
-                    <textarea name="notes" rows={3} placeholder="Permintaan khusus, detail tambahan..." className={textareaClass} />
+                    <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Permintaan khusus, detail tambahan..." className={textareaClass} />
                 </div>
 
                 <div className="flex gap-3 justify-end pt-4">
