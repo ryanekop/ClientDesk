@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Link, usePathname } from "@/i18n/routing";
-import { cn } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { signOut } from "@/app/actions/auth";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -18,7 +18,7 @@ import {
     LogOut,
     Menu
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/lib/utils";
 
 interface SidebarProps {
     isOpen: boolean;
