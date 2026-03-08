@@ -36,7 +36,7 @@ export default function BookingsPage() {
     const [loading, setLoading] = React.useState(true);
     const [isDriveConnected, setIsDriveConnected] = React.useState(false);
     const [creatingFolder, setCreatingFolder] = React.useState<string | null>(null);
-    
+
     // Filters & Search
     const [searchQuery, setSearchQuery] = React.useState("");
     const [statusFilter, setStatusFilter] = React.useState("All");
@@ -47,7 +47,7 @@ export default function BookingsPage() {
     const [statusModal, setStatusModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [newStatus, setNewStatus] = React.useState("");
     const [isUpdatingStatus, setIsUpdatingStatus] = React.useState(false);
-    
+
     const [deleteModal, setDeleteModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [isDeleting, setIsDeleting] = React.useState(false);
 
@@ -129,7 +129,7 @@ export default function BookingsPage() {
             .from("bookings")
             .update({ status: newStatus })
             .eq("id", statusModal.booking.id);
-        
+
         if (!error) {
             setBookings(prev => prev.map(b => b.id === statusModal.booking?.id ? { ...b, status: newStatus } : b));
             setStatusModal({ open: false, booking: null });
@@ -146,7 +146,7 @@ export default function BookingsPage() {
             .from("bookings")
             .delete()
             .eq("id", deleteModal.booking.id);
-        
+
         if (!error) {
             setBookings(prev => prev.filter(b => b.id !== deleteModal.booking?.id));
             setDeleteModal({ open: false, booking: null });
@@ -221,26 +221,26 @@ export default function BookingsPage() {
                         className="h-9 w-full rounded-md border border-input bg-background/50 pl-9 pr-3 text-sm focus-visible:ring-1 focus-visible:ring-ring outline-none transition-all"
                     />
                 </div>
-                <select 
-                    value={statusFilter} 
+                <select
+                    value={statusFilter}
                     onChange={e => setStatusFilter(e.target.value)}
-                    className="h-9 rounded-md border border-input bg-background/50 px-3 text-sm outline-none cursor-pointer"
+                    className="h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
                 >
                     <option value="All">Semua Status</option>
                     {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <select 
-                    value={packageFilter} 
+                <select
+                    value={packageFilter}
                     onChange={e => setPackageFilter(e.target.value)}
-                    className="h-9 rounded-md border border-input bg-background/50 px-3 text-sm outline-none cursor-pointer"
+                    className="h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
                 >
                     <option value="All">Semua Paket</option>
                     {packages.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
-                <select 
-                    value={freelanceFilter} 
+                <select
+                    value={freelanceFilter}
                     onChange={e => setFreelanceFilter(e.target.value)}
-                    className="h-9 rounded-md border border-input bg-background/50 px-3 text-sm outline-none cursor-pointer"
+                    className="h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
                 >
                     <option value="All">Semua Freelance</option>
                     {freelancers.map(f => <option key={f} value={f}>{f}</option>)}
