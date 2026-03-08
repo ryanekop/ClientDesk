@@ -20,7 +20,7 @@ export default function FormBookingPage() {
     const [profileId, setProfileId] = React.useState("");
 
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
-    const formUrl = vendorSlug ? `${siteUrl}/${locale}/book/${vendorSlug}` : "";
+    const formUrl = vendorSlug ? `${siteUrl}/${locale}/${vendorSlug}/formbooking` : "";
 
     React.useEffect(() => {
         async function load() {

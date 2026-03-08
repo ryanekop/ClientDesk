@@ -63,7 +63,7 @@ function parseFormatted(s: string): number | "" {
 
 export default function PublicBookingForm() {
     const params = useParams();
-    const slug = params?.slug as string;
+    const slug = params?.vendorSlug as string;
     const supabase = createClient();
 
     const [vendor, setVendor] = React.useState<Vendor | null>(null);
