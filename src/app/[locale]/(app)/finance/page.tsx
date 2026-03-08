@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { TrendingUp, Clock, CheckCircle2, FileText, Loader2, Download } from "lucide-react";
+import { TrendingUp, Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -161,6 +161,15 @@ export default function FinancePage() {
     const formatCurrency = (n: number) =>
         new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
 
+    function sendInvoiceWhatsApp(b: BookingFinance) {
+        if (!b.client_whatsapp) { alert("Nomor WhatsApp klien tidak tersedia."); return; }
+        const remaining = b.total_price - b.dp_paid;
+        const date = b.session_date ? new Date(b.session_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-";
+        const msg = `📄 *INVOICE - ${b.booking_code}*\n\nHalo ${b.client_name},\nBerikut detail invoice Anda:\n\n📦 Paket: ${b.services?.name || "-"}\n📅 Jadwal: ${date}\n💰 Total: ${formatCurrency(b.total_price)}\n✅ DP Dibayar: ${formatCurrency(b.dp_paid)}\n📌 Sisa: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? "✅ LUNAS" : "⏳ Belum Lunas"}\n\nTerima kasih! 🙏`;
+        const cleaned = b.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
+        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(msg)}`, "_blank");
+    }
+
     const totalRevenue = bookings.filter(b => b.is_fully_paid).reduce((s, b) => s + b.total_price, 0);
     const totalPending = bookings.filter(b => !b.is_fully_paid).reduce((s, b) => s + (b.total_price - b.dp_paid), 0);
     const totalDP = bookings.reduce((s, b) => s + b.dp_paid, 0);
@@ -275,10 +284,17 @@ export default function FinancePage() {
                                             </button>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
-                                            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => generateInvoice(b)}>
-                                                <FileText className="w-3.5 h-3.5" />
-                                                Invoice
-                                            </Button>
+                                            <div className="flex items-center justify-end gap-1">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600" title="Kirim Invoice via WA"
+                                                    disabled={!b.client_whatsapp}
+                                                    onClick={() => sendInvoiceWhatsApp(b)}>
+                                                    <MessageCircle className="w-4 h-4" />
+                                                </Button>
+                                                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => generateInvoice(b)}>
+                                                    <FileText className="w-3.5 h-3.5" />
+                                                    Invoice
+                                                </Button>
+                                            </div>
                                         </td>
                                     </tr>
                                 );

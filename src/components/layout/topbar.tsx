@@ -6,7 +6,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { Menu, User, LayoutDashboard, Package, Settings, BookOpen, History, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link } from "@/i18n/routing";
+import { Link, usePathname } from "@/i18n/routing";
 import { createClient } from "@/utils/supabase/client";
 import { signOut } from "@/app/actions/auth";
 
@@ -20,6 +20,21 @@ export function Topbar({ onMenuClick }: TopbarProps) {
     const [userEmail, setUserEmail] = React.useState("");
     const ref = React.useRef<HTMLDivElement>(null);
     const t = useTranslations("Topbar");
+    const pathname = usePathname();
+
+    const pageTitle = React.useMemo(() => {
+        if (pathname.startsWith("/bookings/new")) return "Buat Booking";
+        if (pathname.startsWith("/bookings/") && pathname.endsWith("/edit")) return "Edit Booking";
+        if (pathname.startsWith("/bookings/")) return "Detail Booking";
+        if (pathname.startsWith("/bookings")) return "Daftar Booking";
+        if (pathname.startsWith("/calendar")) return "Kalender";
+        if (pathname.startsWith("/finance")) return "Keuangan";
+        if (pathname.startsWith("/services")) return "Layanan / Paket";
+        if (pathname.startsWith("/team")) return "Tim / Freelance";
+        if (pathname.startsWith("/settings")) return "Pengaturan";
+        if (pathname.startsWith("/profile")) return "Profil";
+        return "Client Desk";
+    }, [pathname]);
 
     React.useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -60,7 +75,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                     <Menu className="w-5 h-5" />
                     <span className="sr-only">Toggle Sidebar</span>
                 </Button>
-                <h1 className="text-lg font-semibold md:hidden">Client Desk</h1>
+                <h1 className="text-lg font-semibold md:hidden">{pageTitle}</h1>
             </div>
 
             <div className="flex items-center gap-2">

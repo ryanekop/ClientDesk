@@ -2,6 +2,7 @@ import * as React from "react";
 import { createClient } from "@/utils/supabase/server";
 import { Users, CreditCard, TrendingUp, CalendarDays, User } from "lucide-react";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
+import { RealtimeClock, UpcomingBookingCard } from "@/components/dashboard/dashboard-widgets";
 import { getTranslations } from "next-intl/server";
 
 export default async function DashboardPage() {
@@ -70,6 +71,11 @@ export default async function DashboardPage() {
             <div>
                 <h2 className="text-2xl font-bold tracking-tight">{t("welcome", { name: displayName })}</h2>
                 <p className="text-muted-foreground">{t("subtitle")}</p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <RealtimeClock />
+                <UpcomingBookingCard />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
