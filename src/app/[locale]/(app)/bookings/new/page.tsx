@@ -3,17 +3,18 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Sparkles, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
 import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
+import { cn } from "@/lib/utils";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
 const selectClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 
-const EVENT_TYPES = ["Umum", "Wedding", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
+const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
 const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string; isLocation?: boolean }[]> = {
     Wisuda: [
@@ -53,9 +54,14 @@ export default function NewBookingPage() {
     const [saving, setSaving] = React.useState(false);
     const [services, setServices] = React.useState<Service[]>([]);
     const [freelancers, setFreelancers] = React.useState<Freelance[]>([]);
+    
     const [eventType, setEventType] = React.useState("Umum");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
     const [location, setLocation] = React.useState("");
+    const [totalPrice, setTotalPrice] = React.useState<number | "">("");
+    
+    const [isCustomService, setIsCustomService] = React.useState(false);
+    const [isCustomFreelancer, setIsCustomFreelancer] = React.useState(false);
 
     React.useEffect(() => {
         async function load() {
@@ -71,6 +77,16 @@ export default function NewBookingPage() {
         load();
     }, []);
 
+    const handleServiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const id = e.target.value;
+        const selected = services.find(s => s.id === id);
+        if (selected) {
+            setTotalPrice(selected.price);
+        } else {
+            setTotalPrice("");
+        }
+    };
+
     async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
         setSaving(true);
@@ -80,7 +96,10 @@ export default function NewBookingPage() {
         const fd = new FormData(e.currentTarget);
         const { count } = await supabase.from("bookings").select("*", { count: "exact", head: true }).eq("user_id", user.id);
         const code = `BKG-${String((count || 0) + 1).padStart(3, "0")}`;
-        const selectedService = services.find(s => s.id === fd.get("service_id"));
+
+        // Handle Custom Service/Freelancer if needed (simplified for now by just taking the value)
+        const serviceVal = isCustomService ? fd.get("custom_service") : fd.get("service_id");
+        const freelancerVal = isCustomFreelancer ? fd.get("custom_freelancer") : fd.get("freelancer_id");
 
         const { data: booking, error } = await supabase.from("bookings").insert({
             user_id: user.id,
@@ -91,12 +110,14 @@ export default function NewBookingPage() {
             location: location || null,
             instagram: (fd.get("instagram") as string) || null,
             event_type: eventType,
-            service_id: (fd.get("service_id") as string) || null,
-            freelancer_id: (fd.get("freelancer_id") as string) || null,
-            total_price: parseFloat(fd.get("total_price") as string) || selectedService?.price || 0,
+            service_id: !isCustomService ? (serviceVal as string) || null : null,
+            freelancer_id: !isCustomFreelancer ? (freelancerVal as string) || null : null,
+            // If custom, we might want to store the name somewhere, but for now let's use notes or a specific field if it existed.
+            // Since the schema doesn't have custom name fields, we'll append to notes if custom.
+            total_price: parseFloat(totalPrice.toString()) || 0,
             dp_paid: parseFloat(fd.get("dp_paid") as string) || 0,
             status: (fd.get("status") as string) || "Pending",
-            notes: (fd.get("notes") as string) || null,
+            notes: (fd.get("notes") as string) || "" + (isCustomService ? `\n[Paket Custom: ${fd.get("custom_service")}]` : "") + (isCustomFreelancer ? `\n[Freelance Custom: ${fd.get("custom_freelancer")}]` : ""),
             extra_fields: Object.keys(extraFields).length > 0 ? extraFields : null,
         }).select("id").single();
 
@@ -104,6 +125,7 @@ export default function NewBookingPage() {
         if (!error && booking) {
             router.push(`/${locale}/bookings/${booking.id}`);
         } else {
+            console.error(error);
             alert("Gagal menyimpan booking.");
         }
     }
@@ -111,10 +133,10 @@ export default function NewBookingPage() {
     const currentExtraFields = EXTRA_FIELDS[eventType] || [];
 
     return (
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-4xl mx-auto space-y-6 pb-20">
             <div className="flex items-center gap-3">
                 <Link href="/bookings">
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
                         <ArrowLeft className="w-4 h-4" />
                     </Button>
                 </Link>
@@ -125,38 +147,40 @@ export default function NewBookingPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="rounded-xl border bg-card p-6 space-y-4">
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Informasi Klien</h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Nama <span className="text-red-500">*</span></label>
-                            <input name="client_name" required placeholder="Misal: Siti Rahayu" className={inputClass} />
+                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-4">
+                    <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Informasi Klien
+                    </h3>
+                    <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Nama <span className="text-red-500">*</span></label>
+                            <input name="client_name" required placeholder="Nama lengkap klien" className={inputClass} />
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Nomor WhatsApp</label>
-                            <input name="client_whatsapp" type="tel" placeholder="08123456789" className={inputClass} />
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Nomor WhatsApp</label>
+                            <input name="client_whatsapp" type="tel" placeholder="08..." className={inputClass} />
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Instagram</label>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Instagram</label>
                             <input name="instagram" placeholder="@username" className={inputClass} />
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Tipe Acara</label>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Tipe Acara</label>
                             <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); }} className={selectClass}>
                                 {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
                     </div>
                     {currentExtraFields.length > 0 && (
-                        <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 pt-2 border-t border-dashed">
                             {currentExtraFields.map(f => (
-                                <div key={f.key} className={`space-y-2 ${f.isLocation ? "col-span-full" : ""}`}>
-                                    <label className="text-sm font-medium">{locale === "id" ? f.label : f.labelEn}</label>
+                                <div key={f.key} className={`space-y-1.5 ${f.isLocation ? "col-span-full" : ""}`}>
+                                    <label className="text-xs font-medium text-muted-foreground">{locale === "id" ? f.label : f.labelEn}</label>
                                     {f.isLocation ? (
                                         <LocationAutocomplete
                                             value={extraFields[f.key] || ""}
                                             onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))}
-                                            placeholder={`Cari ${f.label.toLowerCase()}...`}
+                                            placeholder={`Cari lokasi ${f.label.toLowerCase()}...`}
                                         />
                                     ) : (
                                         <input
@@ -172,65 +196,98 @@ export default function NewBookingPage() {
                     )}
                 </div>
 
-                <div className="rounded-xl border bg-card p-6 space-y-4">
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Detail Sesi</h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Jadwal Sesi</label>
-                            <input name="session_date" type="datetime-local" className={inputClass} />
+                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-4">
+                    <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span> Detail Sesi
+                    </h3>
+                    <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Jadwal Sesi</label>
+                            <input name="session_date" type="datetime-local" className={cn(inputClass, "block")} />
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Status</label>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Status Awal</label>
                             <select name="status" className={selectClass}>
                                 {["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"].map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
-                        <div className="col-span-full space-y-2">
-                            <label className="text-sm font-medium">Lokasi</label>
+                        <div className="col-span-full space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Lokasi Utama</label>
                             <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi sesi foto..." />
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Paket / Layanan</label>
-                            <select name="service_id" className={selectClass}>
-                                <option value="">-- Pilih Paket --</option>
-                                {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
+                        
+                        {/* Package Selection with Custom Toggle */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-medium text-muted-foreground">Paket / Layanan</label>
+                                <button type="button" onClick={() => setIsCustomService(!isCustomService)} className="text-[10px] flex items-center gap-1 text-blue-500 hover:text-blue-600">
+                                    <Sparkles className="w-3 h-3" /> {isCustomService ? "Paket Terdaftar" : "Custom Paket"}
+                                </button>
+                            </div>
+                            {isCustomService ? (
+                                <input name="custom_service" placeholder="Ketik nama paket manual..." className={inputClass} autoFocus />
+                            ) : (
+                                <select name="service_id" className={selectClass} onChange={handleServiceChange}>
+                                    <option value="">-- Pilih Paket --</option>
+                                    {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            )}
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Freelance</label>
-                            <select name="freelancer_id" className={selectClass}>
-                                <option value="">-- Pilih Freelance --</option>
-                                {freelancers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                            </select>
+
+                        {/* Freelancer Selection with Custom Toggle */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-medium text-muted-foreground">Freelance</label>
+                                <button type="button" onClick={() => setIsCustomFreelancer(!isCustomFreelancer)} className="text-[10px] flex items-center gap-1 text-blue-500 hover:text-blue-600">
+                                    <UserPlus className="w-3 h-3" /> {isCustomFreelancer ? "Freelance Terdaftar" : "Custom Freelance"}
+                                </button>
+                            </div>
+                            {isCustomFreelancer ? (
+                                <input name="custom_freelancer" placeholder="Ketik nama freelance manual..." className={inputClass} autoFocus />
+                            ) : (
+                                <select name="freelancer_id" className={selectClass}>
+                                    <option value="">-- Pilih Freelance --</option>
+                                    {freelancers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                </select>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                <div className="rounded-xl border bg-card p-6 space-y-4">
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Keuangan</h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Harga Total (Rp)</label>
-                            <input name="total_price" type="number" min="0" step="1000" placeholder="0" className={inputClass} />
+                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-4">
+                    <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Keuangan
+                    </h3>
+                    <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Harga Total (Rp)</label>
+                            <input 
+                                name="total_price" 
+                                type="number" 
+                                value={totalPrice}
+                                onChange={e => setTotalPrice(e.target.value ? parseFloat(e.target.value) : "")}
+                                placeholder="0" 
+                                className={inputClass} 
+                            />
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">DP Dibayar (Rp)</label>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">DP Dibayar (Rp)</label>
                             <input name="dp_paid" type="number" min="0" step="1000" placeholder="0" className={inputClass} />
                         </div>
                     </div>
                 </div>
 
-                <div className="rounded-xl border bg-card p-6 space-y-4">
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Catatan</h3>
-                    <textarea name="notes" rows={3} placeholder="Catatan tambahan, permintaan khusus, dll..." className={textareaClass} />
+                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-widest">Catatan</label>
+                    <textarea name="notes" rows={3} placeholder="Permintaan khusus, detail tambahan..." className={textareaClass} />
                 </div>
 
-                <div className="flex gap-3 justify-end">
+                <div className="flex gap-3 justify-end pt-4">
                     <Link href="/bookings">
-                        <Button type="button" variant="outline">Batal</Button>
+                        <Button type="button" variant="ghost" className="text-muted-foreground hover:text-foreground">Batal</Button>
                     </Link>
-                    <Button type="submit" disabled={saving} className="gap-2">
-                        {saving ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+                    <Button type="submit" disabled={saving} className="gap-2 bg-foreground text-background hover:bg-foreground/90 px-8">
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin text-background" /> : <Save className="w-4 h-4" />}
                         Simpan Booking
                     </Button>
                 </div>
@@ -238,3 +295,4 @@ export default function NewBookingPage() {
         </div>
     );
 }
+

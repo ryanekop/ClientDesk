@@ -1,14 +1,6 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
-import { clsx, type ClassValue } from "clsx"
-import { extendTailwindMerge } from "tailwind-merge"
-
-export function cn(...inputs: ClassValue[]) {
-    // Using a custom tailwind-merge configuration is not strictly required in v4 yet
-    // but keeping it simple for now
-    const customTwMerge = extendTailwindMerge({})
-    return customTwMerge(clsx(inputs))
-}
+import { cn } from "@/lib/utils"
 
 export interface ButtonProps
     extends React.ButtonHTMLAttributes<HTMLButtonElement> {
