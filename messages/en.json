@@ -18,7 +18,7 @@
         "calendar": "Calendar",
         "services": "Services / Packages",
         "finance": "Finance",
-        "team": "Team / Freelancer",
+        "team": "Team / Freelance",
         "settings": "Settings",
         "profile": "Profile",
         "logout": "Logout"
@@ -62,7 +62,7 @@
         "harga": "Price",
         "jadwal": "Session Schedule",
         "status": "Status",
-        "freelancer": "Freelancer",
+        "freelancer": "Freelance",
         "aksi": "Actions",
         "memuat": "Loading data...",
         "belumAda": "No bookings yet. Click \"Add Manually\" to create one.",
@@ -140,11 +140,11 @@
         "cetak": "Print Invoice"
     },
     "Team": {
-        "title": "Team / Freelancer",
+        "title": "Team / Freelance",
         "subtitle": "Manage photographers, videographers, and other team members.",
         "tambah": "Add Member",
         "tambahTitle": "Add Team Member",
-        "tambahDesc": "Enter new team member or freelancer information.",
+        "tambahDesc": "Enter new team member or freelance information.",
         "editTitle": "Edit Member",
         "nama": "Name",
         "peran": "Role",

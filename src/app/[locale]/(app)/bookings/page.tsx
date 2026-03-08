@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Upload, MessageSquare, Copy, Folder, FolderPlus, Edit2, Trash2, Link2, Loader2, Info, Phone } from "lucide-react";
+import { Plus, Upload, Folder, FolderPlus, Edit2, Trash2, Link2, Loader2, Info, Phone, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/routing";
 
 type Booking = {
     id: string;
@@ -29,7 +30,6 @@ export default function BookingsPage() {
     const [loading, setLoading] = React.useState(true);
     const [isDriveConnected, setIsDriveConnected] = React.useState(false);
     const [creatingFolder, setCreatingFolder] = React.useState<string | null>(null);
-    const [detailBooking, setDetailBooking] = React.useState<Booking | null>(null);
 
     React.useEffect(() => {
         fetchBookings();
@@ -187,38 +187,12 @@ export default function BookingsPage() {
                         </DialogContent>
                     </Dialog>
 
-                    <Dialog>
-                        <DialogTrigger asChild>
-                            <Button className="gap-2">
-                                <Plus className="w-4 h-4" /> {t("tambahManual")}
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[500px]">
-                            <DialogHeader>
-                                <DialogTitle>{t("tambahTitle")}</DialogTitle>
-                                <DialogDescription>
-                                    {t("tambahDesc")}
-                                </DialogDescription>
-                            </DialogHeader>
-                            <form action={(formData) => { handleAddBooking(formData); }} className="grid gap-4 py-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">{t("namaKlien")}</label>
-                                    <input name="client_name" type="text" required className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" placeholder="Misal: John Doe" />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">{t("nomorWA")}</label>
-                                    <input name="client_whatsapp" type="tel" className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" placeholder="08123456789" />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">{t("jadwalSesi")}</label>
-                                    <input name="session_date" type="datetime-local" className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
-                                </div>
-                                <DialogFooter>
-                                    <Button type="submit">{t("simpanBooking")}</Button>
-                                </DialogFooter>
-                            </form>
-                        </DialogContent>
-                    </Dialog>
+                    {/* Tambah Klien Baru */}
+                    <Link href="/bookings/new">
+                        <Button className="gap-2">
+                            <Plus className="w-4 h-4" /> Tambah Klien Baru
+                        </Button>
+                    </Link>
                 </div>
             </div>
 
@@ -285,10 +259,12 @@ export default function BookingsPage() {
                                         {/* Aksi */}
                                         <td className="px-4 py-4 whitespace-nowrap text-right">
                                             <div className="flex items-center justify-end gap-1.5">
-                                                {/* Detail */}
-                                                <Button variant="outline" size="icon" title="Detail Booking" onClick={() => setDetailBooking(booking)}>
-                                                    <Info className="w-4 h-4 text-muted-foreground" />
-                                                </Button>
+                                                {/* Detail - navigasi ke halaman full */}
+                                                <Link href={`/bookings/${booking.id}`}>
+                                                    <Button variant="outline" size="icon" title="Detail Booking">
+                                                        <Info className="w-4 h-4 text-muted-foreground" />
+                                                    </Button>
+                                                </Link>
                                                 {/* WA ke Freelancer */}
                                                 <Button variant="outline" size="icon" title="WhatsApp ke Freelancer"
                                                     disabled={!booking.freelancers}
@@ -305,10 +281,12 @@ export default function BookingsPage() {
                                                         {creatingFolder === booking.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderPlus className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
                                                     </Button>
                                                 )}
-                                                {/* Edit */}
-                                                <Button variant="outline" size="icon" title="Edit Booking">
-                                                    <Edit2 className="w-4 h-4 text-muted-foreground" />
-                                                </Button>
+                                                {/* Edit - navigasi ke halaman full */}
+                                                <Link href={`/bookings/${booking.id}/edit`}>
+                                                    <Button variant="outline" size="icon" title="Edit Booking">
+                                                        <Edit2 className="w-4 h-4 text-muted-foreground" />
+                                                    </Button>
+                                                </Link>
                                                 {/* Hapus */}
                                                 <Button variant="outline" size="icon" title="Hapus" onClick={() => handleDelete(booking.id)}>
                                                     <Trash2 className="w-4 h-4 text-red-500" />
@@ -323,55 +301,6 @@ export default function BookingsPage() {
                 </div>
             </div>
 
-            {/* Detail Dialog */}
-            <Dialog open={!!detailBooking} onOpenChange={(open) => { if (!open) setDetailBooking(null); }}>
-                <DialogContent className="sm:max-w-[480px]">
-                    <DialogHeader>
-                        <DialogTitle>Detail Booking</DialogTitle>
-                        <DialogDescription>{detailBooking?.booking_code}</DialogDescription>
-                    </DialogHeader>
-                    {detailBooking && (
-                        <div className="space-y-3 text-sm">
-                            <div className="grid grid-cols-2 gap-2">
-                                <span className="text-muted-foreground">{t("namaKlien")}</span>
-                                <span className="font-medium">{detailBooking.client_name}</span>
-                                <span className="text-muted-foreground">WhatsApp</span>
-                                <span>{detailBooking.client_whatsapp || "-"}</span>
-                                <span className="text-muted-foreground">{t("paket")}</span>
-                                <span>{detailBooking.services?.name || "-"}</span>
-                                <span className="text-muted-foreground">{t("jadwal")}</span>
-                                <span>{formatDate(detailBooking.session_date)}</span>
-                                <span className="text-muted-foreground">{t("status")}</span>
-                                <StatusBadge status={detailBooking.status} />
-                                <span className="text-muted-foreground">{t("freelancer")}</span>
-                                <span>{detailBooking.freelancers?.name || "-"}</span>
-                                <span className="text-muted-foreground">{t("harga")}</span>
-                                <span className="font-semibold">{formatCurrency(detailBooking.total_price)}</span>
-                                <span className="text-muted-foreground">DP Dibayar</span>
-                                <span>{formatCurrency(detailBooking.dp_paid)}</span>
-                                <span className="text-muted-foreground">Sisa</span>
-                                <span className="font-semibold text-amber-600 dark:text-amber-400">{formatCurrency(detailBooking.total_price - detailBooking.dp_paid)}</span>
-                            </div>
-                            {detailBooking.drive_folder_url && (
-                                <a href={detailBooking.drive_folder_url} target="_blank" rel="noreferrer"
-                                    className="flex items-center gap-2 text-blue-600 hover:underline">
-                                    <Folder className="w-4 h-4" /> Buka Folder Google Drive
-                                </a>
-                            )}
-                            <div className="flex gap-2 pt-2">
-                                <Button size="sm" className="gap-1.5" onClick={() => sendWhatsApp(detailBooking.client_whatsapp, detailBooking.client_name)}>
-                                    <MessageSquare className="w-3.5 h-3.5" /> WA Klien
-                                </Button>
-                                {detailBooking.freelancers && (
-                                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => sendWhatsAppFreelancer((detailBooking.freelancers as any)?.whatsapp_number, detailBooking.freelancers?.name || "", detailBooking)}>
-                                        <Phone className="w-3.5 h-3.5" /> WA Freelancer
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }

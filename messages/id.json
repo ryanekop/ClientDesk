@@ -18,7 +18,7 @@
         "calendar": "Kalender",
         "services": "Layanan / Paket",
         "finance": "Keuangan",
-        "team": "Tim / Freelancer",
+        "team": "Tim / Freelance",
         "settings": "Setting",
         "profile": "Profil",
         "logout": "Logout"
@@ -62,7 +62,7 @@
         "harga": "Harga",
         "jadwal": "Jadwal Sesi",
         "status": "Status",
-        "freelancer": "Freelancer",
+        "freelancer": "Freelance",
         "aksi": "Aksi",
         "memuat": "Memuat data...",
         "belumAda": "Belum ada data booking. Klik \"Tambah Manual\" untuk menambahkan.",
@@ -140,11 +140,11 @@
         "cetak": "Cetak Invoice"
     },
     "Team": {
-        "title": "Tim / Freelancer",
+        "title": "Tim / Freelance",
         "subtitle": "Kelola fotografer, videografer, dan anggota tim lainnya.",
         "tambah": "Tambah Anggota",
         "tambahTitle": "Tambah Anggota Tim",
-        "tambahDesc": "Masukkan data anggota tim atau freelancer baru.",
+        "tambahDesc": "Masukkan data anggota tim atau freelance baru.",
         "editTitle": "Edit Anggota",
         "nama": "Nama",
         "peran": "Peran / Role",
@@ -156,7 +156,7 @@
         "perbarui": "Perbarui",
         "hapusConfirm": "Hapus anggota ini?",
         "belumAda": "Belum ada anggota tim",
-        "belumAdaDesc": "Klik \"Tambah Anggota\" untuk menambahkan fotografer, videografer, atau freelancer."
+        "belumAdaDesc": "Klik \"Tambah Anggota\" untuk menambahkan fotografer, videografer, atau freelance."
     },
     "Settings": {
         "title": "Pengaturan",
