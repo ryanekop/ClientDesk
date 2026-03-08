@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
-import { ArrowLeft, Save, Sparkles, UserPlus } from "lucide-react";
+import { ArrowLeft, Save, Sparkles, UserPlus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
@@ -54,12 +54,12 @@ export default function NewBookingPage() {
     const [saving, setSaving] = React.useState(false);
     const [services, setServices] = React.useState<Service[]>([]);
     const [freelancers, setFreelancers] = React.useState<Freelance[]>([]);
-    
+
     const [eventType, setEventType] = React.useState("Umum");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
     const [location, setLocation] = React.useState("");
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
-    
+
     const [isCustomService, setIsCustomService] = React.useState(false);
     const [isCustomFreelancer, setIsCustomFreelancer] = React.useState(false);
 
@@ -215,7 +215,7 @@ export default function NewBookingPage() {
                             <label className="text-xs font-medium text-muted-foreground">Lokasi Utama</label>
                             <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi sesi foto..." />
                         </div>
-                        
+
                         {/* Package Selection with Custom Toggle */}
                         <div className="space-y-1.5">
                             <div className="flex items-center justify-between">
@@ -261,13 +261,13 @@ export default function NewBookingPage() {
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Harga Total (Rp)</label>
-                            <input 
-                                name="total_price" 
-                                type="number" 
+                            <input
+                                name="total_price"
+                                type="number"
                                 value={totalPrice}
                                 onChange={e => setTotalPrice(e.target.value ? parseFloat(e.target.value) : "")}
-                                placeholder="0" 
-                                className={inputClass} 
+                                placeholder="0"
+                                className={inputClass}
                             />
                         </div>
                         <div className="space-y-1.5">

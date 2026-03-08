@@ -18,7 +18,7 @@ import {
     LogOut,
     Menu
 } from "lucide-react";
-import { Button } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 interface SidebarProps {
     isOpen: boolean;
