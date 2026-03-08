@@ -35,7 +35,6 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string
     Wisuda: [
         { key: "universitas", label: "Universitas", labelEn: "University" },
         { key: "fakultas", label: "Fakultas", labelEn: "Faculty" },
-        { key: "angkatan", label: "Angkatan", labelEn: "Class Year" },
     ],
     Wedding: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" },
@@ -117,6 +116,7 @@ export default function NewBookingPage() {
     const [showCustomServicePopup, setShowCustomServicePopup] = React.useState(false);
     const [customServiceName, setCustomServiceName] = React.useState("");
     const [customServicePrice, setCustomServicePrice] = React.useState<number | "">("");
+    const [customServiceDesc, setCustomServiceDesc] = React.useState("");
     const [savingCustomService, setSavingCustomService] = React.useState(false);
 
     const [showCustomFreelancerPopup, setShowCustomFreelancerPopup] = React.useState(false);
@@ -160,6 +160,7 @@ export default function NewBookingPage() {
         if (!user) return;
         const { data, error } = await supabase.from("services").insert({
             user_id: user.id, name: customServiceName.trim(),
+            description: customServiceDesc.trim() || null,
             price: parseFloat(customServicePrice.toString()) || 0, is_active: true,
         }).select("id, name, price").single();
         if (!error && data) {
@@ -167,7 +168,7 @@ export default function NewBookingPage() {
             setServices(prev => [...prev, s]);
             setSelectedServiceId(s.id);
             setTotalPrice(s.price);
-            setCustomServiceName(""); setCustomServicePrice("");
+            setCustomServiceName(""); setCustomServicePrice(""); setCustomServiceDesc("");
             setShowCustomServicePopup(false);
         } else { alert("Gagal menyimpan paket baru."); }
         setSavingCustomService(false);
@@ -287,7 +288,7 @@ export default function NewBookingPage() {
                     {currentExtraFields.length > 0 && (
                         <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 pt-3 border-t border-dashed">
                             {currentExtraFields.map(f => (
-                                <div key={f.key} className={`space-y-1.5 ${f.isLocation ? "col-span-full" : ""}`}>
+                                <div key={f.key} className={`space-y-1.5 ${f.isLocation || currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
                                     <label className="text-xs font-medium text-muted-foreground">{locale === "id" ? f.label : f.labelEn}</label>
                                     {f.isLocation ? (
                                         <LocationAutocomplete value={extraFields[f.key] || ""} onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))} placeholder={`Cari lokasi ${f.label.toLowerCase()}...`} />
@@ -399,6 +400,10 @@ export default function NewBookingPage() {
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Nama Paket <span className="text-red-500">*</span></label>
                             <input value={customServiceName} onChange={e => setCustomServiceName(e.target.value)} placeholder="Contoh: Paket Gold 2 Jam" className={inputClass} autoFocus />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Deskripsi</label>
+                            <textarea value={customServiceDesc} onChange={e => setCustomServiceDesc(e.target.value)} placeholder="Deskripsi singkat paket..." rows={2} className={textareaClass} />
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Harga (Rp)</label>

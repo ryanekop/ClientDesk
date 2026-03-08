@@ -1,14 +1,18 @@
 "use client";
 
 import * as React from "react";
-import { Calendar, dateFnsLocalizer, Event } from "react-big-calendar";
+import { Calendar, dateFnsLocalizer, Event, ToolbarProps, View } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import { id } from "date-fns/locale/id";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { createClient } from "@/utils/supabase/client";
-import { Loader2, Link2, Unlink, CalendarPlus } from "lucide-react";
+import { Loader2, Link2, Unlink, CalendarPlus, ChevronLeft, ChevronRight, CalendarDays, CalendarRange, Clock, List, ExternalLink, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
+import { useLocale } from "next-intl";
+import { cn } from "@/lib/utils";
 
 const locales = { "id-ID": id };
 
@@ -24,13 +28,64 @@ type CalendarEvent = Event & {
     source: "booking" | "google";
 };
 
+/* ─── Custom Toolbar ─── */
+function CustomToolbar({ onNavigate, onView, view, label }: ToolbarProps<CalendarEvent, object>) {
+    const viewButtons: { key: View; label: string; icon: React.ReactNode }[] = [
+        { key: "month", label: "Bulan", icon: <CalendarDays className="w-3.5 h-3.5" /> },
+        { key: "week", label: "Minggu", icon: <CalendarRange className="w-3.5 h-3.5" /> },
+        { key: "day", label: "Hari", icon: <Clock className="w-3.5 h-3.5" /> },
+        { key: "agenda", label: "Agenda", icon: <List className="w-3.5 h-3.5" /> },
+    ];
+
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-1">
+                <button onClick={() => onNavigate("TODAY")}
+                    className="inline-flex items-center gap-1.5 px-3 h-8 text-xs font-medium rounded-md border border-input bg-background hover:bg-muted transition-colors">
+                    <CalendarDays className="w-3.5 h-3.5" /> Hari Ini
+                </button>
+                <button onClick={() => onNavigate("PREV")}
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-input bg-background hover:bg-muted transition-colors" title="Mundur">
+                    <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button onClick={() => onNavigate("NEXT")}
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-input bg-background hover:bg-muted transition-colors" title="Maju">
+                    <ChevronRight className="w-4 h-4" />
+                </button>
+            </div>
+
+            <span className="text-sm font-semibold text-foreground">{label}</span>
+
+            <div className="flex items-center gap-1 bg-muted/50 p-0.5 rounded-lg">
+                {viewButtons.map(vb => (
+                    <button key={vb.key} onClick={() => onView(vb.key)}
+                        className={cn(
+                            "inline-flex items-center gap-1.5 px-3 h-7 text-xs font-medium rounded-md transition-colors",
+                            view === vb.key
+                                ? "bg-foreground text-background shadow-sm"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        )}>
+                        {vb.icon} {vb.label}
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 export default function CalendarPage() {
     const supabase = createClient();
     const t = useTranslations("Calendar");
+    const router = useRouter();
+    const locale = useLocale();
     const [events, setEvents] = React.useState<CalendarEvent[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [isGoogleConnected, setIsGoogleConnected] = React.useState(false);
     const [syncing, setSyncing] = React.useState(false);
+
+    // Event popup
+    const [selectedEvent, setSelectedEvent] = React.useState<CalendarEvent | null>(null);
+    const [eventPopupOpen, setEventPopupOpen] = React.useState(false);
 
     React.useEffect(() => {
         fetchBookings();
@@ -76,7 +131,7 @@ export default function CalendarPage() {
                 const sessionDate = new Date(booking.session_date);
                 const endDate = new Date(sessionDate.getTime() + 2 * 60 * 60 * 1000);
                 return {
-                    title: `📋 ${booking.client_name} - ${booking.services?.name || "Booking"}`,
+                    title: `${booking.client_name} - ${booking.services?.name || "Booking"}`,
                     start: sessionDate,
                     end: endDate,
                     bookingId: booking.id,
@@ -149,6 +204,27 @@ export default function CalendarPage() {
         setSyncing(false);
     }
 
+    function handleSelectEvent(event: CalendarEvent) {
+        setSelectedEvent(event);
+        setEventPopupOpen(true);
+    }
+
+    function openGoogleCalendarEvent() {
+        if (!selectedEvent?.start) return;
+        const start = selectedEvent.start;
+        const dateStr = format(start, "yyyyMMdd'T'HHmmss");
+        const titleStr = typeof selectedEvent.title === "string" ? selectedEvent.title : String(selectedEvent.title || "");
+        const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titleStr)}&dates=${dateStr}/${dateStr}`;
+        window.open(url, "_blank");
+        setEventPopupOpen(false);
+    }
+
+    function goToBookingDetail() {
+        if (!selectedEvent?.bookingId) return;
+        router.push(`/${locale}/bookings/${selectedEvent.bookingId}`);
+        setEventPopupOpen(false);
+    }
+
     const eventStyleGetter = (event: CalendarEvent) => {
         let backgroundColor = "#64748b";
         let borderColor = "#475569";
@@ -164,8 +240,14 @@ export default function CalendarPage() {
                 backgroundColor, borderColor, color: "white",
                 borderRadius: "5px", padding: "2px 5px",
                 display: "block", border: "1px solid", opacity: 0.9,
+                cursor: "pointer",
             }
         };
+    };
+
+    const statusLabel: Record<string, string> = {
+        pending: "Pending", dp: "DP", terjadwal: "Terjadwal",
+        selesai: "Selesai", batal: "Batal",
     };
 
     return (
@@ -218,24 +300,14 @@ export default function CalendarPage() {
                 <style dangerouslySetInnerHTML={{
                     __html: `
                     .rbc-calendar { font-family: var(--font-sans); }
-                    .rbc-toolbar { flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-                    .rbc-btn-group > button {
-                        color: var(--foreground); border-color: var(--border);
-                        background-color: transparent;
-                        border-radius: var(--radius-md) !important; margin-right: 4px;
-                    }
-                    .rbc-btn-group > button:hover { background-color: var(--muted); }
-                    .rbc-btn-group > button.rbc-active {
-                        background-color: var(--primary); color: var(--primary-foreground);
-                        box-shadow: none; border-color: var(--primary);
-                    }
+                    .rbc-toolbar { display: none !important; }
                     .rbc-header { padding: 8px 4px; font-weight: 500; font-size: 0.875rem; border-bottom: 1px solid var(--border); }
                     .rbc-month-view, .rbc-time-view, .rbc-agenda-view { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
                     .rbc-month-row, .rbc-day-bg, .rbc-time-header-content { border-color: var(--border) !important; }
                     .rbc-today { background-color: var(--muted) !important; }
                     .rbc-off-range-bg { background-color: var(--background) !important; }
-                    .rbc-event { padding: 2px 4px !important; font-size: 0.75rem; font-weight: 500; }
-                    .dark .rbc-toolbar button { color: #fff; }
+                    .rbc-event { padding: 2px 4px !important; font-size: 0.75rem; font-weight: 500; cursor: pointer !important; }
+                    .rbc-event:hover { opacity: 1 !important; filter: brightness(1.1); }
                     .dark .rbc-day-bg { border-color: #27272a; }
                     .dark .rbc-header { border-bottom-color: #27272a; }
                     .dark .rbc-month-row + .rbc-month-row { border-top-color: #27272a; }
@@ -244,7 +316,7 @@ export default function CalendarPage() {
                     .dark .rbc-day-slot .rbc-time-slot { border-top-color: #27272a; }
                 `}} />
 
-                <div className="flex-1 min-h-0">
+                <div className="flex-1 min-h-0 flex flex-col">
                     <Calendar
                         localizer={localizer}
                         events={events}
@@ -253,9 +325,13 @@ export default function CalendarPage() {
                         style={{ height: "100%" }}
                         culture="id-ID"
                         eventPropGetter={eventStyleGetter}
+                        onSelectEvent={handleSelectEvent}
+                        components={{
+                            toolbar: CustomToolbar,
+                        }}
                         messages={{
-                            next: t("maju"), previous: t("mundur"), today: t("hariIni"),
-                            month: t("bulan"), week: t("minggu"), day: t("hari"), agenda: t("agenda"),
+                            next: "Maju", previous: "Mundur", today: "Hari Ini",
+                            month: "Bulan", week: "Minggu", day: "Hari", agenda: "Agenda",
                             date: t("tanggal"), time: t("waktu"), event: t("booking"),
                             noEventsInRange: t("tidakAdaJadwal"),
                         }}
@@ -272,6 +348,47 @@ export default function CalendarPage() {
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#10b981]"></span> {t("selesai")}</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#ef4444]"></span> {t("batal")}</span>
             </div>
+
+            {/* Event Popup */}
+            <Dialog open={eventPopupOpen} onOpenChange={setEventPopupOpen}>
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg">{selectedEvent?.clientName}</DialogTitle>
+                    </DialogHeader>
+                    {selectedEvent && (
+                        <div className="space-y-3 py-1">
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground w-20 shrink-0">Paket</span>
+                                <span className="font-medium">{selectedEvent.serviceName}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground w-20 shrink-0">Jadwal</span>
+                                <span className="font-medium">{selectedEvent.start ? format(selectedEvent.start, "PPPp", { locale: id }) : "-"}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground w-20 shrink-0">Status</span>
+                                <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full",
+                                    selectedEvent.status?.toLowerCase() === "pending" && "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+                                    selectedEvent.status?.toLowerCase() === "dp" && "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
+                                    selectedEvent.status?.toLowerCase() === "terjadwal" && "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+                                    selectedEvent.status?.toLowerCase() === "selesai" && "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
+                                    selectedEvent.status?.toLowerCase() === "batal" && "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+                                )}>
+                                    {statusLabel[selectedEvent.status?.toLowerCase() || ""] || selectedEvent.status}
+                                </span>
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
+                        <Button variant="outline" className="flex-1 gap-2" onClick={openGoogleCalendarEvent}>
+                            <ExternalLink className="w-4 h-4" /> Buka di Google Calendar
+                        </Button>
+                        <Button className="flex-1 gap-2 bg-foreground text-background hover:bg-foreground/90" onClick={goToBookingDetail}>
+                            <Info className="w-4 h-4" /> Lihat Detail Booking
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
