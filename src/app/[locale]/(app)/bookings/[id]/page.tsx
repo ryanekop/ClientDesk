@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram } from "lucide-react";
+import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
@@ -12,8 +12,8 @@ const EXTRA_FIELD_LABELS: Record<string, string> = {
     fakultas: "Fakultas",
     angkatan: "Angkatan",
     nama_pasangan: "Nama Pasangan",
-    tempat_akad: "Tempat Akad",
-    tempat_resepsi: "Tempat Resepsi",
+    tempat_akad: "Lokasi Akad",
+    tempat_resepsi: "Lokasi Resepsi",
     usia_kehamilan: "Usia Kehamilan",
     gender_bayi: "Gender Bayi",
     nama_bayi: "Nama Bayi",
@@ -22,6 +22,8 @@ const EXTRA_FIELD_LABELS: Record<string, string> = {
     tipe_konten: "Tipe Konten",
     jumlah_anggota: "Jumlah Anggota",
 };
+
+const LOCATION_FIELDS = new Set(["tempat_akad", "tempat_resepsi"]);
 
 type Booking = {
     id: string;
@@ -57,9 +59,29 @@ function StatusBadge({ status }: { status: string }) {
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
     return (
         <div className="flex items-start gap-3 text-sm">
-            <span className="text-muted-foreground w-36 shrink-0">{label}</span>
+            <span className="text-muted-foreground w-40 shrink-0">{label}</span>
             <span className="flex-1">{value}</span>
         </div>
+    );
+}
+
+function LocationValue({ address }: { address: string }) {
+    const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(address)}`;
+    const dirUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+    return (
+        <span className="flex items-start gap-1.5">
+            <span className="flex-1">{address}</span>
+            <span className="flex gap-1 shrink-0 mt-0.5">
+                <button type="button" onClick={() => window.open(mapsUrl, "_blank")} title="Buka di Google Maps"
+                    className="text-blue-600 hover:text-blue-700 transition-colors inline-flex items-center justify-center w-6 h-6 rounded hover:bg-blue-50 dark:hover:bg-blue-500/10">
+                    <MapPin className="w-3.5 h-3.5" />
+                </button>
+                <button type="button" onClick={() => window.open(dirUrl, "_blank")} title="Direction"
+                    className="text-green-600 hover:text-green-700 transition-colors inline-flex items-center justify-center w-6 h-6 rounded hover:bg-green-50 dark:hover:bg-green-500/10">
+                    <Navigation className="w-3.5 h-3.5" />
+                </button>
+            </span>
+        </span>
     );
 }
 
@@ -144,8 +166,12 @@ export default function BookingDetailPage() {
     const remaining = booking.total_price - booking.dp_paid;
     const extraEntries = booking.extra_fields ? Object.entries(booking.extra_fields).filter(([, v]) => v) : [];
 
+    // Separate nama_pasangan from other extra fields (show right after Nama for Wedding)
+    const namaPasangan = booking.extra_fields?.nama_pasangan;
+    const otherExtraEntries = extraEntries.filter(([key]) => key !== "nama_pasangan");
+
     return (
-        <div className="max-w-2xl mx-auto space-y-6">
+        <div className="max-w-4xl mx-auto space-y-6">
             {/* Header */}
             <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -198,6 +224,9 @@ export default function BookingDetailPage() {
             <div className="rounded-xl border bg-card p-6 space-y-3">
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Informasi Klien</h3>
                 <InfoRow label="Nama" value={booking.client_name} />
+                {namaPasangan && (
+                    <InfoRow label="Nama Pasangan" value={namaPasangan} />
+                )}
                 <InfoRow label="WhatsApp" value={booking.client_whatsapp || "-"} />
                 {booking.instagram && (
                     <InfoRow label="Instagram" value={
@@ -210,8 +239,10 @@ export default function BookingDetailPage() {
                 {booking.event_type && booking.event_type !== "Umum" && (
                     <InfoRow label="Tipe Acara" value={booking.event_type} />
                 )}
-                {extraEntries.map(([key, val]) => (
-                    <InfoRow key={key} label={EXTRA_FIELD_LABELS[key] || key} value={val} />
+                {otherExtraEntries.map(([key, val]) => (
+                    <InfoRow key={key} label={EXTRA_FIELD_LABELS[key] || key} value={
+                        LOCATION_FIELDS.has(key) ? <LocationValue address={val} /> : val
+                    } />
                 ))}
             </div>
 
@@ -220,15 +251,7 @@ export default function BookingDetailPage() {
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Detail Sesi</h3>
                 <InfoRow label="Jadwal" value={formatDate(booking.session_date)} />
                 {booking.location && (
-                    <InfoRow label="Lokasi" value={
-                        <span className="flex items-center gap-1">
-                            {booking.location}
-                            <button onClick={() => window.open(`https://maps.google.com/maps?q=${encodeURIComponent(booking.location!)}`, "_blank")}
-                                className="text-blue-600 hover:text-blue-700 ml-1 inline-flex">
-                                <MapPin className="w-3.5 h-3.5" />
-                            </button>
-                        </span>
-                    } />
+                    <InfoRow label="Lokasi" value={<LocationValue address={booking.location} />} />
                 )}
                 <InfoRow label="Paket" value={booking.services?.name || "-"} />
                 <InfoRow label="Freelance" value={booking.freelancers?.name || "-"} />

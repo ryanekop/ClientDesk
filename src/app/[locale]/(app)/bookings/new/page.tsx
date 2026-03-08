@@ -15,7 +15,6 @@ const selectClass = "placeholder:text-muted-foreground dark:bg-input/30 border-i
 
 const EVENT_TYPES = ["Umum", "Wedding", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
-// isLocation flag marks fields that should use LocationAutocomplete
 const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string; isLocation?: boolean }[]> = {
     Wisuda: [
         { key: "universitas", label: "Universitas", labelEn: "University" },
@@ -24,8 +23,8 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string
     ],
     Wedding: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" },
-        { key: "tempat_akad", label: "Tempat Akad", labelEn: "Akad Venue", isLocation: true },
-        { key: "tempat_resepsi", label: "Tempat Resepsi", labelEn: "Reception Venue", isLocation: true },
+        { key: "tempat_akad", label: "Lokasi Akad", labelEn: "Akad Venue", isLocation: true },
+        { key: "tempat_resepsi", label: "Lokasi Resepsi", labelEn: "Reception Venue", isLocation: true },
     ],
     Maternity: [
         { key: "usia_kehamilan", label: "Usia Kehamilan", labelEn: "Pregnancy Age" },
@@ -112,7 +111,7 @@ export default function NewBookingPage() {
     const currentExtraFields = EXTRA_FIELDS[eventType] || [];
 
     return (
-        <div className="max-w-2xl mx-auto space-y-6">
+        <div className="max-w-4xl mx-auto space-y-6">
             <div className="flex items-center gap-3">
                 <Link href="/bookings">
                     <Button variant="ghost" size="icon">
