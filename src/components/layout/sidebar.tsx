@@ -16,7 +16,8 @@ import {
     X,
     ListOrdered,
     LogOut,
-    Menu
+    Menu,
+    FileEdit
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -32,6 +33,7 @@ const mainNavItems = [
     { titleKey: "services" as const, href: "/services", icon: Briefcase },
     { titleKey: "finance" as const, href: "/finance", icon: Wallet },
     { titleKey: "team" as const, href: "/team", icon: Users },
+    { titleKey: "formBooking" as const, href: "/form-booking", icon: FileEdit },
 ];
 
 export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {

@@ -20,6 +20,7 @@
         "finance": "Keuangan",
         "team": "Tim / Freelance",
         "settings": "Pengaturan",
+        "formBooking": "Form Booking",
         "profile": "Profil",
         "logout": "Logout"
     },
@@ -160,11 +161,10 @@
     },
     "Settings": {
         "title": "Pengaturan",
-        "subtitle": "Kelola profil studio dan template pesan Anda.",
-        "profilStudio": "Profil Studio",
-        "infoStudio": "Informasi dasar studio Anda.",
-        "namaStudio": "Nama Studio",
-        "namaLengkap": "Nama Lengkap",
+        "subtitle": "Kelola profil vendor dan template pesan Anda.",
+        "profilStudio": "Profil Vendor/Studio",
+        "infoStudio": "Informasi dasar vendor/studio Anda.",
+        "namaStudio": "Nama Vendor/Studio",
         "nomorWA": "Nomor WhatsApp Studio",
         "simpanProfil": "Simpan Profil",
         "berhasilSimpan": "Profil berhasil disimpan!",
@@ -176,7 +176,8 @@
         "isiTemplate": "Isi Template",
         "simpanTemplate": "Simpan Template",
         "hapusConfirm": "Hapus template ini?",
-        "belumAdaTemplate": "Belum ada template. Klik \"Tambah\" untuk membuat template pertama."
+        "belumAdaTemplate": "Belum ada template. Klik \"Tambah\" untuk membuat template pertama.",
+        "batal": "Batal"
     },
     "Profile": {
         "klikUpload": "Klik untuk upload foto",

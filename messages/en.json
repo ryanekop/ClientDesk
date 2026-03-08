@@ -20,6 +20,7 @@
         "finance": "Finance",
         "team": "Team / Freelance",
         "settings": "Settings",
+        "formBooking": "Booking Form",
         "profile": "Profile",
         "logout": "Logout"
     },
@@ -160,11 +161,10 @@
     },
     "Settings": {
         "title": "Settings",
-        "subtitle": "Manage your studio profile and message templates.",
-        "profilStudio": "Studio Profile",
-        "infoStudio": "Basic information about your studio.",
-        "namaStudio": "Studio Name",
-        "namaLengkap": "Full Name",
+        "subtitle": "Manage your vendor profile and message templates.",
+        "profilStudio": "Vendor/Studio Profile",
+        "infoStudio": "Basic information about your vendor/studio.",
+        "namaStudio": "Vendor/Studio Name",
         "nomorWA": "Studio WhatsApp Number",
         "simpanProfil": "Save Profile",
         "berhasilSimpan": "Profile saved successfully!",
@@ -176,7 +176,8 @@
         "isiTemplate": "Template Content",
         "simpanTemplate": "Save Template",
         "hapusConfirm": "Delete this template?",
-        "belumAdaTemplate": "No templates yet. Click \"Add\" to create your first template."
+        "belumAdaTemplate": "No templates yet. Click \"Add\" to create your first template.",
+        "batal": "Cancel"
     },
     "Profile": {
         "klikUpload": "Click to upload photo",
