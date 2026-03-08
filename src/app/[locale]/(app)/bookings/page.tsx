@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Upload, Folder, FolderPlus, Edit2, Trash2, Link2, Loader2, Info, Phone, MessageSquare } from "lucide-react";
+import { Plus, Upload, Folder, FolderPlus, Edit2, Trash2, Link2, Loader2, Info, Phone, Search, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -19,6 +19,7 @@ type Booking = {
     total_price: number;
     dp_paid: number;
     drive_folder_url: string | null;
+    location: string | null;
     services: { name: string } | null;
     freelancers: { id: string; name: string; whatsapp_number: string | null } | null;
 };
@@ -30,6 +31,7 @@ export default function BookingsPage() {
     const [loading, setLoading] = React.useState(true);
     const [isDriveConnected, setIsDriveConnected] = React.useState(false);
     const [creatingFolder, setCreatingFolder] = React.useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = React.useState("");
 
     React.useEffect(() => {
         fetchBookings();
@@ -86,7 +88,7 @@ export default function BookingsPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, services(name), freelancers(id, name, whatsapp_number)")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, services(name), freelancers(id, name, whatsapp_number)")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
@@ -94,42 +96,10 @@ export default function BookingsPage() {
         setLoading(false);
     }
 
-    async function handleAddBooking(formData: FormData) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { count } = await supabase
-            .from("bookings")
-            .select("*", { count: "exact", head: true })
-            .eq("user_id", user.id);
-
-        const code = `BKG-${String((count || 0) + 1).padStart(3, "0")}`;
-
-        const { error } = await supabase.from("bookings").insert({
-            user_id: user.id,
-            booking_code: code,
-            client_name: formData.get("client_name") as string,
-            client_whatsapp: formData.get("client_whatsapp") as string,
-            session_date: formData.get("session_date") as string || null,
-            status: "Pending",
-        });
-
-        if (!error) {
-            fetchBookings();
-        }
-    }
-
     async function handleDelete(id: string) {
         if (!confirm("Hapus booking ini?")) return;
         await supabase.from("bookings").delete().eq("id", id);
         fetchBookings();
-    }
-
-    function sendWhatsApp(phone: string | null, name: string) {
-        if (!phone) return;
-        const cleaned = phone.replace(/^0/, "62").replace(/[^0-9]/g, "");
-        const msg = encodeURIComponent(`Halo ${name}, terima kasih telah melakukan booking di studio kami!`);
-        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
     }
 
     function sendWhatsAppFreelancer(phone: string | null, freelancerName: string, booking: Booking) {
@@ -147,6 +117,21 @@ export default function BookingsPage() {
 
     const formatCurrency = (n: number) =>
         n ? new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n) : "-";
+
+    // Filter bookings by search query
+    const filteredBookings = bookings.filter(b => {
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.toLowerCase();
+        return (
+            b.client_name.toLowerCase().includes(q) ||
+            b.booking_code.toLowerCase().includes(q) ||
+            (b.client_whatsapp && b.client_whatsapp.includes(q)) ||
+            (b.services?.name && b.services.name.toLowerCase().includes(q)) ||
+            (b.freelancers?.name && b.freelancers.name.toLowerCase().includes(q)) ||
+            (b.location && b.location.toLowerCase().includes(q)) ||
+            b.status.toLowerCase().includes(q)
+        );
+    });
 
     return (
         <div className="space-y-6">
@@ -187,13 +172,24 @@ export default function BookingsPage() {
                         </DialogContent>
                     </Dialog>
 
-                    {/* Tambah Klien Baru */}
                     <Link href="/bookings/new">
                         <Button className="gap-2">
                             <Plus className="w-4 h-4" /> Tambah Klien Baru
                         </Button>
                     </Link>
                 </div>
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Cari nama klien, invoice, lokasi, freelance..."
+                    className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-10 w-full rounded-lg border bg-transparent pl-10 pr-4 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                />
             </div>
 
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
@@ -205,6 +201,7 @@ export default function BookingsPage() {
                                 <th className="px-4 py-4 font-medium text-muted-foreground whitespace-nowrap">Invoice</th>
                                 <th className="px-4 py-4 font-medium text-muted-foreground whitespace-nowrap">{t("paket")}</th>
                                 <th className="px-4 py-4 font-medium text-muted-foreground whitespace-nowrap">{t("jadwal")}</th>
+                                <th className="px-4 py-4 font-medium text-muted-foreground whitespace-nowrap">Lokasi</th>
                                 <th className="px-4 py-4 font-medium text-muted-foreground whitespace-nowrap">{t("status")}</th>
                                 <th className="px-4 py-4 font-medium text-muted-foreground whitespace-nowrap">{t("freelancer")}</th>
                                 <th className="px-4 py-4 font-medium text-muted-foreground whitespace-nowrap">{t("harga")}</th>
@@ -214,16 +211,16 @@ export default function BookingsPage() {
                         <tbody className="divide-y divide-border">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-12 text-center text-muted-foreground">{t("memuat")}</td>
+                                    <td colSpan={9} className="px-6 py-12 text-center text-muted-foreground">{t("memuat")}</td>
                                 </tr>
-                            ) : bookings.length === 0 ? (
+                            ) : filteredBookings.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-12 text-center text-muted-foreground">
-                                        {t("belumAda")}
+                                    <td colSpan={9} className="px-6 py-12 text-center text-muted-foreground">
+                                        {searchQuery ? "Tidak ada hasil pencarian." : t("belumAda")}
                                     </td>
                                 </tr>
                             ) : (
-                                bookings.map((booking) => (
+                                filteredBookings.map((booking) => (
                                     <tr key={booking.id} className="hover:bg-muted/50 transition-colors">
                                         {/* Nama Klien */}
                                         <td className="px-4 py-4">
@@ -244,6 +241,20 @@ export default function BookingsPage() {
                                         <td className="px-4 py-4 whitespace-nowrap">
                                             {formatDate(booking.session_date)}
                                         </td>
+                                        {/* Lokasi */}
+                                        <td className="px-4 py-4 max-w-[200px]">
+                                            {booking.location ? (
+                                                <div className="flex items-start gap-1">
+                                                    <span className="truncate text-xs" title={booking.location}>{booking.location}</span>
+                                                    <button type="button" onClick={() => window.open(`https://maps.google.com/maps?q=${encodeURIComponent(booking.location!)}`, "_blank")}
+                                                        className="text-blue-600 hover:text-blue-700 shrink-0">
+                                                        <MapPin className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span className="text-muted-foreground">-</span>
+                                            )}
+                                        </td>
                                         {/* Status */}
                                         <td className="px-4 py-4 whitespace-nowrap">
                                             <StatusBadge status={booking.status} />
@@ -259,19 +270,16 @@ export default function BookingsPage() {
                                         {/* Aksi */}
                                         <td className="px-4 py-4 whitespace-nowrap text-right">
                                             <div className="flex items-center justify-end gap-1.5">
-                                                {/* Detail - navigasi ke halaman full */}
                                                 <Link href={`/bookings/${booking.id}`}>
                                                     <Button variant="outline" size="icon" title="Detail Booking">
                                                         <Info className="w-4 h-4 text-muted-foreground" />
                                                     </Button>
                                                 </Link>
-                                                {/* WA ke Freelancer */}
                                                 <Button variant="outline" size="icon" title="WhatsApp ke Freelancer"
                                                     disabled={!booking.freelancers}
                                                     onClick={() => sendWhatsAppFreelancer((booking.freelancers as any)?.whatsapp_number, booking.freelancers?.name || "", booking)}>
                                                     <Phone className="w-4 h-4 text-green-600 dark:text-green-400" />
                                                 </Button>
-                                                {/* Drive Folder */}
                                                 {booking.drive_folder_url ? (
                                                     <Button variant="outline" size="icon" title={t("bukaFolderDrive")} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
                                                         <Folder className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -281,13 +289,11 @@ export default function BookingsPage() {
                                                         {creatingFolder === booking.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderPlus className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
                                                     </Button>
                                                 )}
-                                                {/* Edit - navigasi ke halaman full */}
                                                 <Link href={`/bookings/${booking.id}/edit`}>
                                                     <Button variant="outline" size="icon" title="Edit Booking">
                                                         <Edit2 className="w-4 h-4 text-muted-foreground" />
                                                     </Button>
                                                 </Link>
-                                                {/* Hapus */}
                                                 <Button variant="outline" size="icon" title="Hapus" onClick={() => handleDelete(booking.id)}>
                                                     <Trash2 className="w-4 h-4 text-red-500" />
                                                 </Button>
@@ -309,20 +315,21 @@ function StatusBadge({ status }: { status: string }) {
     let variant: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" = "default";
 
     switch (status.toLowerCase()) {
+        case "pending":
+            variant = "secondary";
+            break;
         case "dp":
             variant = "warning";
             break;
         case "terjadwal":
-            variant = "secondary";
+            variant = "default";
             break;
         case "edit":
+        case "cetak":
             variant = "outline";
             break;
         case "selesai":
             variant = "success";
-            break;
-        case "pending":
-            variant = "warning";
             break;
         case "batal":
             variant = "destructive";

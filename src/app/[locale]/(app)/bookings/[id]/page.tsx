@@ -46,9 +46,9 @@ type Booking = {
 
 function StatusBadge({ status }: { status: string }) {
     const variants: Record<string, string> = {
-        pending: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-        dp: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-        terjadwal: "bg-slate-100 text-slate-700 dark:bg-slate-500/10 dark:text-slate-400",
+        pending: "bg-slate-100 text-slate-700 dark:bg-slate-500/10 dark:text-slate-400",
+        dp: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
+        terjadwal: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
         selesai: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
         batal: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
     };

@@ -150,11 +150,12 @@ export default function CalendarPage() {
     }
 
     const eventStyleGetter = (event: CalendarEvent) => {
-        let backgroundColor = "#3b82f6";
-        let borderColor = "#2563eb";
+        let backgroundColor = "#64748b";
+        let borderColor = "#475569";
         switch (event.status?.toLowerCase()) {
+            case "pending": backgroundColor = "#64748b"; borderColor = "#475569"; break;
             case "dp": backgroundColor = "#f59e0b"; borderColor = "#d97706"; break;
-            case "terjadwal": backgroundColor = "#64748b"; borderColor = "#475569"; break;
+            case "terjadwal": backgroundColor = "#3b82f6"; borderColor = "#2563eb"; break;
             case "selesai": backgroundColor = "#10b981"; borderColor = "#059669"; break;
             case "batal": backgroundColor = "#ef4444"; borderColor = "#dc2626"; break;
         }
@@ -265,9 +266,9 @@ export default function CalendarPage() {
 
             {/* Legend */}
             <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#3b82f6]"></span> {t("pending")}</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#64748b]"></span> {t("pending")}</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#f59e0b]"></span> {t("dp")}</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#64748b]"></span> {t("terjadwal")}</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#3b82f6]"></span> {t("terjadwal")}</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#10b981]"></span> {t("selesai")}</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#ef4444]"></span> {t("batal")}</span>
             </div>
