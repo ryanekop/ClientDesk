@@ -36,8 +36,16 @@ export default function FormBookingPage() {
             if (p) {
                 setProfileId(p.id);
                 setStudioName(p.studio_name || "");
-                setVendorSlug(p.vendor_slug || "");
                 setMinDpPercent(p.min_dp_percent ?? 50);
+
+                if (p.vendor_slug) {
+                    setVendorSlug(p.vendor_slug);
+                } else if (p.studio_name) {
+                    // Auto-generate slug from studio name
+                    const autoSlug = p.studio_name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+                    await supabase.from("profiles").update({ vendor_slug: autoSlug }).eq("id", p.id);
+                    setVendorSlug(autoSlug);
+                }
             }
             setLoading(false);
         }
