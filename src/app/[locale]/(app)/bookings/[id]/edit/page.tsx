@@ -18,6 +18,20 @@ const selectClass = "placeholder:text-muted-foreground dark:bg-input/30 border-i
 const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 const STATUSES = ["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"];
 
+const COUNTRY_CODES = [
+    { code: "+62", flag: "🇮🇩", name: "Indonesia" },
+    { code: "+60", flag: "🇲🇾", name: "Malaysia" },
+    { code: "+65", flag: "🇸🇬", name: "Singapore" },
+    { code: "+66", flag: "🇹🇭", name: "Thailand" },
+    { code: "+84", flag: "🇻🇳", name: "Vietnam" },
+    { code: "+63", flag: "🇵🇭", name: "Philippines" },
+    { code: "+95", flag: "🇲🇲", name: "Myanmar" },
+    { code: "+856", flag: "🇱🇦", name: "Laos" },
+    { code: "+855", flag: "🇰🇭", name: "Cambodia" },
+    { code: "+673", flag: "🇧🇳", name: "Brunei" },
+    { code: "+670", flag: "🇹🇱", name: "Timor Leste" },
+];
+
 const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: string; isLocation?: boolean }[]> = {
     Wisuda: [
         { key: "universitas", label: "Universitas", labelEn: "University" },
@@ -29,12 +43,8 @@ const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: st
         { key: "tempat_akad", label: "Lokasi Akad", labelEn: "Akad Venue", isLocation: true },
         { key: "tempat_resepsi", label: "Lokasi Resepsi", labelEn: "Reception Venue", isLocation: true },
     ],
-    Akad: [
-        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" },
-    ],
-    Resepsi: [
-        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" },
-    ],
+    Akad: [{ key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" }],
+    Resepsi: [{ key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" }],
     Maternity: [
         { key: "usia_kehamilan", label: "Usia Kehamilan", labelEn: "Pregnancy Age" },
         { key: "gender_bayi", label: "Gender Bayi", labelEn: "Baby Gender" },
@@ -47,13 +57,38 @@ const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: st
         { key: "nama_brand", label: "Nama Brand", labelEn: "Brand Name" },
         { key: "tipe_konten", label: "Tipe Konten", labelEn: "Content Type" },
     ],
-    Family: [
-        { key: "jumlah_anggota", label: "Jumlah Anggota", labelEn: "Members" },
-    ],
+    Family: [{ key: "jumlah_anggota", label: "Jumlah Anggota", labelEn: "Members" }],
 };
 
 type Service = { id: string; name: string; price: number };
 type Freelance = { id: string; name: string };
+
+function formatNumber(n: number | ""): string {
+    if (n === "" || n === 0) return "";
+    return new Intl.NumberFormat("id-ID").format(n);
+}
+function parseFormattedNumber(s: string): number | "" {
+    const cleaned = s.replace(/\./g, "").replace(/,/g, "");
+    const num = parseInt(cleaned, 10);
+    return isNaN(num) ? "" : num;
+}
+function sanitizePhone(raw: string): string {
+    let cleaned = raw.replace(/[^0-9]/g, "");
+    if (cleaned.startsWith("62")) cleaned = cleaned.slice(2);
+    if (cleaned.startsWith("0")) cleaned = cleaned.slice(1);
+    return cleaned;
+}
+function parseExistingPhone(full: string | null): { code: string; number: string } {
+    if (!full) return { code: "+62", number: "" };
+    const cleaned = full.replace(/[^0-9+]/g, "");
+    for (const c of COUNTRY_CODES) {
+        if (cleaned.startsWith(c.code)) return { code: c.code, number: cleaned.slice(c.code.length) };
+        const numericCode = c.code.replace("+", "");
+        if (cleaned.startsWith(numericCode)) return { code: c.code, number: cleaned.slice(numericCode.length) };
+    }
+    if (cleaned.startsWith("0")) return { code: "+62", number: cleaned.slice(1) };
+    return { code: "+62", number: cleaned };
+}
 
 export default function EditBookingPage() {
     const params = useParams();
@@ -68,7 +103,8 @@ export default function EditBookingPage() {
     const [freelancers, setFreelancers] = React.useState<Freelance[]>([]);
 
     const [clientName, setClientName] = React.useState("");
-    const [clientWa, setClientWa] = React.useState("");
+    const [countryCode, setCountryCode] = React.useState("+62");
+    const [phoneNumber, setPhoneNumber] = React.useState("");
     const [instagram, setInstagram] = React.useState("");
     const [eventType, setEventType] = React.useState("Umum");
     const [sessionDate, setSessionDate] = React.useState("");
@@ -81,7 +117,6 @@ export default function EditBookingPage() {
     const [notes, setNotes] = React.useState("");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
 
-    // Custom popups
     const [showCustomServicePopup, setShowCustomServicePopup] = React.useState(false);
     const [customServiceName, setCustomServiceName] = React.useState("");
     const [customServicePrice, setCustomServicePrice] = React.useState<number | "">("");
@@ -90,22 +125,23 @@ export default function EditBookingPage() {
     const [showCustomFreelancerPopup, setShowCustomFreelancerPopup] = React.useState(false);
     const [customFreelancerName, setCustomFreelancerName] = React.useState("");
     const [customFreelancerWa, setCustomFreelancerWa] = React.useState("");
+    const [customFreelancerRole, setCustomFreelancerRole] = React.useState("Photographer");
     const [savingCustomFreelancer, setSavingCustomFreelancer] = React.useState(false);
 
     React.useEffect(() => {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
-
             const [{ data: booking }, { data: svcs }, { data: frees }] = await Promise.all([
                 supabase.from("bookings").select("*").eq("id", id).single(),
                 supabase.from("services").select("id, name, price").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelancers").select("id, name").eq("user_id", user.id).eq("status", "active"),
             ]);
-
             if (booking) {
                 setClientName(booking.client_name || "");
-                setClientWa(booking.client_whatsapp || "");
+                const parsed = parseExistingPhone(booking.client_whatsapp);
+                setCountryCode(parsed.code);
+                setPhoneNumber(parsed.number);
                 setInstagram(booking.instagram || "");
                 setEventType(booking.event_type || "Umum");
                 setSessionDate(booking.session_date ? booking.session_date.slice(0, 16) : "");
@@ -126,20 +162,13 @@ export default function EditBookingPage() {
     }, [id]);
 
     const handleServiceChange = (val: string) => {
-        if (val === "__custom__") {
-            setShowCustomServicePopup(true);
-            return;
-        }
+        if (val === "__custom__") { setShowCustomServicePopup(true); return; }
         setServiceId(val);
         const selected = services.find(s => s.id === val);
         if (selected) setTotalPrice(selected.price);
     };
-
     const handleFreelancerChange = (val: string) => {
-        if (val === "__custom__") {
-            setShowCustomFreelancerPopup(true);
-            return;
-        }
+        if (val === "__custom__") { setShowCustomFreelancerPopup(true); return; }
         setFreelancerId(val);
     };
 
@@ -170,24 +199,26 @@ export default function EditBookingPage() {
         if (!user) return;
         const { data, error } = await supabase.from("freelancers").insert({
             user_id: user.id, name: customFreelancerName.trim(),
+            role: customFreelancerRole || "Photographer",
             whatsapp_number: customFreelancerWa || null, status: "active",
         }).select("id, name").single();
         if (!error && data) {
             const f = data as Freelance;
             setFreelancers(prev => [...prev, f]);
             setFreelancerId(f.id);
-            setCustomFreelancerName(""); setCustomFreelancerWa("");
+            setCustomFreelancerName(""); setCustomFreelancerWa(""); setCustomFreelancerRole("Photographer");
             setShowCustomFreelancerPopup(false);
-        } else { alert("Gagal menyimpan freelance."); }
+        } else { console.error(error); alert("Gagal menyimpan freelance."); }
         setSavingCustomFreelancer(false);
     }
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         setSaving(true);
+        const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
         const { error } = await supabase.from("bookings").update({
             client_name: clientName,
-            client_whatsapp: clientWa || null,
+            client_whatsapp: fullPhone,
             instagram: instagram || null,
             event_type: eventType,
             session_date: sessionDate || null,
@@ -201,31 +232,23 @@ export default function EditBookingPage() {
             extra_fields: Object.keys(extraFields).length > 0 ? extraFields : null,
             updated_at: new Date().toISOString(),
         }).eq("id", id);
-
         setSaving(false);
-        if (!error) {
-            router.push(`/${locale}/bookings/${id}`);
-        } else {
-            alert("Gagal menyimpan perubahan.");
-        }
+        if (!error) { router.push(`/${locale}/bookings/${id}`); }
+        else { alert("Gagal menyimpan perubahan."); }
     }
 
     const currentExtraFields = EXTRA_FIELDS_DEF[eventType] || [];
-    const reqMark = <span className="text-red-500">*</span>;
+    const reqMark = <span className="text-red-500 ml-0.5">*</span>;
 
     if (loading) return (
-        <div className="flex items-center justify-center py-24">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-        </div>
+        <div className="flex items-center justify-center py-24"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
     );
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 pb-20">
             <div className="flex items-center gap-3">
                 <Link href={`/bookings/${id}`}>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <ArrowLeft className="w-4 h-4" />
-                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="w-4 h-4" /></Button>
                 </Link>
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Edit Booking</h2>
@@ -240,19 +263,24 @@ export default function EditBookingPage() {
                     </h3>
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Nama {reqMark}</label>
+                            <label className="text-xs font-medium text-muted-foreground">Nama{reqMark}</label>
                             <input required value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Nama klien" className={inputClass} />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Nomor WhatsApp {reqMark}</label>
-                            <input required type="tel" value={clientWa} onChange={e => setClientWa(e.target.value)} placeholder="08..." className={inputClass} />
+                            <label className="text-xs font-medium text-muted-foreground">Nomor WhatsApp{reqMark}</label>
+                            <div className="flex gap-1.5">
+                                <select value={countryCode} onChange={e => setCountryCode(e.target.value)} className={cn(selectClass, "w-[110px] shrink-0 text-xs")}>
+                                    {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                                </select>
+                                <input required type="tel" value={phoneNumber} onChange={e => setPhoneNumber(sanitizePhone(e.target.value))} placeholder="812345678" className={cn(inputClass, "flex-1")} />
+                            </div>
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Instagram</label>
                             <input value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@username" className={inputClass} />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Tipe Acara {reqMark}</label>
+                            <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
                             <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); }} className={selectClass} required>
                                 {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
@@ -264,18 +292,9 @@ export default function EditBookingPage() {
                                 <div key={f.key} className={`space-y-1.5 ${f.isLocation ? "col-span-full" : ""}`}>
                                     <label className="text-xs font-medium text-muted-foreground">{locale === "id" ? f.label : f.labelEn}</label>
                                     {f.isLocation ? (
-                                        <LocationAutocomplete
-                                            value={extraFields[f.key] || ""}
-                                            onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))}
-                                            placeholder={`Cari lokasi ${f.label.toLowerCase()}...`}
-                                        />
+                                        <LocationAutocomplete value={extraFields[f.key] || ""} onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))} placeholder={`Cari lokasi ${f.label.toLowerCase()}...`} />
                                     ) : (
-                                        <input
-                                            placeholder={f.label}
-                                            value={extraFields[f.key] || ""}
-                                            onChange={e => setExtraFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                                            className={inputClass}
-                                        />
+                                        <input placeholder={f.label} value={extraFields[f.key] || ""} onChange={e => setExtraFields(prev => ({ ...prev, [f.key]: e.target.value }))} className={inputClass} />
                                     )}
                                 </div>
                             ))}
@@ -289,11 +308,11 @@ export default function EditBookingPage() {
                     </h3>
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Jadwal Sesi {reqMark}</label>
+                            <label className="text-xs font-medium text-muted-foreground">Jadwal Sesi{reqMark}</label>
                             <input required type="datetime-local" value={sessionDate} onChange={e => setSessionDate(e.target.value)} className={cn(inputClass, "block")} />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Status {reqMark}</label>
+                            <label className="text-xs font-medium text-muted-foreground">Status{reqMark}</label>
                             <select value={status} onChange={e => setStatus(e.target.value)} className={selectClass} required>
                                 {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
@@ -302,16 +321,14 @@ export default function EditBookingPage() {
                             <label className="text-xs font-medium text-muted-foreground">Lokasi Utama</label>
                             <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi sesi foto..." />
                         </div>
-
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Paket / Layanan {reqMark}</label>
+                            <label className="text-xs font-medium text-muted-foreground">Paket / Layanan{reqMark}</label>
                             <select value={serviceId} onChange={e => handleServiceChange(e.target.value)} className={selectClass} required>
                                 <option value="">-- Pilih Paket --</option>
                                 {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                 <option value="__custom__">＋ Tambah Paket Baru...</option>
                             </select>
                         </div>
-
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Freelance</label>
                             <select value={freelancerId} onChange={e => handleFreelancerChange(e.target.value)} className={selectClass}>
@@ -329,12 +346,18 @@ export default function EditBookingPage() {
                     </h3>
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Harga Total (Rp) {reqMark}</label>
-                            <input required type="number" value={totalPrice} onChange={e => setTotalPrice(e.target.value ? parseFloat(e.target.value) : "")} placeholder="0" className={inputClass} />
+                            <label className="text-xs font-medium text-muted-foreground">Harga Total{reqMark}</label>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
+                                <input required type="text" inputMode="numeric" value={formatNumber(totalPrice)} onChange={e => setTotalPrice(parseFormattedNumber(e.target.value))} placeholder="0" className={cn(inputClass, "flex-1")} />
+                            </div>
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">DP Dibayar (Rp) {reqMark}</label>
-                            <input required type="number" value={dpPaid} onChange={e => setDpPaid(e.target.value ? parseFloat(e.target.value) : "")} placeholder="0" className={inputClass} />
+                            <label className="text-xs font-medium text-muted-foreground">DP Dibayar{reqMark}</label>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
+                                <input required type="text" inputMode="numeric" value={formatNumber(dpPaid)} onChange={e => setDpPaid(parseFormattedNumber(e.target.value))} placeholder="0" className={cn(inputClass, "flex-1")} />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -347,9 +370,7 @@ export default function EditBookingPage() {
                 </div>
 
                 <div className="flex gap-3 justify-end pt-4">
-                    <Link href={`/bookings/${id}`}>
-                        <Button type="button" variant="ghost" className="text-muted-foreground hover:text-foreground">Batal</Button>
-                    </Link>
+                    <Link href={`/bookings/${id}`}><Button type="button" variant="ghost" className="text-muted-foreground hover:text-foreground">Batal</Button></Link>
                     <Button type="submit" disabled={saving} className="gap-2 bg-foreground text-background hover:bg-foreground/90 px-8">
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Simpan Perubahan
@@ -357,53 +378,58 @@ export default function EditBookingPage() {
                 </div>
             </form>
 
-            {/* Custom Service Popup */}
             <Dialog open={showCustomServicePopup} onOpenChange={setShowCustomServicePopup}>
                 <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Tambah Paket Baru</DialogTitle>
-                    </DialogHeader>
+                    <DialogHeader><DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Tambah Paket Baru</DialogTitle></DialogHeader>
                     <div className="space-y-4 py-2">
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Nama Paket <span className="text-red-500">*</span></label>
-                            <input value={customServiceName} onChange={e => setCustomServiceName(e.target.value)} placeholder="Contoh: Paket Gold 2 Jam" className={inputClass} autoFocus />
+                            <input value={customServiceName} onChange={e => setCustomServiceName(e.target.value)} placeholder="Contoh: Paket Gold" className={inputClass} autoFocus />
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Harga (Rp)</label>
-                            <input type="number" value={customServicePrice} onChange={e => setCustomServicePrice(e.target.value ? parseFloat(e.target.value) : "")} placeholder="0" className={inputClass} />
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
+                                <input type="text" inputMode="numeric" value={formatNumber(customServicePrice)} onChange={e => setCustomServicePrice(parseFormattedNumber(e.target.value))} placeholder="0" className={cn(inputClass, "flex-1")} />
+                            </div>
                         </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowCustomServicePopup(false)} disabled={savingCustomService}>Batal</Button>
                         <Button onClick={saveCustomService} disabled={savingCustomService || !customServiceName.trim()}>
-                            {savingCustomService ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                            Simpan & Pilih
+                            {savingCustomService ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />} Simpan & Pilih
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {/* Custom Freelancer Popup */}
             <Dialog open={showCustomFreelancerPopup} onOpenChange={setShowCustomFreelancerPopup}>
                 <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Tambah Freelance Baru</DialogTitle>
-                    </DialogHeader>
+                    <DialogHeader><DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Tambah Freelance Baru</DialogTitle></DialogHeader>
                     <div className="space-y-4 py-2">
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Nama Freelance <span className="text-red-500">*</span></label>
+                            <label className="text-xs font-medium text-muted-foreground">Nama <span className="text-red-500">*</span></label>
                             <input value={customFreelancerName} onChange={e => setCustomFreelancerName(e.target.value)} placeholder="Nama lengkap" className={inputClass} autoFocus />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Nomor WhatsApp</label>
+                            <label className="text-xs font-medium text-muted-foreground">Role <span className="text-red-500">*</span></label>
+                            <select value={customFreelancerRole} onChange={e => setCustomFreelancerRole(e.target.value)} className={selectClass}>
+                                <option value="Photographer">Photographer</option>
+                                <option value="Videographer">Videographer</option>
+                                <option value="MUA">MUA</option>
+                                <option value="Editor">Editor</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">WhatsApp</label>
                             <input value={customFreelancerWa} onChange={e => setCustomFreelancerWa(e.target.value)} placeholder="08..." className={inputClass} />
                         </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowCustomFreelancerPopup(false)} disabled={savingCustomFreelancer}>Batal</Button>
                         <Button onClick={saveCustomFreelancer} disabled={savingCustomFreelancer || !customFreelancerName.trim()}>
-                            {savingCustomFreelancer ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                            Simpan & Pilih
+                            {savingCustomFreelancer ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />} Simpan & Pilih
                         </Button>
                     </DialogFooter>
                 </DialogContent>

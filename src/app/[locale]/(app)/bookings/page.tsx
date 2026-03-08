@@ -1,14 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Upload, Folder, FolderPlus, Edit2, Trash2, Link2, Loader2, Info, Phone, Search, MapPin, RefreshCcw, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Plus, Folder, FolderPlus, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
+
+const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
 
 type Booking = {
     id: string;
@@ -21,21 +23,31 @@ type Booking = {
     dp_paid: number;
     drive_folder_url: string | null;
     location: string | null;
+    notes: string | null;
     services: { name: string } | null;
     freelancers: { id: string; name: string; whatsapp_number: string | null } | null;
 };
 
 const STATUS_OPTS = ["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"];
 
+function generateWATemplate(booking: Booking, freelancerName?: string) {
+    const sessionStr = booking.session_date ? new Date(booking.session_date).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
+    if (freelancerName) {
+        return `Halo ${freelancerName}, kamu dijadwalkan untuk sesi foto bersama klien ${booking.client_name} (${booking.booking_code}) pada ${sessionStr}. Mohon konfirmasi kehadiranmu. Terima kasih!`;
+    }
+    return `Halo ${booking.client_name}, terima kasih telah booking di studio kami! Detail booking Anda:\n\nKode: ${booking.booking_code}\nJadwal: ${sessionStr}\nPaket: ${booking.services?.name || "-"}\n\nTerima kasih!`;
+}
+
 export default function BookingsPage() {
     const supabase = createClient();
     const t = useTranslations("Bookings");
     const [bookings, setBookings] = React.useState<Booking[]>([]);
     const [packages, setPackages] = React.useState<string[]>([]);
-    const [freelancers, setFreelancers] = React.useState<string[]>([]);
+    const [freelancerNames, setFreelancerNames] = React.useState<string[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [isDriveConnected, setIsDriveConnected] = React.useState(false);
     const [creatingFolder, setCreatingFolder] = React.useState<string | null>(null);
+    const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
     // Filters & Search
     const [searchQuery, setSearchQuery] = React.useState("");
@@ -51,10 +63,14 @@ export default function BookingsPage() {
     const [deleteModal, setDeleteModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [isDeleting, setIsDeleting] = React.useState(false);
 
+    // Drive folder name popup
+    const [folderModal, setFolderModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
+    const [folderName, setFolderName] = React.useState("");
+    const [isCreatingFolderModal, setIsCreatingFolderModal] = React.useState(false);
+
     React.useEffect(() => {
         fetchData();
         checkDriveConnection();
-
         const handleMessage = (event: MessageEvent) => {
             if (event.data?.type === "GOOGLE_DRIVE_SUCCESS") setIsDriveConnected(true);
         };
@@ -65,11 +81,7 @@ export default function BookingsPage() {
     async function checkDriveConnection() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const { data: profile } = await supabase
-            .from("profiles")
-            .select("google_drive_access_token")
-            .eq("id", user.id)
-            .single();
+        const { data: profile } = await supabase.from("profiles").select("google_drive_access_token").eq("id", user.id).single();
         if (profile?.google_drive_access_token) setIsDriveConnected(true);
     }
 
@@ -80,23 +92,29 @@ export default function BookingsPage() {
         window.open("/api/google/drive/auth", "google-drive-auth", `width=${w},height=${h},left=${left},top=${top},popup=yes`);
     }
 
-    async function handleCreateFolder(booking: Booking) {
-        setCreatingFolder(booking.id);
+    async function handleCreateFolderWithName() {
+        if (!folderModal.booking) return;
+        setIsCreatingFolderModal(true);
         try {
             const res = await fetch("/api/google/drive/create-folder", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ bookingId: booking.id, bookingCode: booking.booking_code, clientName: booking.client_name }),
+                body: JSON.stringify({
+                    bookingId: folderModal.booking.id,
+                    bookingCode: folderModal.booking.booking_code,
+                    clientName: folderName || folderModal.booking.client_name,
+                }),
             });
             const result = await res.json();
             if (result.success && result.folderUrl) {
                 window.open(result.folderUrl, "_blank");
                 fetchData();
+                setFolderModal({ open: false, booking: null });
             } else {
                 alert(result.error || "Gagal membuat folder.");
             }
         } catch { alert("Terjadi kesalahan."); }
-        setCreatingFolder(null);
+        setIsCreatingFolderModal(false);
     }
 
     async function fetchData() {
@@ -106,62 +124,51 @@ export default function BookingsPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, services(name), freelancers(id, name, whatsapp_number)")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, notes, services(name), freelancers(id, name, whatsapp_number)")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
         const bgs = (data || []) as unknown as Booking[];
         setBookings(bgs);
-
-        // Extract unique packages and freelancers for filters
-        const pkgs = Array.from(new Set(bgs.map(b => b.services?.name).filter(Boolean))) as string[];
-        const frees = Array.from(new Set(bgs.map(b => b.freelancers?.name).filter(Boolean))) as string[];
-        setPackages(pkgs);
-        setFreelancers(frees);
-
+        setPackages(Array.from(new Set(bgs.map(b => b.services?.name).filter(Boolean))) as string[]);
+        setFreelancerNames(Array.from(new Set(bgs.map(b => b.freelancers?.name).filter(Boolean))) as string[]);
         setLoading(false);
     }
 
     async function handleUpdateStatus() {
         if (!statusModal.booking || !newStatus) return;
         setIsUpdatingStatus(true);
-        const { error } = await supabase
-            .from("bookings")
-            .update({ status: newStatus })
-            .eq("id", statusModal.booking.id);
-
+        const { error } = await supabase.from("bookings").update({ status: newStatus }).eq("id", statusModal.booking.id);
         if (!error) {
             setBookings(prev => prev.map(b => b.id === statusModal.booking?.id ? { ...b, status: newStatus } : b));
             setStatusModal({ open: false, booking: null });
-        } else {
-            alert("Gagal update status.");
-        }
+        } else { alert("Gagal update status."); }
         setIsUpdatingStatus(false);
     }
 
     async function confirmDelete() {
         if (!deleteModal.booking) return;
         setIsDeleting(true);
-        const { error } = await supabase
-            .from("bookings")
-            .delete()
-            .eq("id", deleteModal.booking.id);
-
+        const { error } = await supabase.from("bookings").delete().eq("id", deleteModal.booking.id);
         if (!error) {
             setBookings(prev => prev.filter(b => b.id !== deleteModal.booking?.id));
             setDeleteModal({ open: false, booking: null });
-        } else {
-            alert("Gagal menghapus booking.");
-        }
+        } else { alert("Gagal menghapus booking."); }
         setIsDeleting(false);
     }
 
-    function sendWhatsAppFreelancer(phone: string | null, freelancerName: string, booking: Booking) {
-        if (!phone) { alert("Nomor WhatsApp freelancer tidak tersedia."); return; }
-        const cleaned = phone.replace(/^0/, "62").replace(/[^0-9]/g, "");
-        const sessionStr = booking.session_date ? formatDate(booking.session_date) : "-";
-        const msg = encodeURIComponent(`Halo ${freelancerName}, kamu dijadwalkan untuk sesi foto bersama klien ${booking.client_name} (${booking.booking_code}) pada ${sessionStr}. Mohon konfirmasi kehadiranmu. Terima kasih!`);
+    function sendWhatsAppClient(booking: Booking) {
+        if (!booking.client_whatsapp) { alert("Nomor WhatsApp klien tidak tersedia."); return; }
+        const cleaned = booking.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
+        const msg = encodeURIComponent(generateWATemplate(booking));
         window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
+    }
+
+    function copyTemplate(booking: Booking) {
+        const template = generateWATemplate(booking);
+        navigator.clipboard.writeText(template);
+        setCopiedId(booking.id);
+        setTimeout(() => setCopiedId(null), 2000);
     }
 
     const formatDate = (d: string | null) => {
@@ -172,7 +179,6 @@ export default function BookingsPage() {
     const formatCurrency = (n: number) =>
         n ? new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n) : "-";
 
-    // Combined Filter & Search
     const filteredBookings = bookings.filter(b => {
         const q = searchQuery.toLowerCase();
         const matchesSearch = !searchQuery || (
@@ -183,13 +189,12 @@ export default function BookingsPage() {
         const matchesStatus = statusFilter === "All" || b.status === statusFilter;
         const matchesPackage = packageFilter === "All" || b.services?.name === packageFilter;
         const matchesFreelance = freelanceFilter === "All" || b.freelancers?.name === freelanceFilter;
-
         return matchesSearch && matchesStatus && matchesPackage && matchesFreelance;
     });
 
     return (
         <div className="space-y-6">
-            {/* Header section remains same */}
+            {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight text-foreground">{t("title")}</h2>
@@ -209,44 +214,35 @@ export default function BookingsPage() {
                 </div>
             </div>
 
-            {/* Combined Search & Filters */}
-            <div className="grid gap-4 md:grid-cols-4">
-                <div className="relative md:col-span-1">
+            {/* Filters Row (top) + Search Row (bottom) */}
+            <div className="space-y-3">
+                <div className="flex flex-wrap gap-2 items-center">
+                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={selectFilterClass}>
+                        <option value="All">Semua Status</option>
+                        {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <select value={packageFilter} onChange={e => setPackageFilter(e.target.value)} className={selectFilterClass}>
+                        <option value="All">Semua Paket</option>
+                        {packages.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <select value={freelanceFilter} onChange={e => setFreelanceFilter(e.target.value)} className={selectFilterClass}>
+                        <option value="All">Semua Freelance</option>
+                        {freelancerNames.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                </div>
+                <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <input
                         type="text"
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        placeholder="Cari nama, invoice..."
+                        placeholder="Cari nama klien, invoice, lokasi..."
                         className="h-9 w-full rounded-md border border-input bg-background/50 pl-9 pr-3 text-sm focus-visible:ring-1 focus-visible:ring-ring outline-none transition-all"
                     />
                 </div>
-                <select
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value)}
-                    className="h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
-                >
-                    <option value="All">Semua Status</option>
-                    {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <select
-                    value={packageFilter}
-                    onChange={e => setPackageFilter(e.target.value)}
-                    className="h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
-                >
-                    <option value="All">Semua Paket</option>
-                    {packages.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-                <select
-                    value={freelanceFilter}
-                    onChange={e => setFreelanceFilter(e.target.value)}
-                    className="h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat"
-                >
-                    <option value="All">Semua Freelance</option>
-                    {freelancers.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
             </div>
 
+            {/* Table */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left border-collapse">
@@ -265,15 +261,9 @@ export default function BookingsPage() {
                         </thead>
                         <tbody className="divide-y divide-border/50">
                             {loading ? (
-                                <tr>
-                                    <td colSpan={9} className="px-6 py-12 text-center text-muted-foreground">{t("memuat")}</td>
-                                </tr>
+                                <tr><td colSpan={9} className="px-6 py-12 text-center text-muted-foreground">{t("memuat")}</td></tr>
                             ) : filteredBookings.length === 0 ? (
-                                <tr>
-                                    <td colSpan={9} className="px-6 py-12 text-center text-muted-foreground text-xs italic">
-                                        Data tidak ditemukan.
-                                    </td>
-                                </tr>
+                                <tr><td colSpan={9} className="px-6 py-12 text-center text-muted-foreground text-xs italic">Data tidak ditemukan.</td></tr>
                             ) : (
                                 filteredBookings.map((booking) => (
                                     <tr key={booking.id} className="hover:bg-muted/30 transition-colors group">
@@ -288,65 +278,67 @@ export default function BookingsPage() {
                                                 {booking.booking_code}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
-                                            {booking.services?.name || "-"}
-                                        </td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground font-light">
-                                            {formatDate(booking.session_date)}
-                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{booking.services?.name || "-"}</td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground font-light">{formatDate(booking.session_date)}</td>
                                         <td className="px-4 py-3 max-w-[180px]">
                                             {booking.location ? (
                                                 <div className="flex items-center gap-1">
                                                     <span className="truncate text-xs text-muted-foreground" title={booking.location}>{booking.location}</span>
                                                     <button type="button" onClick={() => window.open(`https://maps.google.com/maps?q=${encodeURIComponent(booking.location!)}`, "_blank")}
-                                                        className="text-blue-500 hover:text-blue-600 transition-colors">
+                                                        className="text-blue-500 hover:text-blue-600 transition-colors shrink-0">
                                                         <MapPin className="w-3 h-3" />
                                                     </button>
                                                 </div>
-                                            ) : (
-                                                <span className="text-muted-foreground">-</span>
-                                            )}
+                                            ) : <span className="text-muted-foreground">-</span>}
                                         </td>
-                                        <td className="px-4 py-3 whitespace-nowrap">
-                                            <StatusBadge status={booking.status} />
-                                        </td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
-                                            {booking.freelancers?.name || "-"}
-                                        </td>
-                                        <td className="px-4 py-3 whitespace-nowrap font-medium text-foreground">
-                                            {formatCurrency(booking.total_price)}
-                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={booking.status} /></td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{booking.freelancers?.name || "-"}</td>
+                                        <td className="px-4 py-3 whitespace-nowrap font-medium text-foreground">{formatCurrency(booking.total_price)}</td>
                                         <td className="px-4 py-3 whitespace-nowrap text-right">
                                             <div className="flex items-center justify-end">
+                                                {/* 1. Copy Template */}
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500 hover:text-violet-600" title="Salin Template"
+                                                    onClick={() => copyTemplate(booking)}>
+                                                    {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                                </Button>
+                                                {/* 2. WA Client */}
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600" title="WA Klien"
+                                                    disabled={!booking.client_whatsapp}
+                                                    onClick={() => sendWhatsAppClient(booking)}>
+                                                    <MessageCircle className="w-4 h-4" />
+                                                </Button>
+                                                {/* 3. Drive Folder */}
+                                                {booking.drive_folder_url ? (
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" title="Buka Folder" onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
+                                                        <Folder className="w-4 h-4" />
+                                                    </Button>
+                                                ) : (
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-500" title="Buat Folder"
+                                                        disabled={!isDriveConnected || creatingFolder === booking.id}
+                                                        onClick={() => { setFolderName(`${booking.booking_code} - ${booking.client_name}`); setFolderModal({ open: true, booking }); }}>
+                                                        {creatingFolder === booking.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderPlus className="w-4 h-4" />}
+                                                    </Button>
+                                                )}
+                                                {/* 4. Detail */}
                                                 <Link href={`/bookings/${booking.id}`}>
                                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-slate-700" title="Detail">
                                                         <Info className="w-4 h-4" />
                                                     </Button>
                                                 </Link>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600" title="WhatsApp"
-                                                    disabled={!booking.freelancers}
-                                                    onClick={() => sendWhatsAppFreelancer((booking.freelancers as any)?.whatsapp_number, booking.freelancers?.name || "", booking)}>
-                                                    <Phone className="w-4 h-4" />
-                                                </Button>
-                                                {booking.drive_folder_url ? (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" title="Drive" onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
-                                                        <Folder className="w-4 h-4" />
-                                                    </Button>
-                                                ) : (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-500" title="Buat Folder" disabled={!isDriveConnected || creatingFolder === booking.id} onClick={() => handleCreateFolder(booking)}>
-                                                        {creatingFolder === booking.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderPlus className="w-4 h-4" />}
-                                                    </Button>
-                                                )}
-                                                {/* Update Status Button */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-500 hover:text-orange-600" title="Ganti Status" onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
+                                                {/* 5. Status */}
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-500 hover:text-orange-600" title="Ganti Status"
+                                                    onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
                                                     <RefreshCcw className="w-4 h-4" />
                                                 </Button>
+                                                {/* 6. Edit */}
                                                 <Link href={`/bookings/${booking.id}/edit`}>
                                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" title="Edit">
                                                         <Edit2 className="w-4 h-4" />
                                                     </Button>
                                                 </Link>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" title="Hapus" onClick={() => setDeleteModal({ open: true, booking })}>
+                                                {/* 7. Hapus */}
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" title="Hapus"
+                                                    onClick={() => setDeleteModal({ open: true, booking })}>
                                                     <Trash2 className="w-4 h-4" />
                                                 </Button>
                                             </div>
@@ -370,14 +362,9 @@ export default function BookingsPage() {
                     </DialogHeader>
                     <div className="py-2 grid grid-cols-3 gap-2">
                         {STATUS_OPTS.map((opt) => (
-                            <button
-                                key={opt}
-                                onClick={() => setNewStatus(opt)}
-                                className={cn(
-                                    "flex flex-col items-center gap-1.5 p-3 rounded-lg border text-xs font-medium transition-all hover:bg-muted/50",
-                                    newStatus === opt ? "border-foreground bg-foreground/5 dark:bg-foreground/10" : "border-border text-muted-foreground"
-                                )}
-                            >
+                            <button key={opt} onClick={() => setNewStatus(opt)}
+                                className={cn("flex flex-col items-center gap-1.5 p-3 rounded-lg border text-xs font-medium transition-all hover:bg-muted/50",
+                                    newStatus === opt ? "border-foreground bg-foreground/5 dark:bg-foreground/10" : "border-border text-muted-foreground")}>
                                 <StatusBadge status={opt} className="scale-110 mb-0.5" />
                                 {opt}
                             </button>
@@ -393,7 +380,7 @@ export default function BookingsPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Custom Delete Modal */}
+            {/* Delete Modal */}
             <Dialog open={deleteModal.open} onOpenChange={(o) => !o && setDeleteModal({ open: false, booking: null })}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader className="items-center text-center">
@@ -414,6 +401,27 @@ export default function BookingsPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Folder Name Modal */}
+            <Dialog open={folderModal.open} onOpenChange={(o) => !o && setFolderModal({ open: false, booking: null })}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2"><FolderPlus className="w-5 h-5" /> Buat Drive Folder</DialogTitle>
+                        <DialogDescription>Masukkan nama folder untuk klien <strong>{folderModal.booking?.client_name}</strong></DialogDescription>
+                    </DialogHeader>
+                    <div className="py-2">
+                        <input value={folderName} onChange={e => setFolderName(e.target.value)} placeholder="Nama folder..."
+                            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring" autoFocus />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setFolderModal({ open: false, booking: null })} disabled={isCreatingFolderModal}>Batal</Button>
+                        <Button onClick={handleCreateFolderWithName} disabled={isCreatingFolderModal || !folderName.trim()}>
+                            {isCreatingFolderModal ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FolderPlus className="w-4 h-4 mr-2" />}
+                            Buat Folder
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
@@ -421,31 +429,13 @@ export default function BookingsPage() {
 function StatusBadge({ status, className }: { status: string; className?: string }) {
     let variant: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" = "default";
     let customClass = "";
-
     switch (status.toLowerCase()) {
-        case "pending":
-            variant = "secondary";
-            customClass = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-none";
-            break;
-        case "dp":
-            variant = "warning";
-            break;
-        case "terjadwal":
-            variant = "default";
-            customClass = "bg-blue-500 text-white hover:bg-blue-600 border-none shadow-sm";
-            break;
-        case "edit":
-        case "cetak":
-            variant = "outline";
-            customClass = "border-blue-200 text-blue-600 dark:border-blue-900/50 dark:text-blue-400";
-            break;
-        case "selesai":
-            variant = "success";
-            break;
-        case "batal":
-            variant = "destructive";
-            break;
+        case "pending": variant = "secondary"; customClass = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-none"; break;
+        case "dp": variant = "warning"; break;
+        case "terjadwal": variant = "default"; customClass = "bg-blue-500 text-white hover:bg-blue-600 border-none shadow-sm"; break;
+        case "edit": case "cetak": variant = "outline"; customClass = "border-blue-200 text-blue-600 dark:border-blue-900/50 dark:text-blue-400"; break;
+        case "selesai": variant = "success"; break;
+        case "batal": variant = "destructive"; break;
     }
-
     return <Badge variant={variant} className={cn("text-[10px] px-2 py-0.5 font-medium rounded-full whitespace-nowrap", customClass, className)}>{status}</Badge>;
 }

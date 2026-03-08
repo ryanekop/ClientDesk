@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
-import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, X, Plus } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
@@ -17,6 +17,20 @@ const selectClass = "placeholder:text-muted-foreground dark:bg-input/30 border-i
 
 const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
+const COUNTRY_CODES = [
+    { code: "+62", flag: "🇮🇩", name: "Indonesia" },
+    { code: "+60", flag: "🇲🇾", name: "Malaysia" },
+    { code: "+65", flag: "🇸🇬", name: "Singapore" },
+    { code: "+66", flag: "🇹🇭", name: "Thailand" },
+    { code: "+84", flag: "🇻🇳", name: "Vietnam" },
+    { code: "+63", flag: "🇵🇭", name: "Philippines" },
+    { code: "+95", flag: "🇲🇲", name: "Myanmar" },
+    { code: "+856", flag: "🇱🇦", name: "Laos" },
+    { code: "+855", flag: "🇰🇭", name: "Cambodia" },
+    { code: "+673", flag: "🇧🇳", name: "Brunei" },
+    { code: "+670", flag: "🇹🇱", name: "Timor Leste" },
+];
+
 const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string; isLocation?: boolean }[]> = {
     Wisuda: [
         { key: "universitas", label: "Universitas", labelEn: "University" },
@@ -28,12 +42,8 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string
         { key: "tempat_akad", label: "Lokasi Akad", labelEn: "Akad Venue", isLocation: true },
         { key: "tempat_resepsi", label: "Lokasi Resepsi", labelEn: "Reception Venue", isLocation: true },
     ],
-    Akad: [
-        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" },
-    ],
-    Resepsi: [
-        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" },
-    ],
+    Akad: [{ key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" }],
+    Resepsi: [{ key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" }],
     Maternity: [
         { key: "usia_kehamilan", label: "Usia Kehamilan", labelEn: "Pregnancy Age" },
         { key: "gender_bayi", label: "Gender Bayi", labelEn: "Baby Gender" },
@@ -46,13 +56,30 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string
         { key: "nama_brand", label: "Nama Brand", labelEn: "Brand Name" },
         { key: "tipe_konten", label: "Tipe Konten", labelEn: "Content Type" },
     ],
-    Family: [
-        { key: "jumlah_anggota", label: "Jumlah Anggota", labelEn: "Number of Members" },
-    ],
+    Family: [{ key: "jumlah_anggota", label: "Jumlah Anggota", labelEn: "Number of Members" }],
 };
 
 type Service = { id: string; name: string; price: number };
 type Freelance = { id: string; name: string };
+
+function formatNumber(n: number | ""): string {
+    if (n === "" || n === 0) return "";
+    return new Intl.NumberFormat("id-ID").format(n);
+}
+
+function parseFormattedNumber(s: string): number | "" {
+    const cleaned = s.replace(/\./g, "").replace(/,/g, "");
+    const num = parseInt(cleaned, 10);
+    return isNaN(num) ? "" : num;
+}
+
+function sanitizePhone(raw: string): string {
+    // Strip leading 0, +62, 62
+    let cleaned = raw.replace(/[^0-9]/g, "");
+    if (cleaned.startsWith("62")) cleaned = cleaned.slice(2);
+    if (cleaned.startsWith("0")) cleaned = cleaned.slice(1);
+    return cleaned;
+}
 
 function generateBookingCode(): string {
     const now = new Date();
@@ -78,17 +105,19 @@ export default function NewBookingPage() {
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
     const [selectedServiceId, setSelectedServiceId] = React.useState("");
     const [selectedFreelancerId, setSelectedFreelancerId] = React.useState("");
+    const [countryCode, setCountryCode] = React.useState("+62");
+    const [phoneNumber, setPhoneNumber] = React.useState("");
 
-    // Custom Service Popup
+    // Custom popups
     const [showCustomServicePopup, setShowCustomServicePopup] = React.useState(false);
     const [customServiceName, setCustomServiceName] = React.useState("");
     const [customServicePrice, setCustomServicePrice] = React.useState<number | "">("");
     const [savingCustomService, setSavingCustomService] = React.useState(false);
 
-    // Custom Freelancer Popup
     const [showCustomFreelancerPopup, setShowCustomFreelancerPopup] = React.useState(false);
     const [customFreelancerName, setCustomFreelancerName] = React.useState("");
     const [customFreelancerWa, setCustomFreelancerWa] = React.useState("");
+    const [customFreelancerRole, setCustomFreelancerRole] = React.useState("Photographer");
     const [savingCustomFreelancer, setSavingCustomFreelancer] = React.useState(false);
 
     React.useEffect(() => {
@@ -107,11 +136,7 @@ export default function NewBookingPage() {
 
     const handleServiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const val = e.target.value;
-        if (val === "__custom__") {
-            e.target.value = selectedServiceId;
-            setShowCustomServicePopup(true);
-            return;
-        }
+        if (val === "__custom__") { e.target.value = selectedServiceId; setShowCustomServicePopup(true); return; }
         setSelectedServiceId(val);
         const selected = services.find(s => s.id === val);
         if (selected) setTotalPrice(selected.price);
@@ -119,11 +144,7 @@ export default function NewBookingPage() {
 
     const handleFreelancerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const val = e.target.value;
-        if (val === "__custom__") {
-            e.target.value = selectedFreelancerId;
-            setShowCustomFreelancerPopup(true);
-            return;
-        }
+        if (val === "__custom__") { e.target.value = selectedFreelancerId; setShowCustomFreelancerPopup(true); return; }
         setSelectedFreelancerId(val);
     };
 
@@ -132,25 +153,18 @@ export default function NewBookingPage() {
         setSavingCustomService(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-
         const { data, error } = await supabase.from("services").insert({
-            user_id: user.id,
-            name: customServiceName.trim(),
-            price: parseFloat(customServicePrice.toString()) || 0,
-            is_active: true,
+            user_id: user.id, name: customServiceName.trim(),
+            price: parseFloat(customServicePrice.toString()) || 0, is_active: true,
         }).select("id, name, price").single();
-
         if (!error && data) {
-            const newSvc = data as Service;
-            setServices(prev => [...prev, newSvc]);
-            setSelectedServiceId(newSvc.id);
-            setTotalPrice(newSvc.price);
-            setCustomServiceName("");
-            setCustomServicePrice("");
+            const s = data as Service;
+            setServices(prev => [...prev, s]);
+            setSelectedServiceId(s.id);
+            setTotalPrice(s.price);
+            setCustomServiceName(""); setCustomServicePrice("");
             setShowCustomServicePopup(false);
-        } else {
-            alert("Gagal menyimpan paket baru.");
-        }
+        } else { alert("Gagal menyimpan paket baru."); }
         setSavingCustomService(false);
     }
 
@@ -159,24 +173,20 @@ export default function NewBookingPage() {
         setSavingCustomFreelancer(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-
         const { data, error } = await supabase.from("freelancers").insert({
             user_id: user.id,
             name: customFreelancerName.trim(),
+            role: customFreelancerRole || "Photographer",
             whatsapp_number: customFreelancerWa || null,
             status: "active",
         }).select("id, name").single();
-
         if (!error && data) {
-            const newFree = data as Freelance;
-            setFreelancers(prev => [...prev, newFree]);
-            setSelectedFreelancerId(newFree.id);
-            setCustomFreelancerName("");
-            setCustomFreelancerWa("");
+            const f = data as Freelance;
+            setFreelancers(prev => [...prev, f]);
+            setSelectedFreelancerId(f.id);
+            setCustomFreelancerName(""); setCustomFreelancerWa(""); setCustomFreelancerRole("Photographer");
             setShowCustomFreelancerPopup(false);
-        } else {
-            alert("Gagal menyimpan freelance baru.");
-        }
+        } else { console.error(error); alert("Gagal menyimpan freelance baru."); }
         setSavingCustomFreelancer(false);
     }
 
@@ -189,12 +199,13 @@ export default function NewBookingPage() {
         const fd = new FormData(e.currentTarget);
         const bookingCode = generateBookingCode();
         const invoiceCode = `INV-${bookingCode}`;
+        const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
 
         const { data: booking, error } = await supabase.from("bookings").insert({
             user_id: user.id,
             booking_code: invoiceCode,
             client_name: fd.get("client_name") as string,
-            client_whatsapp: (fd.get("client_whatsapp") as string) || null,
+            client_whatsapp: fullPhone,
             session_date: (fd.get("session_date") as string) || null,
             location: location || null,
             instagram: (fd.get("instagram") as string) || null,
@@ -211,22 +222,17 @@ export default function NewBookingPage() {
         setSaving(false);
         if (!error && booking) {
             router.push(`/${locale}/bookings/${booking.id}`);
-        } else {
-            console.error(error);
-            alert("Gagal menyimpan booking.");
-        }
+        } else { console.error(error); alert("Gagal menyimpan booking."); }
     }
 
     const currentExtraFields = EXTRA_FIELDS[eventType] || [];
-    const reqMark = <span className="text-red-500">*</span>;
+    const reqMark = <span className="text-red-500 ml-0.5">*</span>;
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 pb-20">
             <div className="flex items-center gap-3">
                 <Link href="/bookings">
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <ArrowLeft className="w-4 h-4" />
-                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="w-4 h-4" /></Button>
                 </Link>
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Tambah Klien Baru</h2>
@@ -242,19 +248,33 @@ export default function NewBookingPage() {
                     </h3>
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Nama {reqMark}</label>
+                            <label className="text-xs font-medium text-muted-foreground">Nama{reqMark}</label>
                             <input name="client_name" required placeholder="Nama lengkap klien" className={inputClass} />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Nomor WhatsApp {reqMark}</label>
-                            <input name="client_whatsapp" required type="tel" placeholder="08..." className={inputClass} />
+                            <label className="text-xs font-medium text-muted-foreground">Nomor WhatsApp{reqMark}</label>
+                            <div className="flex gap-1.5">
+                                <select value={countryCode} onChange={e => setCountryCode(e.target.value)}
+                                    className={cn(selectClass, "w-[110px] shrink-0 text-xs")}>
+                                    {COUNTRY_CODES.map(c => (
+                                        <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
+                                    ))}
+                                </select>
+                                <input
+                                    required type="tel"
+                                    value={phoneNumber}
+                                    onChange={e => setPhoneNumber(sanitizePhone(e.target.value))}
+                                    placeholder="812345678"
+                                    className={cn(inputClass, "flex-1")}
+                                />
+                            </div>
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Instagram</label>
                             <input name="instagram" placeholder="@username" className={inputClass} />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Tipe Acara {reqMark}</label>
+                            <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
                             <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); }} className={selectClass} required>
                                 {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
@@ -266,18 +286,9 @@ export default function NewBookingPage() {
                                 <div key={f.key} className={`space-y-1.5 ${f.isLocation ? "col-span-full" : ""}`}>
                                     <label className="text-xs font-medium text-muted-foreground">{locale === "id" ? f.label : f.labelEn}</label>
                                     {f.isLocation ? (
-                                        <LocationAutocomplete
-                                            value={extraFields[f.key] || ""}
-                                            onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))}
-                                            placeholder={`Cari lokasi ${f.label.toLowerCase()}...`}
-                                        />
+                                        <LocationAutocomplete value={extraFields[f.key] || ""} onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))} placeholder={`Cari lokasi ${f.label.toLowerCase()}...`} />
                                     ) : (
-                                        <input
-                                            placeholder={f.label}
-                                            value={extraFields[f.key] || ""}
-                                            onChange={e => setExtraFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                                            className={inputClass}
-                                        />
+                                        <input placeholder={f.label} value={extraFields[f.key] || ""} onChange={e => setExtraFields(prev => ({ ...prev, [f.key]: e.target.value }))} className={inputClass} />
                                     )}
                                 </div>
                             ))}
@@ -292,11 +303,11 @@ export default function NewBookingPage() {
                     </h3>
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Jadwal Sesi {reqMark}</label>
+                            <label className="text-xs font-medium text-muted-foreground">Jadwal Sesi{reqMark}</label>
                             <input name="session_date" required type="datetime-local" className={cn(inputClass, "block")} />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Status {reqMark}</label>
+                            <label className="text-xs font-medium text-muted-foreground">Status{reqMark}</label>
                             <select name="status" required className={selectClass}>
                                 {["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"].map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
@@ -305,18 +316,14 @@ export default function NewBookingPage() {
                             <label className="text-xs font-medium text-muted-foreground">Lokasi Utama</label>
                             <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi sesi foto..." />
                         </div>
-
-                        {/* Package Selection */}
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Paket / Layanan {reqMark}</label>
+                            <label className="text-xs font-medium text-muted-foreground">Paket / Layanan{reqMark}</label>
                             <select value={selectedServiceId} onChange={handleServiceChange} className={selectClass} required>
                                 <option value="">-- Pilih Paket --</option>
                                 {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                 <option value="__custom__">＋ Tambah Paket Baru...</option>
                             </select>
                         </div>
-
-                        {/* Freelancer Selection */}
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Freelance</label>
                             <select value={selectedFreelancerId} onChange={handleFreelancerChange} className={selectClass}>
@@ -335,28 +342,30 @@ export default function NewBookingPage() {
                     </h3>
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Harga Total (Rp) {reqMark}</label>
-                            <input
-                                name="total_price"
-                                type="number"
-                                required
-                                value={totalPrice}
-                                onChange={e => setTotalPrice(e.target.value ? parseFloat(e.target.value) : "")}
-                                placeholder="0"
-                                className={inputClass}
-                            />
+                            <label className="text-xs font-medium text-muted-foreground">Harga Total{reqMark}</label>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
+                                <input
+                                    required type="text" inputMode="numeric"
+                                    value={formatNumber(totalPrice)}
+                                    onChange={e => setTotalPrice(parseFormattedNumber(e.target.value))}
+                                    placeholder="0"
+                                    className={cn(inputClass, "flex-1")}
+                                />
+                            </div>
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">DP Dibayar (Rp) {reqMark}</label>
-                            <input
-                                name="dp_paid"
-                                type="number"
-                                required
-                                value={dpPaid}
-                                onChange={e => setDpPaid(e.target.value ? parseFloat(e.target.value) : "")}
-                                placeholder="0"
-                                className={inputClass}
-                            />
+                            <label className="text-xs font-medium text-muted-foreground">DP Dibayar{reqMark}</label>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
+                                <input
+                                    required type="text" inputMode="numeric"
+                                    value={formatNumber(dpPaid)}
+                                    onChange={e => setDpPaid(parseFormattedNumber(e.target.value))}
+                                    placeholder="0"
+                                    className={cn(inputClass, "flex-1")}
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -370,9 +379,7 @@ export default function NewBookingPage() {
                 </div>
 
                 <div className="flex gap-3 justify-end pt-4">
-                    <Link href="/bookings">
-                        <Button type="button" variant="ghost" className="text-muted-foreground hover:text-foreground">Batal</Button>
-                    </Link>
+                    <Link href="/bookings"><Button type="button" variant="ghost" className="text-muted-foreground hover:text-foreground">Batal</Button></Link>
                     <Button type="submit" disabled={saving} className="gap-2 bg-foreground text-background hover:bg-foreground/90 px-8">
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Simpan Booking
@@ -383,9 +390,7 @@ export default function NewBookingPage() {
             {/* Custom Service Popup */}
             <Dialog open={showCustomServicePopup} onOpenChange={setShowCustomServicePopup}>
                 <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Tambah Paket Baru</DialogTitle>
-                    </DialogHeader>
+                    <DialogHeader><DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Tambah Paket Baru</DialogTitle></DialogHeader>
                     <div className="space-y-4 py-2">
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Nama Paket <span className="text-red-500">*</span></label>
@@ -393,7 +398,10 @@ export default function NewBookingPage() {
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Harga (Rp)</label>
-                            <input type="number" value={customServicePrice} onChange={e => setCustomServicePrice(e.target.value ? parseFloat(e.target.value) : "")} placeholder="0" className={inputClass} />
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
+                                <input type="text" inputMode="numeric" value={formatNumber(customServicePrice)} onChange={e => setCustomServicePrice(parseFormattedNumber(e.target.value))} placeholder="0" className={cn(inputClass, "flex-1")} />
+                            </div>
                         </div>
                     </div>
                     <DialogFooter>
@@ -409,13 +417,21 @@ export default function NewBookingPage() {
             {/* Custom Freelancer Popup */}
             <Dialog open={showCustomFreelancerPopup} onOpenChange={setShowCustomFreelancerPopup}>
                 <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Tambah Freelance Baru</DialogTitle>
-                    </DialogHeader>
+                    <DialogHeader><DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Tambah Freelance Baru</DialogTitle></DialogHeader>
                     <div className="space-y-4 py-2">
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Nama Freelance <span className="text-red-500">*</span></label>
                             <input value={customFreelancerName} onChange={e => setCustomFreelancerName(e.target.value)} placeholder="Nama lengkap" className={inputClass} autoFocus />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Role <span className="text-red-500">*</span></label>
+                            <select value={customFreelancerRole} onChange={e => setCustomFreelancerRole(e.target.value)} className={selectClass}>
+                                <option value="Photographer">Photographer</option>
+                                <option value="Videographer">Videographer</option>
+                                <option value="MUA">MUA</option>
+                                <option value="Editor">Editor</option>
+                                <option value="Other">Other</option>
+                            </select>
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Nomor WhatsApp</label>
