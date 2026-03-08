@@ -14,7 +14,7 @@ export function getDriveAuthUrl() {
         access_type: "offline",
         prompt: "consent",
         scope: [
-            "https://www.googleapis.com/auth/drive.file",
+            "https://www.googleapis.com/auth/drive",
         ],
     });
 }
@@ -29,7 +29,26 @@ export async function getDriveClient(accessToken: string, refreshToken: string) 
 }
 
 /**
- * Creates a folder in Google Drive for a booking.
+ * Lists folders inside a given parent folder.
+ * parentId = "root" for root of My Drive.
+ */
+export async function listDriveFolder(
+    accessToken: string,
+    refreshToken: string,
+    parentId: string = "root"
+) {
+    const drive = await getDriveClient(accessToken, refreshToken);
+    const res = await drive.files.list({
+        q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        fields: "files(id, name, webViewLink, createdTime)",
+        orderBy: "name",
+        pageSize: 100,
+    });
+    return res.data.files || [];
+}
+
+/**
+ * Creates a folder in Google Drive.
  * If parentFolderId is provided, creates inside that folder.
  */
 export async function createBookingFolder(

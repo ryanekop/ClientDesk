@@ -9,6 +9,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
+import { DriveBrowser } from "@/components/drive-browser";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
 
@@ -46,7 +47,6 @@ export default function BookingsPage() {
     const [freelancerNames, setFreelancerNames] = React.useState<string[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [isDriveConnected, setIsDriveConnected] = React.useState(false);
-    const [creatingFolder, setCreatingFolder] = React.useState<string | null>(null);
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
     // Filters & Search
@@ -63,10 +63,8 @@ export default function BookingsPage() {
     const [deleteModal, setDeleteModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [isDeleting, setIsDeleting] = React.useState(false);
 
-    // Drive folder name popup
-    const [folderModal, setFolderModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
-    const [folderName, setFolderName] = React.useState("");
-    const [isCreatingFolderModal, setIsCreatingFolderModal] = React.useState(false);
+    // Drive browser
+    const [driveBrowser, setDriveBrowser] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
 
     React.useEffect(() => {
         fetchData();
@@ -92,30 +90,6 @@ export default function BookingsPage() {
         window.open("/api/google/drive/auth", "google-drive-auth", `width=${w},height=${h},left=${left},top=${top},popup=yes`);
     }
 
-    async function handleCreateFolderWithName() {
-        if (!folderModal.booking) return;
-        setIsCreatingFolderModal(true);
-        try {
-            const res = await fetch("/api/google/drive/create-folder", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    bookingId: folderModal.booking.id,
-                    bookingCode: folderModal.booking.booking_code,
-                    clientName: folderName || folderModal.booking.client_name,
-                }),
-            });
-            const result = await res.json();
-            if (result.success && result.folderUrl) {
-                window.open(result.folderUrl, "_blank");
-                fetchData();
-                setFolderModal({ open: false, booking: null });
-            } else {
-                alert(result.error || "Gagal membuat folder.");
-            }
-        } catch { alert("Terjadi kesalahan."); }
-        setIsCreatingFolderModal(false);
-    }
 
     async function fetchData() {
         setLoading(true);
@@ -314,9 +288,9 @@ export default function BookingsPage() {
                                                     </Button>
                                                 ) : (
                                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-500" title="Buat Folder"
-                                                        disabled={!isDriveConnected || creatingFolder === booking.id}
-                                                        onClick={() => { setFolderName(`${booking.booking_code} - ${booking.client_name}`); setFolderModal({ open: true, booking }); }}>
-                                                        {creatingFolder === booking.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderPlus className="w-4 h-4" />}
+                                                        disabled={!isDriveConnected}
+                                                        onClick={() => setDriveBrowser({ open: true, booking })}>
+                                                        <FolderPlus className="w-4 h-4" />
                                                     </Button>
                                                 )}
                                                 {/* 4. Detail */}
@@ -402,26 +376,26 @@ export default function BookingsPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Folder Name Modal */}
-            <Dialog open={folderModal.open} onOpenChange={(o) => !o && setFolderModal({ open: false, booking: null })}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2"><FolderPlus className="w-5 h-5" /> Buat Drive Folder</DialogTitle>
-                        <DialogDescription>Masukkan nama folder untuk klien <strong>{folderModal.booking?.client_name}</strong></DialogDescription>
-                    </DialogHeader>
-                    <div className="py-2">
-                        <input value={folderName} onChange={e => setFolderName(e.target.value)} placeholder="Nama folder..."
-                            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring" autoFocus />
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setFolderModal({ open: false, booking: null })} disabled={isCreatingFolderModal}>Batal</Button>
-                        <Button onClick={handleCreateFolderWithName} disabled={isCreatingFolderModal || !folderName.trim()}>
-                            {isCreatingFolderModal ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FolderPlus className="w-4 h-4 mr-2" />}
-                            Buat Folder
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {/* Drive Browser */}
+            {driveBrowser.booking && (
+                <DriveBrowser
+                    open={driveBrowser.open}
+                    onOpenChange={o => { if (!o) setDriveBrowser({ open: false, booking: null }); }}
+                    bookingId={driveBrowser.booking.id}
+                    defaultFolderName={`${driveBrowser.booking.booking_code} - ${driveBrowser.booking.client_name}`}
+                    onFolderCreated={(url) => {
+                        setBookings(prev => prev.map(b => b.id === driveBrowser.booking?.id ? { ...b, drive_folder_url: url } : b));
+                        window.open(url, "_blank");
+                    }}
+                    onFolderSelected={(url) => {
+                        // Save selected folder URL to booking
+                        supabase.from("bookings").update({ drive_folder_url: url }).eq("id", driveBrowser.booking!.id).then(() => {
+                            setBookings(prev => prev.map(b => b.id === driveBrowser.booking?.id ? { ...b, drive_folder_url: url } : b));
+                        });
+                        window.open(url, "_blank");
+                    }}
+                />
+            )}
         </div>
     );
 }

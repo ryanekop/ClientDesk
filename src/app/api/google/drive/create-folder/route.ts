@@ -21,22 +21,21 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Google Drive belum terhubung." }, { status: 400 });
         }
 
-        const { bookingId, bookingCode, clientName } = await request.json();
+        const { bookingId, folderName, parentId } = await request.json();
 
-        if (!bookingId || !bookingCode) {
-            return NextResponse.json({ success: false, error: "Data booking tidak lengkap." }, { status: 400 });
+        if (!folderName) {
+            return NextResponse.json({ success: false, error: "Nama folder wajib diisi." }, { status: 400 });
         }
-
-        const folderName = `${bookingCode} - ${clientName}`;
 
         const result = await createBookingFolder(
             profile.google_drive_access_token,
             profile.google_drive_refresh_token,
-            folderName
+            folderName,
+            parentId || undefined
         );
 
-        // Save folder URL to booking
-        if (result.folderUrl) {
+        // If bookingId provided, save folder URL to booking
+        if (bookingId && result.folderUrl) {
             await supabase
                 .from("bookings")
                 .update({ drive_folder_url: result.folderUrl })
