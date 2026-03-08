@@ -217,6 +217,8 @@ export default function EditBookingPage() {
         e.preventDefault();
         setSaving(true);
         const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
+        const tPrice = parseFloat(totalPrice.toString()) || 0;
+        const dPaid = parseFloat(dpPaid.toString()) || 0;
         const { error } = await supabase.from("bookings").update({
             client_name: clientName,
             client_whatsapp: fullPhone,
@@ -226,8 +228,9 @@ export default function EditBookingPage() {
             location: location || null,
             service_id: serviceId || null,
             freelancer_id: freelancerId || null,
-            total_price: parseFloat(totalPrice.toString()) || 0,
-            dp_paid: parseFloat(dpPaid.toString()) || 0,
+            total_price: tPrice,
+            dp_paid: dPaid,
+            is_fully_paid: dPaid >= tPrice && tPrice > 0,
             status,
             notes: notes || null,
             extra_fields: Object.keys(extraFields).length > 0 ? extraFields : null,

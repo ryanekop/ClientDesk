@@ -95,23 +95,17 @@ export default function PublicBookingForm() {
 
     React.useEffect(() => {
         async function load() {
-            // Get vendor by slug
-            const { data: v } = await supabase
-                .from("profiles")
-                .select("id, studio_name, whatsapp_number, min_dp_percent, avatar_url")
-                .eq("vendor_slug", slug)
-                .single();
+            try {
+                const res = await fetch(`/api/public/vendor?slug=${encodeURIComponent(slug)}`);
+                const data = await res.json();
 
-            if (!v) { setNotFound(true); setLoading(false); return; }
-            setVendor(v as Vendor);
+                if (!data.success) { setNotFound(true); setLoading(false); return; }
 
-            // Get vendor's services
-            const { data: svcs } = await supabase
-                .from("services")
-                .select("id, name, price, description")
-                .eq("user_id", v.id)
-                .order("name");
-            setServices((svcs || []) as Service[]);
+                setVendor(data.vendor as Vendor);
+                setServices((data.services || []) as Service[]);
+            } catch {
+                setNotFound(true);
+            }
             setLoading(false);
         }
         if (slug) load();
