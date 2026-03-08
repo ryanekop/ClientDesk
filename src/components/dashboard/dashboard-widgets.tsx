@@ -35,8 +35,8 @@ export function RealtimeClock() {
                 </div>
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Waktu Sekarang</span>
             </div>
-            <div className="text-2xl font-bold tabular-nums tracking-tight">{timeStr}</div>
-            <p className="text-sm text-muted-foreground mt-1">{dayName}, {dateStr}</p>
+            <p className="text-lg font-bold">{dayName}, {dateStr}</p>
+            <div className="text-2xl font-bold tabular-nums tracking-tight text-primary mt-1">{timeStr}</div>
         </div>
     );
 }

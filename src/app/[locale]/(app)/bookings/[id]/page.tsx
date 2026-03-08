@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation } from "lucide-react";
+import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
@@ -42,6 +42,9 @@ type Booking = {
     extra_fields: Record<string, string> | null;
     services: { name: string; price: number } | null;
     freelancers: { name: string; whatsapp_number: string | null } | null;
+    tracking_uuid: string | null;
+    client_status: string | null;
+    queue_position: number | null;
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -93,6 +96,11 @@ export default function BookingDetailPage() {
     const [loading, setLoading] = React.useState(true);
     const [creatingFolder, setCreatingFolder] = React.useState(false);
     const [isDriveConnected, setIsDriveConnected] = React.useState(false);
+    const [clientStatus, setClientStatus] = React.useState("");
+    const [queuePos, setQueuePos] = React.useState<number | "">(0);
+    const [savingStatus, setSavingStatus] = React.useState(false);
+    const [statusSaved, setStatusSaved] = React.useState(false);
+    const [copiedTrack, setCopiedTrack] = React.useState(false);
 
     React.useEffect(() => {
         async function load() {
@@ -101,16 +109,46 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, instagram, event_type, notes, extra_fields, services(name, price), freelancers(name, whatsapp_number)")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelancers(name, whatsapp_number)")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token").eq("id", user.id).single(),
             ]);
             setBooking(data as unknown as Booking);
+            if (data) {
+                setClientStatus((data as any).client_status || "");
+                setQueuePos((data as any).queue_position || "");
+                // Generate tracking_uuid if not set
+                if (!(data as any).tracking_uuid) {
+                    const uuid = crypto.randomUUID();
+                    await supabase.from("bookings").update({ tracking_uuid: uuid }).eq("id", id);
+                    setBooking(prev => prev ? { ...prev, tracking_uuid: uuid } : prev);
+                }
+            }
             if (profile?.google_drive_access_token) setIsDriveConnected(true);
             setLoading(false);
         }
         load();
     }, [id]);
+
+    async function handleSaveClientStatus() {
+        if (!booking) return;
+        setSavingStatus(true);
+        await supabase.from("bookings").update({
+            client_status: clientStatus || null,
+            queue_position: queuePos === "" ? null : Number(queuePos),
+        }).eq("id", booking.id);
+        setStatusSaved(true);
+        setTimeout(() => setStatusSaved(false), 2000);
+        setSavingStatus(false);
+    }
+
+    function copyTrackingLink() {
+        if (!booking?.tracking_uuid) return;
+        const url = `${window.location.origin}/id/track/${booking.tracking_uuid}`;
+        navigator.clipboard.writeText(url);
+        setCopiedTrack(true);
+        setTimeout(() => setCopiedTrack(false), 2000);
+    }
 
     const formatDate = (d: string | null) => {
         if (!d) return "-";
@@ -276,6 +314,64 @@ export default function BookingDetailPage() {
                     <p className="text-sm whitespace-pre-wrap">{booking.notes}</p>
                 </div>
             )}
+
+            {/* Status Klien / Tracking */}
+            <div className="rounded-xl border bg-card p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5"><ListOrdered className="w-4 h-4" /> Status Klien</h3>
+                    {booking.tracking_uuid && (
+                        <button onClick={copyTrackingLink} className="flex items-center gap-1.5 text-xs text-primary hover:underline cursor-pointer">
+                            {copiedTrack ? <ClipboardCheck className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+                            {copiedTrack ? "Tersalin!" : "Salin Link Tracking"}
+                        </button>
+                    )}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Progress</label>
+                        <select
+                            value={clientStatus}
+                            onChange={e => setClientStatus(e.target.value)}
+                            className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] cursor-pointer"
+                        >
+                            <option value="">Pilih status...</option>
+                            <option value="Booking Confirmed">Booking Confirmed</option>
+                            <option value="Sesi Foto / Acara">Sesi Foto / Acara</option>
+                            <option value="Antrian Edit">Antrian Edit</option>
+                            <option value="Proses Edit">Proses Edit</option>
+                            <option value="Revisi">Revisi</option>
+                            <option value="File Siap">File Siap</option>
+                            <option value="Selesai">Selesai</option>
+                        </select>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Posisi Antrian</label>
+                        <input
+                            type="number"
+                            min={0}
+                            value={queuePos}
+                            onChange={e => setQueuePos(e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                            placeholder="Misal: 3"
+                            className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                        />
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <Button size="sm" onClick={handleSaveClientStatus} disabled={savingStatus} className="gap-1.5">
+                        {savingStatus ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                        Simpan Status
+                    </Button>
+                    {statusSaved && <span className="text-xs text-green-600 dark:text-green-400">Tersimpan!</span>}
+                </div>
+
+                {booking.tracking_uuid && (
+                    <div className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md font-mono break-all">
+                        Link klien: {window.location.origin}/id/track/{booking.tracking_uuid}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
