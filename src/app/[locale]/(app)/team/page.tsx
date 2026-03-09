@@ -12,6 +12,7 @@ type Freelancer = {
     name: string;
     role: string;
     whatsapp_number: string | null;
+    google_email: string | null;
     status: string;
     created_at: string;
 };
@@ -53,6 +54,7 @@ export default function TeamPage() {
             name: formData.get("name") as string,
             role: formData.get("role") as string,
             whatsapp_number: formData.get("whatsapp_number") as string || null,
+            google_email: formData.get("google_email") as string || null,
             status: "active",
         });
 
@@ -68,6 +70,7 @@ export default function TeamPage() {
                 name: formData.get("name") as string,
                 role: formData.get("role") as string,
                 whatsapp_number: formData.get("whatsapp_number") as string || null,
+                google_email: formData.get("google_email") as string || null,
             })
             .eq("id", editingMember.id);
 
@@ -127,6 +130,10 @@ export default function TeamPage() {
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">{t("whatsapp")}</label>
                                 <input name="whatsapp_number" type="tel" placeholder="08123456789" className={inputClass} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Google Email</label>
+                                <input name="google_email" type="email" placeholder="email@gmail.com (untuk kalender)" className={inputClass} />
                             </div>
                             <DialogFooter><Button type="submit">{t("simpan")}</Button></DialogFooter>
                         </form>
@@ -228,6 +235,10 @@ export default function TeamPage() {
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">{t("whatsapp")}</label>
                                 <input name="whatsapp_number" type="tel" defaultValue={editingMember.whatsapp_number || ""} className={inputClass} />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Google Email</label>
+                                <input name="google_email" type="email" defaultValue={editingMember.google_email || ""} placeholder="email@gmail.com (untuk kalender)" className={inputClass} />
                             </div>
                             <DialogFooter><Button type="submit">{t("perbarui")}</Button></DialogFooter>
                         </form>

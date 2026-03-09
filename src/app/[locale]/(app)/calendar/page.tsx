@@ -6,7 +6,7 @@ import { format, parse, startOfWeek, getDay } from "date-fns";
 import { id } from "date-fns/locale/id";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { createClient } from "@/utils/supabase/client";
-import { Loader2, Link2, Unlink, CalendarPlus, ChevronLeft, ChevronRight, CalendarDays, CalendarRange, Clock, List, ExternalLink, Info } from "lucide-react";
+import { Loader2, Link2, Unlink, CalendarPlus, ChevronLeft, ChevronRight, CalendarDays, CalendarRange, Clock, List, ExternalLink, Info, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useTranslations } from "next-intl";
@@ -25,8 +25,14 @@ type CalendarEvent = Event & {
     clientName?: string;
     status?: string;
     serviceName?: string;
-    source: "booking" | "google";
+    source: "booking" | "google" | "freelancer";
+    freelancerName?: string;
+    freelancerColor?: string;
 };
+
+type FreelancerCal = { id: string; name: string; google_email: string };
+
+const FREELANCER_COLORS = ["#8b5cf6", "#ec4899", "#f97316", "#06b6d4", "#84cc16"];
 
 /* ─── Custom Toolbar ─── */
 function CustomToolbar({ onNavigate, onView, view, label }: ToolbarProps<CalendarEvent, object>) {
@@ -83,6 +89,12 @@ export default function CalendarPage() {
     const [isGoogleConnected, setIsGoogleConnected] = React.useState(false);
     const [syncing, setSyncing] = React.useState(false);
 
+    // Freelancer calendars
+    const [freelancerCals, setFreelancerCals] = React.useState<FreelancerCal[]>([]);
+    const [activeFreelancers, setActiveFreelancers] = React.useState<Set<string>>(new Set());
+    const [freelancerEvents, setFreelancerEvents] = React.useState<CalendarEvent[]>([]);
+    const [loadingFreelancers, setLoadingFreelancers] = React.useState(false);
+
     // Event popup
     const [selectedEvent, setSelectedEvent] = React.useState<CalendarEvent | null>(null);
     const [eventPopupOpen, setEventPopupOpen] = React.useState(false);
@@ -90,6 +102,7 @@ export default function CalendarPage() {
     React.useEffect(() => {
         fetchBookings();
         checkGoogleConnection();
+        fetchFreelancerList();
 
         const handleMessage = (event: MessageEvent) => {
             if (event.data?.type === "GOOGLE_AUTH_SUCCESS") {
@@ -99,6 +112,52 @@ export default function CalendarPage() {
         window.addEventListener("message", handleMessage);
         return () => window.removeEventListener("message", handleMessage);
     }, []);
+
+    // Fetch freelancer calendar events when toggles change
+    React.useEffect(() => {
+        fetchFreelancerCalendars();
+    }, [activeFreelancers]);
+
+    async function fetchFreelancerList() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+            .from("freelancers")
+            .select("id, name, google_email")
+            .eq("user_id", user.id)
+            .eq("status", "active")
+            .not("google_email", "is", null);
+        setFreelancerCals((data || []).filter((f: any) => f.google_email) as FreelancerCal[]);
+    }
+
+    async function fetchFreelancerCalendars() {
+        if (activeFreelancers.size === 0) { setFreelancerEvents([]); return; }
+        setLoadingFreelancers(true);
+        const allEvents: CalendarEvent[] = [];
+
+        for (const fId of activeFreelancers) {
+            const f = freelancerCals.find(fc => fc.id === fId);
+            if (!f) continue;
+            const colorIdx = freelancerCals.indexOf(f) % FREELANCER_COLORS.length;
+            try {
+                const res = await fetch(`/api/google/freelancer-calendar?email=${encodeURIComponent(f.google_email)}`);
+                const json = await res.json();
+                if (json.success && json.events) {
+                    const mapped: CalendarEvent[] = json.events.map((e: any) => ({
+                        title: `[${f.name}] ${e.title}`,
+                        start: new Date(e.start),
+                        end: new Date(e.end),
+                        source: "freelancer" as const,
+                        freelancerName: f.name,
+                        freelancerColor: FREELANCER_COLORS[colorIdx],
+                    }));
+                    allEvents.push(...mapped);
+                }
+            } catch { /* skip errors */ }
+        }
+        setFreelancerEvents(allEvents);
+        setLoadingFreelancers(false);
+    }
 
     async function checkGoogleConnection() {
         const { data: { user } } = await supabase.auth.getUser();
@@ -225,7 +284,18 @@ export default function CalendarPage() {
         setEventPopupOpen(false);
     }
 
+    const allEvents = [...events, ...freelancerEvents];
+
     const eventStyleGetter = (event: CalendarEvent) => {
+        // Freelancer calendar events
+        if (event.source === "freelancer" && event.freelancerColor) {
+            return {
+                style: {
+                    backgroundColor: event.freelancerColor, borderColor: event.freelancerColor,
+                    color: "#fff", borderRadius: "6px", border: "none", opacity: 0.85, cursor: "pointer",
+                }
+            };
+        }
         let backgroundColor = "#64748b";
         let borderColor = "#475569";
         switch (event.status?.toLowerCase()) {
@@ -319,7 +389,7 @@ export default function CalendarPage() {
                 <div className="flex-1 min-h-0 flex flex-col">
                     <Calendar
                         localizer={localizer}
-                        events={events}
+                        events={allEvents}
                         startAccessor="start"
                         endAccessor="end"
                         style={{ height: "100%" }}
@@ -347,7 +417,52 @@ export default function CalendarPage() {
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#3b82f6]"></span> {t("terjadwal")}</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#10b981]"></span> {t("selesai")}</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#ef4444]"></span> {t("batal")}</span>
+                {freelancerCals.map((f, i) => activeFreelancers.has(f.id) && (
+                    <span key={f.id} className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: FREELANCER_COLORS[i % FREELANCER_COLORS.length] }}></span>
+                        {f.name}
+                    </span>
+                ))}
             </div>
+
+            {/* Freelancer Calendar Toggles */}
+            {freelancerCals.length > 0 && (
+                <div className="rounded-xl border bg-card p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <Users className="w-4 h-4" />
+                        Kalender Freelancer
+                        {loadingFreelancers && <Loader2 className="w-3 h-3 animate-spin" />}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {freelancerCals.map((f, i) => {
+                            const isActive = activeFreelancers.has(f.id);
+                            const color = FREELANCER_COLORS[i % FREELANCER_COLORS.length];
+                            return (
+                                <button
+                                    key={f.id}
+                                    onClick={() => {
+                                        setActiveFreelancers(prev => {
+                                            const next = new Set(prev);
+                                            if (next.has(f.id)) next.delete(f.id); else next.add(f.id);
+                                            return next;
+                                        });
+                                    }}
+                                    className={cn(
+                                        "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer",
+                                        isActive
+                                            ? "text-white border-transparent"
+                                            : "border-input text-muted-foreground hover:bg-muted/50"
+                                    )}
+                                    style={isActive ? { backgroundColor: color, borderColor: color } : {}}
+                                >
+                                    {f.name}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Freelancer harus share Google Calendar ke email admin Anda terlebih dahulu.</p>
+                </div>
+            )}
 
             {/* Event Popup */}
             <Dialog open={eventPopupOpen} onOpenChange={setEventPopupOpen}>
