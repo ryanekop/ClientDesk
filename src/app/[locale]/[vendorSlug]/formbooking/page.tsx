@@ -5,19 +5,26 @@ import { useParams } from "next/navigation";
 import { Loader2, CheckCircle2, Upload, CalendarDays, MapPin, Camera, MessageCircle, CreditCard } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { compressImage } from "@/utils/compress-image";
+import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
 
 const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
-const EXTRA_FIELDS: Record<string, { key: string; label: string }[]> = {
+const EXTRA_FIELDS: Record<string, { key: string; label: string; isLocation?: boolean }[]> = {
     Wisuda: [{ key: "universitas", label: "Universitas" }],
     Wedding: [
         { key: "nama_pasangan", label: "Nama Pasangan" },
         { key: "jumlah_tamu", label: "Estimasi Tamu" },
+        { key: "tempat_akad", label: "Lokasi Akad", isLocation: true },
+        { key: "tempat_resepsi", label: "Lokasi Resepsi", isLocation: true },
     ],
-    Akad: [{ key: "nama_pasangan", label: "Nama Pasangan" }],
+    Akad: [
+        { key: "nama_pasangan", label: "Nama Pasangan" },
+        { key: "tempat_akad", label: "Lokasi Akad", isLocation: true },
+    ],
     Resepsi: [
         { key: "nama_pasangan", label: "Nama Pasangan" },
         { key: "jumlah_tamu", label: "Estimasi Tamu" },
+        { key: "tempat_resepsi", label: "Lokasi Resepsi", isLocation: true },
     ],
     Maternity: [{ key: "usia_kandungan", label: "Usia Kandungan (bulan)" }],
     Newborn: [{ key: "nama_bayi", label: "Nama Bayi" }],
@@ -51,9 +58,7 @@ type Vendor = {
     form_show_location: boolean;
     form_show_notes: boolean;
     form_show_proof: boolean;
-    bank_name: string | null;
-    bank_account_number: string | null;
-    bank_account_name: string | null;
+    bank_accounts: { bank_name: string; account_number: string; account_name: string }[];
 };
 
 function formatCurrency(n: number) {
@@ -382,14 +387,22 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                         {currentExtraFields.length > 0 && (
                             <div className={`grid gap-4 ${currentExtraFields.length === 1 ? "" : "sm:grid-cols-2"}`}>
                                 {currentExtraFields.map(f => (
-                                    <div key={f.key} className={`space-y-1.5 ${currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
+                                    <div key={f.key} className={`space-y-1.5 ${f.isLocation || currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
                                         <label className="text-sm font-medium">{f.label}</label>
-                                        <input
-                                            value={extraData[f.key] || ""}
-                                            onChange={e => setExtraData(prev => ({ ...prev, [f.key]: e.target.value }))}
-                                            placeholder={f.label}
-                                            className={inputClass}
-                                        />
+                                        {f.isLocation ? (
+                                            <LocationAutocomplete
+                                                value={extraData[f.key] || ""}
+                                                onChange={v => setExtraData(prev => ({ ...prev, [f.key]: v }))}
+                                                placeholder={`Cari lokasi ${f.label.toLowerCase()}...`}
+                                            />
+                                        ) : (
+                                            <input
+                                                value={extraData[f.key] || ""}
+                                                onChange={e => setExtraData(prev => ({ ...prev, [f.key]: e.target.value }))}
+                                                placeholder={f.label}
+                                                className={inputClass}
+                                            />
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -397,7 +410,7 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
 
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Lokasi <span className="text-red-500">*</span></label>
-                            <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Lokasi acara" className={inputClass} required />
+                            <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi acara..." />
                         </div>
                     </div>
 
@@ -440,28 +453,33 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                                         setDpDisplay(val === "" ? "" : formatNumber(val));
                                     }}
                                     placeholder={selectedService ? formatNumber(Math.ceil(selectedService.price * minDP / 100)) : "0"}
-                                    className={inputClass}
+                                    className={`${inputClass} ${selectedService && dpDisplay && Number(parseFormatted(dpDisplay)) < Math.ceil(selectedService.price * minDP / 100) ? "!border-red-500 focus-visible:!border-red-500 focus-visible:!ring-red-500/30" : ""}`}
                                     required
                                 />
                             </div>
-                            {selectedService && (
+                            {selectedService && dpDisplay && Number(parseFormatted(dpDisplay)) < Math.ceil(selectedService.price * minDP / 100) ? (
+                                <p className="text-xs text-red-500 font-medium">
+                                    ⚠️ DP minimal {minDP}% dari harga paket ({formatCurrency(Math.ceil(selectedService.price * minDP / 100))})
+                                </p>
+                            ) : selectedService ? (
                                 <p className="text-xs text-muted-foreground">
                                     Minimum: {formatCurrency(Math.ceil(selectedService.price * minDP / 100))}
                                 </p>
-                            )}
+                            ) : null}
                         </div>
 
                         {/* Bank Info */}
-                        {vendor?.bank_name && vendor?.bank_account_number && (
-                            <div className="rounded-lg border bg-blue-50 dark:bg-blue-500/5 border-blue-200 dark:border-blue-500/20 p-4 space-y-2">
-                                <div className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 dark:text-blue-400">
-                                    <CreditCard className="w-4 h-4" /> Transfer ke
-                                </div>
-                                <div className="space-y-1 text-sm">
-                                    <p className="font-medium">{vendor.bank_name}</p>
-                                    <p className="font-mono text-base font-bold tracking-wide">{vendor.bank_account_number}</p>
-                                    {vendor.bank_account_name && <p className="text-muted-foreground">a.n. {vendor.bank_account_name}</p>}
-                                </div>
+                        {vendor?.bank_accounts && vendor.bank_accounts.length > 0 && (
+                            <div className="space-y-2">
+                                {vendor.bank_accounts.map((bank: { bank_name: string; account_number: string; account_name: string }, i: number) => (
+                                    <div key={i} className="rounded-lg border bg-blue-50 dark:bg-blue-500/5 border-blue-200 dark:border-blue-500/20 p-3 space-y-1">
+                                        <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-400">
+                                            <CreditCard className="w-3.5 h-3.5" /> {bank.bank_name}
+                                        </div>
+                                        <p className="font-mono text-sm font-bold tracking-wide">{bank.account_number}</p>
+                                        {bank.account_name && <p className="text-xs text-muted-foreground">a.n. {bank.account_name}</p>}
+                                    </div>
+                                ))}
                             </div>
                         )}
 
