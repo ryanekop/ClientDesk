@@ -158,7 +158,9 @@
         "perbarui": "Perbarui",
         "hapusConfirm": "Hapus anggota ini?",
         "belumAda": "Belum ada anggota tim",
-        "belumAdaDesc": "Klik \"Tambah Anggota\" untuk menambahkan fotografer, videografer, atau freelance."
+        "belumAdaDesc": "Klik \"Tambah Anggota\" untuk menambahkan fotografer, videografer, atau freelance.",
+        "aktif": "Aktif",
+        "nonaktif": "Nonaktif"
     },
     "Settings": {
         "title": "Pengaturan",

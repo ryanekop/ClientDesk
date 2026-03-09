@@ -158,7 +158,9 @@
         "perbarui": "Update",
         "hapusConfirm": "Delete this member?",
         "belumAda": "No team members yet",
-        "belumAdaDesc": "Click \"Add Member\" to add photographers, videographers, or freelancers."
+        "belumAdaDesc": "Click \"Add Member\" to add photographers, videographers, or freelancers.",
+        "aktif": "Active",
+        "nonaktif": "Inactive"
     },
     "Settings": {
         "title": "Settings",
