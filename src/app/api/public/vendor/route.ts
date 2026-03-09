@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     // Get vendor info
     const { data: vendor } = await supabaseAdmin
         .from("profiles")
-        .select("id, studio_name, whatsapp_number, min_dp_percent, avatar_url")
+        .select("id, studio_name, whatsapp_number, min_dp_percent, avatar_url, form_brand_color, form_greeting, form_event_types, form_show_location, form_show_notes, form_show_proof")
         .eq("vendor_slug", slug)
         .single();
 
@@ -37,6 +37,12 @@ export async function GET(request: NextRequest) {
             whatsapp_number: vendor.whatsapp_number,
             min_dp_percent: vendor.min_dp_percent,
             avatar_url: vendor.avatar_url,
+            form_brand_color: vendor.form_brand_color || '#000000',
+            form_greeting: vendor.form_greeting,
+            form_event_types: vendor.form_event_types,
+            form_show_location: vendor.form_show_location ?? true,
+            form_show_notes: vendor.form_show_notes ?? true,
+            form_show_proof: vendor.form_show_proof ?? true,
         },
         services: services || [],
     });

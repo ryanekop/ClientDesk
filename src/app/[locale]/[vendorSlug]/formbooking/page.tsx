@@ -44,6 +44,12 @@ type Vendor = {
     whatsapp_number: string | null;
     min_dp_percent: number | null;
     avatar_url: string | null;
+    form_brand_color: string;
+    form_greeting: string | null;
+    form_event_types: string[] | null;
+    form_show_location: boolean;
+    form_show_notes: boolean;
+    form_show_proof: boolean;
 };
 
 function formatCurrency(n: number) {
@@ -230,6 +236,8 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
 
     const minDP = vendor?.min_dp_percent ?? 50;
     const currentExtraFields = EXTRA_FIELDS[eventType] || [];
+    const brandColor = vendor?.form_brand_color || '#000000';
+    const availableEventTypes = vendor?.form_event_types?.length ? vendor.form_event_types : EVENT_TYPES;
 
     if (loading) {
         return (
@@ -291,7 +299,7 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">{vendor?.studio_name || "Studio"}</h1>
-                        <p className="text-muted-foreground text-sm">Silakan isi formulir di bawah ini untuk booking.</p>
+                        <p className="text-muted-foreground text-sm">{vendor?.form_greeting || "Silakan isi formulir di bawah ini untuk booking."}</p>
                     </div>
                 </div>
 
@@ -337,7 +345,7 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                                 <label className="text-sm font-medium">Tipe Acara <span className="text-red-500">*</span></label>
                                 <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraData({}); }} className={selectClass} required>
                                     <option value="">Pilih tipe...</option>
-                                    {EVENT_TYPES.map(et => <option key={et} value={et}>{et}</option>)}
+                                    {availableEventTypes.map(et => <option key={et} value={et}>{et}</option>)}
                                 </select>
                             </div>
                             <div className="space-y-1.5">
@@ -363,10 +371,12 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                             </div>
                         )}
 
-                        <div className="space-y-1.5">
-                            <label className="text-sm font-medium flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Lokasi</label>
-                            <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Lokasi acara (opsional)" className={inputClass} />
-                        </div>
+                        {vendor?.form_show_location !== false && (
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Lokasi</label>
+                                <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Lokasi acara (opsional)" className={inputClass} />
+                            </div>
+                        )}
                     </div>
 
                     {/* Package & Payment */}
@@ -420,37 +430,41 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                         </div>
 
                         {/* Payment Proof Upload */}
-                        <div className="space-y-1.5">
-                            <label className="text-sm font-medium flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" /> Bukti Pembayaran</label>
-                            <div
-                                onClick={() => fileInputRef.current?.click()}
-                                className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer"
-                            >
-                                {proofPreview ? (
-                                    <img src={proofPreview} alt="Bukti" className="max-h-40 rounded-lg object-contain" />
-                                ) : (
-                                    <>
-                                        <Upload className="w-8 h-8 text-muted-foreground mb-2" />
-                                        <p className="text-sm text-muted-foreground">Klik untuk upload bukti transfer</p>
-                                        <p className="text-xs text-muted-foreground mt-1">JPG, PNG, atau PDF (max 5MB)</p>
-                                    </>
-                                )}
+                        {vendor?.form_show_proof !== false && (
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" /> Bukti Pembayaran</label>
+                                <div
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer"
+                                >
+                                    {proofPreview ? (
+                                        <img src={proofPreview} alt="Bukti" className="max-h-40 rounded-lg object-contain" />
+                                    ) : (
+                                        <>
+                                            <Upload className="w-8 h-8 text-muted-foreground mb-2" />
+                                            <p className="text-sm text-muted-foreground">Klik untuk upload bukti transfer</p>
+                                            <p className="text-xs text-muted-foreground mt-1">JPG, PNG, atau PDF (max 5MB)</p>
+                                        </>
+                                    )}
+                                </div>
+                                <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleProofFile} />
                             </div>
-                            <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleProofFile} />
-                        </div>
+                        )}
                     </div>
 
                     {/* Notes */}
-                    <div className="space-y-1.5 pt-2">
-                        <label className="text-sm font-medium">Catatan</label>
-                        <textarea
-                            value={notes}
-                            onChange={e => setNotes(e.target.value)}
-                            rows={3}
-                            placeholder="Catatan tambahan (opsional)..."
-                            className="placeholder:text-muted-foreground w-full min-w-0 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none transition-all"
-                        />
-                    </div>
+                    {vendor?.form_show_notes !== false && (
+                        <div className="space-y-1.5 pt-2">
+                            <label className="text-sm font-medium">Catatan</label>
+                            <textarea
+                                value={notes}
+                                onChange={e => setNotes(e.target.value)}
+                                rows={3}
+                                placeholder="Catatan tambahan (opsional)..."
+                                className="placeholder:text-muted-foreground w-full min-w-0 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none transition-all"
+                            />
+                        </div>
+                    )}
 
                     {/* Error / Submit */}
                     {error && (
@@ -462,7 +476,8 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                     <button
                         type="submit"
                         disabled={submitting}
-                        className="flex items-center justify-center gap-2 w-full h-12 rounded-lg bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-primary/20 cursor-pointer disabled:opacity-50 text-base"
+                        className="flex items-center justify-center gap-2 w-full h-12 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity shadow-lg cursor-pointer disabled:opacity-50 text-base"
+                        style={{ backgroundColor: brandColor, boxShadow: `0 10px 15px -3px ${brandColor}33` }}
                     >
                         {submitting ? (
                             <>
