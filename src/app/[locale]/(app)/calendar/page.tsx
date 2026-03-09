@@ -6,7 +6,7 @@ import { format, parse, startOfWeek, getDay } from "date-fns";
 import { id } from "date-fns/locale/id";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { createClient } from "@/utils/supabase/client";
-import { Loader2, Link2, Unlink, CalendarPlus, ChevronLeft, ChevronRight, CalendarDays, CalendarRange, Clock, List, ExternalLink, Info, Users } from "lucide-react";
+import { Loader2, Link2, Unlink, CalendarPlus, ChevronLeft, ChevronRight, CalendarDays, CalendarRange, Clock, List, ExternalLink, Info, Users, AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useTranslations } from "next-intl";
@@ -88,6 +88,10 @@ export default function CalendarPage() {
     const [loading, setLoading] = React.useState(true);
     const [isGoogleConnected, setIsGoogleConnected] = React.useState(false);
     const [syncing, setSyncing] = React.useState(false);
+    const [calendarWarningDismissed, setCalendarWarningDismissed] = React.useState(() => {
+        if (typeof window !== "undefined") return localStorage.getItem("dismiss_calendar_warning") === "1";
+        return false;
+    });
 
     // Freelancer calendars
     const [freelancerCals, setFreelancerCals] = React.useState<FreelancerCal[]>([]);
@@ -328,37 +332,31 @@ export default function CalendarPage() {
                     <p className="text-muted-foreground">{t("subtitle")}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    {isGoogleConnected ? (
-                        <>
-                            <Button
-                                onClick={handleSyncToGoogle}
-                                disabled={syncing}
-                                className="gap-2"
-                            >
-                                {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarPlus className="w-4 h-4" />}
-                                {syncing ? t("menyinkronkan") : t("sinkron")}
-                            </Button>
-                            <Button
-                                variant="outline"
-                                onClick={handleDisconnectGoogle}
-                                className="gap-2 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
-                            >
-                                <Unlink className="w-4 h-4" />
-                                {t("putuskan")}
-                            </Button>
-                        </>
-                    ) : (
+                    {isGoogleConnected && (
                         <Button
-                            variant="outline"
-                            onClick={handleConnectGoogle}
+                            onClick={handleSyncToGoogle}
+                            disabled={syncing}
                             className="gap-2"
                         >
-                            <Link2 className="w-4 h-4" />
-                            {t("hubungkan")}
+                            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarPlus className="w-4 h-4" />}
+                            {syncing ? t("menyinkronkan") : t("sinkron")}
                         </Button>
                     )}
                 </div>
             </div>
+
+            {/* Warning banner when not connected */}
+            {!isGoogleConnected && !calendarWarningDismissed && (
+                <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 px-4 py-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <p className="text-sm text-amber-800 dark:text-amber-300 flex-1">
+                        Google Calendar belum terhubung. <a href="/id/settings" className="underline font-medium">Hubungkan di Pengaturan</a> untuk sinkronisasi jadwal otomatis.
+                    </p>
+                    <button onClick={() => { setCalendarWarningDismissed(true); localStorage.setItem("dismiss_calendar_warning", "1"); }} className="p-1 rounded hover:bg-amber-200/50 dark:hover:bg-amber-500/20 transition-colors cursor-pointer">
+                        <X className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    </button>
+                </div>
+            )}
 
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm flex-1 p-4 relative overflow-hidden flex flex-col h-full">
                 {loading && (

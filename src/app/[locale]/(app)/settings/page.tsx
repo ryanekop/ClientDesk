@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Save, Loader2, Plus, Trash2, MessageSquare, Building2, Phone, Globe } from "lucide-react";
+import { Save, Loader2, Plus, Trash2, MessageSquare, Building2, Phone, Globe, Link2, Unlink, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -69,17 +69,33 @@ export default function SettingsPage() {
     const [showAddTemplate, setShowAddTemplate] = React.useState(false);
     const [batal] = React.useState("batal");
 
+    // Google integration
+    const [isCalendarConnected, setIsCalendarConnected] = React.useState(false);
+    const [isDriveConnected, setIsDriveConnected] = React.useState(false);
+
     React.useEffect(() => { fetchAll(); }, []);
+
+    // Listen for Google auth popup callbacks
+    React.useEffect(() => {
+        const handleMessage = (event: MessageEvent) => {
+            if (event.data?.type === "GOOGLE_AUTH_SUCCESS") setIsCalendarConnected(true);
+            if (event.data?.type === "GOOGLE_DRIVE_SUCCESS") setIsDriveConnected(true);
+        };
+        window.addEventListener("message", handleMessage);
+        return () => window.removeEventListener("message", handleMessage);
+    }, []);
 
     async function fetchAll() {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const { data: p } = await supabase.from("profiles").select("id, full_name, studio_name, whatsapp_number, vendor_slug").eq("id", user.id).single();
+        const { data: p } = await supabase.from("profiles").select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token").eq("id", user.id).single();
         const prof = p as Profile;
         setProfile(prof);
         setStudioName(prof?.studio_name || "");
+        setIsCalendarConnected(!!(prof as any)?.google_access_token);
+        setIsDriveConnected(!!(prof as any)?.google_drive_access_token);
         // Parse saved number into country code + local number
         const savedWa = prof?.whatsapp_number || "";
         const matchedCode = COUNTRY_CODES.find(c => savedWa.startsWith(c.code));
@@ -211,6 +227,100 @@ export default function SettingsPage() {
                         {savedMsg && <span className="text-sm text-green-600 dark:text-green-400">{savedMsg}</span>}
                     </div>
                 </form>
+            </div>
+
+            {/* Google Integration Section */}
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                <div className="px-6 py-4 border-b">
+                    <h3 className="font-semibold flex items-center gap-2">
+                        <svg className="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>
+                        Integrasi Google
+                    </h3>
+                    <p className="text-sm text-muted-foreground">Hubungkan akun Google untuk sinkronisasi kalender dan penyimpanan file.</p>
+                </div>
+                <div className="p-6 space-y-4">
+                    {/* Google Calendar */}
+                    <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-500/10">
+                                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" className="text-blue-600 dark:text-blue-400" strokeWidth="2" /><path d="M3 10h18" stroke="currentColor" className="text-blue-600 dark:text-blue-400" strokeWidth="2" /><path d="M16 2v4M8 2v4" stroke="currentColor" className="text-blue-600 dark:text-blue-400" strokeWidth="2" strokeLinecap="round" /></svg>
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium">Google Calendar</p>
+                                <p className="text-xs text-muted-foreground">Sinkronisasi jadwal sesi ke Google Calendar</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {isCalendarConnected ? (
+                                <>
+                                    <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Terhubung</span>
+                                    <Button variant="outline" size="sm" className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10" onClick={async () => {
+                                        if (!confirm("Putuskan koneksi Google Calendar?")) return;
+                                        const { data: { user } } = await supabase.auth.getUser();
+                                        if (!user) return;
+                                        await supabase.from("profiles").update({ google_access_token: null, google_refresh_token: null, google_token_expiry: null }).eq("id", user.id);
+                                        setIsCalendarConnected(false);
+                                    }}>
+                                        <Unlink className="w-3.5 h-3.5" /> Putuskan
+                                    </Button>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Belum terhubung</span>
+                                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+                                        const w = 500, h = 600;
+                                        const left = window.screenX + (window.outerWidth - w) / 2;
+                                        const top = window.screenY + (window.outerHeight - h) / 2;
+                                        window.open("/api/google/auth", "google-auth", `width=${w},height=${h},left=${left},top=${top},popup=yes`);
+                                    }}>
+                                        <Link2 className="w-3.5 h-3.5" /> Hubungkan
+                                    </Button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Google Drive */}
+                    <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-green-100 dark:bg-green-500/10">
+                                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 19h20L12 2z" stroke="currentColor" className="text-green-600 dark:text-green-400" strokeWidth="2" strokeLinejoin="round" /><path d="M7.5 12.5h9" stroke="currentColor" className="text-green-600 dark:text-green-400" strokeWidth="2" /></svg>
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium">Google Drive</p>
+                                <p className="text-xs text-muted-foreground">Simpan file klien langsung ke Google Drive</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {isDriveConnected ? (
+                                <>
+                                    <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Terhubung</span>
+                                    <Button variant="outline" size="sm" className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10" onClick={async () => {
+                                        if (!confirm("Putuskan koneksi Google Drive?")) return;
+                                        const { data: { user } } = await supabase.auth.getUser();
+                                        if (!user) return;
+                                        await supabase.from("profiles").update({ google_drive_access_token: null, google_drive_refresh_token: null }).eq("id", user.id);
+                                        setIsDriveConnected(false);
+                                    }}>
+                                        <Unlink className="w-3.5 h-3.5" /> Putuskan
+                                    </Button>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Belum terhubung</span>
+                                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+                                        const w = 500, h = 600;
+                                        const left = window.screenX + (window.outerWidth - w) / 2;
+                                        const top = window.screenY + (window.outerHeight - h) / 2;
+                                        window.open("/api/google/drive/auth", "google-drive-auth", `width=${w},height=${h},left=${left},top=${top},popup=yes`);
+                                    }}>
+                                        <Link2 className="w-3.5 h-3.5" /> Hubungkan
+                                    </Button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Templates Section */}

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Folder, FolderPlus, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck } from "lucide-react";
+import { Plus, Folder, FolderPlus, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -51,6 +51,10 @@ export default function BookingsPage() {
     const [freelancerNames, setFreelancerNames] = React.useState<string[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [isDriveConnected, setIsDriveConnected] = React.useState(false);
+    const [driveWarningDismissed, setDriveWarningDismissed] = React.useState(() => {
+        if (typeof window !== "undefined") return localStorage.getItem("dismiss_drive_warning") === "1";
+        return false;
+    });
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
     // Filters & Search
@@ -186,11 +190,6 @@ export default function BookingsPage() {
                     <p className="text-muted-foreground text-sm">{t("subtitle")}</p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
-                    {!isDriveConnected && (
-                        <Button variant="outline" className="gap-2 h-9" onClick={handleConnectDrive}>
-                            <Link2 className="w-4 h-4" /> {t("hubungkanDrive")}
-                        </Button>
-                    )}
                     <BatchImportButton onImported={() => fetchData()} />
                     <Link href="/bookings/new">
                         <Button className="gap-2 h-9 bg-foreground text-background hover:bg-foreground/90">
@@ -200,6 +199,18 @@ export default function BookingsPage() {
                 </div>
             </div>
 
+            {/* Drive warning banner */}
+            {!isDriveConnected && !driveWarningDismissed && (
+                <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 px-4 py-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <p className="text-sm text-amber-800 dark:text-amber-300 flex-1">
+                        Google Drive belum terhubung. <a href="/id/settings" className="underline font-medium">Hubungkan di Pengaturan</a> untuk menyimpan file klien otomatis.
+                    </p>
+                    <button onClick={() => { setDriveWarningDismissed(true); localStorage.setItem("dismiss_drive_warning", "1"); }} className="p-1 rounded hover:bg-amber-200/50 dark:hover:bg-amber-500/20 transition-colors cursor-pointer">
+                        <X className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    </button>
+                </div>
+            )}
             {/* Filters Row (top) + Search Row (bottom) */}
             <div className="space-y-3">
                 <div className="flex flex-wrap gap-2 items-center">
