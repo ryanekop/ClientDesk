@@ -14,6 +14,8 @@ import { BatchImportButton } from "@/components/batch-import";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
 
+type FreelancerInfo = { id: string; name: string; whatsapp_number: string | null };
+
 type Booking = {
     id: string;
     booking_code: string;
@@ -27,7 +29,8 @@ type Booking = {
     location: string | null;
     notes: string | null;
     services: { name: string } | null;
-    freelancers: { id: string; name: string; whatsapp_number: string | null } | null;
+    freelancers: FreelancerInfo | null; // old single FK (backward compat)
+    booking_freelancers: FreelancerInfo[]; // new junction data
 };
 
 const STATUS_OPTS = ["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"];
@@ -67,6 +70,9 @@ export default function BookingsPage() {
     // Drive browser
     const [driveBrowser, setDriveBrowser] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
 
+    // WA Freelancer popup
+    const [waPopup, setWaPopup] = React.useState<{ open: boolean; freelancers: FreelancerInfo[] }>({ open: false, freelancers: [] });
+
     React.useEffect(() => {
         fetchData();
         checkDriveConnection();
@@ -99,14 +105,18 @@ export default function BookingsPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, notes, services(name), freelancers(id, name, whatsapp_number)")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, notes, services(name), freelancers(id, name, whatsapp_number), booking_freelancers(freelancer_id, freelancers(id, name, whatsapp_number))")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
-        const bgs = (data || []) as unknown as Booking[];
+        // Normalize: merge booking_freelancers into a flat array
+        const bgs = (data || []).map((b: any) => {
+            const junctionFreelancers = (b.booking_freelancers || []).map((bf: any) => bf.freelancers).filter(Boolean);
+            return { ...b, booking_freelancers: junctionFreelancers.length > 0 ? junctionFreelancers : b.freelancers ? [b.freelancers] : [] };
+        }) as unknown as Booking[];
         setBookings(bgs);
         setPackages(Array.from(new Set(bgs.map(b => b.services?.name).filter(Boolean))) as string[]);
-        setFreelancerNames(Array.from(new Set(bgs.map(b => b.freelancers?.name).filter(Boolean))) as string[]);
+        setFreelancerNames(Array.from(new Set(bgs.flatMap(b => b.booking_freelancers.map(f => f.name)).filter(Boolean))) as string[]);
         setLoading(false);
     }
 
@@ -163,7 +173,7 @@ export default function BookingsPage() {
         );
         const matchesStatus = statusFilter === "All" || b.status === statusFilter;
         const matchesPackage = packageFilter === "All" || b.services?.name === packageFilter;
-        const matchesFreelance = freelanceFilter === "All" || b.freelancers?.name === freelanceFilter;
+        const matchesFreelance = freelanceFilter === "All" || b.booking_freelancers.some(f => f.name === freelanceFilter);
         return matchesSearch && matchesStatus && matchesPackage && matchesFreelance;
     });
 
@@ -268,7 +278,11 @@ export default function BookingsPage() {
                                             ) : <span className="text-muted-foreground">-</span>}
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={booking.status} /></td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{booking.freelancers?.name || "-"}</td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                                            {booking.booking_freelancers.length > 0
+                                                ? booking.booking_freelancers.map(f => f.name).join(", ")
+                                                : "-"}
+                                        </td>
                                         <td className="px-4 py-3 whitespace-nowrap font-medium text-foreground">{formatCurrency(booking.total_price)}</td>
                                         <td className="px-4 py-3 whitespace-nowrap text-right">
                                             <div className="flex items-center justify-end">
@@ -279,12 +293,15 @@ export default function BookingsPage() {
                                                 </Button>
                                                 {/* 2. WA Freelancer (default) / Client fallback */}
                                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600"
-                                                    title={booking.freelancers?.whatsapp_number ? `WA Freelance (${booking.freelancers.name})` : "WA Klien"}
-                                                    disabled={!booking.freelancers?.whatsapp_number && !booking.client_whatsapp}
+                                                    title={booking.booking_freelancers.length > 0 ? `WA Freelance (${booking.booking_freelancers.length})` : "WA Klien"}
+                                                    disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
                                                     onClick={() => {
-                                                        if (booking.freelancers?.whatsapp_number) {
-                                                            const cleaned = booking.freelancers.whatsapp_number.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                                            const msg = encodeURIComponent(generateWATemplate(booking, booking.freelancers.name));
+                                                        if (booking.booking_freelancers.length > 1) {
+                                                            setWaPopup({ open: true, freelancers: booking.booking_freelancers });
+                                                        } else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
+                                                            const f = booking.booking_freelancers[0];
+                                                            const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
+                                                            const msg = encodeURIComponent(generateWATemplate(booking, f.name));
                                                             window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
                                                         } else {
                                                             sendWhatsAppClient(booking);
@@ -384,6 +401,39 @@ export default function BookingsPage() {
                             Ya, Hapus
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* WA Freelancer Selection Popup */}
+            <Dialog open={waPopup.open} onOpenChange={(o) => !o && setWaPopup({ open: false, freelancers: [] })}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>WhatsApp Freelancer</DialogTitle>
+                        <DialogDescription>Pilih freelancer yang ingin dihubungi</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-2 py-2">
+                        {waPopup.freelancers.map((f) => (
+                            <button
+                                key={f.id}
+                                disabled={!f.whatsapp_number}
+                                onClick={() => {
+                                    if (!f.whatsapp_number) return;
+                                    const cleaned = f.whatsapp_number.replace(/^0/, "62").replace(/[^0-9]/g, "");
+                                    window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(`Halo ${f.name}!`)}`, "_blank");
+                                    setWaPopup({ open: false, freelancers: [] });
+                                }}
+                                className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                            >
+                                <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-500/10 flex items-center justify-center shrink-0">
+                                    <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium">{f.name}</p>
+                                    <p className="text-xs text-muted-foreground">{f.whatsapp_number || "Nomor tidak tersedia"}</p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
                 </DialogContent>
             </Dialog>
 

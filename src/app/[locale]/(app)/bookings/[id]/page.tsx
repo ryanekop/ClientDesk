@@ -25,6 +25,8 @@ const EXTRA_FIELD_LABELS: Record<string, string> = {
 
 const LOCATION_FIELDS = new Set(["tempat_akad", "tempat_resepsi"]);
 
+type FreelancerDetail = { id: string; name: string; whatsapp_number: string | null };
+
 type Booking = {
     id: string;
     booking_code: string;
@@ -41,7 +43,8 @@ type Booking = {
     notes: string | null;
     extra_fields: Record<string, string> | null;
     services: { name: string; price: number } | null;
-    freelancers: { name: string; whatsapp_number: string | null } | null;
+    freelancers: FreelancerDetail | null; // old single FK
+    booking_freelancers: FreelancerDetail[]; // new junction
     tracking_uuid: string | null;
     client_status: string | null;
     queue_position: number | null;
@@ -109,11 +112,19 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelancers(name, whatsapp_number)")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelancers(id, name, whatsapp_number), booking_freelancers(freelancer_id, freelancers(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token").eq("id", user.id).single(),
             ]);
-            setBooking(data as unknown as Booking);
+            // Normalize freelancers from junction table
+            const normalized = data ? {
+                ...data,
+                booking_freelancers: (() => {
+                    const jf = (data as any).booking_freelancers?.map((bf: any) => bf.freelancers).filter(Boolean) || [];
+                    return jf.length > 0 ? jf : (data as any).freelancers ? [(data as any).freelancers] : [];
+                })()
+            } : data;
+            setBooking(normalized as unknown as Booking);
             if (data) {
                 setClientStatus((data as any).client_status || "");
                 setQueuePos((data as any).queue_position || "");
@@ -241,11 +252,11 @@ export default function BookingDetailPage() {
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => sendWA(booking.client_whatsapp, booking.client_name)}>
                     <MessageSquare className="w-4 h-4 text-green-600" /> WA Klien
                 </Button>
-                {booking.freelancers && (
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => sendWAFreelance((booking.freelancers as any)?.whatsapp_number, booking.freelancers?.name || "")}>
-                        <Phone className="w-4 h-4 text-blue-600" /> WA Freelance
+                {booking.booking_freelancers.length > 0 && booking.booking_freelancers.map(f => (
+                    <Button key={f.id} variant="outline" size="sm" className="gap-1.5" onClick={() => sendWAFreelance(f.whatsapp_number, f.name)}>
+                        <Phone className="w-4 h-4 text-blue-600" /> WA {f.name}
                     </Button>
-                )}
+                ))}
                 {booking.drive_folder_url ? (
                     <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
                         <Folder className="w-4 h-4 text-yellow-600" /> Buka Drive Folder
@@ -292,7 +303,11 @@ export default function BookingDetailPage() {
                     <InfoRow label="Lokasi" value={<LocationValue address={booking.location} />} />
                 )}
                 <InfoRow label="Paket" value={booking.services?.name || "-"} />
-                <InfoRow label="Freelance" value={booking.freelancers?.name || "-"} />
+                <InfoRow label="Freelance" value={
+                    booking.booking_freelancers.length > 0
+                        ? booking.booking_freelancers.map(f => f.name).join(", ")
+                        : "-"
+                } />
             </div>
 
             {/* Keuangan */}

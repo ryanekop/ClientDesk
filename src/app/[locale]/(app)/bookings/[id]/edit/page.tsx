@@ -109,7 +109,7 @@ export default function EditBookingPage() {
     const [sessionDate, setSessionDate] = React.useState("");
     const [location, setLocation] = React.useState("");
     const [serviceId, setServiceId] = React.useState("");
-    const [freelancerId, setFreelancerId] = React.useState("");
+    const [freelancerIds, setFreelancerIds] = React.useState<string[]>([]);
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
     const [status, setStatus] = React.useState("Pending");
@@ -132,10 +132,11 @@ export default function EditBookingPage() {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
-            const [{ data: booking }, { data: svcs }, { data: frees }] = await Promise.all([
+            const [{ data: booking }, { data: svcs }, { data: frees }, { data: bfRows }] = await Promise.all([
                 supabase.from("bookings").select("*").eq("id", id).single(),
                 supabase.from("services").select("id, name, price").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelancers").select("id, name").eq("user_id", user.id).eq("status", "active"),
+                supabase.from("booking_freelancers").select("freelancer_id").eq("booking_id", id),
             ]);
             if (booking) {
                 setClientName(booking.client_name || "");
@@ -147,7 +148,9 @@ export default function EditBookingPage() {
                 setSessionDate(booking.session_date ? booking.session_date.slice(0, 16) : "");
                 setLocation(booking.location || "");
                 setServiceId(booking.service_id || "");
-                setFreelancerId(booking.freelancer_id || "");
+                // Load multi-freelancer from junction table, fallback to old column
+                const junctionIds = (bfRows || []).map((r: any) => r.freelancer_id);
+                setFreelancerIds(junctionIds.length > 0 ? junctionIds : booking.freelancer_id ? [booking.freelancer_id] : []);
                 setTotalPrice(booking.total_price || "");
                 setDpPaid(booking.dp_paid || "");
                 setStatus(booking.status || "Pending");
@@ -167,9 +170,12 @@ export default function EditBookingPage() {
         const selected = services.find(s => s.id === val);
         if (selected) setTotalPrice(selected.price);
     };
-    const handleFreelancerChange = (val: string) => {
-        if (val === "__custom__") { setShowCustomFreelancerPopup(true); return; }
-        setFreelancerId(val);
+    const toggleFreelancer = (fid: string) => {
+        setFreelancerIds(prev => {
+            if (prev.includes(fid)) return prev.filter(f => f !== fid);
+            if (prev.length >= 5) return prev;
+            return [...prev, fid];
+        });
     };
 
     async function saveCustomService() {
@@ -206,7 +212,7 @@ export default function EditBookingPage() {
         if (!error && data) {
             const f = data as Freelance;
             setFreelancers(prev => [...prev, f]);
-            setFreelancerId(f.id);
+            setFreelancerIds(prev => prev.length < 5 ? [...prev, f.id] : prev);
             setCustomFreelancerName(""); setCustomFreelancerWa(""); setCustomFreelancerRole("Photographer");
             setShowCustomFreelancerPopup(false);
         } else { console.error(error); alert("Gagal menyimpan freelance."); }
@@ -227,7 +233,7 @@ export default function EditBookingPage() {
             session_date: sessionDate || null,
             location: location || null,
             service_id: serviceId || null,
-            freelancer_id: freelancerId || null,
+            freelancer_id: freelancerIds[0] || null,
             total_price: tPrice,
             dp_paid: dPaid,
             is_fully_paid: dPaid >= tPrice && tPrice > 0,
@@ -237,7 +243,16 @@ export default function EditBookingPage() {
             updated_at: new Date().toISOString(),
         }).eq("id", id);
         setSaving(false);
-        if (!error) { router.push(`/${locale}/bookings/${id}`); }
+        if (!error) {
+            // Sync junction table
+            await supabase.from("booking_freelancers").delete().eq("booking_id", id);
+            if (freelancerIds.length > 0) {
+                await supabase.from("booking_freelancers").insert(
+                    freelancerIds.map(fid => ({ booking_id: id, freelancer_id: fid }))
+                );
+            }
+            router.push(`/${locale}/bookings/${id}`);
+        }
         else { alert("Gagal menyimpan perubahan."); }
     }
 
@@ -333,13 +348,35 @@ export default function EditBookingPage() {
                                 <option value="__custom__">＋ Tambah Paket Baru...</option>
                             </select>
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Freelance</label>
-                            <select value={freelancerId} onChange={e => handleFreelancerChange(e.target.value)} className={selectClass}>
-                                <option value="">-- Pilih Freelance --</option>
-                                {freelancers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                <option value="__custom__">＋ Tambah Freelance Baru...</option>
-                            </select>
+                        <div className="col-span-full space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Freelance (max 5)</label>
+                            <div className="flex flex-wrap gap-2">
+                                {freelancers.map(f => (
+                                    <button
+                                        key={f.id}
+                                        type="button"
+                                        onClick={() => toggleFreelancer(f.id)}
+                                        className={cn(
+                                            "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer",
+                                            freelancerIds.includes(f.id)
+                                                ? "border-foreground bg-foreground/5 dark:bg-foreground/10 text-foreground"
+                                                : "border-input text-muted-foreground hover:bg-muted/50"
+                                        )}
+                                    >
+                                        {f.name}
+                                    </button>
+                                ))}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCustomFreelancerPopup(true)}
+                                    className="px-3 py-1.5 rounded-lg border border-dashed border-input text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+                                >
+                                    ＋ Tambah Baru
+                                </button>
+                            </div>
+                            {freelancerIds.length > 0 && (
+                                <p className="text-[10px] text-muted-foreground">{freelancerIds.length}/5 dipilih</p>
+                            )}
                         </div>
                     </div>
                 </div>

@@ -104,7 +104,7 @@ export default function NewBookingPage() {
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
     const [selectedServiceId, setSelectedServiceId] = React.useState("");
-    const [selectedFreelancerId, setSelectedFreelancerId] = React.useState("");
+    const [selectedFreelancerIds, setSelectedFreelancerIds] = React.useState<string[]>([]);
     const [countryCode, setCountryCode] = React.useState("+62");
     const [phoneNumber, setPhoneNumber] = React.useState("");
     const [instagram, setInstagram] = React.useState("");
@@ -147,10 +147,12 @@ export default function NewBookingPage() {
         if (selected) setTotalPrice(selected.price);
     };
 
-    const handleFreelancerChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const val = e.target.value;
-        if (val === "__custom__") { e.target.value = selectedFreelancerId; setShowCustomFreelancerPopup(true); return; }
-        setSelectedFreelancerId(val);
+    const toggleFreelancer = (id: string) => {
+        setSelectedFreelancerIds(prev => {
+            if (prev.includes(id)) return prev.filter(f => f !== id);
+            if (prev.length >= 5) return prev;
+            return [...prev, id];
+        });
     };
 
     async function saveCustomService() {
@@ -189,7 +191,7 @@ export default function NewBookingPage() {
         if (!error && data) {
             const f = data as Freelance;
             setFreelancers(prev => [...prev, f]);
-            setSelectedFreelancerId(f.id);
+            setSelectedFreelancerIds(prev => prev.length < 5 ? [...prev, f.id] : prev);
             setCustomFreelancerName(""); setCustomFreelancerWa(""); setCustomFreelancerRole("Photographer");
             setShowCustomFreelancerPopup(false);
         } else { console.error(error); alert("Gagal menyimpan freelance baru."); }
@@ -216,7 +218,7 @@ export default function NewBookingPage() {
             instagram: instagram || null,
             event_type: eventType,
             service_id: selectedServiceId || null,
-            freelancer_id: selectedFreelancerId || null,
+            freelancer_id: selectedFreelancerIds[0] || null,
             total_price: parseFloat(totalPrice.toString()) || 0,
             dp_paid: parseFloat(dpPaid.toString()) || 0,
             status: statusVal,
@@ -226,6 +228,12 @@ export default function NewBookingPage() {
 
         setSaving(false);
         if (!error && booking) {
+            // Insert into junction table
+            if (selectedFreelancerIds.length > 0) {
+                await supabase.from("booking_freelancers").insert(
+                    selectedFreelancerIds.map(fid => ({ booking_id: booking.id, freelancer_id: fid }))
+                );
+            }
             router.push(`/${locale}/bookings/${booking.id}`);
         } else { console.error(error); alert("Gagal menyimpan booking."); }
     }
@@ -329,13 +337,35 @@ export default function NewBookingPage() {
                                 <option value="__custom__">＋ Tambah Paket Baru...</option>
                             </select>
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Freelance</label>
-                            <select value={selectedFreelancerId} onChange={handleFreelancerChange} className={selectClass}>
-                                <option value="">-- Pilih Freelance --</option>
-                                {freelancers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                <option value="__custom__">＋ Tambah Freelance Baru...</option>
-                            </select>
+                        <div className="col-span-full space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Freelance (max 5)</label>
+                            <div className="flex flex-wrap gap-2">
+                                {freelancers.map(f => (
+                                    <button
+                                        key={f.id}
+                                        type="button"
+                                        onClick={() => toggleFreelancer(f.id)}
+                                        className={cn(
+                                            "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer",
+                                            selectedFreelancerIds.includes(f.id)
+                                                ? "border-foreground bg-foreground/5 dark:bg-foreground/10 text-foreground"
+                                                : "border-input text-muted-foreground hover:bg-muted/50"
+                                        )}
+                                    >
+                                        {f.name}
+                                    </button>
+                                ))}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCustomFreelancerPopup(true)}
+                                    className="px-3 py-1.5 rounded-lg border border-dashed border-input text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+                                >
+                                    ＋ Tambah Baru
+                                </button>
+                            </div>
+                            {selectedFreelancerIds.length > 0 && (
+                                <p className="text-[10px] text-muted-foreground">{selectedFreelancerIds.length}/5 dipilih</p>
+                            )}
                         </div>
                     </div>
                 </div>
