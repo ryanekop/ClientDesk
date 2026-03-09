@@ -48,7 +48,7 @@ export default function FormBookingPage() {
     const [iframeKey, setIframeKey] = React.useState(0);
 
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
-    const formUrl = vendorSlug ? `${siteUrl}/${locale}/${vendorSlug}/formbooking` : "";
+    const formUrl = vendorSlug ? `${siteUrl}/${locale}/formbooking/${vendorSlug}` : "";
 
     React.useEffect(() => {
         async function load() {
