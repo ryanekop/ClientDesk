@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     const { data: booking } = await supabaseAdmin
         .from("bookings")
-        .select("id, booking_code, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, services(name), created_at")
+        .select("id, booking_code, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, total_price, dp_paid, is_fully_paid, location, services(name), created_at")
         .eq("tracking_uuid", uuid)
         .single();
 
@@ -48,6 +48,10 @@ export async function GET(request: NextRequest) {
             serviceName: (booking.services as any)?.name || null,
             driveUrl: booking.drive_folder_url,
             createdAt: booking.created_at,
+            totalPrice: booking.total_price || 0,
+            dpPaid: booking.dp_paid || 0,
+            isFullyPaid: booking.is_fully_paid || false,
+            location: booking.location || null,
         },
         vendorName,
     });

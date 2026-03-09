@@ -25,6 +25,7 @@ type CalendarEvent = Event & {
     clientName?: string;
     status?: string;
     serviceName?: string;
+    location?: string;
     source: "booking" | "google" | "freelancer";
     freelancerName?: string;
     freelancerColor?: string;
@@ -185,7 +186,7 @@ export default function CalendarPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, client_name, session_date, status, services(name)")
+            .select("id, client_name, session_date, status, location, services(name)")
             .eq("user_id", user.id)
             .not("session_date", "is", null);
 
@@ -201,6 +202,7 @@ export default function CalendarPage() {
                     clientName: booking.client_name,
                     status: booking.status,
                     serviceName: booking.services?.name || "Layanan",
+                    location: booking.location || undefined,
                     source: "booking" as const,
                 };
             });
@@ -464,7 +466,7 @@ export default function CalendarPage() {
 
             {/* Event Popup */}
             <Dialog open={eventPopupOpen} onOpenChange={setEventPopupOpen}>
-                <DialogContent className="sm:max-w-sm">
+                <DialogContent className="sm:max-w-md overflow-hidden">
                     <DialogHeader>
                         <DialogTitle className="text-lg">{selectedEvent?.clientName}</DialogTitle>
                     </DialogHeader>
@@ -490,6 +492,12 @@ export default function CalendarPage() {
                                     {statusLabel[selectedEvent.status?.toLowerCase() || ""] || selectedEvent.status}
                                 </span>
                             </div>
+                            {selectedEvent.location && (
+                                <div className="flex items-start gap-2 text-sm">
+                                    <span className="text-muted-foreground w-20 shrink-0">Lokasi</span>
+                                    <span className="font-medium break-words">{selectedEvent.location}</span>
+                                </div>
+                            )}
                         </div>
                     )}
                     <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">

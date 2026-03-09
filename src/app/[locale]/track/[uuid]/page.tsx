@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams } from "next/navigation";
-import { CheckCircle2, Clock, PlayCircle, HardDrive, Edit3, Camera, Loader2, ExternalLink, Users } from "lucide-react";
+import { CheckCircle2, Clock, PlayCircle, HardDrive, Edit3, Camera, Loader2, ExternalLink, Users, Download } from "lucide-react";
 
 type BookingData = {
     bookingCode: string;
@@ -15,6 +15,10 @@ type BookingData = {
     serviceName: string | null;
     driveUrl: string | null;
     createdAt: string;
+    totalPrice: number;
+    dpPaid: number;
+    isFullyPaid: boolean;
+    location: string | null;
 };
 
 const STATUS_STEPS = [
@@ -98,7 +102,7 @@ export default function TrackingPage() {
                             <p className="text-muted-foreground text-sm">Kode: <span className="font-semibold text-primary">{booking.bookingCode}</span></p>
                         </div>
                         <div className="flex items-center gap-2">
-                            {booking.queuePosition && booking.queuePosition > 0 && (
+                            {booking.queuePosition && booking.queuePosition > 0 && booking.clientStatus !== "Selesai" && (
                                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
                                     Antrian #{booking.queuePosition}
                                 </span>
@@ -184,8 +188,8 @@ export default function TrackingPage() {
                     </div>
                 </div>
 
-                {/* Drive Link */}
-                {booking.driveUrl && (
+                {/* Drive Link - only show if status >= Sesi Foto */}
+                {booking.driveUrl && currentIdx >= 1 && (
                     <div className="bg-background rounded-2xl shadow-lg border p-6">
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">File Hasil</h3>
                         <a
@@ -200,6 +204,25 @@ export default function TrackingPage() {
                         </a>
                     </div>
                 )}
+
+                {/* Invoice Download */}
+                <div className="bg-background rounded-2xl shadow-lg border p-6">
+                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">Invoice</h3>
+                    <div className="space-y-2 text-sm border-b pb-3 mb-3">
+                        <div className="flex justify-between"><span className="text-muted-foreground">Kode</span><span className="font-medium">{booking.bookingCode}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-medium">Rp {(booking.totalPrice || 0).toLocaleString("id-ID")}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">DP Dibayar</span><span className="font-medium">Rp {(booking.dpPaid || 0).toLocaleString("id-ID")}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Sisa</span><span className="font-semibold">Rp {((booking.totalPrice || 0) - (booking.dpPaid || 0)).toLocaleString("id-ID")}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className={`font-semibold ${booking.isFullyPaid ? "text-green-600" : "text-amber-600"}`}>{booking.isFullyPaid ? "✅ Lunas" : "⏳ Belum Lunas"}</span></div>
+                    </div>
+                    <button
+                        onClick={() => window.print()}
+                        className="flex items-center gap-2 text-sm text-primary hover:underline cursor-pointer"
+                    >
+                        <Download className="w-4 h-4" />
+                        Cetak / Download Invoice
+                    </button>
+                </div>
 
                 <p className="text-center text-xs text-muted-foreground pb-4">
                     Powered by <span className="font-semibold">Client Desk</span>

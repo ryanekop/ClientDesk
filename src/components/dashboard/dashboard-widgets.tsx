@@ -125,9 +125,9 @@ export function UpcomingBookingCard() {
                         <span className="line-clamp-2 break-words">{booking.location}</span>
                     </div>
                 )}
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Package className="w-3 h-3 shrink-0" />
-                    <span>{(booking.services as any)?.name || booking.booking_code}</span>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
+                    <Package className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{(booking.services as any)?.name || booking.booking_code}</span>
                 </div>
             </div>
         </div>
