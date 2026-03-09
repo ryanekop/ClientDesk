@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Clock, CalendarDays, MapPin, User } from "lucide-react";
+import { CalendarDays, MapPin, User, ExternalLink } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -14,32 +14,6 @@ type UpcomingBooking = {
     services: { name: string } | null;
     status: string;
 };
-
-export function RealtimeClock() {
-    const [now, setNow] = React.useState(new Date());
-
-    React.useEffect(() => {
-        const timer = setInterval(() => setNow(new Date()), 1000);
-        return () => clearInterval(timer);
-    }, []);
-
-    const dayName = now.toLocaleDateString("id-ID", { weekday: "long" });
-    const dateStr = now.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
-    const timeStr = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-
-    return (
-        <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-            <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-500/10">
-                    <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                </div>
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Waktu Sekarang</span>
-            </div>
-            <p className="text-lg font-bold">{dayName}, {dateStr}</p>
-            <div className="text-2xl font-bold tabular-nums tracking-tight text-primary mt-1">{timeStr}</div>
-        </div>
-    );
-}
 
 export function UpcomingBookingCard() {
     const supabase = createClient();
@@ -68,16 +42,20 @@ export function UpcomingBookingCard() {
         load();
     }, []);
 
+    const headerContent = (
+        <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-500/10">
+                <CalendarDays className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </div>
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Booking Terdekat</span>
+        </div>
+    );
+
     if (loading) {
         return (
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-                <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-500/10">
-                        <CalendarDays className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Booking Terdekat</span>
-                </div>
-                <div className="h-12 flex items-center justify-center">
+                <div className="flex items-center gap-3 mb-3">{headerContent}</div>
+                <div className="h-16 flex items-center justify-center">
                     <div className="w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
                 </div>
             </div>
@@ -87,12 +65,7 @@ export function UpcomingBookingCard() {
     if (!booking) {
         return (
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-                <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-500/10">
-                        <CalendarDays className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Booking Terdekat</span>
-                </div>
+                <div className="flex items-center gap-3 mb-3">{headerContent}</div>
                 <p className="text-sm text-muted-foreground">Tidak ada booking mendatang.</p>
             </div>
         );
@@ -102,7 +75,6 @@ export function UpcomingBookingCard() {
     const dateStr = sessionDate.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" });
     const timeStr = sessionDate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 
-    // Calculate days until
     const now = new Date();
     const diffMs = sessionDate.getTime() - now.getTime();
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
@@ -116,37 +88,41 @@ export function UpcomingBookingCard() {
     };
 
     return (
-        <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+        <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5 flex flex-col">
             <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-500/10">
-                        <CalendarDays className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Booking Terdekat</span>
-                </div>
-                <span className={cn(
-                    "text-xs font-semibold px-2 py-0.5 rounded-full",
-                    diffDays <= 1 ? "bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400" : "bg-purple-100 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400"
-                )}>
-                    {urgencyLabel}
-                </span>
-            </div>
-            <div className="space-y-2">
+                {headerContent}
                 <div className="flex items-center gap-2">
+                    <span className={cn(
+                        "text-xs font-semibold px-2 py-0.5 rounded-full",
+                        diffDays <= 1 ? "bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400" : "bg-purple-100 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400"
+                    )}>
+                        {urgencyLabel}
+                    </span>
+                    <a
+                        href={`/id/bookings/${booking.id}`}
+                        className="p-1.5 rounded-md hover:bg-muted/50 transition-colors"
+                        title="Lihat Detail"
+                    >
+                        <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                    </a>
+                </div>
+            </div>
+            <div className="space-y-2 flex-1 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
                     <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <span className="font-semibold text-sm">{booking.client_name}</span>
-                    <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full ml-auto", statusColors[booking.status?.toLowerCase()] || statusColors.pending)}>
+                    <span className="font-semibold text-sm truncate">{booking.client_name}</span>
+                    <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full ml-auto shrink-0", statusColors[booking.status?.toLowerCase()] || statusColors.pending)}>
                         {booking.status}
                     </span>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
                     <CalendarDays className="w-3.5 h-3.5 shrink-0" />
-                    <span>{dateStr}, {timeStr}</span>
+                    <span className="truncate">{dateStr}, {timeStr}</span>
                 </div>
                 {booking.location && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <MapPin className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{booking.location}</span>
+                    <div className="flex items-start gap-2 text-sm text-muted-foreground min-w-0">
+                        <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span className="line-clamp-2 break-words">{booking.location}</span>
                     </div>
                 )}
                 <div className="text-xs text-muted-foreground">

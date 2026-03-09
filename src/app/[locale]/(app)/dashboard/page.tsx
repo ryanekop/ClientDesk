@@ -162,22 +162,28 @@ export default async function DashboardPage() {
                     {/* Quick Actions */}
                     <div>
                         <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Aksi Cepat</h4>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-4 gap-2">
                             <Link href="/bookings/new" className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-center group">
-                                <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                                    <Plus className="w-4 h-4 text-primary" />
+                                <div className="p-2 rounded-lg bg-foreground/5 dark:bg-foreground/10 group-hover:bg-foreground/10 dark:group-hover:bg-foreground/20 transition-colors">
+                                    <Plus className="w-4 h-4 text-foreground" />
                                 </div>
-                                <span className="text-[11px] font-medium">Booking Baru</span>
+                                <span className="text-[11px] font-medium">Baru</span>
+                            </Link>
+                            <Link href="/bookings" className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-center group">
+                                <div className="p-2 rounded-lg bg-foreground/5 dark:bg-foreground/10 group-hover:bg-foreground/10 dark:group-hover:bg-foreground/20 transition-colors">
+                                    <Users className="w-4 h-4 text-foreground" />
+                                </div>
+                                <span className="text-[11px] font-medium">Daftar</span>
                             </Link>
                             <Link href="/calendar" className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-center group">
-                                <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-500/10 group-hover:bg-purple-200 dark:group-hover:bg-purple-500/20 transition-colors">
-                                    <Calendar className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                                <div className="p-2 rounded-lg bg-foreground/5 dark:bg-foreground/10 group-hover:bg-foreground/10 dark:group-hover:bg-foreground/20 transition-colors">
+                                    <Calendar className="w-4 h-4 text-foreground" />
                                 </div>
                                 <span className="text-[11px] font-medium">Kalender</span>
                             </Link>
                             <Link href="/finance" className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-center group">
-                                <div className="p-2 rounded-lg bg-green-100 dark:bg-green-500/10 group-hover:bg-green-200 dark:group-hover:bg-green-500/20 transition-colors">
-                                    <Wallet className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                <div className="p-2 rounded-lg bg-foreground/5 dark:bg-foreground/10 group-hover:bg-foreground/10 dark:group-hover:bg-foreground/20 transition-colors">
+                                    <Wallet className="w-4 h-4 text-foreground" />
                                 </div>
                                 <span className="text-[11px] font-medium">Keuangan</span>
                             </Link>
