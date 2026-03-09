@@ -60,7 +60,7 @@ export default function ClientStatusPage() {
                 .neq("status", "Batal")
                 .order("created_at", { ascending: false });
 
-            setBookings((data || []) as BookingStatus[]);
+            setBookings((data || []) as unknown as BookingStatus[]);
             setLoading(false);
         }
         load();
