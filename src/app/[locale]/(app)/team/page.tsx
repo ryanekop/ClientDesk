@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Edit2, Trash2, Users, Phone, Loader2 } from "lucide-react";
+import { Plus, Edit2, Trash2, Users, MessageCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -194,15 +194,15 @@ export default function TeamPage() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
                                             <div className="flex items-center justify-end gap-2">
-                                                <Button variant="outline" size="icon" title="Kirim WA" onClick={() => sendWhatsApp(member.whatsapp_number, member.name)}>
-                                                    <Phone className="w-4 h-4 text-green-600 dark:text-green-400" />
-                                                </Button>
-                                                <Button variant="outline" size="icon" title="Edit" onClick={() => { setEditingMember(member); setIsEditOpen(true); }}>
+                                                <button title="Kirim WA" onClick={() => sendWhatsApp(member.whatsapp_number, member.name)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
+                                                    <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                                </button>
+                                                <button title="Edit" onClick={() => { setEditingMember(member); setIsEditOpen(true); }} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
                                                     <Edit2 className="w-4 h-4 text-muted-foreground" />
-                                                </Button>
-                                                <Button variant="outline" size="icon" title="Hapus" onClick={() => handleDelete(member.id)}>
+                                                </button>
+                                                <button title="Hapus" onClick={() => handleDelete(member.id)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
                                                     <Trash2 className="w-4 h-4 text-red-500" />
-                                                </Button>
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>

@@ -15,6 +15,7 @@ type BookingFinance = {
     is_fully_paid: boolean;
     status: string;
     session_date: string | null;
+    tracking_uuid: string | null;
     services: { name: string } | null;
 };
 
@@ -47,7 +48,7 @@ export default function FinancePage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, services(name)")
+            .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, tracking_uuid, services(name)")
             .eq("user_id", user.id)
             .neq("status", "Batal")
             .order("created_at", { ascending: false });
@@ -178,7 +179,9 @@ export default function FinancePage() {
         if (!b.client_whatsapp) { alert("Nomor WhatsApp klien tidak tersedia."); return; }
         const remaining = b.total_price - b.dp_paid;
         const date = b.session_date ? new Date(b.session_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-";
-        const msg = `📄 *INVOICE - ${b.booking_code}*\n\nHalo ${b.client_name},\nBerikut detail invoice Anda:\n\n📦 Paket: ${b.services?.name || "-"}\n📅 Jadwal: ${date}\n💰 Total: ${formatCurrency(b.total_price)}\n✅ DP Dibayar: ${formatCurrency(b.dp_paid)}\n📌 Sisa: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? "✅ LUNAS" : "⏳ Belum Lunas"}\n\nTerima kasih! 🙏`;
+        const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
+        const trackLink = b.tracking_uuid ? `${siteUrl}/id/track/${b.tracking_uuid}` : "";
+        const msg = `📄 *INVOICE - ${b.booking_code}*\n\nHalo ${b.client_name},\nBerikut detail invoice Anda:\n\n📦 Paket: ${b.services?.name || "-"}\n📅 Jadwal: ${date}\n💰 Total: ${formatCurrency(b.total_price)}\n✅ DP Dibayar: ${formatCurrency(b.dp_paid)}\n📌 Sisa: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? "✅ LUNAS" : "⏳ Belum Lunas"}${trackLink ? `\n\n🔗 Lihat Invoice: ${trackLink}` : ""}\n\nTerima kasih! 🙏`;
         const cleaned = b.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
         window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(msg)}`, "_blank");
     }

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CalendarDays, MapPin, User, ExternalLink } from "lucide-react";
+import { CalendarDays, MapPin, User, ExternalLink, Package } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -125,8 +125,9 @@ export function UpcomingBookingCard() {
                         <span className="line-clamp-2 break-words">{booking.location}</span>
                     </div>
                 )}
-                <div className="text-xs text-muted-foreground">
-                    {(booking.services as any)?.name || booking.booking_code}
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Package className="w-3 h-3 shrink-0" />
+                    <span>{(booking.services as any)?.name || booking.booking_code}</span>
                 </div>
             </div>
         </div>

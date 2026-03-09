@@ -409,7 +409,7 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                         )}
 
                         <div className="space-y-1.5">
-                            <label className="text-sm font-medium flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Lokasi <span className="text-red-500">*</span></label>
+                            <label className="text-sm font-medium">Lokasi <span className="text-red-500">*</span></label>
                             <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi acara..." />
                         </div>
                     </div>

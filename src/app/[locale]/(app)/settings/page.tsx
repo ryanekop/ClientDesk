@@ -6,6 +6,15 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 
+const COUNTRY_CODES = [
+    { code: "+62", flag: "🇮🇩", name: "Indonesia" },
+    { code: "+60", flag: "🇲🇾", name: "Malaysia" },
+    { code: "+65", flag: "🇸🇬", name: "Singapore" },
+    { code: "+66", flag: "🇹🇭", name: "Thailand" },
+    { code: "+63", flag: "🇵🇭", name: "Philippines" },
+    { code: "+84", flag: "🇻🇳", name: "Vietnam" },
+];
+
 type Profile = {
     id: string;
     full_name: string;
@@ -49,6 +58,7 @@ export default function SettingsPage() {
 
     // Controlled fields for profile
     const [studioName, setStudioName] = React.useState("");
+    const [countryCode, setCountryCode] = React.useState("+62");
     const [waNumber, setWaNumber] = React.useState("");
     const [vendorSlug, setVendorSlug] = React.useState("");
 
@@ -70,7 +80,15 @@ export default function SettingsPage() {
         const prof = p as Profile;
         setProfile(prof);
         setStudioName(prof?.studio_name || "");
-        setWaNumber(prof?.whatsapp_number || "");
+        // Parse saved number into country code + local number
+        const savedWa = prof?.whatsapp_number || "";
+        const matchedCode = COUNTRY_CODES.find(c => savedWa.startsWith(c.code));
+        if (matchedCode) {
+            setCountryCode(matchedCode.code);
+            setWaNumber(savedWa.slice(matchedCode.code.length));
+        } else {
+            setWaNumber(savedWa.replace(/^0/, ""));
+        }
         setVendorSlug(prof?.vendor_slug || "");
 
         const { data: t } = await supabase.from("templates").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
@@ -87,7 +105,7 @@ export default function SettingsPage() {
 
         await supabase.from("profiles").update({
             studio_name: studioName || null,
-            whatsapp_number: waNumber || null,
+            whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
             vendor_slug: slug || null,
         }).eq("id", profile.id);
 
@@ -162,7 +180,12 @@ export default function SettingsPage() {
                         </div>
                         <div className="space-y-2">
                             <label className="text-sm font-medium flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {t("nomorWA")}</label>
-                            <input type="tel" value={waNumber} onChange={e => setWaNumber(e.target.value)} placeholder="08123456789" className={inputClass} />
+                            <div className="flex gap-2">
+                                <select value={countryCode} onChange={e => setCountryCode(e.target.value)} className={inputClass + " !w-28 shrink-0 cursor-pointer"}>
+                                    {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                                </select>
+                                <input type="tel" value={waNumber} onChange={e => { const val = e.target.value.replace(/[^0-9]/g, ""); setWaNumber(val.startsWith("0") ? val.slice(1) : val); }} placeholder="8123456789" className={inputClass} />
+                            </div>
                         </div>
                     </div>
 
@@ -176,7 +199,7 @@ export default function SettingsPage() {
                             className={inputClass}
                         />
                         <div className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md font-mono break-all">
-                            {siteUrl}/<span className="text-primary font-semibold">{slugPreview}</span>/formbooking
+                            {siteUrl}/formbooking/<span className="text-primary font-semibold">{slugPreview}</span>
                         </div>
                     </div>
 
