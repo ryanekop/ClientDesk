@@ -1,8 +1,8 @@
 import * as React from "react";
 import { createClient } from "@/utils/supabase/server";
-import { Users, CreditCard, TrendingUp, CalendarDays, User, Plus, Wallet, Calendar } from "lucide-react";
+import { Users, CreditCard, TrendingUp, CalendarDays, User, Plus, Wallet, Calendar, Camera, Clock3 } from "lucide-react";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
-import { RealtimeClock, UpcomingBookingCard } from "@/components/dashboard/dashboard-widgets";
+import { UpcomingBookingCard } from "@/components/dashboard/dashboard-widgets";
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 
@@ -98,7 +98,6 @@ export default async function DashboardPage() {
             {/* Header */}
             <div>
                 <h2 className="text-2xl font-bold tracking-tight">👋 {t("welcome", { name: displayName })}</h2>
-                <p className="text-muted-foreground">{t("subtitle")}</p>
             </div>
 
             {/* Row 1: 4 Stats Cards */}
@@ -131,27 +130,38 @@ export default async function DashboardPage() {
                 />
             </div>
 
-            {/* Row 2: Waktu Sekarang + Quick Actions / Ringkasan */}
+            {/* Row 2: Booking Terdekat + Ringkasan Hari Ini */}
             <div className="grid gap-4 sm:grid-cols-2">
-                <RealtimeClock />
+                <UpcomingBookingCard />
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5 space-y-4">
-                    {/* Ringkasan Hari Ini */}
-                    <div>
-                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Ringkasan Hari Ini</h3>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="rounded-lg bg-blue-50 dark:bg-blue-500/5 p-3 text-center">
-                                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{todaySessions || 0}</p>
-                                <p className="text-xs text-muted-foreground">Sesi Hari Ini</p>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ringkasan Hari Ini</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-xl border bg-card shadow-sm p-4 hover:shadow-md transition-shadow">
+                            <div className="flex flex-row items-center justify-between">
+                                <div className="flex flex-col gap-1">
+                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sesi Hari Ini</h4>
+                                    <div className="text-xl font-bold text-foreground">{todaySessions || 0} <span className="text-sm font-medium text-muted-foreground">Sesi</span></div>
+                                </div>
+                                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-500/10">
+                                    <Camera className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                </div>
                             </div>
-                            <div className="rounded-lg bg-amber-50 dark:bg-amber-500/5 p-3 text-center">
-                                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{pendingCount || 0}</p>
-                                <p className="text-xs text-muted-foreground">Perlu Konfirmasi</p>
+                        </div>
+                        <div className="rounded-xl border bg-card shadow-sm p-4 hover:shadow-md transition-shadow">
+                            <div className="flex flex-row items-center justify-between">
+                                <div className="flex flex-col gap-1">
+                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Perlu Konfirmasi</h4>
+                                    <div className="text-xl font-bold text-foreground">{pendingCount || 0} <span className="text-sm font-medium text-muted-foreground">Pending</span></div>
+                                </div>
+                                <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-500/10">
+                                    <Clock3 className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                                </div>
                             </div>
                         </div>
                     </div>
                     {/* Quick Actions */}
                     <div>
-                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Aksi Cepat</h3>
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Aksi Cepat</h4>
                         <div className="grid grid-cols-3 gap-2">
                             <Link href="/bookings/new" className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-center group">
                                 <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
@@ -176,17 +186,12 @@ export default async function DashboardPage() {
                 </div>
             </div>
 
-            {/* Row 3: Grafik Trend + Booking Terdekat */}
-            <div className="grid gap-4 lg:grid-cols-7">
-                <div className="lg:col-span-4 rounded-xl border bg-card text-card-foreground shadow-sm p-6">
-                    <div className="flex flex-col space-y-1.5 mb-4">
-                        <h3 className="font-semibold leading-none tracking-tight">{t("trendPemasukan")}</h3>
-                    </div>
-                    <DashboardCharts />
+            {/* Row 3: Grafik Trend Pemasukan (Full Width) */}
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6">
+                <div className="flex flex-col space-y-1.5 mb-4">
+                    <h3 className="font-semibold leading-none tracking-tight">{t("trendPemasukan")}</h3>
                 </div>
-                <div className="lg:col-span-3">
-                    <UpcomingBookingCard />
-                </div>
+                <DashboardCharts />
             </div>
 
             {/* Row 4: Booking Terbaru (Full Width Table) */}

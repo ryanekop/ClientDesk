@@ -10,6 +10,22 @@ import { Link, usePathname } from "@/i18n/routing";
 import { createClient } from "@/utils/supabase/client";
 import { signOut } from "@/app/actions/auth";
 
+function TopbarClock() {
+    const [now, setNow] = React.useState(new Date());
+    React.useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+    const dateStr = now.toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" });
+    const timeStr = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    return (
+        <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground tabular-nums mr-1">
+            <span className="font-medium">{dateStr}</span>
+            <span className="text-foreground font-bold">{timeStr}</span>
+        </div>
+    );
+}
+
 interface TopbarProps {
     onMenuClick: () => void;
 }
@@ -80,6 +96,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
             </div>
 
             <div className="flex items-center gap-2">
+                <TopbarClock />
                 <LanguageSwitcher />
                 <ThemeToggle />
 
