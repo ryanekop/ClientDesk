@@ -72,8 +72,13 @@ export async function GET(request: NextRequest) {
                     <p style="color:#888;">Jendela ini akan tertutup otomatis...</p>
                 </div>
                 <script>
-                    window.opener?.postMessage({ type: "GOOGLE_AUTH_SUCCESS" }, "*");
-                    setTimeout(() => window.close(), 1500);
+                    if (window.opener) {
+                        window.opener.postMessage({ type: "GOOGLE_AUTH_SUCCESS" }, "*");
+                        setTimeout(() => window.close(), 1500);
+                    } else {
+                        // Fallback: if opened in same tab (popup blocked), redirect back
+                        setTimeout(() => { window.location.href = "/id/calendar"; }, 1500);
+                    }
                 </script>
             </body>
             </html>`,

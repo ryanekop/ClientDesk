@@ -43,6 +43,9 @@ export async function GET(request: NextRequest) {
             form_show_location: vendor.form_show_location ?? true,
             form_show_notes: vendor.form_show_notes ?? true,
             form_show_proof: vendor.form_show_proof ?? true,
+            bank_name: vendor.bank_name || null,
+            bank_account_number: vendor.bank_account_number || null,
+            bank_account_name: vendor.bank_account_name || null,
         },
         services: services || [],
     });

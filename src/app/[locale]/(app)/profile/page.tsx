@@ -5,6 +5,7 @@ import { Camera, Trash2, Save, Key, Loader2, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
+import { compressImage } from "@/utils/compress-image";
 
 export default function ProfilePage() {
     const supabase = createClient();
@@ -62,25 +63,29 @@ export default function ProfilePage() {
         const file = e.target.files?.[0];
         if (!file || !userId) return;
 
-        const ext = file.name.split(".").pop();
-        const path = `avatars/${userId}.${ext}`;
+        try {
+            const compressed = await compressImage(file, 512, 0.8);
+            const path = `avatars/${userId}.jpg`;
 
-        const { error } = await supabase.storage
-            .from("avatars")
-            .upload(path, file, { upsert: true });
+            const { error } = await supabase.storage
+                .from("avatars")
+                .upload(path, compressed, { upsert: true, contentType: "image/jpeg" });
 
-        if (error) {
-            alert(t("gagalUpload") + ": " + error.message);
-            return;
+            if (error) {
+                alert(t("gagalUpload") + ": " + error.message);
+                return;
+            }
+
+            const { data: publicUrl } = supabase.storage.from("avatars").getPublicUrl(path);
+
+            await supabase.from("profiles").update({
+                avatar_url: publicUrl.publicUrl,
+            }).eq("id", userId);
+
+            setAvatarUrl(publicUrl.publicUrl + "?t=" + Date.now());
+        } catch {
+            alert("Gagal compress foto.");
         }
-
-        const { data: publicUrl } = supabase.storage.from("avatars").getPublicUrl(path);
-
-        await supabase.from("profiles").update({
-            avatar_url: publicUrl.publicUrl,
-        }).eq("id", userId);
-
-        setAvatarUrl(publicUrl.publicUrl + "?t=" + Date.now());
     }
 
     async function handleRemoveAvatar() {
@@ -94,25 +99,29 @@ export default function ProfilePage() {
         const file = e.target.files?.[0];
         if (!file || !userId) return;
 
-        const ext = file.name.split(".").pop();
-        const path = `logos/${userId}_invoice.${ext}`;
+        try {
+            const compressed = await compressImage(file, 800, 0.8);
+            const path = `logos/${userId}_invoice.jpg`;
 
-        const { error } = await supabase.storage
-            .from("avatars")
-            .upload(path, file, { upsert: true });
+            const { error } = await supabase.storage
+                .from("avatars")
+                .upload(path, compressed, { upsert: true, contentType: "image/jpeg" });
 
-        if (error) {
-            alert("Gagal upload logo: " + error.message);
-            return;
+            if (error) {
+                alert("Gagal upload logo: " + error.message);
+                return;
+            }
+
+            const { data: publicUrl } = supabase.storage.from("avatars").getPublicUrl(path);
+
+            await supabase.from("profiles").update({
+                invoice_logo_url: publicUrl.publicUrl,
+            }).eq("id", userId);
+
+            setInvoiceLogoUrl(publicUrl.publicUrl + "?t=" + Date.now());
+        } catch {
+            alert("Gagal compress/upload logo.");
         }
-
-        const { data: publicUrl } = supabase.storage.from("avatars").getPublicUrl(path);
-
-        await supabase.from("profiles").update({
-            invoice_logo_url: publicUrl.publicUrl,
-        }).eq("id", userId);
-
-        setInvoiceLogoUrl(publicUrl.publicUrl + "?t=" + Date.now());
     }
 
     async function handleRemoveLogo() {

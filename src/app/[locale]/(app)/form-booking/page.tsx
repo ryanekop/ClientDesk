@@ -2,11 +2,24 @@
 
 import * as React from "react";
 import { useLocale } from "next-intl";
-import { ExternalLink, Copy, ClipboardCheck, Eye, Loader2, Globe, Percent, Link2, Palette, List, ToggleRight, RefreshCw } from "lucide-react";
+import { ExternalLink, Copy, ClipboardCheck, Eye, Loader2, Percent, Link2, Palette, List, ToggleRight, RefreshCw, RotateCcw, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 
 const ALL_EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
+
+const DEFAULTS = {
+    brandColor: "#000000",
+    greeting: "",
+    eventTypes: ALL_EVENT_TYPES,
+    showLocation: true,
+    showNotes: true,
+    showProof: true,
+    minDpPercent: 50,
+    bankName: "",
+    bankAccountNumber: "",
+    bankAccountName: "",
+};
 
 export default function FormBookingPage() {
     const supabase = createClient();
@@ -15,18 +28,24 @@ export default function FormBookingPage() {
     const [saving, setSaving] = React.useState(false);
     const [vendorSlug, setVendorSlug] = React.useState("");
     const [studioName, setStudioName] = React.useState("");
-    const [minDpPercent, setMinDpPercent] = React.useState(50);
+    const [minDpPercent, setMinDpPercent] = React.useState(DEFAULTS.minDpPercent);
     const [savedMsg, setSavedMsg] = React.useState("");
     const [copied, setCopied] = React.useState(false);
     const [profileId, setProfileId] = React.useState("");
+    const [showResetConfirm, setShowResetConfirm] = React.useState(false);
 
     // Customization
-    const [brandColor, setBrandColor] = React.useState("#000000");
-    const [greeting, setGreeting] = React.useState("");
-    const [selectedEventTypes, setSelectedEventTypes] = React.useState<string[]>(ALL_EVENT_TYPES);
-    const [showLocation, setShowLocation] = React.useState(true);
-    const [showNotes, setShowNotes] = React.useState(true);
-    const [showProof, setShowProof] = React.useState(true);
+    const [brandColor, setBrandColor] = React.useState(DEFAULTS.brandColor);
+    const [greeting, setGreeting] = React.useState(DEFAULTS.greeting);
+    const [selectedEventTypes, setSelectedEventTypes] = React.useState<string[]>(DEFAULTS.eventTypes);
+    const [showLocation, setShowLocation] = React.useState(DEFAULTS.showLocation);
+    const [showNotes, setShowNotes] = React.useState(DEFAULTS.showNotes);
+    const [showProof, setShowProof] = React.useState(DEFAULTS.showProof);
+
+    // Bank info
+    const [bankName, setBankName] = React.useState(DEFAULTS.bankName);
+    const [bankAccountNumber, setBankAccountNumber] = React.useState(DEFAULTS.bankAccountNumber);
+    const [bankAccountName, setBankAccountName] = React.useState(DEFAULTS.bankAccountName);
 
     const [iframeKey, setIframeKey] = React.useState(0);
 
@@ -47,13 +66,16 @@ export default function FormBookingPage() {
             if (p) {
                 setProfileId(p.id);
                 setStudioName(p.studio_name || "");
-                setMinDpPercent(p.min_dp_percent ?? 50);
-                setBrandColor(p.form_brand_color || "#000000");
-                setGreeting(p.form_greeting || "");
-                setSelectedEventTypes(p.form_event_types?.length > 0 ? p.form_event_types : ALL_EVENT_TYPES);
-                setShowLocation(p.form_show_location ?? true);
-                setShowNotes(p.form_show_notes ?? true);
-                setShowProof(p.form_show_proof ?? true);
+                setMinDpPercent(p.min_dp_percent ?? DEFAULTS.minDpPercent);
+                setBrandColor(p.form_brand_color || DEFAULTS.brandColor);
+                setGreeting(p.form_greeting || DEFAULTS.greeting);
+                setSelectedEventTypes(p.form_event_types?.length > 0 ? p.form_event_types : DEFAULTS.eventTypes);
+                setShowLocation(p.form_show_location ?? DEFAULTS.showLocation);
+                setShowNotes(p.form_show_notes ?? DEFAULTS.showNotes);
+                setShowProof(p.form_show_proof ?? DEFAULTS.showProof);
+                setBankName(p.bank_name || DEFAULTS.bankName);
+                setBankAccountNumber(p.bank_account_number || DEFAULTS.bankAccountNumber);
+                setBankAccountName(p.bank_account_name || DEFAULTS.bankAccountName);
 
                 if (p.vendor_slug) {
                     setVendorSlug(p.vendor_slug);
@@ -68,7 +90,12 @@ export default function FormBookingPage() {
         if (!profileId) return;
         setSaving(true);
 
-        const slug = vendorSlug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+        // Auto-generate slug from studio name if empty
+        let slug = vendorSlug;
+        if (!slug && studioName) {
+            slug = studioName.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+            setVendorSlug(slug);
+        }
 
         await supabase.from("profiles").update({
             vendor_slug: slug || null,
@@ -79,13 +106,29 @@ export default function FormBookingPage() {
             form_show_location: showLocation,
             form_show_notes: showNotes,
             form_show_proof: showProof,
+            bank_name: bankName || null,
+            bank_account_number: bankAccountNumber || null,
+            bank_account_name: bankAccountName || null,
         }).eq("id", profileId);
 
-        setVendorSlug(slug);
         setSavedMsg("Tersimpan!");
-        setIframeKey(k => k + 1); // refresh preview
+        setIframeKey(k => k + 1);
         setTimeout(() => setSavedMsg(""), 3000);
         setSaving(false);
+    }
+
+    function handleResetDefault() {
+        setBrandColor(DEFAULTS.brandColor);
+        setGreeting(DEFAULTS.greeting);
+        setSelectedEventTypes([...DEFAULTS.eventTypes]);
+        setShowLocation(DEFAULTS.showLocation);
+        setShowNotes(DEFAULTS.showNotes);
+        setShowProof(DEFAULTS.showProof);
+        setMinDpPercent(DEFAULTS.minDpPercent);
+        setBankName(DEFAULTS.bankName);
+        setBankAccountNumber(DEFAULTS.bankAccountNumber);
+        setBankAccountName(DEFAULTS.bankAccountName);
+        setShowResetConfirm(false);
     }
 
     function copyUrl() {
@@ -141,41 +184,22 @@ export default function FormBookingPage() {
                 </div>
             ) : (
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6 text-center space-y-3">
-                    <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto">
-                        <Globe className="w-7 h-7 text-muted-foreground" />
-                    </div>
-                    <h3 className="font-semibold">Form Booking Belum Aktif</h3>
-                    <p className="text-sm text-muted-foreground">Isi custom URL di bawah untuk mengaktifkan form booking online.</p>
+                    <p className="text-sm text-muted-foreground">Form booking akan aktif setelah Anda menyimpan pengaturan. URL akan digenerate otomatis dari nama studio.</p>
                 </div>
             )}
 
-            {/* Main Content: Settings + Preview side by side */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Main Content: Settings + Preview */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
                 {/* LEFT: Settings */}
                 <div className="space-y-6">
-                    {/* URL & DP Settings */}
+                    {/* Payment Settings */}
                     <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
                         <div className="px-6 py-4 border-b">
-                            <h3 className="font-semibold flex items-center gap-2"><Globe className="w-4 h-4" /> Pengaturan URL & Pembayaran</h3>
+                            <h3 className="font-semibold flex items-center gap-2"><Percent className="w-4 h-4" /> Pengaturan Pembayaran</h3>
                         </div>
                         <div className="p-6 space-y-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Custom URL</label>
-                                <input
-                                    value={vendorSlug}
-                                    onChange={e => setVendorSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                                    placeholder={studioName?.toLowerCase().replace(/[^a-z0-9]/g, "-") || "nama-vendor"}
-                                    className={inputClass}
-                                />
-                                <div className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md font-mono break-all">
-                                    {siteUrl}/{locale}/<span className="text-primary font-semibold">{vendorSlug || "nama-vendor"}</span>/formbooking
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium flex items-center gap-1.5">
-                                    <Percent className="w-3.5 h-3.5" /> Minimum DP
-                                </label>
+                                <label className="text-sm font-medium">Minimum DP</label>
                                 <div className="flex items-center gap-4">
                                     <input
                                         type="range"
@@ -186,6 +210,43 @@ export default function FormBookingPage() {
                                     />
                                     <span className="text-sm font-bold w-12 text-right tabular-nums">{minDpPercent}%</span>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Bank Info */}
+                    <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                        <div className="px-6 py-4 border-b">
+                            <h3 className="font-semibold flex items-center gap-2"><CreditCard className="w-4 h-4" /> Rekening Pembayaran</h3>
+                            <p className="text-xs text-muted-foreground mt-1">Informasi rekening akan ditampilkan di form booking publik.</p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Nama Bank / E-Wallet</label>
+                                <input
+                                    value={bankName}
+                                    onChange={e => setBankName(e.target.value)}
+                                    placeholder="BCA / BNI / DANA / GoPay"
+                                    className={inputClass}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Nomor Rekening</label>
+                                <input
+                                    value={bankAccountNumber}
+                                    onChange={e => setBankAccountNumber(e.target.value)}
+                                    placeholder="1234567890"
+                                    className={inputClass}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Atas Nama</label>
+                                <input
+                                    value={bankAccountName}
+                                    onChange={e => setBankAccountName(e.target.value)}
+                                    placeholder="Nama pemilik rekening"
+                                    className={inputClass}
+                                />
                             </div>
                         </div>
                     </div>
@@ -261,7 +322,6 @@ export default function FormBookingPage() {
                         </div>
                         <div className="p-6 space-y-3">
                             {[
-                                { label: "Lokasi Acara", value: showLocation, setter: setShowLocation },
                                 { label: "Catatan", value: showNotes, setter: setShowNotes },
                                 { label: "Upload Bukti Pembayaran", value: showProof, setter: setShowProof },
                             ].map(item => (
@@ -281,40 +341,67 @@ export default function FormBookingPage() {
                         </div>
                     </div>
 
-                    {/* Save Button */}
-                    <div className="flex items-center gap-3">
+                    {/* Save + Reset Buttons */}
+                    <div className="flex items-center gap-3 flex-wrap">
                         <Button onClick={handleSave} disabled={saving} className="gap-2">
                             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                             Simpan Pengaturan
                         </Button>
+                        <Button variant="outline" onClick={() => setShowResetConfirm(true)} className="gap-2 text-muted-foreground">
+                            <RotateCcw className="w-4 h-4" /> Reset Default
+                        </Button>
                         {savedMsg && <span className="text-sm text-green-600 dark:text-green-400">{savedMsg}</span>}
                     </div>
+
+                    {/* Reset Confirmation Dialog */}
+                    {showResetConfirm && (
+                        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowResetConfirm(false)}>
+                            <div className="bg-card rounded-xl border shadow-lg p-6 max-w-sm w-full space-y-4" onClick={e => e.stopPropagation()}>
+                                <h3 className="font-semibold text-lg">Reset ke Default?</h3>
+                                <p className="text-sm text-muted-foreground">Semua pengaturan form (warna, tipe acara, field opsional, rekening bank, minimum DP) akan dikembalikan ke nilai default. Perubahan belum tersimpan sampai Anda klik &quot;Simpan Pengaturan&quot;.</p>
+                                <div className="flex gap-3 justify-end">
+                                    <Button variant="outline" onClick={() => setShowResetConfirm(false)}>Batal</Button>
+                                    <Button variant="destructive" onClick={handleResetDefault} className="gap-1.5">
+                                        <RotateCcw className="w-4 h-4" /> Reset
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* RIGHT: Preview */}
-                {vendorSlug && (
-                    <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6 space-y-4 sticky top-4">
-                        <div className="flex items-center justify-between">
-                            <h3 className="font-semibold flex items-center gap-2"><Eye className="w-4 h-4" /> Preview</h3>
-                            <div className="flex items-center gap-2">
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIframeKey(k => k + 1)} title="Refresh">
-                                    <RefreshCw className="w-3.5 h-3.5" />
-                                </Button>
+                {/* RIGHT: Preview — fills remaining space, centered content */}
+                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6 space-y-4 sticky top-4">
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-semibold flex items-center gap-2"><Eye className="w-4 h-4" /> Preview</h3>
+                        <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIframeKey(k => k + 1)} title="Refresh">
+                                <RefreshCw className="w-3.5 h-3.5" />
+                            </Button>
+                            {vendorSlug && (
                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.open(formUrl, "_blank")} title="Buka di tab baru">
                                     <ExternalLink className="w-3.5 h-3.5" />
                                 </Button>
-                            </div>
-                        </div>
-                        <div className="aspect-[9/16] max-h-[700px] rounded-lg overflow-hidden border bg-muted">
-                            <iframe
-                                key={iframeKey}
-                                src={formUrl}
-                                className="w-full h-full"
-                                title="Form Preview"
-                            />
+                            )}
                         </div>
                     </div>
-                )}
+                    {vendorSlug ? (
+                        <div className="flex justify-center">
+                            <div className="w-full max-w-[400px] aspect-[9/16] max-h-[700px] rounded-lg overflow-hidden border bg-muted">
+                                <iframe
+                                    key={iframeKey}
+                                    src={formUrl}
+                                    className="w-full h-full"
+                                    title="Form Preview"
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-center h-64 text-center">
+                            <p className="text-sm text-muted-foreground">Simpan pengaturan terlebih dahulu untuk melihat preview form booking.</p>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

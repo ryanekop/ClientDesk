@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { useParams } from "next/navigation";
-import { Loader2, CheckCircle2, Upload, CalendarDays, MapPin, Camera, MessageCircle } from "lucide-react";
+import { Loader2, CheckCircle2, Upload, CalendarDays, MapPin, Camera, MessageCircle, CreditCard } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import { compressImage } from "@/utils/compress-image";
 
 const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
@@ -50,6 +51,9 @@ type Vendor = {
     form_show_location: boolean;
     form_show_notes: boolean;
     form_show_proof: boolean;
+    bank_name: string | null;
+    bank_account_number: string | null;
+    bank_account_name: string | null;
 };
 
 function formatCurrency(n: number) {
@@ -143,7 +147,7 @@ export default function PublicBookingForm() {
         e.preventDefault();
         setError("");
 
-        if (!clientName || !phone || !sessionDate || !serviceId) {
+        if (!clientName || !phone || !sessionDate || !serviceId || !location) {
             setError("Mohon lengkapi semua field yang wajib.");
             return;
         }
@@ -151,26 +155,46 @@ export default function PublicBookingForm() {
         const fullPhone = `${countryCode}${phone}`.replace(/[^0-9+]/g, "");
         const dpValue = parseFormatted(dpDisplay) || 0;
 
+        // Validate minimum DP
+        if (selectedService) {
+            const minAmount = Math.ceil((selectedService.price * minDP) / 100);
+            if (dpValue < minAmount) {
+                setError(`DP minimal ${minDP}% dari harga paket (${formatCurrency(minAmount)}).`);
+                return;
+            }
+        }
+
         setSubmitting(true);
 
         // Upload proof if exists
         let paymentProofUrl: string | null = null;
         if (proofFile) {
             setUploadingProof(true);
-            const ext = proofFile.name.split(".").pop();
-            const path = `payment-proofs/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-            const { error: uploadErr } = await supabase.storage
-                .from("payment-proofs")
-                .upload(path, proofFile, { upsert: false });
+            try {
+                // Compress image before uploading
+                const compressed = proofFile.type.startsWith("image/")
+                    ? await compressImage(proofFile, 1200, 0.7)
+                    : proofFile;
+                const ext = proofFile.type.startsWith("image/") ? "jpg" : proofFile.name.split(".").pop();
+                const path = `payment-proofs/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+                const { error: uploadErr } = await supabase.storage
+                    .from("payment-proofs")
+                    .upload(path, compressed, { upsert: false, contentType: proofFile.type.startsWith("image/") ? "image/jpeg" : proofFile.type });
 
-            if (uploadErr) {
-                setError("Gagal upload bukti pembayaran: " + uploadErr.message);
+                if (uploadErr) {
+                    setError("Gagal upload bukti pembayaran: " + uploadErr.message);
+                    setSubmitting(false);
+                    setUploadingProof(false);
+                    return;
+                }
+                const { data: publicUrl } = supabase.storage.from("payment-proofs").getPublicUrl(path);
+                paymentProofUrl = publicUrl.publicUrl;
+            } catch {
+                setError("Gagal compress/upload bukti pembayaran.");
                 setSubmitting(false);
                 setUploadingProof(false);
                 return;
             }
-            const { data: publicUrl } = supabase.storage.from("payment-proofs").getPublicUrl(path);
-            paymentProofUrl = publicUrl.publicUrl;
             setUploadingProof(false);
         }
 
@@ -371,12 +395,10 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                             </div>
                         )}
 
-                        {vendor?.form_show_location !== false && (
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Lokasi</label>
-                                <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Lokasi acara (opsional)" className={inputClass} />
-                            </div>
-                        )}
+                        <div className="space-y-1.5">
+                            <label className="text-sm font-medium flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Lokasi <span className="text-red-500">*</span></label>
+                            <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Lokasi acara" className={inputClass} required />
+                        </div>
                     </div>
 
                     {/* Package & Payment */}
@@ -428,6 +450,20 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                                 </p>
                             )}
                         </div>
+
+                        {/* Bank Info */}
+                        {vendor?.bank_name && vendor?.bank_account_number && (
+                            <div className="rounded-lg border bg-blue-50 dark:bg-blue-500/5 border-blue-200 dark:border-blue-500/20 p-4 space-y-2">
+                                <div className="flex items-center gap-1.5 text-sm font-semibold text-blue-700 dark:text-blue-400">
+                                    <CreditCard className="w-4 h-4" /> Transfer ke
+                                </div>
+                                <div className="space-y-1 text-sm">
+                                    <p className="font-medium">{vendor.bank_name}</p>
+                                    <p className="font-mono text-base font-bold tracking-wide">{vendor.bank_account_number}</p>
+                                    {vendor.bank_account_name && <p className="text-muted-foreground">a.n. {vendor.bank_account_name}</p>}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Payment Proof Upload */}
                         {vendor?.form_show_proof !== false && (
