@@ -40,7 +40,7 @@ export default function FormBookingPage() {
 
             const { data: p } = await supabase
                 .from("profiles")
-                .select("id, studio_name, vendor_slug, min_dp_percent, form_brand_color, form_greeting, form_event_types, form_show_location, form_show_notes, form_show_proof")
+                .select("*")
                 .eq("id", user.id)
                 .single();
 
@@ -57,10 +57,6 @@ export default function FormBookingPage() {
 
                 if (p.vendor_slug) {
                     setVendorSlug(p.vendor_slug);
-                } else if (p.studio_name) {
-                    const autoSlug = p.studio_name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-                    await supabase.from("profiles").update({ vendor_slug: autoSlug }).eq("id", p.id);
-                    setVendorSlug(autoSlug);
                 }
             }
             setLoading(false);
@@ -304,8 +300,8 @@ export default function FormBookingPage() {
                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIframeKey(k => k + 1)} title="Refresh">
                                     <RefreshCw className="w-3.5 h-3.5" />
                                 </Button>
-                                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(formUrl, "_blank")}>
-                                    <ExternalLink className="w-3.5 h-3.5" /> Buka
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.open(formUrl, "_blank")} title="Buka di tab baru">
+                                    <ExternalLink className="w-3.5 h-3.5" />
                                 </Button>
                             </div>
                         </div>

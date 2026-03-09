@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Camera, Trash2, Save, Key, Loader2 } from "lucide-react";
+import { Camera, Trash2, Save, Key, Loader2, ImagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -18,8 +18,10 @@ export default function ProfilePage() {
     const [fullName, setFullName] = React.useState("");
     const [email, setEmail] = React.useState("");
     const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
+    const [invoiceLogoUrl, setInvoiceLogoUrl] = React.useState<string | null>(null);
 
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const logoInputRef = React.useRef<HTMLInputElement>(null);
 
     React.useEffect(() => { fetchProfile(); }, []);
 
@@ -33,13 +35,14 @@ export default function ProfilePage() {
 
         const { data: profile } = await supabase
             .from("profiles")
-            .select("full_name, avatar_url")
+            .select("full_name, avatar_url, invoice_logo_url")
             .eq("id", user.id)
             .single();
 
         if (profile) {
             setFullName(profile.full_name || "");
             setAvatarUrl(profile.avatar_url || null);
+            setInvoiceLogoUrl(profile.invoice_logo_url || null);
         }
         setLoading(false);
     }
@@ -85,6 +88,38 @@ export default function ProfilePage() {
             avatar_url: null,
         }).eq("id", userId);
         setAvatarUrl(null);
+    }
+
+    async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file || !userId) return;
+
+        const ext = file.name.split(".").pop();
+        const path = `logos/${userId}_invoice.${ext}`;
+
+        const { error } = await supabase.storage
+            .from("avatars")
+            .upload(path, file, { upsert: true });
+
+        if (error) {
+            alert("Gagal upload logo: " + error.message);
+            return;
+        }
+
+        const { data: publicUrl } = supabase.storage.from("avatars").getPublicUrl(path);
+
+        await supabase.from("profiles").update({
+            invoice_logo_url: publicUrl.publicUrl,
+        }).eq("id", userId);
+
+        setInvoiceLogoUrl(publicUrl.publicUrl + "?t=" + Date.now());
+    }
+
+    async function handleRemoveLogo() {
+        await supabase.from("profiles").update({
+            invoice_logo_url: null,
+        }).eq("id", userId);
+        setInvoiceLogoUrl(null);
     }
 
     async function handleResetPassword() {
@@ -152,6 +187,32 @@ export default function ProfilePage() {
                             className={inputClass}
                             placeholder={t("namaPlaceholder")}
                         />
+                    </div>
+
+                    {/* Invoice Logo */}
+                    <div className="space-y-3">
+                        <label className="text-sm font-medium">Logo Invoice</label>
+                        <p className="text-xs text-muted-foreground -mt-1">Logo ini akan digunakan di invoice. Jika kosong, akan menggunakan nama studio.</p>
+                        <div className="flex items-center gap-4">
+                            <div className="w-32 h-16 rounded-lg border-2 border-dashed border-muted overflow-hidden bg-muted/30 flex items-center justify-center">
+                                {invoiceLogoUrl ? (
+                                    <img src={invoiceLogoUrl} alt="Logo" className="max-w-full max-h-full object-contain p-1" />
+                                ) : (
+                                    <ImagePlus className="w-6 h-6 text-muted-foreground" />
+                                )}
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <Button variant="outline" size="sm" onClick={() => logoInputRef.current?.click()} className="gap-1.5 cursor-pointer">
+                                    <Camera className="w-3.5 h-3.5" /> {invoiceLogoUrl ? "Ganti Logo" : "Upload Logo"}
+                                </Button>
+                                {invoiceLogoUrl && (
+                                    <button onClick={handleRemoveLogo} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 cursor-pointer">
+                                        <Trash2 className="w-3 h-3" /> Hapus Logo
+                                    </button>
+                                )}
+                            </div>
+                            <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                        </div>
                     </div>
 
                     {/* Email (readonly) */}

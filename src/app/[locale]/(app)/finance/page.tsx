@@ -24,6 +24,8 @@ export default function FinancePage() {
     const [bookings, setBookings] = React.useState<BookingFinance[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [filter, setFilter] = React.useState<"all" | "pending" | "paid">("all");
+    const [studioName, setStudioName] = React.useState("Client Desk");
+    const [invoiceLogoUrl, setInvoiceLogoUrl] = React.useState<string | null>(null);
 
     React.useEffect(() => { fetchBookings(); }, []);
 
@@ -31,6 +33,17 @@ export default function FinancePage() {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+
+        // Load profile for invoice branding
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("studio_name, invoice_logo_url")
+            .eq("id", user.id)
+            .single();
+        if (profile) {
+            if (profile.studio_name) setStudioName(profile.studio_name);
+            if (profile.invoice_logo_url) setInvoiceLogoUrl(profile.invoice_logo_url);
+        }
 
         const { data } = await supabase
             .from("bookings")
@@ -99,7 +112,7 @@ export default function FinancePage() {
 <body>
 <div class="header">
     <div class="brand">
-        <h1>Client Desk</h1>
+        ${invoiceLogoUrl ? `<img src="${invoiceLogoUrl}" alt="Logo" style="max-height:48px;max-width:200px;object-fit:contain;margin-bottom:4px;">` : `<h1>${studioName}</h1>`}
         <p>Studio Management</p>
     </div>
     <div class="invoice-info">
@@ -145,7 +158,7 @@ export default function FinancePage() {
 </div>
 
 <div class="footer">
-    <p>Terima kasih atas kepercayaan Anda. Invoice ini digenerate otomatis oleh Client Desk.</p>
+    <p>Terima kasih atas kepercayaan Anda. Invoice ini digenerate otomatis oleh ${studioName}.</p>
 </div>
 </body>
 </html>`;

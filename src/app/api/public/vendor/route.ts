@@ -12,14 +12,14 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: false, error: "slug required" }, { status: 400 });
     }
 
-    // Get vendor info
-    const { data: vendor } = await supabaseAdmin
+    // Get vendor info — use select("*") so it doesn't fail if form customization columns don't exist yet
+    const { data: vendor, error } = await supabaseAdmin
         .from("profiles")
-        .select("id, studio_name, whatsapp_number, min_dp_percent, avatar_url, form_brand_color, form_greeting, form_event_types, form_show_location, form_show_notes, form_show_proof")
+        .select("*")
         .eq("vendor_slug", slug)
         .single();
 
-    if (!vendor) {
+    if (!vendor || error) {
         return NextResponse.json({ success: false, error: "Vendor not found" }, { status: 404 });
     }
 
@@ -38,8 +38,8 @@ export async function GET(request: NextRequest) {
             min_dp_percent: vendor.min_dp_percent,
             avatar_url: vendor.avatar_url,
             form_brand_color: vendor.form_brand_color || '#000000',
-            form_greeting: vendor.form_greeting,
-            form_event_types: vendor.form_event_types,
+            form_greeting: vendor.form_greeting || null,
+            form_event_types: vendor.form_event_types || null,
             form_show_location: vendor.form_show_location ?? true,
             form_show_notes: vendor.form_show_notes ?? true,
             form_show_proof: vendor.form_show_proof ?? true,

@@ -8,3 +8,4 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS form_event_types TEXT[];
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS form_show_location BOOLEAN DEFAULT true;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS form_show_notes BOOLEAN DEFAULT true;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS form_show_proof BOOLEAN DEFAULT true;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS invoice_logo_url TEXT;
