@@ -17,7 +17,8 @@ import {
     ListOrdered,
     LogOut,
     Menu,
-    FileEdit
+    FileEdit,
+    Activity
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -29,6 +30,7 @@ interface SidebarProps {
 const mainNavItems = [
     { titleKey: "dashboard" as const, href: "/dashboard", icon: LayoutDashboard },
     { titleKey: "bookings" as const, href: "/bookings", icon: ListOrdered },
+    { titleKey: "statusKlien" as const, href: "/client-status", icon: Activity },
     { titleKey: "calendar" as const, href: "/calendar", icon: CalendarDays },
     { titleKey: "services" as const, href: "/services", icon: Briefcase },
     { titleKey: "finance" as const, href: "/finance", icon: Wallet },
