@@ -6,11 +6,14 @@ import { createClient } from "@/utils/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Loader2, Eye, EyeOff, UserPlus, Lock, Languages, Sun, Moon } from "lucide-react"
 import { useTheme } from "next-themes"
+import { useLocale } from "next-intl"
+import Link from "next/link"
 
 export default function LoginPage() {
     const router = useRouter()
     const supabase = createClient()
     const { theme, setTheme } = useTheme()
+    const locale = useLocale()
 
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
@@ -41,7 +44,7 @@ export default function LoginPage() {
             }
 
             router.refresh()
-            router.push("/id/dashboard")
+            router.push(`/${locale}/dashboard`)
         } catch {
             setError("Terjadi kesalahan, coba lagi.")
             setLoading(false)
@@ -81,7 +84,7 @@ export default function LoginPage() {
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                     <label className="text-sm font-medium leading-none">Kata Sandi</label>
-                                    <a href="#" className="text-xs text-primary hover:underline cursor-pointer">Lupa kata sandi?</a>
+                                    <Link href={`/${locale}/forgot-password`} className="text-xs text-primary hover:underline cursor-pointer">Lupa kata sandi?</Link>
                                 </div>
                                 <div className="relative">
                                     <input
@@ -143,9 +146,11 @@ export default function LoginPage() {
                         {/* No Account Section */}
                         <div className="mt-6 pt-6 border-t text-center space-y-3">
                             <p className="text-sm text-muted-foreground">Belum punya akun?</p>
-                            <Button variant="outline" className="w-full gap-2 cursor-pointer">
-                                <UserPlus className="h-4 w-4" />
-                                Daftar Sekarang
+                            <Button variant="outline" className="w-full gap-2 cursor-pointer" asChild>
+                                <Link href={`/${locale}/register`}>
+                                    <UserPlus className="h-4 w-4" />
+                                    Daftar Sekarang
+                                </Link>
                             </Button>
                         </div>
                     </div>
