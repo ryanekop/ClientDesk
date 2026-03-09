@@ -3,6 +3,7 @@
 import * as React from "react";
 import { createClient } from "@/utils/supabase/client";
 import { Activity, Copy, ClipboardCheck, Loader2, ExternalLink, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/routing";
 
 type BookingStatus = {
@@ -106,7 +107,7 @@ export default function ClientStatusPage() {
         <div className="space-y-6">
             <div>
                 <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                    <Activity className="w-6 h-6" /> Status Klien
+                    <Activity className="w-6 h-6" /> Status Booking
                 </h2>
                 <p className="text-muted-foreground text-sm">Kelola progress dan antrian klien. Klien bisa tracking via link.</p>
             </div>
@@ -136,17 +137,17 @@ export default function ClientStatusPage() {
             {/* Table */}
             <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="border-b text-xs text-muted-foreground">
-                                <th className="text-left font-medium px-4 py-3">Klien</th>
-                                <th className="text-left font-medium px-4 py-3 hidden sm:table-cell">Paket</th>
-                                <th className="text-left font-medium px-4 py-3">Status</th>
-                                <th className="text-center font-medium px-4 py-3 hidden sm:table-cell">Antrian</th>
-                                <th className="text-center font-medium px-4 py-3">Link</th>
+                    <table className="w-full text-sm text-left border-collapse">
+                        <thead className="text-[11px] uppercase bg-muted/30 border-b">
+                            <tr>
+                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Klien</th>
+                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap hidden sm:table-cell">Paket</th>
+                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Status</th>
+                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-center hidden sm:table-cell">Antrian</th>
+                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">Aksi</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody className="divide-y divide-border/50">
                             {filtered.length === 0 ? (
                                 <tr>
                                     <td colSpan={5} className="text-center py-12 text-sm text-muted-foreground">
@@ -155,14 +156,14 @@ export default function ClientStatusPage() {
                                 </tr>
                             ) : (
                                 filtered.map(b => (
-                                    <tr key={b.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                                    <tr key={b.id} className="hover:bg-muted/30 transition-colors">
                                         <td className="px-4 py-3">
                                             <Link href={`/bookings/${b.id}`} className="hover:underline">
                                                 <p className="text-sm font-medium leading-tight">{b.client_name}</p>
                                                 <p className="text-[11px] text-muted-foreground font-mono">{b.booking_code}</p>
                                             </Link>
                                         </td>
-                                        <td className="px-4 py-3 text-sm hidden sm:table-cell">
+                                        <td className="px-4 py-3 text-sm hidden sm:table-cell text-muted-foreground">
                                             {(b.services as any)?.name || "-"}
                                         </td>
                                         <td className="px-4 py-3">
@@ -196,22 +197,29 @@ export default function ClientStatusPage() {
                                                 className={inputClass}
                                             />
                                         </td>
-                                        <td className="px-4 py-3 text-center">
-                                            {b.tracking_uuid ? (
-                                                <button
-                                                    onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}
-                                                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer"
-                                                    title="Salin link tracking klien"
-                                                >
-                                                    {copiedId === b.id ? (
-                                                        <><ClipboardCheck className="w-3.5 h-3.5" /> Tersalin</>
-                                                    ) : (
-                                                        <><Copy className="w-3.5 h-3.5" /> Salin</>
-                                                    )}
-                                                </button>
-                                            ) : (
-                                                <span className="text-xs text-muted-foreground">-</span>
-                                            )}
+                                        <td className="px-4 py-3 text-right">
+                                            <div className="flex items-center justify-end gap-1">
+                                                {b.tracking_uuid && (
+                                                    <>
+                                                        <Button
+                                                            variant="ghost" size="icon"
+                                                            className="h-8 w-8 text-blue-500 hover:text-blue-600"
+                                                            title="Buka Tracking"
+                                                            onClick={() => window.open(`/id/track/${b.tracking_uuid}`, "_blank")}
+                                                        >
+                                                            <ExternalLink className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost" size="icon"
+                                                            className={`h-8 w-8 ${copiedId === b.id ? "text-green-500" : "text-slate-500 hover:text-slate-700"}`}
+                                                            title="Salin Link Tracking"
+                                                            onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}
+                                                        >
+                                                            {copiedId === b.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                                        </Button>
+                                                    </>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))

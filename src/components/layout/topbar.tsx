@@ -48,7 +48,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         if (pathname.startsWith("/services")) return "Layanan / Paket";
         if (pathname.startsWith("/team")) return "Tim / Freelance";
         if (pathname.startsWith("/form-booking")) return "Form Booking";
-        if (pathname.startsWith("/client-status")) return "Status Klien";
+        if (pathname.startsWith("/client-status")) return "Status Booking";
         if (pathname.startsWith("/settings")) return "Pengaturan";
         if (pathname.startsWith("/profile")) return "Profil";
         return "Client Desk";

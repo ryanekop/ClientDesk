@@ -290,9 +290,9 @@ export default function FinancePage() {
                                                     onClick={() => sendInvoiceWhatsApp(b)}>
                                                     <MessageCircle className="w-4 h-4" />
                                                 </Button>
-                                                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => generateInvoice(b)}>
-                                                    <FileText className="w-3.5 h-3.5" />
-                                                    Invoice
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-slate-700" title="Invoice"
+                                                    onClick={() => generateInvoice(b)}>
+                                                    <FileText className="w-4 h-4" />
                                                 </Button>
                                             </div>
                                         </td>

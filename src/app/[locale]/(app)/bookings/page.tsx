@@ -275,10 +275,19 @@ export default function BookingsPage() {
                                                     onClick={() => copyTemplate(booking)}>
                                                     {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                                                 </Button>
-                                                {/* 2. WA Client */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600" title="WA Klien"
-                                                    disabled={!booking.client_whatsapp}
-                                                    onClick={() => sendWhatsAppClient(booking)}>
+                                                {/* 2. WA Freelancer (default) / Client fallback */}
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600"
+                                                    title={booking.freelancers?.whatsapp_number ? `WA Freelance (${booking.freelancers.name})` : "WA Klien"}
+                                                    disabled={!booking.freelancers?.whatsapp_number && !booking.client_whatsapp}
+                                                    onClick={() => {
+                                                        if (booking.freelancers?.whatsapp_number) {
+                                                            const cleaned = booking.freelancers.whatsapp_number.replace(/^0/, "62").replace(/[^0-9]/g, "");
+                                                            const msg = encodeURIComponent(generateWATemplate(booking, booking.freelancers.name));
+                                                            window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
+                                                        } else {
+                                                            sendWhatsAppClient(booking);
+                                                        }
+                                                    }}>
                                                     <MessageCircle className="w-4 h-4" />
                                                 </Button>
                                                 {/* 3. Drive Folder */}
