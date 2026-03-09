@@ -118,7 +118,9 @@
         "perbarui": "Update Service",
         "hapusConfirm": "Delete this service?",
         "belumAda": "No services yet",
-        "belumAdaDesc": "Click \"Add Service\" to create your first service."
+        "belumAdaDesc": "Click \"Add Service\" to create your first service.",
+        "aktif": "Active",
+        "nonaktif": "Inactive"
     },
     "Finance": {
         "title": "Finance",

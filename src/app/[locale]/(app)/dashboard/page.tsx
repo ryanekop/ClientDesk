@@ -237,7 +237,7 @@ export default async function DashboardPage() {
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-medium leading-tight">{b.client_name}</p>
-                                                    <p className="text-[11px] text-muted-foreground font-mono">{b.booking_code}</p>
+                                                    <p className="text-[11px] text-muted-foreground">{b.booking_code}</p>
                                                 </div>
                                             </Link>
                                         </td>

@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
         const mm = String(now.getMonth() + 1).padStart(2, "0");
         const yyyy = now.getFullYear();
         const rand = String(Math.floor(Math.random() * 900) + 100);
-        const bookingCode = `${dd}${mm}${yyyy}${rand}`;
+        const bookingCode = `INV-${dd}${mm}${yyyy}${rand}`;
 
         const { data: booking, error } = await supabaseAdmin
             .from("bookings")
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
                 dp_paid: dpPaid,
                 location: location || null,
                 notes: notes || null,
-                extra_data: extraData || null,
+                extra_fields: extraData || null,
                 payment_proof_url: paymentProofUrl || null,
                 status: "Pending",
                 is_fully_paid: dpPaid >= totalPrice,

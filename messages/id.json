@@ -118,7 +118,9 @@
         "perbarui": "Perbarui Layanan",
         "hapusConfirm": "Hapus layanan ini?",
         "belumAda": "Belum ada layanan",
-        "belumAdaDesc": "Klik \"Tambah Layanan\" untuk membuat layanan pertama Anda."
+        "belumAdaDesc": "Klik \"Tambah Layanan\" untuk membuat layanan pertama Anda.",
+        "aktif": "Aktif",
+        "nonaktif": "Nonaktif"
     },
     "Finance": {
         "title": "Keuangan",

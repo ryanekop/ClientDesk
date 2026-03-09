@@ -160,7 +160,7 @@ export default function ClientStatusPage() {
                                         <td className="px-4 py-3">
                                             <Link href={`/bookings/${b.id}`} className="hover:underline">
                                                 <p className="text-sm font-medium leading-tight">{b.client_name}</p>
-                                                <p className="text-[11px] text-muted-foreground font-mono">{b.booking_code}</p>
+                                                <p className="text-[11px] text-muted-foreground">{b.booking_code}</p>
                                             </Link>
                                         </td>
                                         <td className="px-4 py-3 text-sm hidden sm:table-cell text-muted-foreground">

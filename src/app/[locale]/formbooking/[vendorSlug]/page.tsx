@@ -298,7 +298,7 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                     <div>
                         <h2 className="text-2xl font-bold mb-2">Booking Berhasil! 🎉</h2>
                         <p className="text-muted-foreground text-sm">Kode Booking Anda:</p>
-                        <p className="text-3xl font-bold text-primary mt-1 font-mono">{resultData?.bookingCode}</p>
+                        <p className="text-3xl font-bold text-primary mt-1">{resultData?.bookingCode}</p>
                     </div>
                     <p className="text-sm text-muted-foreground">
                         Silakan konfirmasi booking Anda ke admin melalui WhatsApp untuk proses lebih lanjut.

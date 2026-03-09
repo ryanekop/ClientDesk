@@ -95,7 +95,7 @@ export default function TrackingPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
                         <div>
                             <h2 className="text-lg font-bold">Detail Booking</h2>
-                            <p className="text-muted-foreground text-sm">Kode: <span className="font-mono font-semibold text-primary">{booking.bookingCode}</span></p>
+                            <p className="text-muted-foreground text-sm">Kode: <span className="font-semibold text-primary">{booking.bookingCode}</span></p>
                         </div>
                         <div className="flex items-center gap-2">
                             {booking.queuePosition && booking.queuePosition > 0 && (
@@ -104,8 +104,8 @@ export default function TrackingPage() {
                                 </span>
                             )}
                             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${currentIdx >= STATUS_STEPS.length - 1
-                                    ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
-                                    : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+                                ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
+                                : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
                                 }`}>
                                 {booking.clientStatus || booking.status || "Pending"}
                             </span>
@@ -154,10 +154,10 @@ export default function TrackingPage() {
                                     )}
 
                                     <div className={`relative z-10 flex shrink-0 items-center justify-center w-10 h-10 rounded-full border-2 transition-all ${isDone
-                                            ? "bg-primary border-primary text-primary-foreground"
-                                            : isCurrent
-                                                ? "bg-background border-primary text-primary ring-4 ring-primary/10"
-                                                : "bg-background border-border text-muted-foreground"
+                                        ? "bg-primary border-primary text-primary-foreground"
+                                        : isCurrent
+                                            ? "bg-background border-primary text-primary ring-4 ring-primary/10"
+                                            : "bg-background border-border text-muted-foreground"
                                         }`}>
                                         <Icon className="w-4 h-4" />
                                     </div>
