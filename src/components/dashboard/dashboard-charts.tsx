@@ -124,7 +124,7 @@ export function DashboardCharts() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
             {/* 30-day daily trend */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-                <h3 className="font-semibold text-sm mb-3">Trend Pemasukan (30 Hari)</h3>
+                <h3 className="font-semibold text-sm mb-3">Pemasukan per Hari</h3>
                 <div className="h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={dailyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>

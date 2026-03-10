@@ -69,7 +69,7 @@ export default async function DashboardPage() {
     // Recent bookings (5)
     const { data: recentBookings } = await supabase
         .from("bookings")
-        .select("id, client_name, booking_code, session_date, status, total_price, services(name)")
+        .select("id, client_name, booking_code, session_date, status, total_price, created_at, services(name)")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false })
         .limit(5);
@@ -192,13 +192,8 @@ export default async function DashboardPage() {
                 </div>
             </div>
 
-            {/* Row 3: Grafik Trend Pemasukan (Full Width) */}
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6">
-                <div className="flex flex-col space-y-1.5 mb-4">
-                    <h3 className="font-semibold leading-none tracking-tight">{t("trendPemasukan")}</h3>
-                </div>
-                <DashboardCharts />
-            </div>
+            {/* Row 3: Grafik (no card wrapper — charts have their own cards) */}
+            <DashboardCharts />
 
             {/* Row 4: Booking Terbaru (Full Width Table) */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
@@ -218,6 +213,7 @@ export default async function DashboardPage() {
                                 <th className="text-left font-medium px-6 py-3">Klien</th>
                                 <th className="text-left font-medium px-4 py-3 hidden sm:table-cell">Paket</th>
                                 <th className="text-left font-medium px-4 py-3 hidden md:table-cell">Jadwal</th>
+                                <th className="text-left font-medium px-4 py-3 hidden md:table-cell">Tanggal Booking</th>
                                 <th className="text-left font-medium px-4 py-3">Status</th>
                                 <th className="text-right font-medium px-6 py-3 hidden sm:table-cell">Total</th>
                             </tr>
@@ -225,7 +221,7 @@ export default async function DashboardPage() {
                         <tbody>
                             {(!recentBookings || recentBookings.length === 0) ? (
                                 <tr>
-                                    <td colSpan={5} className="text-center py-8 text-sm text-muted-foreground">{t("belumAdaBooking")}</td>
+                                    <td colSpan={6} className="text-center py-8 text-sm text-muted-foreground">{t("belumAdaBooking")}</td>
                                 </tr>
                             ) : (
                                 recentBookings.map((b) => (
@@ -243,6 +239,7 @@ export default async function DashboardPage() {
                                         </td>
                                         <td className="px-4 py-3 text-sm hidden sm:table-cell">{(b.services as any)?.name || "-"}</td>
                                         <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">{formatDate(b.session_date)}</td>
+                                        <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">{formatDate((b as any).created_at)}</td>
                                         <td className="px-4 py-3">
                                             <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${statusColors[b.status?.toLowerCase()] || statusColors.pending}`}>
                                                 {b.status}

@@ -389,13 +389,12 @@ export default function CalendarPage() {
                     @media (max-width: 767px) {
                         .rbc-header { padding: 4px 2px; font-size: 0.7rem; }
                         .rbc-month-row { min-height: 50px !important; }
-                        .rbc-row-segment { padding: 0 1px !important; }
+                        .rbc-date-cell { text-align: center; padding: 2px 0; font-size: 0.8rem; }
+                        .rbc-row-segment { padding: 0 1px !important; display: flex; justify-content: center; }
                         .rbc-event { padding: 0 !important; width: 8px !important; height: 8px !important; min-height: 8px !important; border-radius: 50% !important; display: inline-block !important; margin: 1px !important; overflow: hidden !important; }
                         .rbc-event-content { font-size: 0 !important; line-height: 0 !important; overflow: hidden !important; }
                         .rbc-event-label { display: none !important; }
-                        .rbc-row-content { display: flex; flex-direction: column; align-items: center; }
-                        .rbc-row-content .rbc-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; }
-                        .rbc-show-more { font-size: 0.6rem !important; padding: 0 !important; margin-top: 1px !important; }
+                        .rbc-show-more { font-size: 0.6rem !important; padding: 0 !important; margin-top: 1px !important; text-align: center; }
                         .rbc-overlay { max-width: 250px !important; }
                         .rbc-overlay .rbc-event { width: auto !important; height: auto !important; border-radius: 4px !important; padding: 2px 6px !important; display: block !important; margin: 2px 0 !important; }
                         .rbc-overlay .rbc-event-content { font-size: 0.7rem !important; line-height: 1.3 !important; }

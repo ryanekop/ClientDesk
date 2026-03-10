@@ -76,9 +76,10 @@ export function UpcomingBookingCard() {
     const timeStr = sessionDate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 
     const now = new Date();
-    const diffMs = sessionDate.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    const urgencyLabel = diffDays === 0 ? "Hari ini" : diffDays === 1 ? "Besok" : `${diffDays} hari lagi`;
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const sessionStart = new Date(sessionDate.getFullYear(), sessionDate.getMonth(), sessionDate.getDate());
+    const diffDays = Math.round((sessionStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+    const urgencyLabel = diffDays <= 0 ? "Hari ini" : diffDays === 1 ? "Besok" : `${diffDays} hari lagi`;
 
     const statusColors: Record<string, string> = {
         pending: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
