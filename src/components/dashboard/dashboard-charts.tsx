@@ -60,9 +60,9 @@ export function DashboardCharts() {
             });
 
             const entries = Object.entries(revenueByDate);
-            const dailyPts: DailyPoint[] = entries.map(([date, rev], idx) => {
+            const dailyPts: DailyPoint[] = entries.map(([date, rev]) => {
                 return {
-                    name: idx % 7 === 0 || idx === entries.length - 1 ? dateLabelMap[date] : "",
+                    name: dateLabelMap[date],
                     dateLabel: dateLabelMap[date],
                     revenue: rev,
                 };
@@ -130,7 +130,7 @@ export function DashboardCharts() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
             {/* 30-day daily trend */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-                <h3 className="font-semibold text-sm mb-3">Pemasukan per Hari</h3>
+                <h3 className="font-semibold text-sm mb-3">Pemasukan 30 Hari Terakhir</h3>
                 <div className="h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={dailyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -141,7 +141,7 @@ export function DashboardCharts() {
                                 </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} dy={10} />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} dy={10} interval={6} />
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} tickFormatter={formatShort} width={48} />
                             <Tooltip
                                 content={({ active, payload }) => {

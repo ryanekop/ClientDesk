@@ -130,6 +130,7 @@ export default function SettingsPage() {
     const [showLogoCrop, setShowLogoCrop] = React.useState(false);
     const [logoUploading, setLogoUploading] = React.useState(false);
     const [logoOrientation, setLogoOrientation] = React.useState<"horizontal" | "square">("horizontal");
+    const [logoLightboxOpen, setLogoLightboxOpen] = React.useState(false);
     const [dragOver, setDragOver] = React.useState(false);
     const logoInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -554,7 +555,7 @@ export default function SettingsPage() {
                                     {logoUrl && (
                                         <div className="space-y-2">
                                             <p className="text-xs text-muted-foreground font-medium">Preview:</p>
-                                            <div className={`rounded-xl border bg-muted/20 overflow-hidden flex items-center justify-center ${logoOrientation === "horizontal" ? "w-48 h-24" : "w-32 h-32"}`}>
+                                            <div className={`rounded-xl border bg-muted/20 overflow-hidden flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all ${logoOrientation === "horizontal" ? "w-64 h-32" : "w-40 h-40"}`} onClick={() => setLogoLightboxOpen(true)} title="Klik untuk melihat lebih besar">
                                                 <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
                                             </div>
                                             {/* 3. Delete */}
@@ -741,6 +742,13 @@ export default function SettingsPage() {
                     onClose={() => { setShowLogoCrop(false); setLogoCropSrc(null); }}
                     onCropComplete={handleCroppedLogo}
                 />
+            )}
+
+            {/* Logo Lightbox */}
+            {logoLightboxOpen && logoUrl && (
+                <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-8 cursor-pointer" onClick={() => setLogoLightboxOpen(false)}>
+                    <img src={logoUrl} alt="Logo" className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
+                </div>
             )}
         </>
     );

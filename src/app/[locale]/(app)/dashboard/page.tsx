@@ -135,7 +135,7 @@ export default async function DashboardPage() {
                 <UpcomingBookingCard />
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5 space-y-4">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ringkasan Hari Ini</h3>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="rounded-xl border bg-card shadow-sm p-4 hover:shadow-md transition-shadow">
                             <div className="flex flex-row items-center justify-between">
                                 <div className="flex flex-col gap-1">
