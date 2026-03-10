@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
+import { getSubscription, createTrialSubscription } from '@/utils/subscription-service'
+import { notifyNewSignup } from '@/utils/telegram'
 
 export async function GET(request: Request) {
     const { searchParams, origin } = new URL(request.url)
@@ -11,9 +13,37 @@ export async function GET(request: Request) {
 
     if (code) {
         const supabase = await createClient()
-        const { error } = await supabase.auth.exchangeCodeForSession(code)
+        const { error, data: sessionData } = await supabase.auth.exchangeCodeForSession(code)
 
         if (!error) {
+            // =============================================
+            // AUTO-CREATE TRIAL for new signups
+            // =============================================
+            const userId = sessionData?.user?.id
+            if (userId) {
+                const existingSub = await getSubscription(userId)
+                if (!existingSub) {
+                    await createTrialSubscription(userId)
+                    // Notify admin via Telegram (fire-and-forget)
+                    const userEmail = sessionData?.user?.email || 'unknown'
+                    const fullName = sessionData?.user?.user_metadata?.full_name || ''
+                    const ip = request.headers.get('cf-connecting-ip')
+                        || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+                        || request.headers.get('x-real-ip')
+                        || 'unknown'
+                    const device = request.headers.get('user-agent') || ''
+                    const isInvite = type === 'invite'
+                    notifyNewSignup({
+                        email: userEmail,
+                        fullName,
+                        type: isInvite ? 'invite' : 'signup',
+                        trialDays: 5,
+                        ip,
+                        device,
+                    }).catch(() => { })
+                }
+            }
+
             const forwardedHost = request.headers.get('x-forwarded-host')
             const isLocalEnv = process.env.NODE_ENV === 'development'
 
@@ -35,4 +65,39 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.redirect(`${origin}/${locale}/login?error=auth_code_error`)
+}
+
+/**
+ * POST handler: called from client-side callback page to create trial subscription
+ * after PKCE/implicit exchange happens in the browser (cross-device email confirmation).
+ */
+export async function POST(request: Request) {
+    try {
+        const { userId, email, fullName } = await request.json()
+        if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+
+        const existingSub = await getSubscription(userId)
+        if (!existingSub) {
+            await createTrialSubscription(userId)
+            // Notify admin via Telegram (fire-and-forget)
+            const ip = request.headers.get('cf-connecting-ip')
+                || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+                || request.headers.get('x-real-ip')
+                || 'unknown'
+            const device = request.headers.get('user-agent') || ''
+            notifyNewSignup({
+                email: email || 'unknown',
+                fullName: fullName || '',
+                type: 'signup',
+                trialDays: 5,
+                ip,
+                device,
+            }).catch(() => { })
+        }
+
+        return NextResponse.json({ success: true })
+    } catch (err) {
+        console.error('[Callback POST] Error creating trial:', err)
+        return NextResponse.json({ error: 'Failed' }, { status: 500 })
+    }
 }

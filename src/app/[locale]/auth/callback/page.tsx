@@ -45,6 +45,20 @@ export default function AuthCallbackPage() {
                         return
                     }
 
+                    // Auto-create trial subscription for new users
+                    const { data: { user } } = await supabase.auth.getUser()
+                    if (user) {
+                        fetch('/api/auth/callback', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                userId: user.id,
+                                email: user.email,
+                                fullName: user.user_metadata?.full_name || '',
+                            }),
+                        }).catch(() => { })
+                    }
+
                     if (authType === 'recovery' || authType === 'invite') {
                         window.location.href = `/${locale}/reset-password`
                     } else {
@@ -63,6 +77,20 @@ export default function AuthCallbackPage() {
                     if (sessionError) {
                         setError(sessionError.message)
                         return
+                    }
+
+                    // Auto-create trial subscription for new users
+                    const { data: { user: implicitUser } } = await supabase.auth.getUser()
+                    if (implicitUser) {
+                        fetch('/api/auth/callback', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                userId: implicitUser.id,
+                                email: implicitUser.email,
+                                fullName: implicitUser.user_metadata?.full_name || '',
+                            }),
+                        }).catch(() => { })
                     }
 
                     if (authType === 'invite' || authType === 'recovery') {
