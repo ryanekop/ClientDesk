@@ -279,7 +279,7 @@ export default function ProfilePage() {
                     {resetMsg && <p className="text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 rounded-lg px-4 py-3">{resetMsg}</p>}
 
                     {/* Save */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col sm:grid sm:grid-cols-2 gap-3">
                         <Button onClick={handleSave} disabled={saving} className="gap-2 h-9 text-sm">
                             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                             {t("simpan")}
