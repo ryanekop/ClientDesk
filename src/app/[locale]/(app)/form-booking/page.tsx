@@ -50,6 +50,7 @@ export default function FormBookingPage() {
 
     const [iframeKey, setIframeKey] = React.useState(0);
     const [mobileTab, setMobileTab] = React.useState<"settings" | "preview">("settings");
+    const [isDriveConnected, setIsDriveConnected] = React.useState(false);
 
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
     const formUrl = vendorSlug ? `${siteUrl}/${locale}/formbooking/${vendorSlug}` : "";
@@ -82,6 +83,9 @@ export default function FormBookingPage() {
                 if (p.vendor_slug) {
                     setVendorSlug(p.vendor_slug);
                 }
+                const driveOk = !!(p as any).google_drive_access_token;
+                setIsDriveConnected(driveOk);
+                if (!driveOk) setShowProof(false);
             }
             setLoading(false);
         }
@@ -343,16 +347,23 @@ export default function FormBookingPage() {
                         </div>
                         <div className="p-6 space-y-3">
                             {[
-                                { label: "Catatan", value: showNotes, setter: setShowNotes },
-                                { label: "Upload Bukti Pembayaran", value: showProof, setter: setShowProof },
+                                { label: "Catatan", value: showNotes, setter: setShowNotes, disabled: false },
+                                { label: "Upload Bukti Pembayaran", value: showProof, setter: setShowProof, disabled: !isDriveConnected },
                             ].map(item => (
-                                <label key={item.label} className="flex items-center justify-between cursor-pointer">
-                                    <span className="text-sm font-medium">{item.label}</span>
-                                    <button type="button" role="switch" aria-checked={item.value} onClick={() => item.setter(!item.value)}
-                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${item.value ? "bg-primary" : "bg-muted"}`}>
-                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${item.value ? "translate-x-6" : "translate-x-1"}`} />
-                                    </button>
-                                </label>
+                                <div key={item.label}>
+                                    <label className={`flex items-center justify-between ${item.disabled ? "opacity-50" : "cursor-pointer"}`}>
+                                        <span className="text-sm font-medium">{item.label}</span>
+                                        <button type="button" role="switch" aria-checked={item.value}
+                                            disabled={item.disabled}
+                                            onClick={() => !item.disabled && item.setter(!item.value)}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${item.disabled ? "cursor-not-allowed" : "cursor-pointer"} ${item.value ? "bg-primary" : "bg-muted"}`}>
+                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${item.value ? "translate-x-6" : "translate-x-1"}`} />
+                                        </button>
+                                    </label>
+                                    {item.disabled && (
+                                        <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">Hubungkan Google Drive di Pengaturan untuk mengaktifkan fitur ini.</p>
+                                    )}
+                                </div>
                             ))}
                         </div>
                     </div>
