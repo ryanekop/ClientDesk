@@ -131,7 +131,7 @@ export default function NewBookingPage() {
             if (!user) return;
             const [{ data: svcs }, { data: frees }] = await Promise.all([
                 supabase.from("services").select("id, name, price").eq("user_id", user.id).eq("is_active", true),
-                supabase.from("freelancers").select("id, name").eq("user_id", user.id).eq("status", "active"),
+                supabase.from("freelance").select("id, name").eq("user_id", user.id).eq("status", "active"),
             ]);
             setServices((svcs || []) as Service[]);
             setFreelancers((frees || []) as Freelance[]);
@@ -181,7 +181,7 @@ export default function NewBookingPage() {
         setSavingCustomFreelancer(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const { data, error } = await supabase.from("freelancers").insert({
+        const { data, error } = await supabase.from("freelance").insert({
             user_id: user.id,
             name: customFreelancerName.trim(),
             role: customFreelancerRole || "Photographer",
@@ -218,7 +218,7 @@ export default function NewBookingPage() {
             instagram: instagram || null,
             event_type: eventType,
             service_id: selectedServiceId || null,
-            freelancer_id: selectedFreelancerIds[0] || null,
+            freelance_id: selectedFreelancerIds[0] || null,
             total_price: parseFloat(totalPrice.toString()) || 0,
             dp_paid: parseFloat(dpPaid.toString()) || 0,
             status: statusVal,
@@ -230,10 +230,30 @@ export default function NewBookingPage() {
         if (!error && booking) {
             // Insert into junction table
             if (selectedFreelancerIds.length > 0) {
-                await supabase.from("booking_freelancers").insert(
-                    selectedFreelancerIds.map(fid => ({ booking_id: booking.id, freelancer_id: fid }))
+                await supabase.from("booking_freelance").insert(
+                    selectedFreelancerIds.map(fid => ({ booking_id: booking.id, freelance_id: fid }))
                 );
             }
+
+            // Auto-sync to Google Calendar (fire-and-forget)
+            if (sessionDate) {
+                const start = new Date(sessionDate);
+                const end = new Date(start.getTime() + 2 * 60 * 60 * 1000); // 2 hours default
+                const svc = services.find(s => s.id === selectedServiceId);
+                fetch("/api/google/sync", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        events: [{
+                            summary: `📸 ${clientName} — ${svc?.name || eventType || "Sesi Foto"}`,
+                            description: `Kode: ${invoiceCode}\nKlien: ${clientName}\nLokasi: ${location || "-"}\nTipe: ${eventType || "-"}`,
+                            start: start.toISOString(),
+                            end: end.toISOString(),
+                        }],
+                    }),
+                }).catch(() => { }); // silently ignore if calendar not connected
+            }
+
             router.push(`/${locale}/bookings/${booking.id}`);
         } else { console.error(error); alert("Gagal menyimpan booking."); }
     }

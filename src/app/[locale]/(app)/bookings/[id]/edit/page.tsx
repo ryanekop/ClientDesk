@@ -135,8 +135,8 @@ export default function EditBookingPage() {
             const [{ data: booking }, { data: svcs }, { data: frees }, { data: bfRows }] = await Promise.all([
                 supabase.from("bookings").select("*").eq("id", id).single(),
                 supabase.from("services").select("id, name, price").eq("user_id", user.id).eq("is_active", true),
-                supabase.from("freelancers").select("id, name").eq("user_id", user.id).eq("status", "active"),
-                supabase.from("booking_freelancers").select("freelancer_id").eq("booking_id", id),
+                supabase.from("freelance").select("id, name").eq("user_id", user.id).eq("status", "active"),
+                supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
             ]);
             if (booking) {
                 setClientName(booking.client_name || "");
@@ -149,8 +149,8 @@ export default function EditBookingPage() {
                 setLocation(booking.location || "");
                 setServiceId(booking.service_id || "");
                 // Load multi-freelancer from junction table, fallback to old column
-                const junctionIds = (bfRows || []).map((r: any) => r.freelancer_id);
-                setFreelancerIds(junctionIds.length > 0 ? junctionIds : booking.freelancer_id ? [booking.freelancer_id] : []);
+                const junctionIds = (bfRows || []).map((r: any) => r.freelance_id);
+                setFreelancerIds(junctionIds.length > 0 ? junctionIds : booking.freelance_id ? [booking.freelance_id] : []);
                 setTotalPrice(booking.total_price || "");
                 setDpPaid(booking.dp_paid || "");
                 setStatus(booking.status || "Pending");
@@ -204,7 +204,7 @@ export default function EditBookingPage() {
         setSavingCustomFreelancer(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const { data, error } = await supabase.from("freelancers").insert({
+        const { data, error } = await supabase.from("freelance").insert({
             user_id: user.id, name: customFreelancerName.trim(),
             role: customFreelancerRole || "Photographer",
             whatsapp_number: customFreelancerWa || null, status: "active",
@@ -233,7 +233,7 @@ export default function EditBookingPage() {
             session_date: sessionDate || null,
             location: location || null,
             service_id: serviceId || null,
-            freelancer_id: freelancerIds[0] || null,
+            freelance_id: freelancerIds[0] || null,
             total_price: tPrice,
             dp_paid: dPaid,
             is_fully_paid: dPaid >= tPrice && tPrice > 0,
@@ -245,10 +245,10 @@ export default function EditBookingPage() {
         setSaving(false);
         if (!error) {
             // Sync junction table
-            await supabase.from("booking_freelancers").delete().eq("booking_id", id);
+            await supabase.from("booking_freelance").delete().eq("booking_id", id);
             if (freelancerIds.length > 0) {
-                await supabase.from("booking_freelancers").insert(
-                    freelancerIds.map(fid => ({ booking_id: id, freelancer_id: fid }))
+                await supabase.from("booking_freelance").insert(
+                    freelancerIds.map(fid => ({ booking_id: id, freelance_id: fid }))
                 );
             }
             router.push(`/${locale}/bookings/${id}`);

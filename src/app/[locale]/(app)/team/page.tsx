@@ -36,7 +36,7 @@ export default function TeamPage() {
         if (!user) return;
 
         const { data } = await supabase
-            .from("freelancers")
+            .from("freelance")
             .select("*")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
@@ -49,7 +49,7 @@ export default function TeamPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const { error } = await supabase.from("freelancers").insert({
+        const { error } = await supabase.from("freelance").insert({
             user_id: user.id,
             name: formData.get("name") as string,
             role: formData.get("role") as string,
@@ -65,7 +65,7 @@ export default function TeamPage() {
         if (!editingMember) return;
 
         const { error } = await supabase
-            .from("freelancers")
+            .from("freelance")
             .update({
                 name: formData.get("name") as string,
                 role: formData.get("role") as string,
@@ -79,7 +79,7 @@ export default function TeamPage() {
 
     async function handleToggleStatus(member: Freelancer) {
         await supabase
-            .from("freelancers")
+            .from("freelance")
             .update({ status: member.status === "active" ? "inactive" : "active" })
             .eq("id", member.id);
         fetchMembers();
@@ -87,7 +87,7 @@ export default function TeamPage() {
 
     async function handleDelete(id: string) {
         if (!confirm("Hapus anggota tim ini?")) return;
-        await supabase.from("freelancers").delete().eq("id", id);
+        await supabase.from("freelance").delete().eq("id", id);
         fetchMembers();
     }
 

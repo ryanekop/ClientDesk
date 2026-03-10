@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
             studio_name: vendor.studio_name,
             whatsapp_number: vendor.whatsapp_number,
             min_dp_percent: vendor.min_dp_percent,
+            min_dp_map: vendor.min_dp_map || {},
             avatar_url: vendor.avatar_url,
             form_brand_color: vendor.form_brand_color || '#000000',
             form_greeting: vendor.form_greeting || null,

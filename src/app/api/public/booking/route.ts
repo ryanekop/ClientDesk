@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { pushEventToCalendar } from "@/utils/google/calendar";
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
         // Find vendor by slug
         const { data: vendor } = await supabaseAdmin
             .from("profiles")
-            .select("id, studio_name, whatsapp_number, min_dp_percent")
+            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token")
             .eq("vendor_slug", vendorSlug)
             .single();
 
@@ -39,8 +40,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Vendor tidak ditemukan." }, { status: 404 });
         }
 
-        // Validate minimum DP
-        const minDP = vendor.min_dp_percent ?? 50;
+        // Validate minimum DP (with per-event-type support)
+        const dpMap = (typeof vendor.min_dp_map === "object" && vendor.min_dp_map !== null) ? vendor.min_dp_map as Record<string, number> : {};
+        const minDP = (eventType && dpMap[eventType] !== undefined) ? dpMap[eventType] : (vendor.min_dp_percent ?? 50);
         const minDPAmount = (totalPrice * minDP) / 100;
         if (dpPaid < minDPAmount) {
             return NextResponse.json({
@@ -48,6 +50,13 @@ export async function POST(request: NextRequest) {
                 error: `Minimum DP adalah ${minDP}% (Rp ${new Intl.NumberFormat("id-ID").format(minDPAmount)}).`
             }, { status: 400 });
         }
+
+        // Get service name for calendar event
+        const { data: service } = await supabaseAdmin
+            .from("services")
+            .select("name")
+            .eq("id", serviceId)
+            .single();
 
         // Generate booking code
         const now = new Date();
@@ -81,6 +90,26 @@ export async function POST(request: NextRequest) {
 
         if (error) {
             return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        }
+
+        // Auto-sync to Google Calendar (fire-and-forget)
+        if (vendor.google_access_token && vendor.google_refresh_token && sessionDate) {
+            try {
+                const start = new Date(sessionDate);
+                const end = new Date(start.getTime() + 2 * 60 * 60 * 1000); // 2 hours default
+                await pushEventToCalendar(
+                    vendor.google_access_token,
+                    vendor.google_refresh_token,
+                    {
+                        summary: `📸 ${clientName} — ${service?.name || eventType || "Sesi Foto"}`,
+                        description: `Kode: ${bookingCode}\nKlien: ${clientName}\nLokasi: ${location || "-"}\nTipe: ${eventType || "-"}`,
+                        start,
+                        end,
+                    }
+                );
+            } catch {
+                // Silently ignore — calendar may not be connected
+            }
         }
 
         return NextResponse.json({

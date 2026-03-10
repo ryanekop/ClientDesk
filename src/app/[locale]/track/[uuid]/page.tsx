@@ -216,7 +216,7 @@ export default function TrackingPage() {
                         <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className={`font-semibold ${booking.isFullyPaid ? "text-green-600" : "text-amber-600"}`}>{booking.isFullyPaid ? "✅ Lunas" : "⏳ Belum Lunas"}</span></div>
                     </div>
                     <button
-                        onClick={() => window.print()}
+                        onClick={() => window.open(`/api/public/invoice?code=${encodeURIComponent(booking.bookingCode)}`, "_blank")}
                         className="flex items-center gap-2 text-sm text-primary hover:underline cursor-pointer"
                     >
                         <Download className="w-4 h-4" />

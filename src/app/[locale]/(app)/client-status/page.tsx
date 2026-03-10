@@ -203,19 +203,19 @@ export default function ClientStatusPage() {
                                                     <>
                                                         <Button
                                                             variant="ghost" size="icon"
-                                                            className="h-8 w-8 text-blue-500 hover:text-blue-600"
-                                                            title="Buka Tracking"
-                                                            onClick={() => window.open(`/id/track/${b.tracking_uuid}`, "_blank")}
-                                                        >
-                                                            <ExternalLink className="w-4 h-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost" size="icon"
                                                             className={`h-8 w-8 ${copiedId === b.id ? "text-green-500" : "text-slate-500 hover:text-slate-700"}`}
                                                             title="Salin Link Tracking"
                                                             onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}
                                                         >
                                                             {copiedId === b.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost" size="icon"
+                                                            className="h-8 w-8 text-blue-500 hover:text-blue-600"
+                                                            title="Buka Tracking"
+                                                            onClick={() => window.open(`/id/track/${b.tracking_uuid}`, "_blank")}
+                                                        >
+                                                            <ExternalLink className="w-4 h-4" />
                                                         </Button>
                                                     </>
                                                 )}

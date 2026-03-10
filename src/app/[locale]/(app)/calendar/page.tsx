@@ -127,7 +127,7 @@ export default function CalendarPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         const { data } = await supabase
-            .from("freelancers")
+            .from("freelance")
             .select("id, name, google_email")
             .eq("user_id", user.id)
             .eq("status", "active")

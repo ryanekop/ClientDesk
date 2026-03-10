@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
+import { useLocale } from "next-intl";
 import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { DriveBrowser } from "@/components/drive-browser";
@@ -35,18 +36,63 @@ type Booking = {
 
 const STATUS_OPTS = ["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"];
 
-function generateWATemplate(booking: Booking, freelancerName?: string) {
-    const sessionStr = booking.session_date ? new Date(booking.session_date).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
+type SavedTemplate = {
+    id: string;
+    type: string;
+    content: string;
+    content_en: string;
+    event_type: string | null;
+};
+
+function generateWATemplate(booking: Booking, locale: string, savedTemplates: SavedTemplate[], freelancerName?: string) {
+    const sessionStr = booking.session_date ? new Date(booking.session_date).toLocaleDateString(locale === "en" ? "en-US" : "id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
+    const serviceName = booking.services?.name || "-";
+
+    // Build replacement map
+    const vars: Record<string, string> = {
+        client_name: booking.client_name,
+        booking_code: booking.booking_code,
+        session_date: sessionStr,
+        service_name: serviceName,
+        total_price: new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(booking.total_price || 0),
+        dp_paid: new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(booking.dp_paid || 0),
+        studio_name: "",
+        freelancer_name: freelancerName || "",
+        event_type: serviceName,
+        location: booking.location || "-",
+    };
+
+    function applyVars(tpl: string) {
+        return tpl.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || `{{${key}}}`);
+    }
+
     if (freelancerName) {
+        // Look for whatsapp_freelancer template
+        const template = savedTemplates.find(t => t.type === "whatsapp_freelancer");
+        if (template) {
+            const content = locale === "en" ? (template.content_en || template.content) : template.content;
+            if (content.trim()) return applyVars(content);
+        }
+        // Fallback
         return `Halo ${freelancerName}, kamu dijadwalkan untuk sesi foto bersama klien ${booking.client_name} (${booking.booking_code}) pada ${sessionStr}. Mohon konfirmasi kehadiranmu. Terima kasih!`;
     }
-    return `Halo ${booking.client_name}, terima kasih telah booking di studio kami! Detail booking Anda:\n\nKode: ${booking.booking_code}\nJadwal: ${sessionStr}\nPaket: ${booking.services?.name || "-"}\n\nTerima kasih!`;
+
+    // Look for whatsapp_client template
+    const template = savedTemplates.find(t => t.type === "whatsapp_client");
+    if (template) {
+        const content = locale === "en" ? (template.content_en || template.content) : template.content;
+        if (content.trim()) return applyVars(content);
+    }
+    // Fallback
+    return `Halo ${booking.client_name}, terima kasih telah booking di studio kami! Detail booking Anda:\n\nKode: ${booking.booking_code}\nJadwal: ${sessionStr}\nPaket: ${serviceName}\n\nTerima kasih!`;
 }
 
 export default function BookingsPage() {
     const supabase = createClient();
     const t = useTranslations("Bookings");
+    const locale = useLocale();
     const [bookings, setBookings] = React.useState<Booking[]>([]);
+    const [savedTemplates, setSavedTemplates] = React.useState<SavedTemplate[]>([]);
     const [packages, setPackages] = React.useState<string[]>([]);
     const [freelancerNames, setFreelancerNames] = React.useState<string[]>([]);
     const [loading, setLoading] = React.useState(true);
@@ -75,17 +121,25 @@ export default function BookingsPage() {
     const [driveBrowser, setDriveBrowser] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
 
     // WA Freelancer popup
-    const [waPopup, setWaPopup] = React.useState<{ open: boolean; freelancers: FreelancerInfo[] }>({ open: false, freelancers: [] });
+    const [waPopup, setWaPopup] = React.useState<{ open: boolean; freelancers: FreelancerInfo[]; booking: Booking | null }>({ open: false, freelancers: [], booking: null });
 
     React.useEffect(() => {
         fetchData();
         checkDriveConnection();
+        fetchTemplates();
         const handleMessage = (event: MessageEvent) => {
             if (event.data?.type === "GOOGLE_DRIVE_SUCCESS") setIsDriveConnected(true);
         };
         window.addEventListener("message", handleMessage);
         return () => window.removeEventListener("message", handleMessage);
     }, []);
+
+    async function fetchTemplates() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase.from("templates").select("id, type, content, content_en, event_type").eq("user_id", user.id);
+        setSavedTemplates((data || []) as SavedTemplate[]);
+    }
 
     async function checkDriveConnection() {
         const { data: { user } } = await supabase.auth.getUser();
@@ -109,14 +163,14 @@ export default function BookingsPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, notes, services(name), freelancers(id, name, whatsapp_number), booking_freelancers(freelancer_id, freelancers(id, name, whatsapp_number))")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, notes, services(name), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
         // Normalize: merge booking_freelancers into a flat array
         const bgs = (data || []).map((b: any) => {
-            const junctionFreelancers = (b.booking_freelancers || []).map((bf: any) => bf.freelancers).filter(Boolean);
-            return { ...b, booking_freelancers: junctionFreelancers.length > 0 ? junctionFreelancers : b.freelancers ? [b.freelancers] : [] };
+            const junctionFreelancers = (b.booking_freelance || []).map((bf: any) => bf.freelance).filter(Boolean);
+            return { ...b, booking_freelancers: junctionFreelancers.length > 0 ? junctionFreelancers : b.freelance ? [b.freelance] : [] };
         }) as unknown as Booking[];
         setBookings(bgs);
         setPackages(Array.from(new Set(bgs.map(b => b.services?.name).filter(Boolean))) as string[]);
@@ -149,12 +203,12 @@ export default function BookingsPage() {
     function sendWhatsAppClient(booking: Booking) {
         if (!booking.client_whatsapp) { alert("Nomor WhatsApp klien tidak tersedia."); return; }
         const cleaned = booking.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
-        const msg = encodeURIComponent(generateWATemplate(booking));
+        const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates));
         window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
     }
 
     function copyTemplate(booking: Booking) {
-        const template = generateWATemplate(booking);
+        const template = generateWATemplate(booking, locale, savedTemplates);
         navigator.clipboard.writeText(template);
         setCopiedId(booking.id);
         setTimeout(() => setCopiedId(null), 2000);
@@ -271,7 +325,7 @@ export default function BookingsPage() {
                                             )}
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap">
-                                            <span className="text-[10px] font-mono bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded border border-border/50">
+                                            <span className="text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded border border-border/50">
                                                 {booking.booking_code}
                                             </span>
                                         </td>
@@ -304,15 +358,15 @@ export default function BookingsPage() {
                                                 </Button>
                                                 {/* 2. WA Freelancer (default) / Client fallback */}
                                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600"
-                                                    title={booking.booking_freelancers.length > 0 ? `WA Freelance (${booking.booking_freelancers.length})` : "WA Klien"}
+                                                    title={booking.booking_freelancers.length > 0 ? `Whatsapp Freelance (${booking.booking_freelancers.length})` : "Whatsapp Klien"}
                                                     disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
                                                     onClick={() => {
                                                         if (booking.booking_freelancers.length > 1) {
-                                                            setWaPopup({ open: true, freelancers: booking.booking_freelancers });
+                                                            setWaPopup({ open: true, freelancers: booking.booking_freelancers, booking });
                                                         } else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
                                                             const f = booking.booking_freelancers[0];
                                                             const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                                            const msg = encodeURIComponent(generateWATemplate(booking, f.name));
+                                                            const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, f.name));
                                                             window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
                                                         } else {
                                                             sendWhatsAppClient(booking);
@@ -416,11 +470,11 @@ export default function BookingsPage() {
             </Dialog>
 
             {/* WA Freelancer Selection Popup */}
-            <Dialog open={waPopup.open} onOpenChange={(o) => !o && setWaPopup({ open: false, freelancers: [] })}>
+            <Dialog open={waPopup.open} onOpenChange={(o) => !o && setWaPopup({ open: false, freelancers: [], booking: null })}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>WhatsApp Freelancer</DialogTitle>
-                        <DialogDescription>Pilih freelancer yang ingin dihubungi</DialogDescription>
+                        <DialogTitle>Whatsapp Freelance</DialogTitle>
+                        <DialogDescription>Pilih freelance yang ingin dihubungi</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-2 py-2">
                         {waPopup.freelancers.map((f) => (
@@ -430,8 +484,9 @@ export default function BookingsPage() {
                                 onClick={() => {
                                     if (!f.whatsapp_number) return;
                                     const cleaned = f.whatsapp_number.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                    window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(`Halo ${f.name}!`)}`, "_blank");
-                                    setWaPopup({ open: false, freelancers: [] });
+                                    const msg = waPopup.booking ? encodeURIComponent(generateWATemplate(waPopup.booking, locale, savedTemplates, f.name)) : encodeURIComponent(`Halo ${f.name}!`);
+                                    window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
+                                    setWaPopup({ open: false, freelancers: [], booking: null });
                                 }}
                                 className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                             >

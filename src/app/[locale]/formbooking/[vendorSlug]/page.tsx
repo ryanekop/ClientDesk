@@ -51,6 +51,7 @@ type Vendor = {
     studio_name: string | null;
     whatsapp_number: string | null;
     min_dp_percent: number | null;
+    min_dp_map: Record<string, number> | null;
     avatar_url: string | null;
     form_brand_color: string;
     form_greeting: string | null;
@@ -126,12 +127,20 @@ export default function PublicBookingForm() {
         if (slug) load();
     }, [slug]);
 
+    function getMinDpForEvent(et?: string): number {
+        const eventKey = et || eventType;
+        if (eventKey && vendor?.min_dp_map && vendor.min_dp_map[eventKey] !== undefined) {
+            return vendor.min_dp_map[eventKey];
+        }
+        return vendor?.min_dp_percent ?? 50;
+    }
+
     function handleServiceChange(id: string) {
         setServiceId(id);
         const svc = services.find(s => s.id === id) || null;
         setSelectedService(svc);
         if (svc) {
-            const minDP = vendor?.min_dp_percent ?? 50;
+            const minDP = getMinDpForEvent();
             const minAmount = Math.ceil((svc.price * minDP) / 100);
             setDpDisplay(formatNumber(minAmount));
         } else {
@@ -160,7 +169,7 @@ export default function PublicBookingForm() {
         const fullPhone = `${countryCode}${phone}`.replace(/[^0-9+]/g, "");
         const dpValue = parseFormatted(dpDisplay) || 0;
 
-        // Validate minimum DP
+        const minDP = getMinDpForEvent();
         if (selectedService) {
             const minAmount = Math.ceil((selectedService.price * minDP) / 100);
             if (dpValue < minAmount) {
@@ -263,7 +272,7 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
     const inputClass = "placeholder:text-muted-foreground h-10 w-full min-w-0 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] transition-all";
     const selectClass = inputClass + " cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat pr-8";
 
-    const minDP = vendor?.min_dp_percent ?? 50;
+    const minDP = getMinDpForEvent();
     const currentExtraFields = EXTRA_FIELDS[eventType] || [];
     const brandColor = vendor?.form_brand_color || '#000000';
     const availableEventTypes = vendor?.form_event_types?.length ? vendor.form_event_types : EVENT_TYPES;
@@ -372,7 +381,16 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                         <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-1.5">
                                 <label className="text-sm font-medium">Tipe Acara <span className="text-red-500">*</span></label>
-                                <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraData({}); }} className={selectClass} required>
+                                <select value={eventType} onChange={e => {
+                                    setEventType(e.target.value);
+                                    setExtraData({});
+                                    // Recalculate DP for new event type
+                                    if (selectedService) {
+                                        const newMinDP = getMinDpForEvent(e.target.value);
+                                        const minAmount = Math.ceil((selectedService.price * newMinDP) / 100);
+                                        setDpDisplay(formatNumber(minAmount));
+                                    }
+                                }} className={selectClass} required>
                                     <option value="">Pilih tipe...</option>
                                     {availableEventTypes.map(et => <option key={et} value={et}>{et}</option>)}
                                 </select>

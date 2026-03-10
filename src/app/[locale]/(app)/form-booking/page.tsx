@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useLocale } from "next-intl";
-import { ExternalLink, Copy, ClipboardCheck, Eye, Loader2, Percent, Link2, Palette, List, ToggleRight, RefreshCw, RotateCcw, CreditCard, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, Copy, ClipboardCheck, Loader2, Percent, Palette, List, ToggleRight, RotateCcw, CreditCard, Plus, Trash2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 
@@ -19,6 +19,7 @@ const DEFAULTS = {
     showNotes: true,
     showProof: true,
     minDpPercent: 50,
+    minDpMap: {} as Record<string, number>,
     bankAccounts: [] as BankAccount[],
 };
 
@@ -30,6 +31,8 @@ export default function FormBookingPage() {
     const [vendorSlug, setVendorSlug] = React.useState("");
     const [studioName, setStudioName] = React.useState("");
     const [minDpPercent, setMinDpPercent] = React.useState(DEFAULTS.minDpPercent);
+    const [minDpMap, setMinDpMap] = React.useState<Record<string, number>>(DEFAULTS.minDpMap);
+    const [selectedDpEventType, setSelectedDpEventType] = React.useState("Umum");
     const [savedMsg, setSavedMsg] = React.useState("");
     const [copied, setCopied] = React.useState(false);
     const [profileId, setProfileId] = React.useState("");
@@ -65,6 +68,9 @@ export default function FormBookingPage() {
                 setProfileId(p.id);
                 setStudioName(p.studio_name || "");
                 setMinDpPercent(p.min_dp_percent ?? DEFAULTS.minDpPercent);
+                // Load per-event-type DP map
+                const savedMap = (typeof p.min_dp_map === "object" && p.min_dp_map !== null) ? p.min_dp_map as Record<string, number> : {};
+                setMinDpMap(savedMap);
                 setBrandColor(p.form_brand_color || DEFAULTS.brandColor);
                 setGreeting(p.form_greeting || DEFAULTS.greeting);
                 setSelectedEventTypes(p.form_event_types?.length > 0 ? p.form_event_types : DEFAULTS.eventTypes);
@@ -80,6 +86,15 @@ export default function FormBookingPage() {
         }
         load();
     }, []);
+
+    // Get DP% for currently selected event type
+    function getDpForEventType(eventType: string): number {
+        return minDpMap[eventType] ?? minDpPercent;
+    }
+
+    function setDpForEventType(eventType: string, value: number) {
+        setMinDpMap(prev => ({ ...prev, [eventType]: value }));
+    }
 
     async function handleSave() {
         if (!profileId) return;
@@ -97,6 +112,7 @@ export default function FormBookingPage() {
         await supabase.from("profiles").update({
             vendor_slug: slug || null,
             min_dp_percent: minDpPercent,
+            min_dp_map: minDpMap,
             form_brand_color: brandColor,
             form_greeting: greeting || null,
             form_event_types: selectedEventTypes,
@@ -119,6 +135,7 @@ export default function FormBookingPage() {
         setShowNotes(DEFAULTS.showNotes);
         setShowProof(DEFAULTS.showProof);
         setMinDpPercent(DEFAULTS.minDpPercent);
+        setMinDpMap({});
         setBankAccounts([]);
         setShowResetConfirm(false);
     }
@@ -164,34 +181,6 @@ export default function FormBookingPage() {
                 <p className="text-muted-foreground">Kelola dan bagikan form booking online untuk klien Anda.</p>
             </div>
 
-            {/* URL Card */}
-            {vendorSlug ? (
-                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 rounded-lg bg-green-100 dark:bg-green-500/10">
-                            <Link2 className="w-5 h-5 text-green-600 dark:text-green-400" />
-                        </div>
-                        <div>
-                            <h3 className="font-semibold text-sm">Form Booking Aktif</h3>
-                            <p className="text-xs text-muted-foreground">Bagikan link ini ke klien Anda.</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-3 border">
-                        <code className="flex-1 text-xs text-primary break-all font-mono">{formUrl}</code>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={copyUrl} title="Salin URL">
-                            {copied ? <ClipboardCheck className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => window.open(formUrl, "_blank")} title="Buka">
-                            <ExternalLink className="w-4 h-4" />
-                        </Button>
-                    </div>
-                </div>
-            ) : (
-                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6 text-center space-y-3">
-                    <p className="text-sm text-muted-foreground">Form booking akan aktif setelah Anda menyimpan pengaturan. URL akan digenerate otomatis dari nama studio.</p>
-                </div>
-            )}
-
             {/* Main Content: Settings + Preview */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
                 {/* LEFT: Settings */}
@@ -200,21 +189,54 @@ export default function FormBookingPage() {
                     <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
                         <div className="px-6 py-4 border-b">
                             <h3 className="font-semibold flex items-center gap-2"><Percent className="w-4 h-4" /> Pengaturan Pembayaran</h3>
+                            <p className="text-xs text-muted-foreground mt-1">Atur minimum DP berbeda untuk setiap jenis acara.</p>
                         </div>
                         <div className="p-6 space-y-4">
+                            {/* Event type selector */}
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Minimum DP</label>
+                                <label className="text-sm font-medium">Jenis Acara</label>
+                                <select
+                                    value={selectedDpEventType}
+                                    onChange={e => setSelectedDpEventType(e.target.value)}
+                                    className={inputClass + " cursor-pointer"}
+                                >
+                                    {selectedEventTypes.map(et => (
+                                        <option key={et} value={et}>{et}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* DP Slider for selected event type */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Minimum DP — <span className="text-primary">{selectedDpEventType}</span></label>
                                 <div className="flex items-center gap-4">
                                     <input
                                         type="range"
                                         min={0} max={100} step={5}
-                                        value={minDpPercent}
-                                        onChange={e => setMinDpPercent(Number(e.target.value))}
+                                        value={getDpForEventType(selectedDpEventType)}
+                                        onChange={e => setDpForEventType(selectedDpEventType, Number(e.target.value))}
                                         className="flex-1 accent-primary h-2 cursor-pointer"
                                     />
-                                    <span className="text-sm font-bold w-12 text-right tabular-nums">{minDpPercent}%</span>
+                                    <span className="text-sm font-bold w-12 text-right tabular-nums">{getDpForEventType(selectedDpEventType)}%</span>
                                 </div>
                             </div>
+
+                            {/* Summary of all DP values */}
+                            {Object.keys(minDpMap).length > 0 && (
+                                <div className="pt-3 border-t space-y-1">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ringkasan DP</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedEventTypes.map(et => {
+                                            const dp = minDpMap[et] ?? minDpPercent;
+                                            return (
+                                                <span key={et} className="text-[11px] px-2 py-1 rounded-md border bg-muted/50 text-muted-foreground">
+                                                    {et}: <strong>{dp}%</strong>
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -362,30 +384,53 @@ export default function FormBookingPage() {
                     )}
                 </div>
 
-                {/* RIGHT: Preview */}
-                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6 space-y-4 sticky top-4">
+                {/* RIGHT: Linktree-Style Preview */}
+                <div className="sticky top-4 space-y-3">
+                    {/* Preview Header with Buttons */}
                     <div className="flex items-center justify-between">
-                        <h3 className="font-semibold flex items-center gap-2"><Eye className="w-4 h-4" /> Preview</h3>
+                        <h3 className="text-sm font-semibold text-muted-foreground">Preview</h3>
                         <div className="flex items-center gap-1">
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIframeKey(k => k + 1)} title="Refresh">
                                 <RefreshCw className="w-3.5 h-3.5" />
                             </Button>
                             {vendorSlug && (
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.open(formUrl, "_blank")} title="Buka di tab baru">
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                </Button>
+                                <>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyUrl} title="Salin URL">
+                                        {copied ? <ClipboardCheck className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.open(formUrl, "_blank")} title="Buka di tab baru">
+                                        <ExternalLink className="w-3.5 h-3.5" />
+                                    </Button>
+                                </>
                             )}
                         </div>
                     </div>
+
                     {vendorSlug ? (
                         <div className="flex justify-center">
-                            <div className="w-full max-w-[400px] aspect-[9/16] max-h-[700px] rounded-lg overflow-hidden border bg-muted">
-                                <iframe key={iframeKey} src={formUrl} className="w-full h-full" title="Form Preview" />
+                            {/* Linktree-style phone preview */}
+                            <div className="w-full max-w-[380px]">
+                                {/* URL Bar */}
+                                <div className="bg-muted/80 dark:bg-muted/40 rounded-t-2xl px-4 py-2.5 flex items-center gap-2 border border-b-0">
+                                    <div className="flex gap-1">
+                                        <div className="w-2.5 h-2.5 rounded-full bg-red-400/60" />
+                                        <div className="w-2.5 h-2.5 rounded-full bg-yellow-400/60" />
+                                        <div className="w-2.5 h-2.5 rounded-full bg-green-400/60" />
+                                    </div>
+                                    <div className="flex-1 text-center">
+                                        <span className="text-[11px] text-muted-foreground truncate block">{formUrl.replace(/^https?:\/\//, "")}</span>
+                                    </div>
+                                </div>
+
+                                {/* iframe content */}
+                                <div className="aspect-[9/16] max-h-[700px] rounded-b-2xl overflow-hidden border border-t-0 bg-white dark:bg-background">
+                                    <iframe key={iframeKey} src={formUrl} className="w-full h-full" title="Form Preview" />
+                                </div>
                             </div>
                         </div>
                     ) : (
-                        <div className="flex items-center justify-center h-64 text-center">
-                            <p className="text-sm text-muted-foreground">Simpan pengaturan terlebih dahulu untuk melihat preview.</p>
+                        <div className="flex items-center justify-center h-64 rounded-2xl border bg-muted/20">
+                            <p className="text-sm text-muted-foreground text-center px-6">Simpan pengaturan terlebih dahulu untuk melihat preview.</p>
                         </div>
                     )}
                 </div>
