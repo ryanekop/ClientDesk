@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useLocale } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Loader2, Eye, EyeOff, UserPlus, Mail, ArrowLeft } from "lucide-react"
 import Link from "next/link"
@@ -25,6 +25,7 @@ export default function RegisterPage() {
     const router = useRouter()
     const locale = useLocale()
     const { theme, setTheme } = useTheme()
+    const t = useTranslations("Auth")
 
     const [fullName, setFullName] = useState("")
     const [email, setEmail] = useState("")
@@ -42,19 +43,19 @@ export default function RegisterPage() {
         setError(null)
 
         if (!fullName.trim()) {
-            setError("Nama lengkap wajib diisi.")
+            setError(t("nameRequired"))
             setLoading(false)
             return
         }
 
         if (password !== confirmPassword) {
-            setError("Kata sandi tidak cocok.")
+            setError(t("passwordMismatch"))
             setLoading(false)
             return
         }
 
         if (password.length < 6) {
-            setError("Kata sandi minimal 6 karakter.")
+            setError(t("passwordMinLength"))
             setLoading(false)
             return
         }
@@ -70,7 +71,7 @@ export default function RegisterPage() {
             const data = await res.json()
 
             if (!res.ok) {
-                setError(data.error || 'Terjadi kesalahan')
+                setError(data.error || t("genericError"))
                 setLoading(false)
                 return
             }
@@ -91,7 +92,7 @@ export default function RegisterPage() {
 
             if (signUpError) {
                 if (signUpError.message.includes('already registered') || signUpError.message.includes('User already registered')) {
-                    setError('Email ini sudah terdaftar. Silakan login.')
+                    setError(t("emailAlreadyRegistered"))
                 } else {
                     setError(signUpError.message)
                 }
@@ -101,7 +102,7 @@ export default function RegisterPage() {
 
             setSuccess(true)
         } catch {
-            setError("Terjadi kesalahan, coba lagi.")
+            setError(t("genericError"))
         } finally {
             setLoading(false)
         }
@@ -117,17 +118,17 @@ export default function RegisterPage() {
                             <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
                                 <Mail className="h-8 w-8 text-primary" />
                             </div>
-                            <h2 className="text-xl font-bold">Cek Email Anda</h2>
+                            <h2 className="text-xl font-bold">{t("checkEmail")}</h2>
                             <p className="text-muted-foreground text-sm">
-                                Kami telah mengirimkan link konfirmasi ke email Anda. Klik link tersebut untuk mengaktifkan akun.
+                                {t("confirmEmailSent")}
                             </p>
                             <p className="text-xs text-muted-foreground font-mono bg-muted rounded-md px-3 py-2">
                                 {email}
                             </p>
-                            <Button variant="outline" className="w-full mt-4 cursor-pointer" asChild>
+                            <Button variant="outline" className="w-full mt-4" asChild>
                                 <Link href={`/${locale}/login`}>
                                     <ArrowLeft className="h-4 w-4 mr-2" />
-                                    Kembali ke Login
+                                    {t("backToLogin")}
                                 </Link>
                             </Button>
                         </div>
@@ -145,10 +146,10 @@ export default function RegisterPage() {
                     <div className="grid auto-rows-min items-start gap-2 px-6">
                         <div className="leading-none font-semibold text-2xl text-center flex items-center justify-center gap-2">
                             <UserPlus className="h-6 w-6" />
-                            Daftar Akun
+                            {t("registerTitle")}
                         </div>
                         <div className="text-muted-foreground text-sm text-center">
-                            Buat akun baru untuk mengakses ClientDesk
+                            {t("registerSubtitle")}
                         </div>
                     </div>
 
@@ -156,10 +157,10 @@ export default function RegisterPage() {
                     <div className="px-6">
                         <form onSubmit={handleRegister} className="space-y-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none">Nama Lengkap</label>
+                                <label className="text-sm font-medium leading-none">{t("fullName")}</label>
                                 <input
                                     type="text"
-                                    placeholder="Nama Studio / Nama Anda"
+                                    placeholder={t("fullNamePlaceholder")}
                                     required
                                     value={fullName}
                                     onChange={(e) => setFullName(e.target.value)}
@@ -167,7 +168,7 @@ export default function RegisterPage() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none">Email</label>
+                                <label className="text-sm font-medium leading-none">{t("email")}</label>
                                 <input
                                     type="email"
                                     placeholder="email@example.com"
@@ -178,7 +179,7 @@ export default function RegisterPage() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none">Kata Sandi</label>
+                                <label className="text-sm font-medium leading-none">{t("password")}</label>
                                 <div className="relative">
                                     <input
                                         type={showPassword ? "text" : "password"}
@@ -197,7 +198,7 @@ export default function RegisterPage() {
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none">Konfirmasi Kata Sandi</label>
+                                <label className="text-sm font-medium leading-none">{t("confirmPassword")}</label>
                                 <div className="relative">
                                     <input
                                         type={showConfirmPassword ? "text" : "password"}
@@ -222,24 +223,24 @@ export default function RegisterPage() {
                                 </div>
                             )}
 
-                            <Button type="submit" className="w-full cursor-pointer hover:opacity-90 transition-opacity" disabled={loading}>
+                            <Button type="submit" className="w-full hover:opacity-90 transition-opacity" disabled={loading}>
                                 {loading ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Mendaftar...
+                                        {t("registering")}
                                     </>
                                 ) : (
-                                    <>Daftar</>
+                                    <>{t("register")}</>
                                 )}
                             </Button>
                         </form>
 
                         {/* Already have account */}
                         <div className="mt-6 pt-6 border-t text-center space-y-3">
-                            <p className="text-sm text-muted-foreground">Sudah punya akun?</p>
-                            <Button variant="outline" className="w-full gap-2 cursor-pointer" asChild>
+                            <p className="text-sm text-muted-foreground">{t("hasAccount")}</p>
+                            <Button variant="outline" className="w-full gap-2" asChild>
                                 <Link href={`/${locale}/login`}>
-                                    Masuk
+                                    {t("login")}
                                 </Link>
                             </Button>
                         </div>
@@ -247,12 +248,12 @@ export default function RegisterPage() {
 
                     {/* Footer */}
                     <div className="flex items-center px-6 justify-center gap-2">
-                        <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9 cursor-pointer">
+                        <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9">
                             <Languages className="h-[1.2rem] w-[1.2rem]" />
                         </button>
                         <button
                             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9 cursor-pointer"
+                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9"
                         >
                             {theme === "dark" ? <Moon className="h-[1.2rem] w-[1.2rem]" /> : <Sun className="h-[1.2rem] w-[1.2rem]" />}
                         </button>

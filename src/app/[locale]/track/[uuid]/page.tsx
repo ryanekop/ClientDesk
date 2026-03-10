@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useParams } from "next/navigation";
 import { CheckCircle2, Clock, PlayCircle, HardDrive, Edit3, Camera, Loader2, ExternalLink, Users, Download } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 type BookingData = {
     bookingCode: string;
@@ -21,24 +22,25 @@ type BookingData = {
     location: string | null;
 };
 
-const STATUS_STEPS = [
-    { key: "Booking Confirmed", label: "Booking Dikonfirmasi", icon: CheckCircle2 },
-    { key: "Sesi Foto / Acara", label: "Sesi Foto / Acara", icon: Camera },
-    { key: "Antrian Edit", label: "Antrian Edit", icon: Users },
-    { key: "Proses Edit", label: "Proses Edit", icon: Edit3 },
-    { key: "Revisi", label: "Revisi", icon: Edit3 },
-    { key: "File Siap", label: "File Siap (Google Drive)", icon: HardDrive },
-    { key: "Selesai", label: "Selesai", icon: CheckCircle2 },
+const STATUS_STEPS_KEYS = [
+    { key: "Booking Confirmed", labelKey: "stepConfirmed", icon: CheckCircle2 },
+    { key: "Sesi Foto / Acara", labelKey: "stepSession", icon: Camera },
+    { key: "Antrian Edit", labelKey: "stepEditQueue", icon: Users },
+    { key: "Proses Edit", labelKey: "stepEditing", icon: Edit3 },
+    { key: "Revisi", labelKey: "stepRevision", icon: Edit3 },
+    { key: "File Siap", labelKey: "stepFileReady", icon: HardDrive },
+    { key: "Selesai", labelKey: "stepDone", icon: CheckCircle2 },
 ];
 
 function getStepIndex(status: string | null): number {
     if (!status) return -1;
-    return STATUS_STEPS.findIndex(s => s.key === status);
+    return STATUS_STEPS_KEYS.findIndex(s => s.key === status);
 }
 
 export default function TrackingPage() {
     const params = useParams();
     const uuid = params?.uuid as string;
+    const t = useTranslations("Track");
     const [booking, setBooking] = React.useState<BookingData | null>(null);
     const [vendorName, setVendorName] = React.useState("");
     const [loading, setLoading] = React.useState(true);
@@ -73,8 +75,8 @@ export default function TrackingPage() {
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 px-4">
                 <div className="text-center space-y-4 max-w-md mx-auto">
                     <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto text-4xl">🔍</div>
-                    <h2 className="text-2xl font-bold">Booking Tidak Ditemukan</h2>
-                    <p className="text-muted-foreground">Link tracking tidak valid atau booking sudah dihapus.</p>
+                    <h2 className="text-2xl font-bold">{t("notFoundTitle")}</h2>
+                    <p className="text-muted-foreground">{t("notFoundDesc")}</p>
                 </div>
             </div>
         );
@@ -91,23 +93,23 @@ export default function TrackingPage() {
                 {/* Header */}
                 <div className="text-center space-y-2">
                     <h1 className="text-xl font-bold tracking-tight">{vendorName || "Studio"}</h1>
-                    <p className="text-muted-foreground text-sm">Tracking Status Booking</p>
+                    <p className="text-muted-foreground text-sm">{t("trackingTitle")}</p>
                 </div>
 
                 {/* Booking Info Card */}
                 <div className="bg-background rounded-2xl shadow-lg border p-6 space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
                         <div>
-                            <h2 className="text-lg font-bold">Detail Booking</h2>
-                            <p className="text-muted-foreground text-sm">Kode: <span className="font-semibold text-primary">{booking.bookingCode}</span></p>
+                            <h2 className="text-lg font-bold">{t("bookingDetail")}</h2>
+                            <p className="text-muted-foreground text-sm">{t("code")} <span className="font-semibold text-primary">{booking.bookingCode}</span></p>
                         </div>
                         <div className="flex items-center gap-2">
                             {booking.queuePosition && booking.queuePosition > 0 && booking.clientStatus !== "Selesai" && (
                                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
-                                    Antrian #{booking.queuePosition}
+                                    {t("queue")} #{booking.queuePosition}
                                 </span>
                             )}
-                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${currentIdx >= STATUS_STEPS.length - 1
+                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${currentIdx >= STATUS_STEPS_KEYS.length - 1
                                 ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
                                 : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
                                 }`}>
@@ -118,23 +120,23 @@ export default function TrackingPage() {
 
                     <div className="grid gap-3 text-sm">
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Nama</span>
+                            <span className="text-muted-foreground">{t("name")}</span>
                             <span className="font-medium">{booking.clientName}</span>
                         </div>
                         {booking.serviceName && (
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Paket</span>
+                                <span className="text-muted-foreground">{t("package")}</span>
                                 <span className="font-medium">{booking.serviceName}</span>
                             </div>
                         )}
                         {booking.eventType && (
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Tipe Acara</span>
+                                <span className="text-muted-foreground">{t("eventType")}</span>
                                 <span className="font-medium">{booking.eventType}</span>
                             </div>
                         )}
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Jadwal</span>
+                            <span className="text-muted-foreground">{t("schedule")}</span>
                             <span className="font-medium">{sessionDate}</span>
                         </div>
                     </div>
@@ -142,12 +144,12 @@ export default function TrackingPage() {
 
                 {/* Timeline */}
                 <div className="bg-background rounded-2xl shadow-lg border p-6">
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-6">Progress</h3>
+                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-6">{t("progress")}</h3>
                     <div className="space-y-0">
-                        {STATUS_STEPS.map((step, idx) => {
+                        {STATUS_STEPS_KEYS.map((step, idx) => {
                             const isDone = idx <= currentIdx;
                             const isCurrent = idx === currentIdx;
-                            const isLast = idx === STATUS_STEPS.length - 1;
+                            const isLast = idx === STATUS_STEPS_KEYS.length - 1;
                             const Icon = step.icon;
 
                             return (
@@ -168,18 +170,18 @@ export default function TrackingPage() {
 
                                     <div className={`flex flex-col pb-8 pt-2 ${!isDone && !isCurrent ? "opacity-40" : ""}`}>
                                         <p className={`font-semibold text-sm ${isCurrent ? "text-primary" : ""}`}>
-                                            {step.label}
+                                            {t(step.labelKey as any)}
                                             {isCurrent && booking.queuePosition && booking.queuePosition > 0 && step.key === "Antrian Edit" && (
-                                                <span className="text-xs font-normal text-muted-foreground ml-2">(Posisi #{booking.queuePosition})</span>
+                                                <span className="text-xs font-normal text-muted-foreground ml-2">({t("position")} #{booking.queuePosition})</span>
                                             )}
                                         </p>
                                         {isCurrent && (
                                             <p className="text-xs text-primary mt-0.5 flex items-center gap-1">
-                                                <Clock className="w-3 h-3" /> Sedang berlangsung
+                                                <Clock className="w-3 h-3" /> {t("inProgress")}
                                             </p>
                                         )}
                                         {isDone && !isCurrent && (
-                                            <p className="text-xs text-muted-foreground mt-0.5">✓ Selesai</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">✓ {t("completed")}</p>
                                         )}
                                     </div>
                                 </div>
@@ -191,7 +193,7 @@ export default function TrackingPage() {
                 {/* Drive Link - only show if status >= Sesi Foto */}
                 {booking.driveUrl && currentIdx >= 1 && (
                     <div className="bg-background rounded-2xl shadow-lg border p-6">
-                        <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">File Hasil</h3>
+                        <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("fileResults")}</h3>
                         <a
                             href={booking.driveUrl}
                             target="_blank"
@@ -199,7 +201,7 @@ export default function TrackingPage() {
                             className="flex items-center gap-2 text-sm text-primary hover:underline"
                         >
                             <HardDrive className="w-4 h-4" />
-                            Buka Google Drive
+                            {t("openGoogleDrive")}
                             <ExternalLink className="w-3.5 h-3.5" />
                         </a>
                     </div>
@@ -207,20 +209,20 @@ export default function TrackingPage() {
 
                 {/* Invoice Download */}
                 <div className="bg-background rounded-2xl shadow-lg border p-6">
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">Invoice</h3>
+                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("invoiceTitle")}</h3>
                     <div className="space-y-2 text-sm border-b pb-3 mb-3">
-                        <div className="flex justify-between"><span className="text-muted-foreground">Kode</span><span className="font-medium">{booking.bookingCode}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-medium">Rp {(booking.totalPrice || 0).toLocaleString("id-ID")}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">DP Dibayar</span><span className="font-medium">Rp {(booking.dpPaid || 0).toLocaleString("id-ID")}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Sisa</span><span className="font-semibold">Rp {((booking.totalPrice || 0) - (booking.dpPaid || 0)).toLocaleString("id-ID")}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className={`font-semibold ${booking.isFullyPaid ? "text-green-600" : "text-amber-600"}`}>{booking.isFullyPaid ? "✅ Lunas" : "⏳ Belum Lunas"}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">{t("code").replace(":", "")}</span><span className="font-medium">{booking.bookingCode}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">{t("total")}</span><span className="font-medium">Rp {(booking.totalPrice || 0).toLocaleString("id-ID")}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">{t("dpPaid")}</span><span className="font-medium">Rp {(booking.dpPaid || 0).toLocaleString("id-ID")}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">{t("remaining")}</span><span className="font-semibold">Rp {((booking.totalPrice || 0) - (booking.dpPaid || 0)).toLocaleString("id-ID")}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className={`font-semibold ${booking.isFullyPaid ? "text-green-600" : "text-amber-600"}`}>{booking.isFullyPaid ? `✅ ${t("paid")}` : `⏳ ${t("unpaid")}`}</span></div>
                     </div>
                     <button
                         onClick={() => window.open(`/api/public/invoice?code=${encodeURIComponent(booking.bookingCode)}`, "_blank")}
                         className="flex items-center gap-2 text-sm text-primary hover:underline cursor-pointer"
                     >
                         <Download className="w-4 h-4" />
-                        Cetak / Download Invoice
+                        {t("downloadInvoice")}
                     </button>
                 </div>
 

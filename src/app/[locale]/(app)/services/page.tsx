@@ -8,6 +8,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 
+
 type Service = {
     id: string;
     name: string;
@@ -21,6 +22,7 @@ type Service = {
 export default function ServicesPage() {
     const supabase = createClient();
     const t = useTranslations("Services");
+    const ts = useTranslations("ServicesPage");
     const [services, setServices] = React.useState<Service[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [editingService, setEditingService] = React.useState<Service | null>(null);
@@ -94,7 +96,7 @@ export default function ServicesPage() {
     }
 
     async function handleDelete(id: string) {
-        if (!confirm("Hapus layanan ini? Booking yang sudah terhubung akan kehilangan referensi layanan.")) return;
+        if (!confirm(ts("deleteConfirm"))) return;
         await supabase.from("services").delete().eq("id", id);
         fetchServices();
     }
@@ -123,12 +125,12 @@ export default function ServicesPage() {
                         <form action={(fd) => handleAdd(fd)} className="grid gap-4 py-4">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">{t("namaLayanan")}</label>
-                                <input name="name" required placeholder="Misal: Wedding Photography"
+                                <input name="name" required placeholder="e.g.: Wedding Photography"
                                     className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">{t("deskripsi")}</label>
-                                <textarea name="description" rows={3} placeholder="Deskripsi singkat layanan..."
+                                <textarea name="description" rows={3} placeholder={ts("descPlaceholder")}
                                     className="placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none" />
                             </div>
                             <div className="space-y-2">
@@ -137,14 +139,14 @@ export default function ServicesPage() {
                                     className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Durasi</label>
+                                <label className="text-sm font-medium">{ts("duration")}</label>
                                 <div className="flex items-center gap-2">
                                     <input name="duration_hours" type="number" min="0" max="24" defaultValue={2} placeholder="0"
                                         className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-20 min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
-                                    <span className="text-sm text-muted-foreground">Jam</span>
+                                    <span className="text-sm text-muted-foreground">{ts("hours")}</span>
                                     <input name="duration_mins" type="number" min="0" max="59" step="5" defaultValue={0} placeholder="0"
                                         className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-20 min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
-                                    <span className="text-sm text-muted-foreground">Menit</span>
+                                    <span className="text-sm text-muted-foreground">{ts("minutes")}</span>
                                 </div>
                             </div>
                             <DialogFooter>
@@ -191,7 +193,7 @@ export default function ServicesPage() {
                                     {service.duration_minutes && (
                                         <span className="text-xs text-muted-foreground flex items-center gap-1">
                                             <Clock className="w-3 h-3" />
-                                            {service.duration_minutes >= 60 ? `${Math.floor(service.duration_minutes / 60)} jam${service.duration_minutes % 60 ? ` ${service.duration_minutes % 60} mnt` : ""}` : `${service.duration_minutes} mnt`}
+                                            {service.duration_minutes >= 60 ? `${Math.floor(service.duration_minutes / 60)} ${ts("hourShort")}${service.duration_minutes % 60 ? ` ${service.duration_minutes % 60} ${ts("minuteShort")}` : ""}` : `${service.duration_minutes} ${ts("minuteShort")}`}
                                         </span>
                                     )}
                                 </div>
@@ -241,7 +243,7 @@ export default function ServicesPage() {
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle>{t("editTitle")}</DialogTitle>
-                        <DialogDescription>Perubahan akan langsung tersimpan.</DialogDescription>
+                        <DialogDescription>{ts("editDesc")}</DialogDescription>
                     </DialogHeader>
                     {editingService && (
                         <form action={(fd) => handleEdit(fd)} className="grid gap-4 py-4">
@@ -261,14 +263,14 @@ export default function ServicesPage() {
                                     className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Durasi</label>
+                                <label className="text-sm font-medium">{ts("duration")}</label>
                                 <div className="flex items-center gap-2">
                                     <input name="duration_hours" type="number" min="0" max="24" defaultValue={Math.floor((editingService.duration_minutes || 120) / 60)}
                                         className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-20 min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
-                                    <span className="text-sm text-muted-foreground">Jam</span>
+                                    <span className="text-sm text-muted-foreground">{ts("hours")}</span>
                                     <input name="duration_mins" type="number" min="0" max="59" step="5" defaultValue={(editingService.duration_minutes || 120) % 60}
                                         className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-20 min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
-                                    <span className="text-sm text-muted-foreground">Menit</span>
+                                    <span className="text-sm text-muted-foreground">{ts("minutes")}</span>
                                 </div>
                             </div>
                             <DialogFooter>

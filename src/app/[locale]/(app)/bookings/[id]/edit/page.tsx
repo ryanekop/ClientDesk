@@ -32,18 +32,21 @@ const COUNTRY_CODES = [
     { code: "+670", flag: "🇹🇱", name: "Timor Leste" },
 ];
 
-const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: string; isLocation?: boolean }[]> = {
+const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: string; isLocation?: boolean; fullWidth?: boolean; required?: boolean }[]> = {
     Wisuda: [
         { key: "universitas", label: "Universitas", labelEn: "University" },
         { key: "fakultas", label: "Fakultas", labelEn: "Faculty" },
     ],
     Wedding: [
-        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" },
+        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
         { key: "tempat_akad", label: "Lokasi Akad", labelEn: "Akad Venue", isLocation: true },
         { key: "tempat_resepsi", label: "Lokasi Resepsi", labelEn: "Reception Venue", isLocation: true },
     ],
-    Akad: [{ key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" }],
-    Resepsi: [{ key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name" }],
+    Akad: [{ key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true }],
+    Resepsi: [
+        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
+        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests" },
+    ],
     Maternity: [
         { key: "usia_kehamilan", label: "Usia Kehamilan", labelEn: "Pregnancy Age" },
         { key: "gender_bayi", label: "Gender Bayi", labelEn: "Baby Gender" },
@@ -311,12 +314,12 @@ export default function EditBookingPage() {
                     {currentExtraFields.length > 0 && (
                         <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 pt-3 border-t border-dashed">
                             {currentExtraFields.map(f => (
-                                <div key={f.key} className={`space-y-1.5 ${f.isLocation || currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
-                                    <label className="text-xs font-medium text-muted-foreground">{locale === "id" ? f.label : f.labelEn}</label>
+                                <div key={f.key} className={`space-y-1.5 ${f.isLocation || f.fullWidth || currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
+                                    <label className="text-xs font-medium text-muted-foreground">{locale === "id" ? f.label : f.labelEn}{f.required && <span className="text-red-500 ml-0.5">*</span>}</label>
                                     {f.isLocation ? (
                                         <LocationAutocomplete value={extraFields[f.key] || ""} onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))} placeholder={`Cari lokasi ${f.label.toLowerCase()}...`} />
                                     ) : (
-                                        <input placeholder={f.label} value={extraFields[f.key] || ""} onChange={e => setExtraFields(prev => ({ ...prev, [f.key]: e.target.value }))} className={inputClass} />
+                                        <input placeholder={f.label} value={extraFields[f.key] || ""} onChange={e => setExtraFields(prev => ({ ...prev, [f.key]: e.target.value }))} className={inputClass} required={f.required} />
                                     )}
                                 </div>
                             ))}

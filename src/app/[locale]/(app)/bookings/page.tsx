@@ -95,6 +95,7 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
 export default function BookingsPage() {
     const supabase = createClient();
     const t = useTranslations("Bookings");
+    const tb = useTranslations("BookingsPage");
     const locale = useLocale();
     const [bookings, setBookings] = React.useState<Booking[]>([]);
     const [savedTemplates, setSavedTemplates] = React.useState<SavedTemplate[]>([]);
@@ -176,7 +177,7 @@ export default function BookingsPage() {
         if (!error) {
             setBookings(prev => prev.map(b => b.id === statusModal.booking?.id ? { ...b, status: newStatus } : b));
             setStatusModal({ open: false, booking: null });
-        } else { alert("Gagal update status."); }
+        } else { alert(tb("failedUpdateStatus")); }
         setIsUpdatingStatus(false);
     }
 
@@ -187,12 +188,12 @@ export default function BookingsPage() {
         if (!error) {
             setBookings(prev => prev.filter(b => b.id !== deleteModal.booking?.id));
             setDeleteModal({ open: false, booking: null });
-        } else { alert("Gagal menghapus booking."); }
+        } else { alert(tb("failedDeleteBooking")); }
         setIsDeleting(false);
     }
 
     function sendWhatsAppClient(booking: Booking) {
-        if (!booking.client_whatsapp) { alert("Nomor WhatsApp klien tidak tersedia."); return; }
+        if (!booking.client_whatsapp) { alert(tb("waNotAvailable")); return; }
         const cleaned = booking.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
         const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates));
         window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
@@ -242,27 +243,27 @@ export default function BookingsPage() {
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" className="gap-2 h-9" onClick={() => {
                         const exportData = filteredBookings.map((b: Booking) => ({
-                            "Kode Booking": b.booking_code,
-                            "Nama Klien": b.client_name,
-                            "WhatsApp": b.client_whatsapp || "",
-                            "Jadwal Sesi": b.session_date ? new Date(b.session_date).toLocaleDateString("id-ID") : "",
-                            "Lokasi": b.location || "",
-                            "Paket": b.services?.name || "",
-                            "Harga Total": b.total_price || 0,
-                            "DP Dibayar": b.dp_paid || 0,
-                            "Status": b.status,
+                            [tb("exportBookingCode")]: b.booking_code,
+                            [tb("exportClientName")]: b.client_name,
+                            [tb("exportWhatsApp")]: b.client_whatsapp || "",
+                            [tb("exportSessionDate")]: b.session_date ? new Date(b.session_date).toLocaleDateString("id-ID") : "",
+                            [tb("exportLocation")]: b.location || "",
+                            [tb("exportPackage")]: b.services?.name || "",
+                            [tb("exportTotalPrice")]: b.total_price || 0,
+                            [tb("exportDPPaid")]: b.dp_paid || 0,
+                            [tb("exportStatus")]: b.status,
                         }));
                         const ws = XLSX.utils.json_to_sheet(exportData);
                         const wb = XLSX.utils.book_new();
                         XLSX.utils.book_append_sheet(wb, ws, "Bookings");
                         XLSX.writeFile(wb, `bookings_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
                     }}>
-                        <Download className="w-4 h-4" /> Export
+                        <Download className="w-4 h-4" /> {tb("export")}
                     </Button>
                     <BatchImportButton onImported={() => fetchData()} />
                     <Link href="/bookings/new">
                         <Button className="gap-2 h-9 bg-foreground text-background hover:bg-foreground/90">
-                            <Plus className="w-4 h-4" /> Tambah Klien Baru
+                            <Plus className="w-4 h-4" /> {tb("addClient")}
                         </Button>
                     </Link>
                 </div>
@@ -273,19 +274,19 @@ export default function BookingsPage() {
             <div className="space-y-3">
                 <div className="flex flex-wrap gap-2 items-center">
                     <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={selectFilterClass}>
-                        <option value="All">Semua Status</option>
+                        <option value="All">{tb("allStatus")}</option>
                         {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                     <select value={packageFilter} onChange={e => setPackageFilter(e.target.value)} className={selectFilterClass}>
-                        <option value="All">Semua Paket</option>
+                        <option value="All">{tb("allPackages")}</option>
                         {packages.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                     <select value={freelanceFilter} onChange={e => setFreelanceFilter(e.target.value)} className={selectFilterClass}>
-                        <option value="All">Semua Freelance</option>
+                        <option value="All">{tb("allFreelance")}</option>
                         {freelancerNames.map(f => <option key={f} value={f}>{f}</option>)}
                     </select>
                     <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className={selectFilterClass}>
-                        <option value="All">Semua Bulan</option>
+                        <option value="All">{tb("allMonths")}</option>
                         {Array.from(new Set(bookings.filter(b => b.session_date).map(b => { const d = new Date(b.session_date!); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }))).sort().reverse().map(m => {
                             const [y, mo] = m.split("-");
                             const label = new Date(parseInt(y), parseInt(mo) - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
@@ -299,7 +300,7 @@ export default function BookingsPage() {
                         type="text"
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        placeholder="Cari nama klien, invoice, lokasi..."
+                        placeholder={tb("searchPlaceholder")}
                         className="h-9 w-full rounded-md border border-input bg-background/50 pl-9 pr-3 text-sm focus-visible:ring-1 focus-visible:ring-ring outline-none transition-all"
                     />
                 </div>
@@ -310,7 +311,7 @@ export default function BookingsPage() {
                 {loading ? (
                     <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
                 ) : filteredBookings.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground text-sm">Data tidak ditemukan.</div>
+                    <div className="text-center py-12 text-muted-foreground text-sm">{tb("noDataFound")}</div>
                 ) : (
                     paginateArray(filteredBookings, currentPage, itemsPerPage).map((booking) => (
                         <div key={booking.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
@@ -322,16 +323,16 @@ export default function BookingsPage() {
                                 <StatusBadge status={booking.status} />
                             </div>
                             <div className="border-t pt-2 space-y-1 text-sm text-muted-foreground">
-                                <div className="flex justify-between"><span>Paket</span><span className="text-foreground font-medium">{booking.services?.name || "-"}</span></div>
-                                <div className="flex justify-between"><span>Jadwal</span><span>{formatDate(booking.session_date)}</span></div>
-                                {booking.location && <div className="flex justify-between"><span>Lokasi</span><span className="truncate max-w-[180px]">{booking.location}</span></div>}
+                                <div className="flex justify-between"><span>{t("paket")}</span><span className="text-foreground font-medium">{booking.services?.name || "-"}</span></div>
+                                <div className="flex justify-between"><span>{t("jadwal")}</span><span>{formatDate(booking.session_date)}</span></div>
+                                {booking.location && <div className="flex justify-between"><span>{tb("location")}</span><span className="truncate max-w-[180px]">{booking.location}</span></div>}
                                 <div className="flex justify-between"><span>Total</span><span className="text-foreground font-semibold">{formatCurrency(booking.total_price)}</span></div>
                             </div>
                             <div className="flex items-center gap-1 pt-1 border-t flex-wrap">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500" title="Salin Template" onClick={() => copyTemplate(booking)}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500" title={tb("copyTemplate")} onClick={() => copyTemplate(booking)}>
                                     {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500" title="Whatsapp"
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500" title={tb("whatsapp")}
                                     disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
                                     onClick={() => {
                                         if (booking.booking_freelancers.length > 1) { setWaPopup({ open: true, freelancers: booking.booking_freelancers, booking }); }
@@ -365,10 +366,10 @@ export default function BookingsPage() {
                         <thead className="text-[11px] uppercase bg-muted/30 border-b">
                             <tr>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("namaKlien")}</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Invoice</th>
+                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("invoice")}</th>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("paket")}</th>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("jadwal")}</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Lokasi</th>
+                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("location")}</th>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("status")}</th>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("freelancer")}</th>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("harga")}</th>
@@ -379,7 +380,7 @@ export default function BookingsPage() {
                             {loading ? (
                                 <tr><td colSpan={9} className="px-6 py-12 text-center text-muted-foreground">{t("memuat")}</td></tr>
                             ) : filteredBookings.length === 0 ? (
-                                <tr><td colSpan={9} className="px-6 py-12 text-center text-muted-foreground text-xs italic">Data tidak ditemukan.</td></tr>
+                                <tr><td colSpan={9} className="px-6 py-12 text-center text-muted-foreground text-xs italic">{tb("noDataFound")}</td></tr>
                             ) : (
                                 paginateArray(filteredBookings, currentPage, itemsPerPage).map((booking) => (
                                     <tr key={booking.id} className="hover:bg-muted/30 transition-colors group">
@@ -417,13 +418,13 @@ export default function BookingsPage() {
                                         <td className="px-4 py-3 whitespace-nowrap text-right">
                                             <div className="flex items-center justify-end">
                                                 {/* 1. Copy Template */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500 hover:text-violet-600" title="Salin Template"
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500 hover:text-violet-600" title={tb("copyTemplate")}
                                                     onClick={() => copyTemplate(booking)}>
                                                     {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                                                 </Button>
                                                 {/* 2. WA Freelancer (default) / Client fallback */}
                                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600"
-                                                    title={booking.booking_freelancers.length > 0 ? `Whatsapp Freelance (${booking.booking_freelancers.length})` : "Whatsapp Klien"}
+                                                    title={booking.booking_freelancers.length > 0 ? `${tb("waFreelance")} (${booking.booking_freelancers.length})` : tb("whatsapp")}
                                                     disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
                                                     onClick={() => {
                                                         if (booking.booking_freelancers.length > 1) {
@@ -441,7 +442,7 @@ export default function BookingsPage() {
                                                 </Button>
                                                 {/* 3. Drive Folder */}
                                                 {booking.drive_folder_url ? (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" title="Buka Drive" onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" title={tb("openDrive")} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
                                                         <Folder className="w-4 h-4" />
                                                     </Button>
                                                 ) : (
@@ -452,23 +453,23 @@ export default function BookingsPage() {
                                                 )}
                                                 {/* 4. Detail */}
                                                 <Link href={`/bookings/${booking.id}`}>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-slate-700" title="Detail">
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-slate-700" title={tb("detail")}>
                                                         <Info className="w-4 h-4" />
                                                     </Button>
                                                 </Link>
                                                 {/* 5. Status */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-500 hover:text-orange-600" title="Ganti Status"
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-500 hover:text-orange-600" title={tb("changeStatusBtn")}
                                                     onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
                                                     <RefreshCcw className="w-4 h-4" />
                                                 </Button>
                                                 {/* 6. Edit */}
                                                 <Link href={`/bookings/${booking.id}/edit`}>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" title="Edit">
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" title={tb("editBtn")}>
                                                         <Edit2 className="w-4 h-4" />
                                                     </Button>
                                                 </Link>
                                                 {/* 7. Hapus */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" title="Hapus"
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" title={tb("deleteBtn")}
                                                     onClick={() => setDeleteModal({ open: true, booking })}>
                                                     <Trash2 className="w-4 h-4" />
                                                 </Button>
@@ -487,9 +488,9 @@ export default function BookingsPage() {
             <Dialog open={statusModal.open} onOpenChange={(o) => !o && setStatusModal({ open: false, booking: null })}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Ganti Status Booking</DialogTitle>
+                        <DialogTitle>{tb("changeStatus")}</DialogTitle>
                         <DialogDescription>
-                            Ubah status untuk klien <strong>{statusModal.booking?.client_name}</strong>
+                            {tb("changeStatusDesc")} <strong>{statusModal.booking?.client_name}</strong>
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-2 grid grid-cols-3 gap-2">
@@ -503,10 +504,10 @@ export default function BookingsPage() {
                         ))}
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setStatusModal({ open: false, booking: null })} disabled={isUpdatingStatus}>Batal</Button>
+                        <Button variant="outline" onClick={() => setStatusModal({ open: false, booking: null })} disabled={isUpdatingStatus}>{tb("cancel")}</Button>
                         <Button onClick={handleUpdateStatus} disabled={isUpdatingStatus || newStatus === statusModal.booking?.status}>
                             {isUpdatingStatus ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-                            Simpan Perubahan
+                            {tb("saveChanges")}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -519,16 +520,16 @@ export default function BookingsPage() {
                         <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mb-2">
                             <AlertCircle className="w-6 h-6 text-red-600" />
                         </div>
-                        <DialogTitle className="text-xl">Hapus Booking?</DialogTitle>
+                        <DialogTitle className="text-xl">{tb("deleteBooking")}</DialogTitle>
                         <DialogDescription>
-                            Tindakan ini tidak dapat dibatalkan. Booking klien <strong>{deleteModal.booking?.client_name}</strong> akan dihapus permanen.
+                            {tb("deleteBookingDesc", { name: deleteModal.booking?.client_name || "" })}
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="sm:justify-center gap-2 pt-2">
-                        <Button variant="outline" className="flex-1" onClick={() => setDeleteModal({ open: false, booking: null })} disabled={isDeleting}>Batal</Button>
+                        <Button variant="outline" className="flex-1" onClick={() => setDeleteModal({ open: false, booking: null })} disabled={isDeleting}>{tb("cancel")}</Button>
                         <Button variant="destructive" className="flex-1" onClick={confirmDelete} disabled={isDeleting}>
                             {isDeleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
-                            Ya, Hapus
+                            {tb("yesDelete")}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -538,8 +539,8 @@ export default function BookingsPage() {
             <Dialog open={waPopup.open} onOpenChange={(o) => !o && setWaPopup({ open: false, freelancers: [], booking: null })}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Whatsapp Freelance</DialogTitle>
-                        <DialogDescription>Pilih freelance yang ingin dihubungi</DialogDescription>
+                        <DialogTitle>{tb("waFreelance")}</DialogTitle>
+                        <DialogDescription>{tb("selectFreelance")}</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-2 py-2">
                         {waPopup.freelancers.map((f) => (
@@ -560,7 +561,7 @@ export default function BookingsPage() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium">{f.name}</p>
-                                    <p className="text-xs text-muted-foreground">{f.whatsapp_number || "Nomor tidak tersedia"}</p>
+                                    <p className="text-xs text-muted-foreground">{f.whatsapp_number || tb("numberNotAvailable")}</p>
                                 </div>
                             </button>
                         ))}
@@ -572,8 +573,8 @@ export default function BookingsPage() {
             <Dialog open={driveLinkPopup.open} onOpenChange={(o) => { if (!o) setDriveLinkPopup({ open: false, booking: null }); }}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Set Link Google Drive</DialogTitle>
-                        <DialogDescription>Tempelkan link folder Google Drive untuk booking ini.</DialogDescription>
+                        <DialogTitle>{tb("setDriveLink")}</DialogTitle>
+                        <DialogDescription>{tb("setDriveLinkDesc")}</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-3 py-2">
                         <input
@@ -585,7 +586,7 @@ export default function BookingsPage() {
                         />
                     </div>
                     <DialogFooter>
-                        <Button variant="ghost" onClick={() => setDriveLinkPopup({ open: false, booking: null })}>Batal</Button>
+                        <Button variant="ghost" onClick={() => setDriveLinkPopup({ open: false, booking: null })}>{tb("cancel")}</Button>
                         <Button disabled={!driveLinkInput || savingDriveLink} className="gap-2" onClick={async () => {
                             if (!driveLinkPopup.booking || !driveLinkInput) return;
                             setSavingDriveLink(true);
@@ -595,7 +596,7 @@ export default function BookingsPage() {
                             setDriveLinkPopup({ open: false, booking: null });
                         }}>
                             {savingDriveLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-                            Simpan
+                            {tb("save")}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

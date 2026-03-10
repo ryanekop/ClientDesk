@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { useLocale } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Loader2, Eye, EyeOff, ShieldCheck, CheckCircle } from "lucide-react"
 import { useTheme } from "next-themes"
@@ -16,6 +16,7 @@ export default function ResetPasswordPage() {
     const supabase = createClient()
     const locale = useLocale()
     const { theme, setTheme } = useTheme()
+    const t = useTranslations("Auth")
 
     const [password, setPassword] = useState("")
     const [confirmPassword, setConfirmPassword] = useState("")
@@ -31,13 +32,13 @@ export default function ResetPasswordPage() {
         setError(null)
 
         if (password !== confirmPassword) {
-            setError("Kata sandi tidak cocok.")
+            setError(t("passwordMismatch"))
             setLoading(false)
             return
         }
 
         if (password.length < 6) {
-            setError("Kata sandi minimal 6 karakter.")
+            setError(t("passwordMinLength"))
             setLoading(false)
             return
         }
@@ -58,7 +59,7 @@ export default function ResetPasswordPage() {
                 router.push(`/${locale}/dashboard`)
             }, 2000)
         } catch {
-            setError("Terjadi kesalahan, coba lagi.")
+            setError(t("genericError"))
             setLoading(false)
         }
     }
@@ -72,9 +73,9 @@ export default function ResetPasswordPage() {
                             <div className="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-500/10 flex items-center justify-center">
                                 <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
                             </div>
-                            <h2 className="text-xl font-bold">Kata Sandi Diperbarui!</h2>
+                            <h2 className="text-xl font-bold">{t("passwordUpdated")}</h2>
                             <p className="text-muted-foreground text-sm">
-                                Kata sandi Anda berhasil diperbarui. Anda akan diarahkan ke dashboard...
+                                {t("passwordUpdatedDesc")}
                             </p>
                         </div>
                     </div>
@@ -90,17 +91,17 @@ export default function ResetPasswordPage() {
                     <div className="grid auto-rows-min items-start gap-2 px-6">
                         <div className="leading-none font-semibold text-2xl text-center flex items-center justify-center gap-2">
                             <ShieldCheck className="h-6 w-6" />
-                            Atur Kata Sandi Baru
+                            {t("resetTitle")}
                         </div>
                         <div className="text-muted-foreground text-sm text-center">
-                            Masukkan kata sandi baru untuk akun Anda
+                            {t("resetSubtitle")}
                         </div>
                     </div>
 
                     <div className="px-6">
                         <form onSubmit={handleReset} className="space-y-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none">Kata Sandi Baru</label>
+                                <label className="text-sm font-medium leading-none">{t("newPassword")}</label>
                                 <div className="relative">
                                     <input
                                         type={showPassword ? "text" : "password"}
@@ -119,7 +120,7 @@ export default function ResetPasswordPage() {
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none">Konfirmasi Kata Sandi</label>
+                                <label className="text-sm font-medium leading-none">{t("confirmPassword")}</label>
                                 <div className="relative">
                                     <input
                                         type={showConfirmPassword ? "text" : "password"}
@@ -144,26 +145,26 @@ export default function ResetPasswordPage() {
                                 </div>
                             )}
 
-                            <Button type="submit" className="w-full cursor-pointer hover:opacity-90 transition-opacity" disabled={loading}>
+                            <Button type="submit" className="w-full hover:opacity-90 transition-opacity" disabled={loading}>
                                 {loading ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Menyimpan...
+                                        {t("saving")}
                                     </>
                                 ) : (
-                                    <>Simpan Kata Sandi</>
+                                    <>{t("savePassword")}</>
                                 )}
                             </Button>
                         </form>
                     </div>
 
                     <div className="flex items-center px-6 justify-center gap-2">
-                        <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9 cursor-pointer">
+                        <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9">
                             <Languages className="h-[1.2rem] w-[1.2rem]" />
                         </button>
                         <button
                             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9 cursor-pointer"
+                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9"
                         >
                             {theme === "dark" ? <Moon className="h-[1.2rem] w-[1.2rem]" /> : <Sun className="h-[1.2rem] w-[1.2rem]" />}
                         </button>

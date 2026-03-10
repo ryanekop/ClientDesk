@@ -8,6 +8,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 
+
 type Freelancer = {
     id: string;
     name: string;
@@ -23,6 +24,7 @@ const roleOptions = ["Photographer", "Videographer", "MUA", "Editor", "Asisten",
 export default function TeamPage() {
     const supabase = createClient();
     const t = useTranslations("Team");
+    const tt = useTranslations("TeamPage");
     const [members, setMembers] = React.useState<Freelancer[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [editingMember, setEditingMember] = React.useState<Freelancer | null>(null);
@@ -89,7 +91,7 @@ export default function TeamPage() {
     }
 
     async function handleDelete(id: string) {
-        if (!confirm("Hapus anggota tim ini?")) return;
+        if (!confirm(tt("deleteConfirm"))) return;
         await supabase.from("freelance").delete().eq("id", id);
         fetchMembers();
     }
@@ -97,7 +99,7 @@ export default function TeamPage() {
     function sendWhatsApp(phone: string | null, name: string) {
         if (!phone) return;
         const cleaned = phone.replace(/^0/, "62").replace(/[^0-9]/g, "");
-        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(`Halo ${name}!`)}`, "_blank");
+        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(`${tt("hello")} ${name}!`)}`, "_blank");
     }
 
     const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
@@ -121,7 +123,7 @@ export default function TeamPage() {
                         <form action={(fd) => handleAdd(fd)} className="grid gap-4 py-4">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">{t("nama")}</label>
-                                <input name="name" required placeholder="Misal: Budi Santoso" className={inputClass} />
+                                <input name="name" required placeholder={tt("namePlaceholder")} className={inputClass} />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">{t("peran")}</label>
@@ -136,7 +138,7 @@ export default function TeamPage() {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Google Email</label>
-                                <input name="google_email" type="email" placeholder="email@gmail.com (untuk kalender)" className={inputClass} />
+                                <input name="google_email" type="email" placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
                             </div>
                             <DialogFooter><Button type="submit">{t("simpan")}</Button></DialogFooter>
                         </form>
@@ -177,7 +179,7 @@ export default function TeamPage() {
                                 </div>
                                 {member.whatsapp_number && <p className="text-xs text-muted-foreground">{member.whatsapp_number}</p>}
                                 <div className="flex items-center gap-1 pt-1 border-t">
-                                    <button title="Kirim WA" onClick={() => sendWhatsApp(member.whatsapp_number, member.name)} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
+                                    <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number, member.name)} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
                                         <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                                     </button>
                                     <button title="Edit" onClick={() => { setEditingMember(member); setIsEditOpen(true); }} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
@@ -234,7 +236,7 @@ export default function TeamPage() {
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-right">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    <button title="Kirim WA" onClick={() => sendWhatsApp(member.whatsapp_number, member.name)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
+                                                    <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number, member.name)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
                                                         <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                                                     </button>
                                                     <button title="Edit" onClick={() => { setEditingMember(member); setIsEditOpen(true); }} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
@@ -260,7 +262,7 @@ export default function TeamPage() {
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle>{t("editTitle")}</DialogTitle>
-                        <DialogDescription>Perubahan akan langsung tersimpan.</DialogDescription>
+                        <DialogDescription>{tt("editDesc")}</DialogDescription>
                     </DialogHeader>
                     {editingMember && (
                         <form action={(fd) => handleEdit(fd)} className="grid gap-4 py-4">
@@ -280,7 +282,7 @@ export default function TeamPage() {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Google Email</label>
-                                <input name="google_email" type="email" defaultValue={editingMember.google_email || ""} placeholder="email@gmail.com (untuk kalender)" className={inputClass} />
+                                <input name="google_email" type="email" defaultValue={editingMember.google_email || ""} placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
                             </div>
                             <DialogFooter><Button type="submit">{t("perbarui")}</Button></DialogFooter>
                         </form>

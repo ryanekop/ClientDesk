@@ -6,7 +6,7 @@ import { createClient } from "@/utils/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Loader2, Eye, EyeOff, UserPlus, Lock, Languages, Sun, Moon } from "lucide-react"
 import { useTheme } from "next-themes"
-import { useLocale } from "next-intl"
+import { useLocale, useTranslations } from "next-intl"
 import Link from "next/link"
 
 export default function LoginPage() {
@@ -14,6 +14,7 @@ export default function LoginPage() {
     const supabase = createClient()
     const { theme, setTheme } = useTheme()
     const locale = useLocale()
+    const t = useTranslations("Auth")
 
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
@@ -35,7 +36,7 @@ export default function LoginPage() {
 
             if (error) {
                 if (error.message.toLowerCase().includes('invalid login credentials')) {
-                    setError("Email atau kata sandi salah.")
+                    setError(t("invalidCredentials"))
                 } else {
                     setError(error.message)
                 }
@@ -46,7 +47,7 @@ export default function LoginPage() {
             router.refresh()
             router.push(`/${locale}/dashboard`)
         } catch {
-            setError("Terjadi kesalahan, coba lagi.")
+            setError(t("genericError"))
             setLoading(false)
         }
     }
@@ -60,10 +61,10 @@ export default function LoginPage() {
                     <div className="grid auto-rows-min items-start gap-2 px-6">
                         <div className="leading-none font-semibold text-2xl font-bold text-center flex items-center justify-center gap-2">
                             <Lock className="h-6 w-6" />
-                            Login Akun
+                            {t("loginTitle")}
                         </div>
                         <div className="text-muted-foreground text-sm text-center">
-                            Masuk ke akun Anda untuk mengakses dashboard
+                            {t("loginSubtitle")}
                         </div>
                     </div>
 
@@ -71,7 +72,7 @@ export default function LoginPage() {
                     <div className="px-6">
                         <form onSubmit={handleLogin} className="space-y-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium leading-none">Email</label>
+                                <label className="text-sm font-medium leading-none">{t("email")}</label>
                                 <input
                                     type="email"
                                     placeholder="admin@example.com"
@@ -83,8 +84,8 @@ export default function LoginPage() {
                             </div>
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium leading-none">Kata Sandi</label>
-                                    <Link href={`/${locale}/forgot-password`} className="text-xs text-primary hover:underline cursor-pointer">Lupa kata sandi?</Link>
+                                    <label className="text-sm font-medium leading-none">{t("password")}</label>
+                                    <Link href={`/${locale}/forgot-password`} className="text-xs text-primary hover:underline cursor-pointer">{t("forgotPassword")}</Link>
                                 </div>
                                 <div className="relative">
                                     <input
@@ -121,7 +122,7 @@ export default function LoginPage() {
                                     onClick={() => setRememberMe(!rememberMe)}
                                     className="text-sm font-normal cursor-pointer leading-none"
                                 >
-                                    Ingat saya
+                                    {t("rememberMe")}
                                 </label>
                             </div>
 
@@ -131,25 +132,25 @@ export default function LoginPage() {
                                 </div>
                             )}
 
-                            <Button type="submit" className="w-full cursor-pointer hover:opacity-90 transition-opacity" disabled={loading}>
+                            <Button type="submit" className="w-full hover:opacity-90 transition-opacity" disabled={loading}>
                                 {loading ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Memproses...
+                                        {t("processing")}
                                     </>
                                 ) : (
-                                    <>Masuk</>
+                                    <>{t("login")}</>
                                 )}
                             </Button>
                         </form>
 
                         {/* No Account Section */}
                         <div className="mt-6 pt-6 border-t text-center space-y-3">
-                            <p className="text-sm text-muted-foreground">Belum punya akun?</p>
-                            <Button variant="outline" className="w-full gap-2 cursor-pointer" asChild>
+                            <p className="text-sm text-muted-foreground">{t("noAccount")}</p>
+                            <Button variant="outline" className="w-full gap-2" asChild>
                                 <Link href={`/${locale}/register`}>
                                     <UserPlus className="h-4 w-4" />
-                                    Daftar Sekarang
+                                    {t("registerNow")}
                                 </Link>
                             </Button>
                         </div>
@@ -157,12 +158,12 @@ export default function LoginPage() {
 
                     {/* Card Footer */}
                     <div className="flex items-center px-6 justify-center gap-2">
-                        <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9 cursor-pointer">
+                        <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9">
                             <Languages className="h-[1.2rem] w-[1.2rem]" />
                         </button>
                         <button
                             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9 cursor-pointer"
+                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9"
                         >
                             {theme === "dark" ? <Moon className="h-[1.2rem] w-[1.2rem]" /> : <Sun className="h-[1.2rem] w-[1.2rem]" />}
                         </button>

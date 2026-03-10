@@ -9,22 +9,23 @@ import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
 
 const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
-const EXTRA_FIELDS: Record<string, { key: string; label: string; isLocation?: boolean }[]> = {
-    Wisuda: [{ key: "universitas", label: "Universitas" }],
+const EXTRA_FIELDS: Record<string, { key: string; label: string; isLocation?: boolean; fullWidth?: boolean; required?: boolean }[]> = {
+    Wisuda: [
+        { key: "universitas", label: "Universitas" },
+        { key: "fakultas", label: "Fakultas" },
+    ],
     Wedding: [
-        { key: "nama_pasangan", label: "Nama Pasangan" },
+        { key: "nama_pasangan", label: "Nama Pasangan", fullWidth: true, required: true },
         { key: "jumlah_tamu", label: "Estimasi Tamu" },
         { key: "tempat_akad", label: "Lokasi Akad", isLocation: true },
         { key: "tempat_resepsi", label: "Lokasi Resepsi", isLocation: true },
     ],
     Akad: [
-        { key: "nama_pasangan", label: "Nama Pasangan" },
-        { key: "tempat_akad", label: "Lokasi Akad", isLocation: true },
+        { key: "nama_pasangan", label: "Nama Pasangan", fullWidth: true, required: true },
     ],
     Resepsi: [
-        { key: "nama_pasangan", label: "Nama Pasangan" },
+        { key: "nama_pasangan", label: "Nama Pasangan", fullWidth: true, required: true },
         { key: "jumlah_tamu", label: "Estimasi Tamu" },
-        { key: "tempat_resepsi", label: "Lokasi Resepsi", isLocation: true },
     ],
     Maternity: [{ key: "usia_kandungan", label: "Usia Kandungan (bulan)" }],
     Newborn: [{ key: "nama_bayi", label: "Nama Bayi" }],
@@ -405,8 +406,8 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                         {currentExtraFields.length > 0 && (
                             <div className={`grid gap-4 ${currentExtraFields.length === 1 ? "" : "sm:grid-cols-2"}`}>
                                 {currentExtraFields.map(f => (
-                                    <div key={f.key} className={`space-y-1.5 ${f.isLocation || currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
-                                        <label className="text-sm font-medium">{f.label}</label>
+                                    <div key={f.key} className={`space-y-1.5 ${f.isLocation || f.fullWidth || currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
+                                        <label className="text-sm font-medium">{f.label}{f.required && <span className="text-red-500"> *</span>}</label>
                                         {f.isLocation ? (
                                             <LocationAutocomplete
                                                 value={extraData[f.key] || ""}
@@ -419,6 +420,7 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                                                 onChange={e => setExtraData(prev => ({ ...prev, [f.key]: e.target.value }))}
                                                 placeholder={f.label}
                                                 className={inputClass}
+                                                required={f.required}
                                             />
                                         )}
                                     </div>

@@ -5,6 +5,7 @@ import { TrendingUp, Clock, CheckCircle2, FileText, Loader2, Download, MessageCi
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
+import { useLocale } from "next-intl";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 type BookingFinance = {
     id: string;
@@ -23,6 +24,8 @@ type BookingFinance = {
 export default function FinancePage() {
     const supabase = createClient();
     const t = useTranslations("Finance");
+    const tf = useTranslations("FinancePage");
+    const locale = useLocale();
     const [bookings, setBookings] = React.useState<BookingFinance[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [filter, setFilter] = React.useState<"all" | "pending" | "paid">("all");
@@ -83,13 +86,13 @@ export default function FinancePage() {
         new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
 
     function sendInvoiceWhatsApp(b: BookingFinance) {
-        if (!b.client_whatsapp) { alert("Nomor WhatsApp klien tidak tersedia."); return; }
+        if (!b.client_whatsapp) { alert(tf("waNotAvailable")); return; }
         const remaining = b.total_price - b.dp_paid;
-        const date = b.session_date ? new Date(b.session_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-";
+        const date = b.session_date ? new Date(b.session_date).toLocaleDateString(locale === "en" ? "en-US" : "id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-";
         const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
-        const trackLink = b.tracking_uuid ? `${siteUrl}/id/track/${b.tracking_uuid}` : "";
-        const invoiceLink = `${siteUrl}/api/public/invoice?code=${encodeURIComponent(b.booking_code)}`;
-        const msg = `📄 *INVOICE - ${b.booking_code}*\n\nHalo ${b.client_name},\nBerikut detail invoice Anda:\n\n📦 Paket: ${b.services?.name || "-"}\n📅 Jadwal: ${date}\n💰 Total: ${formatCurrency(b.total_price)}\n✅ DP Dibayar: ${formatCurrency(b.dp_paid)}\n📌 Sisa: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? "✅ LUNAS" : "⏳ Belum Lunas"}\n\n📎 Download Invoice: ${invoiceLink}${trackLink ? `\n🔗 Lihat Status: ${trackLink}` : ""}\n\nTerima kasih! 🙏`;
+        const trackLink = b.tracking_uuid ? `${siteUrl}/${locale}/track/${b.tracking_uuid}` : "";
+        const invoiceLink = `${siteUrl}/api/public/invoice?code=${encodeURIComponent(b.booking_code)}&lang=${locale}`;
+        const msg = `📄 *${tf("waInvoiceTitle")} - ${b.booking_code}*\n\n${tf("waInvoiceHello", { name: b.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${b.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(b.total_price)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(b.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${trackLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
         const cleaned = b.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
         window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(msg)}`, "_blank");
     }
@@ -176,7 +179,7 @@ export default function FinancePage() {
                                 <div className="flex justify-between"><span className="text-muted-foreground">{t("sisa")}</span><span className={remaining > 0 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-green-600 dark:text-green-400"}>{formatCurrency(remaining)}</span></div>
                             </div>
                             <div className="flex items-center gap-1 pt-1 border-t">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500" title="Kirim Invoice via WA" disabled={!b.client_whatsapp} onClick={() => sendInvoiceWhatsApp(b)}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500" title={tf("sendInvoiceWA")} disabled={!b.client_whatsapp} onClick={() => sendInvoiceWhatsApp(b)}>
                                     <MessageCircle className="w-4 h-4" />
                                 </Button>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" title="Invoice" onClick={() => generateInvoice(b)}>
@@ -221,7 +224,7 @@ export default function FinancePage() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(b.total_price)}</td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <EditableAmount value={b.dp_paid} onSave={(v) => handleUpdatePayment(b.id, "dp_paid", v)} />
+                                            <EditableAmount value={b.dp_paid} onSave={(v) => handleUpdatePayment(b.id, "dp_paid", v)} editTitle={tf("clickToEditDP")} />
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap font-medium">
                                             <span className={remaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}>
@@ -241,7 +244,7 @@ export default function FinancePage() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
                                             <div className="flex items-center justify-end gap-1">
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600" title="Kirim Invoice via WA"
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600" title={tf("sendInvoiceWA")}
                                                     disabled={!b.client_whatsapp}
                                                     onClick={() => sendInvoiceWhatsApp(b)}>
                                                     <MessageCircle className="w-4 h-4" />
@@ -265,7 +268,7 @@ export default function FinancePage() {
 }
 
 /** Inline editable amount component */
-function EditableAmount({ value, onSave }: { value: number; onSave: (v: number) => void }) {
+function EditableAmount({ value, onSave, editTitle }: { value: number; onSave: (v: number) => void; editTitle?: string }) {
     const [editing, setEditing] = React.useState(false);
     const [val, setVal] = React.useState(String(value));
     const inputRef = React.useRef<HTMLInputElement>(null);
@@ -281,7 +284,7 @@ function EditableAmount({ value, onSave }: { value: number; onSave: (v: number) 
             <button
                 onClick={() => setEditing(true)}
                 className="text-sm font-medium hover:underline cursor-pointer text-blue-600 dark:text-blue-400"
-                title="Klik untuk edit jumlah DP"
+                title={editTitle}
             >
                 {formatCurrency(value)}
             </button>
