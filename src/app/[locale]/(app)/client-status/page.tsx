@@ -6,6 +6,7 @@ import { Activity, Copy, ClipboardCheck, Loader2, ExternalLink, Search } from "l
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/routing";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
+import { useTranslations, useLocale } from "next-intl";
 
 type BookingStatus = {
     id: string;
@@ -43,7 +44,8 @@ const statusColors: Record<string, string> = {
 
 export default function ClientStatusPage() {
     const supabase = createClient();
-    const [bookings, setBookings] = React.useState<BookingStatus[]>([]);
+    const t = useTranslations("ClientStatus");
+    const locale = useLocale(); const [bookings, setBookings] = React.useState<BookingStatus[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [filter, setFilter] = React.useState("");
     const [search, setSearch] = React.useState("");
@@ -110,9 +112,9 @@ export default function ClientStatusPage() {
         <div className="space-y-6">
             <div>
                 <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                    <Activity className="w-6 h-6" /> Status Booking
+                    <Activity className="w-6 h-6" /> {t("title")}
                 </h2>
-                <p className="text-muted-foreground text-sm">Kelola progress dan antrian klien. Klien bisa tracking via link.</p>
+                <p className="text-muted-foreground text-sm">{t("subtitle")}</p>
             </div>
 
             {/* Filters */}
@@ -122,7 +124,7 @@ export default function ClientStatusPage() {
                     <input
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        placeholder="Cari nama klien atau kode..."
+                        placeholder={t("cariPlaceholder")}
                         className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                     />
                 </div>
@@ -140,7 +142,7 @@ export default function ClientStatusPage() {
             {/* Mobile Cards */}
             <div className="md:hidden space-y-3">
                 {filtered.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground text-sm">{bookings.length === 0 ? "Belum ada booking." : "Tidak ada hasil."}</div>
+                    <div className="text-center py-12 text-muted-foreground text-sm">{bookings.length === 0 ? t("belumAdaBooking") : t("tidakAdaHasil")}</div>
                 ) : paginateArray(filtered, currentPage, itemsPerPage).map(b => (
                     <div key={b.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
                         <div className="flex items-start justify-between">
@@ -158,22 +160,22 @@ export default function ClientStatusPage() {
                             <div className="flex items-center gap-3">
                                 <label className="text-xs text-muted-foreground shrink-0 w-14">Status</label>
                                 <select value={b.client_status || ""} onChange={e => updateStatus(b.id, e.target.value)} disabled={savingId === b.id} className={`${selectClass} flex-1`}>
-                                    <option value="">Belum diset</option>
+                                    <option value="">{t("belumDiset")}</option>
                                     {CLIENT_STATUSES.filter(s => s.value).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                                 </select>
                             </div>
                             <div className="flex items-center gap-3">
-                                <label className="text-xs text-muted-foreground shrink-0 w-14">Antrian</label>
+                                <label className="text-xs text-muted-foreground shrink-0 w-14">{t("antrian")}</label>
                                 <input type="number" min={0} value={b.queue_position ?? ""} onChange={e => updateQueue(b.id, e.target.value === "" ? null : parseInt(e.target.value, 10))} placeholder="-" className={`${inputClass} flex-1`} />
                             </div>
                         </div>
                         <div className="flex items-center gap-1 pt-1 border-t">
                             {b.tracking_uuid && (
                                 <>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500" title="Buka Link" onClick={() => window.open(`${window.location.origin}/track/${b.tracking_uuid}`, "_blank")}>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500" title={t("bukaLink")} onClick={() => window.open(`${window.location.origin}/track/${b.tracking_uuid}`, "_blank")}>
                                         <ExternalLink className="w-4 h-4" />
                                     </Button>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500" title="Salin Link" onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500" title={t("salinLink")} onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}>
                                         {copiedId === b.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                                     </Button>
                                 </>
@@ -189,18 +191,18 @@ export default function ClientStatusPage() {
                     <table className="w-full text-sm text-left border-collapse">
                         <thead className="text-[11px] uppercase bg-muted/30 border-b">
                             <tr>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Klien</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap hidden sm:table-cell">Paket</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Status</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-center hidden sm:table-cell">Antrian</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">Aksi</th>
+                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{locale === "en" ? "Client" : "Klien"}</th>
+                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap hidden sm:table-cell">{locale === "en" ? "Package" : "Paket"}</th>
+                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{locale === "en" ? "Status" : "Status"}</th>
+                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-center hidden sm:table-cell">{t("antrian")}</th>
+                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">{t("aksi")}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border/50">
                             {filtered.length === 0 ? (
                                 <tr>
                                     <td colSpan={5} className="text-center py-12 text-sm text-muted-foreground">
-                                        {bookings.length === 0 ? "Belum ada booking." : "Tidak ada hasil."}
+                                        {bookings.length === 0 ? t("belumAdaBooking") : t("tidakAdaHasil")}
                                     </td>
                                 </tr>
                             ) : (
@@ -222,7 +224,7 @@ export default function ClientStatusPage() {
                                                 disabled={savingId === b.id}
                                                 className={selectClass}
                                             >
-                                                <option value="">Belum diset</option>
+                                                <option value="">{t("belumDiset")}</option>
                                                 {CLIENT_STATUSES.filter(s => s.value).map(s => (
                                                     <option key={s.value} value={s.value}>{s.label}</option>
                                                 ))}
@@ -253,7 +255,7 @@ export default function ClientStatusPage() {
                                                         <Button
                                                             variant="ghost" size="icon"
                                                             className={`h-8 w-8 ${copiedId === b.id ? "text-green-500" : "text-slate-500 hover:text-slate-700"}`}
-                                                            title="Salin Link Tracking"
+                                                            title={t("salinLinkTracking")}
                                                             onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}
                                                         >
                                                             {copiedId === b.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -261,8 +263,8 @@ export default function ClientStatusPage() {
                                                         <Button
                                                             variant="ghost" size="icon"
                                                             className="h-8 w-8 text-blue-500 hover:text-blue-600"
-                                                            title="Buka Tracking"
-                                                            onClick={() => window.open(`/id/track/${b.tracking_uuid}`, "_blank")}
+                                                            title={t("bukaTracking")}
+                                                            onClick={() => window.open(`/${locale}/track/${b.tracking_uuid}`, "_blank")}
                                                         >
                                                             <ExternalLink className="w-4 h-4" />
                                                         </Button>

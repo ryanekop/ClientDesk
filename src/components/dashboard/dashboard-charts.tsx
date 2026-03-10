@@ -6,14 +6,19 @@ import {
     ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import { createClient } from "@/utils/supabase/client";
+import { useLocale, useTranslations } from "next-intl";
 
 type DailyPoint = { name: string; dateLabel: string; revenue: number };
 type MonthlyPoint = { name: string; revenue: number };
 
 export function DashboardCharts() {
+    const locale = useLocale();
+    const t = useTranslations("Dashboard");
     const [dailyData, setDailyData] = React.useState<DailyPoint[]>([]);
     const [monthlyData, setMonthlyData] = React.useState<MonthlyPoint[]>([]);
     const [loading, setLoading] = React.useState(true);
+
+    const dateLocale = locale === "en" ? "en-US" : "id-ID";
 
     React.useEffect(() => {
         async function load() {
@@ -36,7 +41,7 @@ export function DashboardCharts() {
 
             // Use local date keys to avoid UTC offset issues
             const toLocalKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-            const toLocalLabel = (d: Date) => d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+            const toLocalLabel = (d: Date) => d.toLocaleDateString(dateLocale, { day: "numeric", month: "short" });
 
             // Initialize all 30 days
             const revenueByDate: Record<string, number> = {};
@@ -98,7 +103,7 @@ export function DashboardCharts() {
                 const [y, m] = key.split("-");
                 const d = new Date(Number(y), Number(m) - 1, 1);
                 return {
-                    name: d.toLocaleDateString("id-ID", { month: "short", year: "2-digit" }),
+                    name: d.toLocaleDateString(dateLocale, { month: "short", year: "2-digit" }),
                     revenue: val,
                 };
             });
@@ -107,7 +112,7 @@ export function DashboardCharts() {
             setLoading(false);
         }
         load();
-    }, []);
+    }, [dateLocale]);
 
     if (loading) {
         return (
@@ -121,8 +126,8 @@ export function DashboardCharts() {
         new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
 
     const formatShort = (n: number) => {
-        if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}jt`;
-        if (n >= 1_000) return `${(n / 1_000).toFixed(0)}rb`;
+        if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}${t("jt")}`;
+        if (n >= 1_000) return `${(n / 1_000).toFixed(0)}${t("rb")}`;
         return String(n);
     };
 
@@ -130,7 +135,7 @@ export function DashboardCharts() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
             {/* 30-day daily trend */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-                <h3 className="font-semibold text-sm mb-3">Pemasukan 30 Hari Terakhir</h3>
+                <h3 className="font-semibold text-sm mb-3">{t("pemasukan30")}</h3>
                 <div className="h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={dailyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -150,7 +155,7 @@ export function DashboardCharts() {
                                     return (
                                         <div style={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
                                             <div style={{ fontWeight: 600, marginBottom: 2 }}>{p.dateLabel}</div>
-                                            <div style={{ color: 'var(--foreground)' }}>Pemasukan: {formatCurrency(p.revenue)}</div>
+                                            <div style={{ color: 'var(--foreground)' }}>{t("pemasukan")}: {formatCurrency(p.revenue)}</div>
                                         </div>
                                     );
                                 }}
@@ -163,7 +168,7 @@ export function DashboardCharts() {
 
             {/* 12-month column chart */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-                <h3 className="font-semibold text-sm mb-3">Pemasukan per Bulan (1 Tahun)</h3>
+                <h3 className="font-semibold text-sm mb-3">{t("pemasukanBulanan")}</h3>
                 <div className="h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -171,7 +176,7 @@ export function DashboardCharts() {
                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} dy={5} />
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} tickFormatter={formatShort} width={48} />
                             <Tooltip
-                                formatter={(value: any) => [formatCurrency(Number(value)), "Pemasukan"]}
+                                formatter={(value: any) => [formatCurrency(Number(value)), t("pemasukan")]}
                                 contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)', borderRadius: '8px', fontSize: '13px' }}
                                 itemStyle={{ color: 'var(--foreground)' }}
                             />

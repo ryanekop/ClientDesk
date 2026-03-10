@@ -6,6 +6,7 @@ import { Loader2, CheckCircle2, Upload, CalendarDays, MapPin, Camera, MessageCir
 import { createClient } from "@/utils/supabase/client";
 import { compressImage } from "@/utils/compress-image";
 import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
+import { useTranslations } from "next-intl";
 
 const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
@@ -83,6 +84,7 @@ export default function PublicBookingForm() {
     const params = useParams();
     const slug = params?.vendorSlug as string;
     const supabase = createClient();
+    const t = useTranslations("BookingForm");
 
     const [vendor, setVendor] = React.useState<Vendor | null>(null);
     const [services, setServices] = React.useState<Service[]>([]);
@@ -164,13 +166,13 @@ export default function PublicBookingForm() {
         setError("");
 
         if (!clientName || !phone || !sessionDate || !serviceId || (!location && eventType !== "Wedding")) {
-            setError("Mohon lengkapi semua field yang wajib.");
+            setError(t("errorWajib"));
             return;
         }
 
         // Validate required extra fields for Wedding
         if (eventType === "Wedding" && (!extraData.tempat_akad || !extraData.tempat_resepsi)) {
-            setError("Mohon lengkapi Lokasi Akad dan Lokasi Resepsi.");
+            setError(t("errorLokasiWedding"));
             return;
         }
 
@@ -184,7 +186,7 @@ export default function PublicBookingForm() {
         if (selectedService) {
             const minAmount = Math.ceil((selectedService.price * minDP) / 100);
             if (dpValue < minAmount) {
-                setError(`DP minimal ${minDP}% dari harga paket (${formatCurrency(minAmount)}).`);
+                setError(t("errorDPMin", { percent: String(minDP), amount: formatCurrency(minAmount) }));
                 return;
             }
         }
@@ -207,7 +209,7 @@ export default function PublicBookingForm() {
                     .upload(path, compressed, { upsert: false, contentType: proofFile.type.startsWith("image/") ? "image/jpeg" : proofFile.type });
 
                 if (uploadErr) {
-                    setError("Gagal upload bukti pembayaran: " + uploadErr.message);
+                    setError(t("errorUpload") + uploadErr.message);
                     setSubmitting(false);
                     setUploadingProof(false);
                     return;
@@ -215,7 +217,7 @@ export default function PublicBookingForm() {
                 const { data: publicUrl } = supabase.storage.from("payment-proofs").getPublicUrl(path);
                 paymentProofUrl = publicUrl.publicUrl;
             } catch {
-                setError("Gagal compress/upload bukti pembayaran.");
+                setError(t("errorCompress"));
                 setSubmitting(false);
                 setUploadingProof(false);
                 return;
@@ -316,18 +318,18 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                         <CheckCircle2 className="w-10 h-10 text-green-600" />
                     </div>
                     <div>
-                        <h2 className="text-2xl font-bold mb-2">Booking Berhasil! 🎉</h2>
-                        <p className="text-muted-foreground text-sm">Kode Booking Anda:</p>
+                        <h2 className="text-2xl font-bold mb-2">{t("booking Berhasil")}</h2>
+                        <p className="text-muted-foreground text-sm">{t("kodeBooking")}</p>
                         <p className="text-3xl font-bold text-primary mt-1">{resultData?.bookingCode}</p>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                        Silakan konfirmasi booking Anda ke admin melalui WhatsApp untuk proses lebih lanjut.
+                        {t("konfirmasiWA")}
                     </p>
                     <button
                         onClick={openWhatsAppConfirmation}
                         className="inline-flex items-center justify-center gap-2 w-full h-12 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 transition-colors shadow-lg shadow-green-600/20 cursor-pointer text-base"
                     >
-                        <MessageCircle className="w-5 h-5" /> Konfirmasi via WhatsApp
+                        <MessageCircle className="w-5 h-5" /> {t("konfirmasiViaWA")}
                     </button>
                 </div>
             </div>
@@ -350,7 +352,7 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">{vendor?.studio_name || "Studio"}</h1>
-                        <p className="text-muted-foreground text-sm">{vendor?.form_greeting || "Silakan isi formulir di bawah ini untuk booking."}</p>
+                        <p className="text-muted-foreground text-sm">{vendor?.form_greeting || t("greetingDefault")}</p>
                     </div>
                 </div>
 
@@ -358,15 +360,15 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                 <form onSubmit={handleSubmit} className="bg-background rounded-2xl shadow-lg border p-6 sm:p-8 space-y-5">
                     {/* Client Info */}
                     <div className="space-y-4">
-                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Informasi Klien</h3>
+                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{t("infoKlien")}</h3>
 
                         <div className="space-y-1.5">
-                            <label className="text-sm font-medium">Nama Lengkap <span className="text-red-500">*</span></label>
-                            <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Nama lengkap Anda" className={inputClass} required />
+                            <label className="text-sm font-medium">{t("namaLengkap")} <span className="text-red-500">*</span></label>
+                            <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder={t("namaPlaceholder")} className={inputClass} required />
                         </div>
 
                         <div className="space-y-1.5">
-                            <label className="text-sm font-medium">Nomor WhatsApp <span className="text-red-500">*</span></label>
+                            <label className="text-sm font-medium">{t("nomorWhatsapp")} <span className="text-red-500">*</span></label>
                             <div className="flex gap-2">
                                 <select value={countryCode} onChange={e => setCountryCode(e.target.value)} className={selectClass + " !w-28 shrink-0"}>
                                     {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
@@ -388,12 +390,12 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                     {/* Session Details */}
                     <div className="space-y-4 pt-2">
                         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                            <CalendarDays className="w-3.5 h-3.5" /> Detail Sesi
+                            <CalendarDays className="w-3.5 h-3.5" /> {t("detailSesi")}
                         </h3>
 
                         <div className="grid gap-4 sm:grid-cols-2">
                             <div className="space-y-1.5">
-                                <label className="text-sm font-medium">Tipe Acara <span className="text-red-500">*</span></label>
+                                <label className="text-sm font-medium">{t("tipeAcara")} <span className="text-red-500">*</span></label>
                                 <select value={eventType} onChange={e => {
                                     setEventType(e.target.value);
                                     setExtraData({});
@@ -404,12 +406,12 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                                         setDpDisplay(formatNumber(minAmount));
                                     }
                                 }} className={selectClass} required>
-                                    <option value="">Pilih tipe...</option>
+                                    <option value="">{t("pilihTipe")}</option>
                                     {availableEventTypes.map(et => <option key={et} value={et}>{et}</option>)}
                                 </select>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-sm font-medium">Jadwal Sesi <span className="text-red-500">*</span></label>
+                                <label className="text-sm font-medium">{t("jadwalSesi")} <span className="text-red-500">*</span></label>
                                 <input type="datetime-local" value={sessionDate} onChange={e => setSessionDate(e.target.value)} className={inputClass} required />
                             </div>
                         </div>
@@ -442,20 +444,20 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
 
                         {eventType !== "Wedding" && (
                             <div className="space-y-1.5">
-                                <label className="text-sm font-medium">Lokasi <span className="text-red-500">*</span></label>
-                                <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi acara..." />
+                                <label className="text-sm font-medium">{t("lokasi")} <span className="text-red-500">*</span></label>
+                                <LocationAutocomplete value={location} onChange={setLocation} placeholder={t("cariLokasi")} />
                             </div>
                         )}
                     </div>
 
                     {/* Package & Payment */}
                     <div className="space-y-4 pt-2">
-                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Paket & Pembayaran</h3>
+                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{t("paketPembayaran")}</h3>
 
                         <div className="space-y-1.5">
-                            <label className="text-sm font-medium">Paket / Layanan <span className="text-red-500">*</span></label>
+                            <label className="text-sm font-medium">{t("paketLayanan")} <span className="text-red-500">*</span></label>
                             <select value={serviceId} onChange={e => handleServiceChange(e.target.value)} className={selectClass} required>
-                                <option value="">Pilih paket...</option>
+                                <option value="">{t("pilihPaket")}</option>
                                 {services.map(s => (
                                     <option key={s.id} value={s.id}>{s.name} — {formatCurrency(s.price)}</option>
                                 ))}
@@ -476,7 +478,7 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
 
                         <div className="space-y-1.5">
                             <label className="text-sm font-medium">
-                                DP (Minimal {minDP}%) <span className="text-red-500">*</span>
+                                {t("dpMinimal", { percent: String(minDP) })} <span className="text-red-500">*</span>
                             </label>
                             <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
@@ -493,7 +495,7 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                             </div>
                             {selectedService && dpDisplay && Number(parseFormatted(dpDisplay)) < Math.ceil(selectedService.price * minDP / 100) ? (
                                 <p className="text-xs text-red-500 font-medium">
-                                    ⚠️ DP minimal {minDP}% dari harga paket ({formatCurrency(Math.ceil(selectedService.price * minDP / 100))})
+                                    {t("dpMinWarning", { percent: String(minDP), amount: formatCurrency(Math.ceil(selectedService.price * minDP / 100)) })}
                                 </p>
                             ) : selectedService ? (
                                 <p className="text-xs text-muted-foreground">
@@ -520,7 +522,7 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                         {/* Payment Proof Upload */}
                         {vendor?.form_show_proof !== false && (
                             <div className="space-y-1.5">
-                                <label className="text-sm font-medium flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" /> Bukti Pembayaran</label>
+                                <label className="text-sm font-medium flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" /> {t("buktiPembayaran")}</label>
                                 <div
                                     onClick={() => fileInputRef.current?.click()}
                                     className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer"
@@ -530,8 +532,8 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                                     ) : (
                                         <>
                                             <Upload className="w-8 h-8 text-muted-foreground mb-2" />
-                                            <p className="text-sm text-muted-foreground">Klik untuk upload bukti transfer</p>
-                                            <p className="text-xs text-muted-foreground mt-1">JPG, PNG, atau PDF (max 5MB)</p>
+                                            <p className="text-sm text-muted-foreground">{t("klikUpload")}</p>
+                                            <p className="text-xs text-muted-foreground mt-1">{t("formatFile")}</p>
                                         </>
                                     )}
                                 </div>
@@ -543,12 +545,12 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                     {/* Notes */}
                     {vendor?.form_show_notes !== false && (
                         <div className="space-y-1.5 pt-2">
-                            <label className="text-sm font-medium">Catatan</label>
+                            <label className="text-sm font-medium">{t("catatan")}</label>
                             <textarea
                                 value={notes}
                                 onChange={e => setNotes(e.target.value)}
                                 rows={3}
-                                placeholder="Catatan tambahan (opsional)..."
+                                placeholder={t("catatanPlaceholder")}
                                 className="placeholder:text-muted-foreground w-full min-w-0 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none transition-all"
                             />
                         </div>
@@ -570,10 +572,10 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                         {submitting ? (
                             <>
                                 <Loader2 className="w-5 h-5 animate-spin" />
-                                {uploadingProof ? "Mengupload bukti..." : "Mengirim..."}
+                                {uploadingProof ? t("mengupload") : t("mengirim")}
                             </>
                         ) : (
-                            <>Kirim Booking</>
+                            <>{t("kirimBooking")}</>
                         )}
                     </button>
                 </form>

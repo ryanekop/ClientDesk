@@ -4,6 +4,7 @@ import * as React from "react";
 import { CalendarDays, MapPin, User, ExternalLink, Package } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { cn } from "@/lib/utils";
+import { useLocale, useTranslations } from "next-intl";
 
 type UpcomingBooking = {
     id: string;
@@ -17,6 +18,8 @@ type UpcomingBooking = {
 
 export function UpcomingBookingCard() {
     const supabase = createClient();
+    const locale = useLocale();
+    const t = useTranslations("Dashboard");
     const [booking, setBooking] = React.useState<UpcomingBooking | null>(null);
     const [loading, setLoading] = React.useState(true);
 
@@ -47,7 +50,7 @@ export function UpcomingBookingCard() {
             <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-500/10">
                 <CalendarDays className="w-5 h-5 text-purple-600 dark:text-purple-400" />
             </div>
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Booking Terdekat</span>
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("bookingTerdekat")}</span>
         </div>
     );
 
@@ -66,20 +69,21 @@ export function UpcomingBookingCard() {
         return (
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
                 <div className="flex items-center gap-3 mb-3">{headerContent}</div>
-                <p className="text-sm text-muted-foreground">Tidak ada booking mendatang.</p>
+                <p className="text-sm text-muted-foreground">{t("tidakAdaBooking")}</p>
             </div>
         );
     }
 
+    const dateLocale = locale === "en" ? "en-US" : "id-ID";
     const sessionDate = new Date(booking.session_date);
-    const dateStr = sessionDate.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" });
-    const timeStr = sessionDate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+    const dateStr = sessionDate.toLocaleDateString(dateLocale, { weekday: "long", day: "numeric", month: "long" });
+    const timeStr = sessionDate.toLocaleTimeString(dateLocale, { hour: "2-digit", minute: "2-digit" });
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const sessionStart = new Date(sessionDate.getFullYear(), sessionDate.getMonth(), sessionDate.getDate());
     const diffDays = Math.round((sessionStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
-    const urgencyLabel = diffDays <= 0 ? "Hari ini" : diffDays === 1 ? "Besok" : `${diffDays} hari lagi`;
+    const urgencyLabel = diffDays <= 0 ? t("hariIni") : diffDays === 1 ? t("besok") : t("hariLagi", { days: diffDays });
 
     const statusColors: Record<string, string> = {
         pending: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
@@ -100,9 +104,9 @@ export function UpcomingBookingCard() {
                         {urgencyLabel}
                     </span>
                     <a
-                        href={`/id/bookings/${booking.id}`}
+                        href={`/${locale}/bookings/${booking.id}`}
                         className="p-1.5 rounded-md hover:bg-muted/50 transition-colors"
-                        title="Lihat Detail"
+                        title={t("lihatDetail")}
                     >
                         <ExternalLink className="w-4 h-4 text-muted-foreground" />
                     </a>

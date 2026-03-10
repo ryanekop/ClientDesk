@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useLocale } from "next-intl";
-import { ExternalLink, Copy, ClipboardCheck, Loader2, Percent, Palette, List, ToggleRight, RotateCcw, CreditCard, Plus, Trash2, RefreshCw, Settings2, Eye } from "lucide-react";
+import { ExternalLink, Copy, ClipboardCheck, Loader2, Percent, Palette, List, ToggleRight, RotateCcw, CreditCard, Plus, Trash2, RefreshCw, Settings2, Eye, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
+import { useTranslations } from "next-intl";
 
 const ALL_EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
@@ -44,6 +45,7 @@ export default function FormBookingPage() {
     const [selectedEventTypes, setSelectedEventTypes] = React.useState<string[]>(DEFAULTS.eventTypes);
     const [showNotes, setShowNotes] = React.useState(DEFAULTS.showNotes);
     const [showProof, setShowProof] = React.useState(DEFAULTS.showProof);
+    const [formLang, setFormLang] = React.useState("id");
 
     // Bank accounts (max 5)
     const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
@@ -53,7 +55,7 @@ export default function FormBookingPage() {
     const [isDriveConnected, setIsDriveConnected] = React.useState(false);
 
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
-    const formUrl = vendorSlug ? `${siteUrl}/${locale}/formbooking/${vendorSlug}` : "";
+    const formUrl = vendorSlug ? `${siteUrl}/${formLang}/formbooking/${vendorSlug}` : "";
 
     React.useEffect(() => {
         async function load() {
@@ -79,6 +81,7 @@ export default function FormBookingPage() {
                 setShowNotes(p.form_show_notes ?? DEFAULTS.showNotes);
                 setShowProof(p.form_show_proof ?? DEFAULTS.showProof);
                 setBankAccounts(Array.isArray(p.bank_accounts) && p.bank_accounts.length > 0 ? p.bank_accounts : []);
+                setFormLang((p as any).form_lang || "id");
 
                 if (p.vendor_slug) {
                     setVendorSlug(p.vendor_slug);
@@ -124,6 +127,7 @@ export default function FormBookingPage() {
             form_show_notes: showNotes,
             form_show_proof: showProof,
             bank_accounts: validBanks,
+            form_lang: formLang,
         }).eq("id", profileId);
 
         setBankAccounts(validBanks);
@@ -142,6 +146,7 @@ export default function FormBookingPage() {
         setMinDpPercent(DEFAULTS.minDpPercent);
         setMinDpMap({});
         setBankAccounts([]);
+        setFormLang("id");
         setShowResetConfirm(false);
     }
 
@@ -317,6 +322,16 @@ export default function FormBookingPage() {
                                 <input value={greeting} onChange={e => setGreeting(e.target.value)} placeholder="Silakan isi formulir di bawah ini untuk booking." className={inputClass} />
                                 <p className="text-xs text-muted-foreground">Kosongkan untuk menggunakan teks default.</p>
                             </div>
+                        </div>
+
+                        {/* Form Language */}
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> {locale === "en" ? "Form Language" : "Bahasa Form"}</label>
+                            <select value={formLang} onChange={e => setFormLang(e.target.value)} className={inputClass + " cursor-pointer"}>
+                                <option value="id">🇮🇩 Bahasa Indonesia</option>
+                                <option value="en">🇬🇧 English</option>
+                            </select>
+                            <p className="text-xs text-muted-foreground">{locale === "en" ? "Choose the language for the public booking form." : "Pilih bahasa untuk form booking publik."}</p>
                         </div>
                     </div>
 

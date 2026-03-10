@@ -134,13 +134,13 @@ export default async function DashboardPage() {
             <div className="grid gap-4 sm:grid-cols-2">
                 <UpcomingBookingCard />
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5 space-y-4">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ringkasan Hari Ini</h3>
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("ringkasanHariIni")}</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="rounded-xl border bg-card shadow-sm p-4 hover:shadow-md transition-shadow">
                             <div className="flex flex-row items-center justify-between">
                                 <div className="flex flex-col gap-1">
-                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sesi Hari Ini</h4>
-                                    <div className="text-xl font-bold text-foreground">{todaySessions || 0} <span className="text-sm font-medium text-muted-foreground">Sesi</span></div>
+                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("sesiHariIni")}</h4>
+                                    <div className="text-xl font-bold text-foreground">{todaySessions || 0} <span className="text-sm font-medium text-muted-foreground">{t("sesi")}</span></div>
                                 </div>
                                 <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-500/10">
                                     <Camera className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -150,7 +150,7 @@ export default async function DashboardPage() {
                         <div className="rounded-xl border bg-card shadow-sm p-4 hover:shadow-md transition-shadow">
                             <div className="flex flex-row items-center justify-between">
                                 <div className="flex flex-col gap-1">
-                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Perlu Konfirmasi</h4>
+                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("perluKonfirmasi")}</h4>
                                     <div className="text-xl font-bold text-foreground">{pendingCount || 0} <span className="text-sm font-medium text-muted-foreground">Pending</span></div>
                                 </div>
                                 <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-500/10">
@@ -161,31 +161,31 @@ export default async function DashboardPage() {
                     </div>
                     {/* Quick Actions */}
                     <div>
-                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Aksi Cepat</h4>
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{t("aksiCepat")}</h4>
                         <div className="grid grid-cols-4 gap-2">
                             <Link href="/bookings/new" className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-center group">
                                 <div className="p-2 rounded-lg bg-foreground/5 dark:bg-foreground/10 group-hover:bg-foreground/10 dark:group-hover:bg-foreground/20 transition-colors">
                                     <Plus className="w-4 h-4 text-foreground" />
                                 </div>
-                                <span className="text-[11px] font-medium">Baru</span>
+                                <span className="text-[11px] font-medium">{t("baru")}</span>
                             </Link>
                             <Link href="/bookings" className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-center group">
                                 <div className="p-2 rounded-lg bg-foreground/5 dark:bg-foreground/10 group-hover:bg-foreground/10 dark:group-hover:bg-foreground/20 transition-colors">
                                     <ListOrdered className="w-4 h-4 text-foreground" />
                                 </div>
-                                <span className="text-[11px] font-medium">Daftar Booking</span>
+                                <span className="text-[11px] font-medium">{t("daftarBooking")}</span>
                             </Link>
                             <Link href="/calendar" className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-center group">
                                 <div className="p-2 rounded-lg bg-foreground/5 dark:bg-foreground/10 group-hover:bg-foreground/10 dark:group-hover:bg-foreground/20 transition-colors">
                                     <Calendar className="w-4 h-4 text-foreground" />
                                 </div>
-                                <span className="text-[11px] font-medium">Kalender</span>
+                                <span className="text-[11px] font-medium">{t("kalender")}</span>
                             </Link>
                             <Link href="/finance" className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-center group">
                                 <div className="p-2 rounded-lg bg-foreground/5 dark:bg-foreground/10 group-hover:bg-foreground/10 dark:group-hover:bg-foreground/20 transition-colors">
                                     <Wallet className="w-4 h-4 text-foreground" />
                                 </div>
-                                <span className="text-[11px] font-medium">Keuangan</span>
+                                <span className="text-[11px] font-medium">{t("keuangan")}</span>
                             </Link>
                         </div>
                     </div>
@@ -203,19 +203,19 @@ export default async function DashboardPage() {
                         <p className="text-sm text-muted-foreground mt-1">{t("transaksiTerakhir")}</p>
                     </div>
                     <Link href="/bookings" className="text-xs text-primary hover:underline font-medium">
-                        Lihat Semua →
+                        {t("lihatSemua")}
                     </Link>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead>
                             <tr className="border-b text-xs text-muted-foreground">
-                                <th className="text-left font-medium px-6 py-3">Klien</th>
-                                <th className="text-left font-medium px-4 py-3 hidden sm:table-cell">Paket</th>
-                                <th className="text-left font-medium px-4 py-3 hidden md:table-cell">Tanggal Booking</th>
-                                <th className="text-left font-medium px-4 py-3 hidden md:table-cell">Jadwal</th>
-                                <th className="text-left font-medium px-4 py-3">Status</th>
-                                <th className="text-right font-medium px-6 py-3 hidden sm:table-cell">Total</th>
+                                <th className="text-left font-medium px-6 py-3">{t("klien")}</th>
+                                <th className="text-left font-medium px-4 py-3 hidden sm:table-cell">{t("paket")}</th>
+                                <th className="text-left font-medium px-4 py-3 hidden md:table-cell">{t("tanggalBooking")}</th>
+                                <th className="text-left font-medium px-4 py-3 hidden md:table-cell">{t("jadwal")}</th>
+                                <th className="text-left font-medium px-4 py-3">{t("status")}</th>
+                                <th className="text-right font-medium px-6 py-3 hidden sm:table-cell">{t("total")}</th>
                             </tr>
                         </thead>
                         <tbody>
