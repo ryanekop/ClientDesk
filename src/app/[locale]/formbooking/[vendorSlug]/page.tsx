@@ -54,6 +54,7 @@ type Vendor = {
     min_dp_percent: number | null;
     min_dp_map: Record<string, number> | null;
     avatar_url: string | null;
+    invoice_logo_url: string | null;
     form_brand_color: string;
     form_greeting: string | null;
     form_event_types: string[] | null;
@@ -330,7 +331,9 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                 {/* Vendor Header */}
                 <div className="text-center space-y-3">
                     <div className="w-20 h-20 bg-background border-2 rounded-full mx-auto flex items-center justify-center font-bold text-2xl shadow-sm overflow-hidden">
-                        {vendor?.avatar_url ? (
+                        {vendor?.invoice_logo_url ? (
+                            <img src={vendor.invoice_logo_url} alt="Logo" className="w-full h-full object-contain p-1" />
+                        ) : vendor?.avatar_url ? (
                             <img src={vendor.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
                         ) : (
                             vendor?.studio_name?.charAt(0)?.toUpperCase() || "V"
