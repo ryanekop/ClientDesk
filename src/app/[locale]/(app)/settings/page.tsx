@@ -529,12 +529,13 @@ export default function SettingsPage() {
                                 </div>
 
                                 {/* Logo Studio */}
-                                <div className="space-y-3 pt-2 border-t">
+                                <div className="space-y-4 pt-2 border-t">
                                     <div>
                                         <label className="text-sm font-medium flex items-center gap-1.5"><ImagePlus className="w-3.5 h-3.5" /> Logo Studio</label>
                                         <p className="text-xs text-muted-foreground mt-0.5">Logo akan digunakan di invoice. Maks 500KB. Jika kosong, menggunakan nama studio.</p>
                                     </div>
-                                    {/* Orientation Toggle */}
+
+                                    {/* 1. Orientation */}
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs text-muted-foreground">Orientasi:</span>
                                         <div className="flex rounded-lg border border-input overflow-hidden">
@@ -548,40 +549,40 @@ export default function SettingsPage() {
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="flex items-start gap-4">
-                                        {/* Preview */}
-                                        <div className={`rounded-xl border-2 border-dashed border-muted overflow-hidden bg-muted/30 flex items-center justify-center shrink-0 ${logoOrientation === "horizontal" ? "w-32 h-20" : "w-24 h-24"}`}>
-                                            {logoUrl ? (
-                                                <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
-                                            ) : (
-                                                <ImagePlus className="w-8 h-8 text-muted-foreground/40" />
-                                            )}
-                                        </div>
-                                        {/* Upload area */}
-                                        <div className="flex-1 space-y-2">
-                                            <div
-                                                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                                                onDragLeave={() => setDragOver(false)}
-                                                onDrop={(e) => {
-                                                    e.preventDefault(); setDragOver(false);
-                                                    const file = e.dataTransfer.files?.[0];
-                                                    if (file) handleLogoFileSelected(file);
-                                                }}
-                                                onClick={() => logoInputRef.current?.click()}
-                                                className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${dragOver ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"}`}
-                                            >
-                                                <Upload className="w-5 h-5 mx-auto text-muted-foreground mb-1" />
-                                                <p className="text-xs text-muted-foreground">Klik atau drag & drop gambar</p>
-                                                <p className="text-[10px] text-muted-foreground/60">PNG, JPG • Maks 500KB</p>
+
+                                    {/* 2. Preview */}
+                                    {logoUrl && (
+                                        <div className="space-y-2">
+                                            <p className="text-xs text-muted-foreground font-medium">Preview:</p>
+                                            <div className={`rounded-xl border bg-muted/20 overflow-hidden flex items-center justify-center ${logoOrientation === "horizontal" ? "w-48 h-24" : "w-32 h-32"}`}>
+                                                <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
                                             </div>
-                                            <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleLogoFileSelected(e.target.files[0]); e.target.value = ""; }} />
-                                            {logoUrl && (
-                                                <button onClick={handleRemoveLogo} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 cursor-pointer">
-                                                    <Trash2 className="w-3 h-3" /> Hapus Logo
-                                                </button>
-                                            )}
-                                            {logoUploading && <p className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Uploading...</p>}
+                                            {/* 3. Delete */}
+                                            <button type="button" onClick={handleRemoveLogo} className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-600 cursor-pointer transition-colors">
+                                                <Trash2 className="w-3.5 h-3.5" /> Hapus Logo
+                                            </button>
                                         </div>
+                                    )}
+
+                                    {/* 4. Upload */}
+                                    <div>
+                                        <div
+                                            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                                            onDragLeave={() => setDragOver(false)}
+                                            onDrop={(e) => {
+                                                e.preventDefault(); setDragOver(false);
+                                                const file = e.dataTransfer.files?.[0];
+                                                if (file) handleLogoFileSelected(file);
+                                            }}
+                                            onClick={() => logoInputRef.current?.click()}
+                                            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${dragOver ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"}`}
+                                        >
+                                            <Upload className="w-6 h-6 mx-auto text-muted-foreground mb-2" />
+                                            <p className="text-sm text-muted-foreground">{logoUrl ? "Klik untuk ganti logo" : "Klik atau drag & drop gambar"}</p>
+                                            <p className="text-[10px] text-muted-foreground/60 mt-1">PNG, JPG • Maks 500KB</p>
+                                        </div>
+                                        <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleLogoFileSelected(e.target.files[0]); e.target.value = ""; }} />
+                                        {logoUploading && <p className="text-xs text-muted-foreground flex items-center gap-1 mt-2"><Loader2 className="w-3 h-3 animate-spin" /> Uploading...</p>}
                                     </div>
                                 </div>
 

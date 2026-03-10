@@ -29,11 +29,12 @@ export async function GET(request: NextRequest) {
 
     const { data: profile } = await supabaseAdmin
         .from("profiles")
-        .select("studio_name")
+        .select("studio_name, invoice_logo_url")
         .eq("id", booking.user_id)
         .single();
 
     const studioName = profile?.studio_name || "Studio";
+    const logoBase64 = profile?.invoice_logo_url || null;
     const remaining = booking.total_price - booking.dp_paid;
     const sessionDate = booking.session_date
         ? new Date(booking.session_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
@@ -60,7 +61,31 @@ export async function GET(request: NextRequest) {
     let y = 802; // start from top
 
     // --- HEADER ---
-    page.drawText(studioName, { x: mx, y, font: helveticaBold, size: 18, color: black });
+    let logoDrawn = false;
+    if (logoBase64) {
+        try {
+            // Extract raw base64 data
+            const base64Data = logoBase64.replace(/^data:image\/(png|jpe?g);base64,/, "");
+            const imageBytes = Buffer.from(base64Data, "base64");
+            let image;
+            if (logoBase64.includes("image/png")) {
+                image = await pdfDoc.embedPng(imageBytes);
+            } else {
+                image = await pdfDoc.embedJpg(imageBytes);
+            }
+            // Scale logo to fit ~120x40 max
+            const maxW = 120;
+            const maxH = 40;
+            const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+            const drawW = image.width * scale;
+            const drawH = image.height * scale;
+            page.drawImage(image, { x: mx, y: y - drawH + 18, width: drawW, height: drawH });
+            logoDrawn = true;
+        } catch { /* fallback to text */ }
+    }
+    if (!logoDrawn) {
+        page.drawText(studioName, { x: mx, y, font: helveticaBold, size: 18, color: black });
+    }
     page.drawText("INVOICE", { x: w - mx - helveticaBold.widthOfTextAtSize("INVOICE", 22), y, font: helveticaBold, size: 22, color: black });
     y -= 18;
     page.drawText("Studio Management", { x: mx, y, font: helvetica, size: 9, color: gray });
