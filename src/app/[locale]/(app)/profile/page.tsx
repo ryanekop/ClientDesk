@@ -73,33 +73,24 @@ export default function ProfilePage() {
         e.target.value = ""; // reset so same file can be selected again
     }
 
-    // After crop, upload the cropped blob
+    // After crop, save as base64 data URI
     async function handleCroppedAvatar(blob: Blob) {
         setShowCrop(false);
         setCropSrc(null);
         if (!userId) return;
 
         try {
-            const path = `avatars/${userId}.png`;
-
-            const { error } = await supabase.storage
-                .from("avatars")
-                .upload(path, blob, { upsert: true, contentType: "image/png" });
-
-            if (error) {
-                alert(t("gagalUpload") + ": " + error.message);
-                return;
-            }
-
-            const { data: publicUrl } = supabase.storage.from("avatars").getPublicUrl(path);
-
-            await supabase.from("profiles").update({
-                avatar_url: publicUrl.publicUrl,
-            }).eq("id", userId);
-
-            setAvatarUrl(publicUrl.publicUrl + "?t=" + Date.now());
+            const reader = new FileReader();
+            reader.onload = async () => {
+                const base64 = reader.result as string;
+                await supabase.from("profiles").update({
+                    avatar_url: base64,
+                }).eq("id", userId);
+                setAvatarUrl(base64);
+            };
+            reader.readAsDataURL(blob);
         } catch {
-            alert("Gagal upload foto.");
+            alert("Gagal menyimpan foto.");
         }
     }
 

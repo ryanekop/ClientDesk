@@ -129,6 +129,7 @@ export default function SettingsPage() {
     const [logoCropSrc, setLogoCropSrc] = React.useState<string | null>(null);
     const [showLogoCrop, setShowLogoCrop] = React.useState(false);
     const [logoUploading, setLogoUploading] = React.useState(false);
+    const [logoOrientation, setLogoOrientation] = React.useState<"horizontal" | "vertical">("horizontal");
     const [dragOver, setDragOver] = React.useState(false);
     const logoInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -286,16 +287,18 @@ export default function SettingsPage() {
         if (!profile?.id) return;
         setLogoUploading(true);
         try {
-            const path = `logos/${profile.id}_invoice.png`;
-            const { error } = await supabase.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/png" });
-            if (error) { alert("Gagal upload logo: " + error.message); setLogoUploading(false); return; }
-            const { data: publicUrl } = supabase.storage.from("avatars").getPublicUrl(path);
-            await supabase.from("profiles").update({ invoice_logo_url: publicUrl.publicUrl }).eq("id", profile.id);
-            setLogoUrl(publicUrl.publicUrl + "?t=" + Date.now());
+            const reader = new FileReader();
+            reader.onload = async () => {
+                const base64 = reader.result as string;
+                await supabase.from("profiles").update({ invoice_logo_url: base64 }).eq("id", profile.id);
+                setLogoUrl(base64);
+                setLogoUploading(false);
+            };
+            reader.readAsDataURL(blob);
         } catch {
-            alert("Gagal upload logo.");
+            alert("Gagal menyimpan logo.");
+            setLogoUploading(false);
         }
-        setLogoUploading(false);
     }
 
     async function handleRemoveLogo() {
@@ -529,11 +532,25 @@ export default function SettingsPage() {
                                 <div className="space-y-3 pt-2 border-t">
                                     <div>
                                         <label className="text-sm font-medium flex items-center gap-1.5"><ImagePlus className="w-3.5 h-3.5" /> Logo Studio</label>
-                                        <p className="text-xs text-muted-foreground mt-0.5">Logo akan digunakan di invoice. Maks 500KB, rekomendasi 512×512px (persegi). Jika kosong, menggunakan nama studio.</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Logo akan digunakan di invoice. Maks 500KB. Jika kosong, menggunakan nama studio.</p>
+                                    </div>
+                                    {/* Orientation Toggle */}
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground">Orientasi:</span>
+                                        <div className="flex rounded-lg border border-input overflow-hidden">
+                                            <button type="button" onClick={() => setLogoOrientation("horizontal")}
+                                                className={`px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${logoOrientation === "horizontal" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}>
+                                                Horizontal
+                                            </button>
+                                            <button type="button" onClick={() => setLogoOrientation("vertical")}
+                                                className={`px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${logoOrientation === "vertical" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}>
+                                                Vertikal
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="flex items-start gap-4">
                                         {/* Preview */}
-                                        <div className="w-24 h-24 rounded-xl border-2 border-dashed border-muted overflow-hidden bg-muted/30 flex items-center justify-center shrink-0">
+                                        <div className={`rounded-xl border-2 border-dashed border-muted overflow-hidden bg-muted/30 flex items-center justify-center shrink-0 ${logoOrientation === "horizontal" ? "w-32 h-20" : "w-20 h-28"}`}>
                                             {logoUrl ? (
                                                 <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
                                             ) : (
@@ -717,8 +734,8 @@ export default function SettingsPage() {
                 <ImageCropModal
                     open={showLogoCrop}
                     imageSrc={logoCropSrc}
-                    title="Crop Logo Studio"
-                    aspect={1}
+                    title={`Crop Logo (${logoOrientation === "horizontal" ? "Horizontal" : "Vertikal"})`}
+                    aspect={logoOrientation === "horizontal" ? 16 / 10 : 10 / 14}
                     cropShape="rect"
                     onClose={() => { setShowLogoCrop(false); setLogoCropSrc(null); }}
                     onCropComplete={handleCroppedLogo}
