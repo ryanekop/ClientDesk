@@ -1,6 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+interface VendorProfile {
+  id: string;
+  studio_name: string;
+  whatsapp_number: string;
+  min_dp_percent: number;
+  min_dp_map: Record<string, number> | null;
+  avatar_url: string | null;
+  invoice_logo_url: string | null;
+  form_brand_color: string | null;
+  form_greeting: string | null;
+  form_event_types: string[] | null;
+  form_show_location: boolean | null;
+  form_show_notes: boolean | null;
+  form_show_proof: boolean | null;
+  bank_accounts: unknown[] | null;
+}
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -16,7 +33,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Fetch only the columns we actually need — no more select("*")
-  const { data: vendor, error } = await supabaseAdmin
+  const { data: vendorRaw, error } = await supabaseAdmin
     .from("profiles")
     .select(
       "id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, " +
@@ -26,6 +43,8 @@ export async function GET(request: NextRequest) {
     )
     .eq("vendor_slug", slug)
     .single();
+
+  const vendor = vendorRaw as VendorProfile | null;
 
   if (!vendor || error) {
     return NextResponse.json(
