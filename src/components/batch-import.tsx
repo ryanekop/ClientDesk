@@ -128,9 +128,9 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
 
     return (
         <>
-            <Button variant="outline" className="gap-2 h-9" onClick={() => setOpen(true)} title="Batch Import">
+            <Button variant="outline" className="gap-2 h-9 shrink-0" onClick={() => setOpen(true)} title="Batch Import">
                 <Zap className="w-4 h-4" />
-                <span className="hidden sm:inline">Batch Import</span>
+                Batch Import
             </Button>
 
             <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>

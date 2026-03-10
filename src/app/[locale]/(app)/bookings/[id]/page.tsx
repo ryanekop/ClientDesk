@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered } from "lucide-react";
+import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
@@ -383,6 +383,23 @@ export default function BookingDetailPage() {
                 <div className="rounded-xl border bg-card p-6 space-y-2">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Catatan</h3>
                     <p className="text-sm whitespace-pre-wrap">{booking.notes}</p>
+                </div>
+            )}
+
+            {/* Link Google Drive */}
+            {booking.drive_folder_url && (
+                <div className="rounded-xl border bg-card p-6 space-y-3">
+                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5"><Folder className="w-4 h-4" /> Google Drive</h3>
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
+                        <Link2 className="w-4 h-4 text-blue-500 shrink-0" />
+                        <span className="flex-1 truncate text-xs text-muted-foreground">{booking.drive_folder_url}</span>
+                        <button onClick={() => { navigator.clipboard.writeText(booking.drive_folder_url!); }} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
+                            <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => window.open(booking.drive_folder_url!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">
+                            <ExternalLink className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
                 </div>
             )}
 

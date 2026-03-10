@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Folder, FolderPlus, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, AlertTriangle, X } from "lucide-react";
+import { Plus, Folder, FolderPlus, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, AlertTriangle, X, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { DriveBrowser } from "@/components/drive-browser";
 import { BatchImportButton } from "@/components/batch-import";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
+import * as XLSX from "xlsx";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
 
@@ -256,7 +257,26 @@ export default function BookingsPage() {
                     <h2 className="text-2xl font-bold tracking-tight text-foreground">{t("title")}</h2>
                     <p className="text-muted-foreground text-sm">{t("subtitle")}</p>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" className="gap-2 h-9" onClick={() => {
+                        const exportData = filteredBookings.map((b: Booking) => ({
+                            "Kode Booking": b.booking_code,
+                            "Nama Klien": b.client_name,
+                            "WhatsApp": b.client_whatsapp || "",
+                            "Jadwal Sesi": b.session_date ? new Date(b.session_date).toLocaleDateString("id-ID") : "",
+                            "Lokasi": b.location || "",
+                            "Paket": b.services?.name || "",
+                            "Harga Total": b.total_price || 0,
+                            "DP Dibayar": b.dp_paid || 0,
+                            "Status": b.status,
+                        }));
+                        const ws = XLSX.utils.json_to_sheet(exportData);
+                        const wb = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(wb, ws, "Bookings");
+                        XLSX.writeFile(wb, `bookings_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
+                    }}>
+                        <Download className="w-4 h-4" /> Export
+                    </Button>
                     <BatchImportButton onImported={() => fetchData()} />
                     <Link href="/bookings/new">
                         <Button className="gap-2 h-9 bg-foreground text-background hover:bg-foreground/90">

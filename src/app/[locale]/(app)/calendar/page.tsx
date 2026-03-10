@@ -327,7 +327,7 @@ export default function CalendarPage() {
     };
 
     return (
-        <div className="space-y-6 md:h-[calc(100vh-8rem)] min-h-[500px] md:min-h-[600px] flex flex-col">
+        <div className="space-y-6 h-[calc(100vh-8rem)] min-h-[600px] flex flex-col">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
@@ -360,7 +360,7 @@ export default function CalendarPage() {
                 </div>
             )}
 
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm flex-1 p-4 relative overflow-hidden flex flex-col h-full">
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm flex-1 p-4 relative flex flex-col min-h-[500px]">
                 {loading && (
                     <div className="absolute inset-0 z-10 bg-background/50 flex items-center justify-center backdrop-blur-sm">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -413,6 +413,7 @@ export default function CalendarPage() {
                             noEventsInRange: t("tidakAdaJadwal"),
                         }}
                         popup
+                        length={365}
                     />
                 </div>
             </div>
