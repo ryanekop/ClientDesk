@@ -67,12 +67,12 @@ function CustomToolbar({ onNavigate, onView, view, label }: ToolbarProps<Calenda
                 {viewButtons.map(vb => (
                     <button key={vb.key} onClick={() => onView(vb.key)}
                         className={cn(
-                            "inline-flex items-center gap-1.5 px-3 h-7 text-xs font-medium rounded-md transition-colors",
+                            "inline-flex items-center gap-1.5 px-2 sm:px-3 h-7 text-xs font-medium rounded-md transition-colors",
                             view === vb.key
                                 ? "bg-foreground text-background shadow-sm"
                                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
                         )}>
-                        {vb.icon} {vb.label}
+                        {vb.icon} <span className="hidden sm:inline">{vb.label}</span>
                     </button>
                 ))}
             </div>
@@ -384,6 +384,22 @@ export default function CalendarPage() {
                     .dark .rbc-time-content { border-top-color: #27272a; }
                     .dark .rbc-time-header-content { border-left-color: #27272a; }
                     .dark .rbc-day-slot .rbc-time-slot { border-top-color: #27272a; }
+
+                    /* Mobile: dot indicators instead of full event bars */
+                    @media (max-width: 767px) {
+                        .rbc-header { padding: 4px 2px; font-size: 0.7rem; }
+                        .rbc-month-row { min-height: 50px !important; }
+                        .rbc-row-segment { padding: 0 1px !important; }
+                        .rbc-event { padding: 0 !important; width: 8px !important; height: 8px !important; min-height: 8px !important; border-radius: 50% !important; display: inline-block !important; margin: 1px !important; overflow: hidden !important; }
+                        .rbc-event-content { font-size: 0 !important; line-height: 0 !important; overflow: hidden !important; }
+                        .rbc-event-label { display: none !important; }
+                        .rbc-row-content { display: flex; flex-direction: column; align-items: center; }
+                        .rbc-row-content .rbc-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; }
+                        .rbc-show-more { font-size: 0.6rem !important; padding: 0 !important; margin-top: 1px !important; }
+                        .rbc-overlay { max-width: 250px !important; }
+                        .rbc-overlay .rbc-event { width: auto !important; height: auto !important; border-radius: 4px !important; padding: 2px 6px !important; display: block !important; margin: 2px 0 !important; }
+                        .rbc-overlay .rbc-event-content { font-size: 0.7rem !important; line-height: 1.3 !important; }
+                    }
                 `}} />
 
                 <div className="flex-1 min-h-0 flex flex-col">
