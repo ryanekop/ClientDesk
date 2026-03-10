@@ -36,6 +36,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
     const [userEmail, setUserEmail] = React.useState("");
     const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
     const [avatarTs, setAvatarTs] = React.useState(Date.now());
+    const [subscription, setSubscription] = React.useState<{ tier: string; status: string } | null>(null);
     const ref = React.useRef<HTMLDivElement>(null);
     const t = useTranslations("Topbar");
     const pathname = usePathname();
@@ -79,10 +80,41 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                 setUserName(profile?.full_name || user.email?.split("@")[0] || "User");
                 setAvatarUrl(profile?.avatar_url || null);
                 setAvatarTs(Date.now());
+
+                // Fetch subscription status
+                const { data: sub } = await supabase
+                    .from("subscriptions")
+                    .select("tier, status")
+                    .eq("user_id", user.id)
+                    .single();
+                setSubscription(sub);
             }
         }
         fetchUser();
     }, []);
+
+    const getMembershipBadge = () => {
+        if (!subscription) return null;
+        const isLifetime = subscription.tier === 'lifetime';
+        const isPro = subscription.tier.startsWith('pro_') || isLifetime;
+        const isTrial = subscription.status === 'trial' || subscription.tier === 'free';
+
+        if (isPro) {
+            return (
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium">
+                    {isLifetime ? '👑' : '🔥'} Pro
+                </span>
+            );
+        }
+        if (isTrial) {
+            return (
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-muted text-muted-foreground font-medium border">
+                    ⏱️ Trial
+                </span>
+            );
+        }
+        return null;
+    };
 
     const menuItems = [
         { label: t("profil"), href: "/profile", icon: User },
@@ -127,7 +159,10 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                     >
                         {/* Header */}
                         <div className="px-4 py-3 border-b">
-                            <p className="font-semibold text-sm">{userName}</p>
+                            <div className="flex items-center gap-2">
+                                <p className="font-semibold text-sm">{userName}</p>
+                                {getMembershipBadge()}
+                            </div>
                             <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
                         </div>
 
