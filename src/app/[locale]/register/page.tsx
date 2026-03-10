@@ -8,6 +8,7 @@ import { Loader2, Eye, EyeOff, UserPlus, Mail, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { Turnstile } from '@marsidev/react-turnstile'
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
 // Use implicit flow so confirmation link works on any device (no PKCE verifier needed)
@@ -32,6 +33,7 @@ export default function RegisterPage() {
     const [confirmPassword, setConfirmPassword] = useState("")
     const [showPassword, setShowPassword] = useState(false)
     const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+    const [captchaToken, setCaptchaToken] = useState("")
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState(false)
@@ -64,7 +66,7 @@ export default function RegisterPage() {
             const res = await fetch('/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email }),
+                body: JSON.stringify({ email, captchaToken }),
             })
 
             const data = await res.json()
@@ -222,7 +224,14 @@ export default function RegisterPage() {
                                 </div>
                             )}
 
-                            <Button type="submit" className="w-full hover:opacity-90 transition-opacity" disabled={loading}>
+                            <Turnstile
+                                siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+                                onSuccess={(token) => setCaptchaToken(token)}
+                                onExpire={() => setCaptchaToken("")}
+                                options={{ theme: 'auto', size: 'flexible' }}
+                            />
+
+                            <Button type="submit" className="w-full hover:opacity-90 transition-opacity" disabled={loading || !captchaToken}>
                                 {loading ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
