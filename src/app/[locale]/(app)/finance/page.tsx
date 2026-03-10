@@ -5,6 +5,7 @@ import { TrendingUp, Clock, CheckCircle2, FileText, Loader2, Download, MessageCi
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
+import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 type BookingFinance = {
     id: string;
     booking_code: string;
@@ -27,6 +28,8 @@ export default function FinancePage() {
     const [filter, setFilter] = React.useState<"all" | "pending" | "paid">("all");
     const [studioName, setStudioName] = React.useState("Client Desk");
     const [invoiceLogoUrl, setInvoiceLogoUrl] = React.useState<string | null>(null);
+    const [currentPage, setCurrentPage] = React.useState(1);
+    const [itemsPerPage, setItemsPerPage] = React.useState(10);
 
     React.useEffect(() => { fetchBookings(); }, []);
 
@@ -159,7 +162,7 @@ export default function FinancePage() {
                     <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
                 ) : filtered.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">{t("tidakAdaData")}</div>
-                ) : filtered.map((b) => {
+                ) : paginateArray(filtered, currentPage, itemsPerPage).map((b) => {
                     const remaining = b.total_price - b.dp_paid;
                     return (
                         <div key={b.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
@@ -218,13 +221,13 @@ export default function FinancePage() {
                                 <tr><td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
                                     {t("tidakAdaData")}
                                 </td></tr>
-                            ) : filtered.map((b) => {
+                            ) : paginateArray(filtered, currentPage, itemsPerPage).map((b) => {
                                 const remaining = b.total_price - b.dp_paid;
                                 return (
                                     <tr key={b.id} className="hover:bg-muted/50 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="font-medium">{b.client_name}</div>
-                                            <div className="text-xs text-muted-foreground">{b.booking_code} · {b.services?.name || "-"}</div>
+                                        <td className="px-4 py-3 max-w-[180px]">
+                                            <div className="font-medium truncate">{b.client_name}</div>
+                                            <div className="text-xs text-muted-foreground truncate">{b.booking_code} · {b.services?.name || "-"}</div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(b.total_price)}</td>
                                         <td className="px-6 py-4 whitespace-nowrap">
@@ -265,6 +268,7 @@ export default function FinancePage() {
                         </tbody>
                     </table>
                 </div>
+                <TablePagination totalItems={filtered.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
             </div>
         </div>
     );

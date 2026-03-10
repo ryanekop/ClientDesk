@@ -5,6 +5,7 @@ import { createClient } from "@/utils/supabase/client";
 import { Activity, Copy, ClipboardCheck, Loader2, ExternalLink, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/routing";
+import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 
 type BookingStatus = {
     id: string;
@@ -48,6 +49,8 @@ export default function ClientStatusPage() {
     const [search, setSearch] = React.useState("");
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
     const [savingId, setSavingId] = React.useState<string | null>(null);
+    const [currentPage, setCurrentPage] = React.useState(1);
+    const [itemsPerPage, setItemsPerPage] = React.useState(10);
 
     React.useEffect(() => {
         async function load() {
@@ -138,7 +141,7 @@ export default function ClientStatusPage() {
             <div className="md:hidden space-y-3">
                 {filtered.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">{bookings.length === 0 ? "Belum ada booking." : "Tidak ada hasil."}</div>
-                ) : filtered.map(b => (
+                ) : paginateArray(filtered, currentPage, itemsPerPage).map(b => (
                     <div key={b.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
                         <div className="flex items-start justify-between">
                             <Link href={`/bookings/${b.id}`} className="hover:underline">
@@ -201,7 +204,7 @@ export default function ClientStatusPage() {
                                     </td>
                                 </tr>
                             ) : (
-                                filtered.map(b => (
+                                paginateArray(filtered, currentPage, itemsPerPage).map(b => (
                                     <tr key={b.id} className="hover:bg-muted/30 transition-colors">
                                         <td className="px-4 py-3">
                                             <Link href={`/bookings/${b.id}`} className="hover:underline">
@@ -273,6 +276,7 @@ export default function ClientStatusPage() {
                         </tbody>
                     </table>
                 </div>
+                <TablePagination totalItems={filtered.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
             </div>
         </div>
     );

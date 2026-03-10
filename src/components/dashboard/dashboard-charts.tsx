@@ -1,13 +1,18 @@
 "use client";
 
 import * as React from "react";
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import {
+    Area, AreaChart, Bar, BarChart,
+    ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
+} from "recharts";
 import { createClient } from "@/utils/supabase/client";
 
-type ChartPoint = { name: string; revenue: number };
+type DailyPoint = { name: string; revenue: number };
+type MonthlyPoint = { name: string; revenue: number };
 
 export function DashboardCharts() {
-    const [data, setData] = React.useState<ChartPoint[]>([]);
+    const [dailyData, setDailyData] = React.useState<DailyPoint[]>([]);
+    const [monthlyData, setMonthlyData] = React.useState<MonthlyPoint[]>([]);
     const [loading, setLoading] = React.useState(true);
 
     React.useEffect(() => {
@@ -16,45 +21,29 @@ export function DashboardCharts() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { setLoading(false); return; }
 
-            // Get all paid bookings from last 30 days
+            const now = new Date();
+
+            // ─── 30-day daily income ─────────────────
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-            const { data: bookings } = await supabase
+            const { data: recentBookings } = await supabase
                 .from("bookings")
                 .select("total_price, dp_paid, created_at, is_fully_paid")
                 .eq("user_id", user.id)
                 .gte("created_at", thirtyDaysAgo.toISOString())
                 .order("created_at", { ascending: true });
 
-            if (!bookings || bookings.length === 0) {
-                // Generate empty chart for last 7 days
-                const points: ChartPoint[] = [];
-                for (let i = 6; i >= 0; i--) {
-                    const d = new Date();
-                    d.setDate(d.getDate() - i);
-                    points.push({
-                        name: d.toLocaleDateString("id-ID", { day: "numeric", month: "short" }),
-                        revenue: 0,
-                    });
-                }
-                setData(points);
-                setLoading(false);
-                return;
-            }
-
-            // Group revenue by date
-            const revenueByDate: Record<string, number> = {};
-
             // Initialize all 30 days
+            const revenueByDate: Record<string, number> = {};
             for (let i = 29; i >= 0; i--) {
                 const d = new Date();
                 d.setDate(d.getDate() - i);
-                const key = d.toISOString().split("T")[0];
-                revenueByDate[key] = 0;
+                revenueByDate[d.toISOString().split("T")[0]] = 0;
             }
 
-            bookings.forEach(b => {
+            // Sum per-day income (non-cumulative)
+            (recentBookings || []).forEach(b => {
                 const dateKey = new Date(b.created_at).toISOString().split("T")[0];
                 const amount = b.is_fully_paid ? (b.total_price || 0) : (b.dp_paid || 0);
                 if (revenueByDate[dateKey] !== undefined) {
@@ -62,21 +51,53 @@ export function DashboardCharts() {
                 }
             });
 
-            // Convert to cumulative chart points, showing every 5th day label
             const entries = Object.entries(revenueByDate);
-            let cumulative = 0;
-            const points: ChartPoint[] = entries.map(([date], idx) => {
-                cumulative += revenueByDate[date];
+            const dailyPts: DailyPoint[] = entries.map(([date], idx) => {
                 const d = new Date(date);
                 return {
                     name: idx % 5 === 0 || idx === entries.length - 1
                         ? d.toLocaleDateString("id-ID", { day: "numeric", month: "short" })
                         : "",
-                    revenue: cumulative,
+                    revenue: revenueByDate[date],
                 };
             });
+            setDailyData(dailyPts);
 
-            setData(points);
+            // ─── 12-month column chart ───────────────
+            const yearAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+            const { data: yearBookings } = await supabase
+                .from("bookings")
+                .select("total_price, dp_paid, created_at, is_fully_paid")
+                .eq("user_id", user.id)
+                .gte("created_at", yearAgo.toISOString())
+                .order("created_at", { ascending: true });
+
+            const revenueByMonth: Record<string, number> = {};
+            for (let i = 11; i >= 0; i--) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                revenueByMonth[key] = 0;
+            }
+
+            (yearBookings || []).forEach(b => {
+                const d = new Date(b.created_at);
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                const amount = b.is_fully_paid ? (b.total_price || 0) : (b.dp_paid || 0);
+                if (revenueByMonth[key] !== undefined) {
+                    revenueByMonth[key] += amount;
+                }
+            });
+
+            const monthlyPts: MonthlyPoint[] = Object.entries(revenueByMonth).map(([key, val]) => {
+                const [y, m] = key.split("-");
+                const d = new Date(Number(y), Number(m) - 1, 1);
+                return {
+                    name: d.toLocaleDateString("id-ID", { month: "short", year: "2-digit" }),
+                    revenue: val,
+                };
+            });
+            setMonthlyData(monthlyPts);
+
             setLoading(false);
         }
         load();
@@ -93,25 +114,57 @@ export function DashboardCharts() {
     const formatCurrency = (n: number) =>
         new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
 
+    const formatShort = (n: number) => {
+        if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}jt`;
+        if (n >= 1_000) return `${(n / 1_000).toFixed(0)}rb`;
+        return String(n);
+    };
+
     return (
-        <div className="h-[250px] w-full mt-4">
-            <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <defs>
-                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8} />
-                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                        </linearGradient>
-                    </defs>
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} dy={10} />
-                    <Tooltip
-                        formatter={(value: any) => [formatCurrency(Number(value)), "Pemasukan"]}
-                        contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)', borderRadius: '8px', fontSize: '13px' }}
-                        itemStyle={{ color: 'var(--foreground)' }}
-                    />
-                    <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
-                </AreaChart>
-            </ResponsiveContainer>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+            {/* 30-day daily trend */}
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+                <h3 className="font-semibold text-sm mb-3">Trend Pemasukan (30 Hari)</h3>
+                <div className="h-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={dailyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8} />
+                                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} dy={10} />
+                            <Tooltip
+                                formatter={(value: any) => [formatCurrency(Number(value)), "Pemasukan"]}
+                                contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)', borderRadius: '8px', fontSize: '13px' }}
+                                itemStyle={{ color: 'var(--foreground)' }}
+                            />
+                            <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
+            {/* 12-month column chart */}
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+                <h3 className="font-semibold text-sm mb-3">Pemasukan per Bulan (1 Tahun)</h3>
+                <div className="h-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} dy={5} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} tickFormatter={formatShort} width={48} />
+                            <Tooltip
+                                formatter={(value: any) => [formatCurrency(Number(value)), "Pemasukan"]}
+                                contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)', borderRadius: '8px', fontSize: '13px' }}
+                                itemStyle={{ color: 'var(--foreground)' }}
+                            />
+                            <Bar dataKey="revenue" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
         </div>
     );
 }

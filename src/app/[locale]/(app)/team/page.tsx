@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
+import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 
 type Freelancer = {
     id: string;
@@ -27,6 +28,8 @@ export default function TeamPage() {
     const [editingMember, setEditingMember] = React.useState<Freelancer | null>(null);
     const [isAddOpen, setIsAddOpen] = React.useState(false);
     const [isEditOpen, setIsEditOpen] = React.useState(false);
+    const [currentPage, setCurrentPage] = React.useState(1);
+    const [itemsPerPage, setItemsPerPage] = React.useState(10);
 
     React.useEffect(() => { fetchMembers(); }, []);
 
@@ -155,7 +158,7 @@ export default function TeamPage() {
                 <>
                     {/* Mobile Cards */}
                     <div className="md:hidden space-y-3">
-                        {members.map((member) => (
+                        {paginateArray(members, currentPage, itemsPerPage).map((member) => (
                             <div key={member.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium shrink-0">
@@ -202,9 +205,9 @@ export default function TeamPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
-                                    {members.map((member) => (
+                                    {paginateArray(members, currentPage, itemsPerPage).map((member) => (
                                         <tr key={member.id} className="hover:bg-muted/50 transition-colors">
-                                            <td className="px-6 py-4">
+                                            <td className="px-4 py-3">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-sm shrink-0">
                                                         {member.name.charAt(0).toUpperCase()}
@@ -247,6 +250,7 @@ export default function TeamPage() {
                                 </tbody>
                             </table>
                         </div>
+                        <TablePagination totalItems={members.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
                     </div>
                 </>
             )}

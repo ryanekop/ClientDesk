@@ -12,6 +12,7 @@ import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { DriveBrowser } from "@/components/drive-browser";
 import { BatchImportButton } from "@/components/batch-import";
+import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
 
@@ -35,6 +36,8 @@ type Booking = {
 };
 
 const STATUS_OPTS = ["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"];
+const TABLE_CELL = "px-4 py-3 whitespace-nowrap text-sm";
+const TRUNCATE_CELL = "px-4 py-3 text-sm max-w-[160px] truncate";
 
 type SavedTemplate = {
     id: string;
@@ -110,6 +113,8 @@ export default function BookingsPage() {
     const [statusFilter, setStatusFilter] = React.useState("All");
     const [packageFilter, setPackageFilter] = React.useState("All");
     const [freelanceFilter, setFreelanceFilter] = React.useState("All");
+    const [currentPage, setCurrentPage] = React.useState(1);
+    const [itemsPerPage, setItemsPerPage] = React.useState(10);
 
     // Modals
     const [statusModal, setStatusModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
@@ -302,7 +307,7 @@ export default function BookingsPage() {
                 ) : filteredBookings.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">Data tidak ditemukan.</div>
                 ) : (
-                    filteredBookings.map((booking) => (
+                    paginateArray(filteredBookings, currentPage, itemsPerPage).map((booking) => (
                         <div key={booking.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
                             <div className="flex items-start justify-between">
                                 <div>
@@ -371,12 +376,12 @@ export default function BookingsPage() {
                             ) : filteredBookings.length === 0 ? (
                                 <tr><td colSpan={9} className="px-6 py-12 text-center text-muted-foreground text-xs italic">Data tidak ditemukan.</td></tr>
                             ) : (
-                                filteredBookings.map((booking) => (
+                                paginateArray(filteredBookings, currentPage, itemsPerPage).map((booking) => (
                                     <tr key={booking.id} className="hover:bg-muted/30 transition-colors group">
-                                        <td className="px-4 py-3">
-                                            <div className="font-medium text-foreground">{booking.client_name}</div>
+                                        <td className="px-4 py-3 max-w-[140px]">
+                                            <div className="font-medium text-foreground truncate">{booking.client_name}</div>
                                             {booking.client_whatsapp && (
-                                                <div className="text-[11px] text-muted-foreground">{booking.client_whatsapp}</div>
+                                                <div className="text-[11px] text-muted-foreground truncate">{booking.client_whatsapp}</div>
                                             )}
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap">
@@ -384,7 +389,7 @@ export default function BookingsPage() {
                                                 {booking.booking_code}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{booking.services?.name || "-"}</td>
+                                        <td className="px-4 py-3 max-w-[150px] truncate text-muted-foreground" title={booking.services?.name || "-"}>{booking.services?.name || "-"}</td>
                                         <td className="px-4 py-3 whitespace-nowrap text-muted-foreground font-light">{formatDate(booking.session_date)}</td>
                                         <td className="px-4 py-3 max-w-[180px]">
                                             {booking.location ? (
@@ -398,7 +403,7 @@ export default function BookingsPage() {
                                             ) : <span className="text-muted-foreground">-</span>}
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={booking.status} /></td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                                        <td className="px-4 py-3 max-w-[130px] truncate text-muted-foreground" title={booking.booking_freelancers.length > 0 ? booking.booking_freelancers.map(f => f.name).join(", ") : "-"}>
                                             {booking.booking_freelancers.length > 0
                                                 ? booking.booking_freelancers.map(f => f.name).join(", ")
                                                 : "-"}
@@ -471,6 +476,7 @@ export default function BookingsPage() {
                         </tbody>
                     </table>
                 </div>
+                <TablePagination totalItems={filteredBookings.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
             </div>
 
             {/* Status Change Modal */}

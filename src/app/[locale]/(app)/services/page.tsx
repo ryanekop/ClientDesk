@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
+import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 
 type Service = {
     id: string;
@@ -25,6 +26,8 @@ export default function ServicesPage() {
     const [editingService, setEditingService] = React.useState<Service | null>(null);
     const [isAddOpen, setIsAddOpen] = React.useState(false);
     const [isEditOpen, setIsEditOpen] = React.useState(false);
+    const [currentPage, setCurrentPage] = React.useState(1);
+    const [itemsPerPage, setItemsPerPage] = React.useState(10);
 
     React.useEffect(() => { fetchServices(); }, []);
 
@@ -158,71 +161,74 @@ export default function ServicesPage() {
                     <p className="text-muted-foreground text-sm">{t("belumAdaDesc")}</p>
                 </div>
             ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {services.map((service) => (
-                        <div key={service.id} className="rounded-xl border bg-card text-card-foreground shadow-sm p-5 flex flex-col gap-3 relative">
-                            {/* Active badge */}
-                            <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                    <h3 className="font-semibold text-base">{service.name}</h3>
-                                    {service.description && (
-                                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{service.description}</p>
+                <>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {paginateArray(services, currentPage, itemsPerPage).map((service) => (
+                            <div key={service.id} className="rounded-xl border bg-card text-card-foreground shadow-sm p-5 flex flex-col gap-3 relative">
+                                {/* Active badge */}
+                                <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                        <h3 className="font-semibold text-base">{service.name}</h3>
+                                        {service.description && (
+                                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{service.description}</p>
+                                        )}
+                                    </div>
+                                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ml-2 ${service.is_active
+                                        ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
+                                        : "bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400"
+                                        }`}>
+                                        {service.is_active ? t("aktif") : t("nonaktif")}
+                                    </span>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <div className="text-xl font-bold">{formatCurrency(service.price)}</div>
+                                    {service.duration_minutes && (
+                                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                            <Clock className="w-3 h-3" />
+                                            {service.duration_minutes >= 60 ? `${Math.floor(service.duration_minutes / 60)} jam${service.duration_minutes % 60 ? ` ${service.duration_minutes % 60} mnt` : ""}` : `${service.duration_minutes} mnt`}
+                                        </span>
                                     )}
                                 </div>
-                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ml-2 ${service.is_active
-                                    ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
-                                    : "bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400"
-                                    }`}>
-                                    {service.is_active ? t("aktif") : t("nonaktif")}
-                                </span>
-                            </div>
 
-                            <div className="flex items-center gap-3">
-                                <div className="text-xl font-bold">{formatCurrency(service.price)}</div>
-                                {service.duration_minutes && (
-                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />
-                                        {service.duration_minutes >= 60 ? `${Math.floor(service.duration_minutes / 60)} jam${service.duration_minutes % 60 ? ` ${service.duration_minutes % 60} mnt` : ""}` : `${service.duration_minutes} mnt`}
-                                    </span>
-                                )}
+                                <div className="flex items-center gap-2 pt-2 border-t">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1.5 flex-1"
+                                        onClick={() => {
+                                            setEditingService(service);
+                                            setIsEditOpen(true);
+                                        }}
+                                    >
+                                        <Edit2 className="w-3.5 h-3.5" /> Edit
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1.5"
+                                        onClick={() => handleToggleActive(service)}
+                                        title={service.is_active ? t("nonaktif") : t("aktif")}
+                                    >
+                                        {service.is_active
+                                            ? <ToggleRight className="w-4 h-4 text-green-600" />
+                                            : <ToggleLeft className="w-4 h-4 text-muted-foreground" />
+                                        }
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-1.5"
+                                        onClick={() => handleDelete(service.id)}
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                    </Button>
+                                </div>
                             </div>
-
-                            <div className="flex items-center gap-2 pt-2 border-t">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="gap-1.5 flex-1"
-                                    onClick={() => {
-                                        setEditingService(service);
-                                        setIsEditOpen(true);
-                                    }}
-                                >
-                                    <Edit2 className="w-3.5 h-3.5" /> Edit
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="gap-1.5"
-                                    onClick={() => handleToggleActive(service)}
-                                    title={service.is_active ? t("nonaktif") : t("aktif")}
-                                >
-                                    {service.is_active
-                                        ? <ToggleRight className="w-4 h-4 text-green-600" />
-                                        : <ToggleLeft className="w-4 h-4 text-muted-foreground" />
-                                    }
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="gap-1.5"
-                                    onClick={() => handleDelete(service.id)}
-                                >
-                                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                                </Button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                    <TablePagination totalItems={services.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
+                </>
             )}
 
             {/* Edit Dialog */}
