@@ -26,7 +26,8 @@ export default async function PrivacyPage() {
     return (
         <div className="flex flex-col min-h-screen font-[family-name:var(--font-geist-sans)]">
             <header className="sticky top-0 z-50 flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm">
-                <Link href={`/${locale}`} className="font-bold text-xl tracking-tight flex items-center gap-3 hover:opacity-80 transition-opacity">
+                <Link href={`/${locale}`} className="font-bold text-xl tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity">
+                    <img src="/icon-192.png" alt="Client Desk" className="h-8 w-8 rounded-lg" />
                     Client Desk
                 </Link>
                 <div className="flex items-center gap-2">

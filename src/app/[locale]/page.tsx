@@ -20,7 +20,8 @@ export default async function Home() {
     <div className="flex flex-col min-h-screen font-[family-name:var(--font-geist-sans)]">
       {/* Header */}
       <header className="sticky top-0 z-50 flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm">
-        <Link href={`/${locale}`} className="font-bold text-xl tracking-tight flex items-center gap-3 hover:opacity-80 transition-opacity">
+        <Link href={`/${locale}`} className="font-bold text-xl tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <img src="/icon-192.png" alt="Client Desk" className="h-8 w-8 rounded-lg" />
           Client Desk
         </Link>
         <DesktopNav />
@@ -44,7 +45,12 @@ export default async function Home() {
 
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight">
               {t('title')}
-              <span className="block text-primary mt-2">{t('subtitle')}</span>
+              {/* Mobile: allow wrapping naturally */}
+              <span className="block text-primary mt-2 sm:hidden">{t('subtitle')}</span>
+              {/* Desktop: keep "& Profesional" on same line */}
+              <span className="hidden sm:block text-primary mt-2">
+                {t('subtitleLine1')} {t('subtitleLine2')}
+              </span>
             </h1>
 
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">

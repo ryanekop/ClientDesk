@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { Button } from "@/components/ui/button"
@@ -158,14 +158,26 @@ export function MobileNav() {
 
 export function LandingNav() {
     const t = useTranslations('Landing')
+    const tt = useTranslations('Topbar')
     const locale = useLocale()
     const router = useRouter()
     const supabase = createClient()
     const [isAuthenticating, setIsAuthenticating] = useState(false)
     const [user, setUser] = useState<SupabaseUser | null>(null)
     const [userName, setUserName] = useState<string>("Admin")
+    const [userEmail, setUserEmail] = useState<string>("")
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
+    const [dropdownOpen, setDropdownOpen] = useState(false)
+    const dropdownRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setDropdownOpen(false)
+        }
+        document.addEventListener('mousedown', handler)
+        return () => document.removeEventListener('mousedown', handler)
+    }, [])
 
     useEffect(() => {
         const handleAuthRedirect = async () => {
@@ -181,6 +193,7 @@ export function LandingNav() {
             const { data: { user } } = await supabase.auth.getUser()
             if (user) {
                 setUser(user)
+                setUserEmail(user.email || "")
                 const name = user.user_metadata?.full_name || user.email?.split('@')[0] || "Admin"
                 setUserName(name)
                 const { data: profile } = await supabase
@@ -206,6 +219,7 @@ export function LandingNav() {
         await supabase.auth.signOut()
         setUser(null)
         setAvatarUrl(null)
+        setDropdownOpen(false)
         router.refresh()
         setLoading(false)
     }
@@ -221,19 +235,66 @@ export function LandingNav() {
         )
     }
 
+    const menuItems = [
+        { label: tt('profil'), href: `/${locale}/profile`, icon: User },
+        { label: tt('dashboard'), href: `/${locale}/dashboard`, icon: LayoutDashboard },
+        { label: tt('pengaturan'), href: `/${locale}/settings`, icon: Settings },
+    ]
+
     return (
         <>
             {user ? (
-                <div className="flex items-center gap-2">
-                    <Button variant="ghost" className="relative h-9 w-9 rounded-full bg-muted flex items-center justify-center cursor-pointer hover:bg-muted/80 transition-colors overflow-hidden p-0"
-                        onClick={() => router.push(`/${locale}/dashboard`)}
+                <div className="relative" ref={dropdownRef}>
+                    <button
+                        onClick={() => setDropdownOpen(!dropdownOpen)}
+                        className="relative h-9 w-9 rounded-full bg-muted flex items-center justify-center cursor-pointer hover:bg-muted/80 transition-colors overflow-hidden"
                     >
                         {avatarUrl ? (
                             <img src={avatarUrl} alt="Avatar" className="absolute inset-0 w-full h-full object-cover rounded-full" />
                         ) : (
                             <span className="text-xs font-medium">{getInitials(userName)}</span>
                         )}
-                    </Button>
+                    </button>
+
+                    <div
+                        className={`absolute right-0 top-full mt-2 w-56 rounded-lg border bg-card shadow-lg z-50 overflow-hidden transition-all duration-200 ease-out origin-top-right ${dropdownOpen
+                            ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                            : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
+                            }`}
+                    >
+                        {/* Header */}
+                        <div className="px-4 py-3 border-b">
+                            <p className="font-semibold text-sm">{userName}</p>
+                            <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
+                        </div>
+
+                        {/* Menu Items */}
+                        <div className="py-1">
+                            {menuItems.map((item) => (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    onClick={() => setDropdownOpen(false)}
+                                    className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted/50 transition-colors"
+                                >
+                                    <item.icon className="w-4 h-4 text-muted-foreground" />
+                                    {item.label}
+                                </Link>
+                            ))}
+                        </div>
+
+                        {/* Logout */}
+                        <div className="border-t py-1">
+                            <button
+                                onClick={handleLogout}
+                                disabled={loading}
+                                className="flex items-center gap-3 px-4 py-2 text-sm text-red-500 hover:bg-muted/50 transition-colors w-full cursor-pointer"
+                            >
+                                <LogOut className="w-4 h-4" />
+                                {tt('logout')}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             ) : (
                 <Button variant="outline" asChild className="hidden md:inline-flex">
