@@ -130,7 +130,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                                     key={item.href}
                                     href={item.href}
                                     onClick={() => setProfileOpen(false)}
-                                    className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-muted/50 transition-colors"
+                                    className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted/50 transition-colors"
                                 >
                                     <item.icon className="w-4 h-4 text-muted-foreground" />
                                     {item.label}
@@ -142,7 +142,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                         <div className="border-t py-1">
                             <button
                                 onClick={() => signOut()}
-                                className="flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-muted/50 transition-colors w-full cursor-pointer"
+                                className="flex items-center gap-3 px-4 py-2 text-sm text-red-500 hover:bg-muted/50 transition-colors w-full cursor-pointer"
                             >
                                 <LogOut className="w-4 h-4" />
                                 {t("logout")}

@@ -51,11 +51,18 @@ export default function ProfilePage() {
 
     async function handleSave() {
         setSaving(true);
-        await supabase.from("profiles").update({
+        const { error } = await supabase.from("profiles").update({
             full_name: fullName,
         }).eq("id", userId);
 
-        setSavedMsg(t("berhasilSimpan"));
+        if (error) {
+            console.error("Save error:", error);
+            setSavedMsg("Gagal menyimpan.");
+        } else {
+            // Also update auth user metadata so it persists
+            await supabase.auth.updateUser({ data: { full_name: fullName } });
+            setSavedMsg(t("berhasilSimpan"));
+        }
         setTimeout(() => setSavedMsg(""), 3000);
         setSaving(false);
     }
@@ -174,7 +181,7 @@ export default function ProfilePage() {
                         <input
                             value={email}
                             readOnly
-                            className={`${inputClass} bg-muted text-muted-foreground cursor-not-allowed`}
+                            className={`${inputClass} !bg-gray-100 dark:!bg-gray-800 text-muted-foreground cursor-not-allowed`}
                         />
                         <p className="text-xs text-muted-foreground">{t("emailNote")}</p>
                     </div>
