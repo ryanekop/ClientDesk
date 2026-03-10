@@ -173,7 +173,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                             >
                                 <div className="w-8 h-8 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-medium text-sm overflow-hidden">
                                     {avatarUrl ? (
-                                        <img src={`${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}t=${avatarTs}`} alt={userName} className="w-full h-full object-cover" />
+                                        <img src={avatarUrl.startsWith('data:') ? avatarUrl : `${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}t=${avatarTs}`} alt={userName} className="w-full h-full object-cover" />
                                     ) : (
                                         userName ? userName.charAt(0).toUpperCase() : "U"
                                     )}

@@ -17,6 +17,8 @@ const categories = [
     { key: "categoryTechnical", icon: Wrench, color: "text-orange-500", bg: "bg-orange-500/10", questions: ["q12"] },
 ] as const
 
+import { LandingNav } from "@/components/landing/landing-client"
+
 export default function FAQPage() {
     const t = useTranslations("FAQ")
     const tl = useTranslations("Landing")
@@ -37,6 +39,7 @@ export default function FAQPage() {
                 <div className="flex items-center gap-2">
                     <LanguageSwitcher />
                     <ThemeToggle />
+                    <LandingNav />
                 </div>
             </header>
 

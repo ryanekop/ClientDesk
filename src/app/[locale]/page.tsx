@@ -19,12 +19,14 @@ export default async function Home() {
   return (
     <div className="flex flex-col min-h-screen font-[family-name:var(--font-geist-sans)]">
       {/* Header */}
-      <header className="sticky top-0 z-50 flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm">
+      <header className="sticky top-0 z-50 flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm relative">
         <Link href={`/${locale}`} className="font-bold text-xl tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity">
           <img src="/icon-192.png" alt="Client Desk" className="h-8 w-8 rounded-lg" />
           Client Desk
         </Link>
-        <DesktopNav />
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <DesktopNav />
+        </div>
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
           <ThemeToggle />

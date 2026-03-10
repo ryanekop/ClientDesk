@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
+import { LandingNav } from "@/components/landing/landing-client"
+
 export default function PricingPage() {
     const t = useTranslations('Pricing')
     const tl = useTranslations('Landing')
@@ -85,9 +87,7 @@ export default function PricingPage() {
                 <div className="flex items-center gap-2">
                     <LanguageSwitcher />
                     <ThemeToggle />
-                    <Button variant="outline" asChild>
-                        <Link href={`/${locale}/login`}>{t('loginButton')}</Link>
-                    </Button>
+                    <LandingNav />
                 </div>
             </header>
 

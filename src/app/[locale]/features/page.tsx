@@ -32,6 +32,8 @@ const additionalFeatures = [
     { icon: Globe2, titleKey: 'feature12Title', descKey: 'feature12Desc', color: 'text-teal-500', bg: 'bg-teal-500/10' },
 ]
 
+import { LandingNav } from "@/components/landing/landing-client"
+
 export default function FeaturesPage() {
     const t = useTranslations('Features')
     const tl = useTranslations('Landing')
@@ -93,6 +95,7 @@ export default function FeaturesPage() {
                 <div className="flex items-center gap-2">
                     <LanguageSwitcher />
                     <ThemeToggle />
+                    <LandingNav />
                 </div>
             </header>
 

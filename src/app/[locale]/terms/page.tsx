@@ -5,6 +5,7 @@ import { LanguageSwitcher } from "@/components/language-switcher"
 import { Button } from "@/components/ui/button"
 import Link from 'next/link'
 import { ArrowLeft } from "lucide-react"
+import { LandingNav } from "@/components/landing/landing-client"
 
 export default async function TermsPage() {
     const t = await getTranslations('Terms')
@@ -33,6 +34,7 @@ export default async function TermsPage() {
                 <div className="flex items-center gap-2">
                     <LanguageSwitcher />
                     <ThemeToggle />
+                    <LandingNav />
                 </div>
             </header>
 

@@ -4,7 +4,7 @@ import * as React from "react";
 import { useTranslations } from "next-intl";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
-import { Menu, User, LayoutDashboard, Package, Settings, BookOpen, History, LogOut } from "lucide-react";
+import { Menu, User, LayoutDashboard, Crown, Settings, BookOpen, History, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, usePathname } from "@/i18n/routing";
 import { createClient } from "@/utils/supabase/client";
@@ -87,7 +87,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
     const menuItems = [
         { label: t("profil"), href: "/profile", icon: User },
         { label: t("dashboard"), href: "/dashboard", icon: LayoutDashboard },
-        { label: t("paket"), href: "/pricing", icon: Package },
+        { label: t("paket"), href: "/pricing", icon: Crown },
         { label: t("pengaturan"), href: "/settings", icon: Settings },
     ];
 
@@ -113,7 +113,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                         className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-medium text-sm cursor-pointer hover:opacity-90 transition-opacity ml-1 overflow-hidden"
                     >
                         {avatarUrl ? (
-                            <img src={`${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}t=${avatarTs}`} alt={userName} className="w-full h-full object-cover" />
+                            <img src={avatarUrl.startsWith('data:') ? avatarUrl : `${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}t=${avatarTs}`} alt={userName} className="w-full h-full object-cover" />
                         ) : (
                             userName ? userName.charAt(0).toUpperCase() : "U"
                         )}
