@@ -44,9 +44,12 @@ export async function GET(request: Request) {
                     }).catch(() => { })
                 }
 
-                // Sync full_name to profiles table
+                // Sync full_name to profiles table (upsert to ensure row exists)
                 if (fullName) {
-                    await supabase.from('profiles').update({ full_name: fullName }).eq('id', userId)
+                    await supabase.from('profiles').upsert(
+                        { id: userId, full_name: fullName },
+                        { onConflict: 'id' }
+                    )
                 }
             }
 
@@ -101,7 +104,7 @@ export async function POST(request: Request) {
             }).catch(() => { })
         }
 
-        // Sync full_name to profiles table
+        // Sync full_name to profiles table (upsert to ensure row exists)
         if (fullName) {
             const { createClient } = await import('@supabase/supabase-js')
             const supabaseAdmin = createClient(
@@ -109,7 +112,10 @@ export async function POST(request: Request) {
                 process.env.SUPABASE_SERVICE_ROLE_KEY!,
                 { auth: { autoRefreshToken: false, persistSession: false } }
             )
-            await supabaseAdmin.from('profiles').update({ full_name: fullName }).eq('id', userId)
+            await supabaseAdmin.from('profiles').upsert(
+                { id: userId, full_name: fullName },
+                { onConflict: 'id' }
+            )
         }
 
         return NextResponse.json({ success: true })

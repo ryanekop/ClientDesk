@@ -49,7 +49,7 @@ export default function AuthCallbackPage() {
                     // Auto-create trial subscription for new users
                     const { data: { user } } = await supabase.auth.getUser()
                     if (user) {
-                        fetch('/api/auth/callback', {
+                        await fetch('/api/auth/callback', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -83,7 +83,7 @@ export default function AuthCallbackPage() {
                     // Auto-create trial subscription for new users
                     const { data: { user: implicitUser } } = await supabase.auth.getUser()
                     if (implicitUser) {
-                        fetch('/api/auth/callback', {
+                        await fetch('/api/auth/callback', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
