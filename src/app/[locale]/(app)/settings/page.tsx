@@ -129,7 +129,7 @@ export default function SettingsPage() {
     const [logoCropSrc, setLogoCropSrc] = React.useState<string | null>(null);
     const [showLogoCrop, setShowLogoCrop] = React.useState(false);
     const [logoUploading, setLogoUploading] = React.useState(false);
-    const [logoOrientation, setLogoOrientation] = React.useState<"horizontal" | "vertical">("horizontal");
+    const [logoOrientation, setLogoOrientation] = React.useState<"horizontal" | "square">("horizontal");
     const [dragOver, setDragOver] = React.useState(false);
     const logoInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -542,15 +542,15 @@ export default function SettingsPage() {
                                                 className={`px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${logoOrientation === "horizontal" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}>
                                                 Horizontal
                                             </button>
-                                            <button type="button" onClick={() => setLogoOrientation("vertical")}
-                                                className={`px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${logoOrientation === "vertical" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}>
-                                                Vertikal
+                                            <button type="button" onClick={() => setLogoOrientation("square")}
+                                                className={`px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${logoOrientation === "square" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}>
+                                                Persegi
                                             </button>
                                         </div>
                                     </div>
                                     <div className="flex items-start gap-4">
                                         {/* Preview */}
-                                        <div className={`rounded-xl border-2 border-dashed border-muted overflow-hidden bg-muted/30 flex items-center justify-center shrink-0 ${logoOrientation === "horizontal" ? "w-32 h-20" : "w-20 h-28"}`}>
+                                        <div className={`rounded-xl border-2 border-dashed border-muted overflow-hidden bg-muted/30 flex items-center justify-center shrink-0 ${logoOrientation === "horizontal" ? "w-32 h-20" : "w-24 h-24"}`}>
                                             {logoUrl ? (
                                                 <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
                                             ) : (
@@ -734,8 +734,8 @@ export default function SettingsPage() {
                 <ImageCropModal
                     open={showLogoCrop}
                     imageSrc={logoCropSrc}
-                    title={`Crop Logo (${logoOrientation === "horizontal" ? "Horizontal" : "Vertikal"})`}
-                    aspect={logoOrientation === "horizontal" ? 16 / 10 : 10 / 14}
+                    title={`Crop Logo (${logoOrientation === "horizontal" ? "Horizontal" : "Persegi"})`}
+                    aspect={logoOrientation === "horizontal" ? 16 / 10 : 1}
                     cropShape="rect"
                     onClose={() => { setShowLogoCrop(false); setLogoCropSrc(null); }}
                     onCropComplete={handleCroppedLogo}

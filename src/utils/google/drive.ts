@@ -78,3 +78,66 @@ export async function createBookingFolder(
         folderUrl: res.data.webViewLink,
     };
 }
+
+/**
+ * Finds a folder by name under a parent, or creates one if not found.
+ */
+export async function findOrCreateFolder(
+    accessToken: string,
+    refreshToken: string,
+    folderName: string,
+    parentId: string = "root"
+) {
+    const drive = await getDriveClient(accessToken, refreshToken);
+
+    // Search for existing folder
+    const search = await drive.files.list({
+        q: `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        fields: "files(id, webViewLink)",
+        pageSize: 1,
+    });
+
+    if (search.data.files && search.data.files.length > 0) {
+        return {
+            folderId: search.data.files[0].id!,
+            folderUrl: search.data.files[0].webViewLink || null,
+        };
+    }
+
+    // Create folder
+    return createBookingFolder(accessToken, refreshToken, folderName, parentId);
+}
+
+/**
+ * Uploads a file (Buffer) to a specific Google Drive folder.
+ * Returns the file's webViewLink.
+ */
+export async function uploadFileToDrive(
+    accessToken: string,
+    refreshToken: string,
+    fileName: string,
+    mimeType: string,
+    fileBuffer: Buffer,
+    parentFolderId: string
+) {
+    const drive = await getDriveClient(accessToken, refreshToken);
+    const { Readable } = require("stream");
+
+    const res = await drive.files.create({
+        requestBody: {
+            name: fileName,
+            parents: [parentFolderId],
+        },
+        media: {
+            mimeType,
+            body: Readable.from(fileBuffer),
+        },
+        fields: "id, webViewLink, webContentLink",
+    });
+
+    return {
+        fileId: res.data.id,
+        fileUrl: res.data.webViewLink,
+        downloadUrl: res.data.webContentLink,
+    };
+}
