@@ -40,8 +40,8 @@ const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: st
     Wedding: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
         { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true },
-        { key: "tempat_akad", label: "Lokasi Akad", labelEn: "Akad Venue", isLocation: true },
-        { key: "tempat_resepsi", label: "Lokasi Resepsi", labelEn: "Reception Venue", isLocation: true },
+        { key: "tempat_akad", label: "Lokasi Akad", labelEn: "Akad Venue", isLocation: true, required: true },
+        { key: "tempat_resepsi", label: "Lokasi Resepsi", labelEn: "Reception Venue", isLocation: true, required: true },
     ],
     Akad: [{ key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true }],
     Resepsi: [

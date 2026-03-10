@@ -17,8 +17,8 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; isLocation?: bo
     Wedding: [
         { key: "nama_pasangan", label: "Nama Pasangan", fullWidth: true, required: true },
         { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true },
-        { key: "tempat_akad", label: "Lokasi Akad", isLocation: true },
-        { key: "tempat_resepsi", label: "Lokasi Resepsi", isLocation: true },
+        { key: "tempat_akad", label: "Lokasi Akad", isLocation: true, required: true },
+        { key: "tempat_resepsi", label: "Lokasi Resepsi", isLocation: true, required: true },
     ],
     Akad: [
         { key: "nama_pasangan", label: "Nama Pasangan", fullWidth: true, required: true },
@@ -165,6 +165,12 @@ export default function PublicBookingForm() {
 
         if (!clientName || !phone || !sessionDate || !serviceId || (!location && eventType !== "Wedding")) {
             setError("Mohon lengkapi semua field yang wajib.");
+            return;
+        }
+
+        // Validate required extra fields for Wedding
+        if (eventType === "Wedding" && (!extraData.tempat_akad || !extraData.tempat_resepsi)) {
+            setError("Mohon lengkapi Lokasi Akad dan Lokasi Resepsi.");
             return;
         }
 
