@@ -16,7 +16,7 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; isLocation?: bo
     ],
     Wedding: [
         { key: "nama_pasangan", label: "Nama Pasangan", fullWidth: true, required: true },
-        { key: "jumlah_tamu", label: "Estimasi Tamu" },
+        { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true },
         { key: "tempat_akad", label: "Lokasi Akad", isLocation: true },
         { key: "tempat_resepsi", label: "Lokasi Resepsi", isLocation: true },
     ],
@@ -25,7 +25,7 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; isLocation?: bo
     ],
     Resepsi: [
         { key: "nama_pasangan", label: "Nama Pasangan", fullWidth: true, required: true },
-        { key: "jumlah_tamu", label: "Estimasi Tamu" },
+        { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true },
     ],
     Maternity: [{ key: "usia_kandungan", label: "Usia Kandungan (bulan)" }],
     Newborn: [{ key: "nama_bayi", label: "Nama Bayi" }],
@@ -163,13 +163,16 @@ export default function PublicBookingForm() {
         e.preventDefault();
         setError("");
 
-        if (!clientName || !phone || !sessionDate || !serviceId || !location) {
+        if (!clientName || !phone || !sessionDate || !serviceId || (!location && eventType !== "Wedding")) {
             setError("Mohon lengkapi semua field yang wajib.");
             return;
         }
 
         const fullPhone = `${countryCode}${phone}`.replace(/[^0-9+]/g, "");
         const dpValue = parseFormatted(dpDisplay) || 0;
+
+        // For Wedding, auto-set location from tempat_akad
+        const finalLocation = eventType === "Wedding" ? (extraData.tempat_akad || extraData.tempat_resepsi || location) : location;
 
         const minDP = getMinDpForEvent();
         if (selectedService) {
@@ -227,7 +230,7 @@ export default function PublicBookingForm() {
                     serviceId,
                     totalPrice: selectedService?.price || 0,
                     dpPaid: dpValue,
-                    location: location || null,
+                    location: finalLocation || null,
                     notes: notes || null,
                     extraData: Object.keys(extraData).length > 0 ? extraData : null,
                     paymentProofUrl,
@@ -431,10 +434,12 @@ Mohon konfirmasi booking saya. Terima kasih! 🙏`;
                             </div>
                         )}
 
-                        <div className="space-y-1.5">
-                            <label className="text-sm font-medium">Lokasi <span className="text-red-500">*</span></label>
-                            <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi acara..." />
-                        </div>
+                        {eventType !== "Wedding" && (
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium">Lokasi <span className="text-red-500">*</span></label>
+                                <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi acara..." />
+                            </div>
+                        )}
                     </div>
 
                     {/* Package & Payment */}

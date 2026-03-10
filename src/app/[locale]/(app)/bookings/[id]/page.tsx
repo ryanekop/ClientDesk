@@ -22,6 +22,7 @@ const EXTRA_FIELD_LABELS: Record<string, string> = {
     nama_brand: "Nama Brand",
     tipe_konten: "Tipe Konten",
     jumlah_anggota: "Jumlah Anggota",
+    jumlah_tamu: "Estimasi Tamu",
 };
 
 const LOCATION_FIELDS = new Set(["tempat_akad", "tempat_resepsi"]);

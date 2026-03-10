@@ -39,13 +39,14 @@ const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: st
     ],
     Wedding: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
+        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true },
         { key: "tempat_akad", label: "Lokasi Akad", labelEn: "Akad Venue", isLocation: true },
         { key: "tempat_resepsi", label: "Lokasi Resepsi", labelEn: "Reception Venue", isLocation: true },
     ],
     Akad: [{ key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true }],
     Resepsi: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
-        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests" },
+        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true },
     ],
     Maternity: [
         { key: "usia_kehamilan", label: "Usia Kehamilan", labelEn: "Pregnancy Age" },
@@ -236,7 +237,7 @@ export default function EditBookingPage() {
             instagram: instagram || null,
             event_type: eventType,
             session_date: sessionDate || null,
-            location: location || null,
+            location: (eventType === "Wedding" ? (extraFields.tempat_akad || extraFields.tempat_resepsi || location) : location) || null,
             service_id: serviceId || null,
             freelance_id: freelancerIds[0] || null,
             total_price: tPrice,
@@ -342,10 +343,12 @@ export default function EditBookingPage() {
                                 {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
-                        <div className="col-span-full space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Lokasi Utama</label>
-                            <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi sesi foto..." />
-                        </div>
+                        {eventType !== "Wedding" && (
+                            <div className="col-span-full space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Lokasi Utama</label>
+                                <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi sesi foto..." />
+                            </div>
+                        )}
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Paket / Layanan{reqMark}</label>
                             <select value={serviceId} onChange={e => handleServiceChange(e.target.value)} className={selectClass} required>
