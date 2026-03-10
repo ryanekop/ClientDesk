@@ -200,78 +200,92 @@ function MapPickerModal({
   const [selectedLatLng, setSelectedLatLng] = React.useState(center);
 
   React.useEffect(() => {
-    if (!mapRef.current || !window.google?.maps) return;
+    function initMap() {
+      if (!mapRef.current || !window.google?.maps) return;
 
-    const map = new google.maps.Map(mapRef.current, {
-      center,
-      zoom: 15,
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: false,
-    });
-    googleMapRef.current = map;
-
-    const marker = new google.maps.Marker({
-      position: center,
-      map,
-      draggable: true,
-      animation: google.maps.Animation.DROP,
-    });
-    markerRef.current = marker;
-
-    // Geocode when marker is dragged
-    marker.addListener("dragend", () => {
-      const pos = marker.getPosition();
-      if (!pos) return;
-      const lat = pos.lat();
-      const lng = pos.lng();
-      setSelectedLatLng({ lat, lng });
-
-      const geocoder = new google.maps.Geocoder();
-      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-        if (status === "OK" && results?.[0]) {
-          setSelectedAddress(results[0].formatted_address);
-        }
+      const map = new google.maps.Map(mapRef.current, {
+        center,
+        zoom: 15,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
       });
-    });
+      googleMapRef.current = map;
 
-    // Click on map moves marker
-    map.addListener("click", (e: google.maps.MapMouseEvent) => {
-      if (!e.latLng) return;
-      const lat = e.latLng.lat();
-      const lng = e.latLng.lng();
-      marker.setPosition(e.latLng);
-      setSelectedLatLng({ lat, lng });
-
-      const geocoder = new google.maps.Geocoder();
-      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-        if (status === "OK" && results?.[0]) {
-          setSelectedAddress(results[0].formatted_address);
-        }
+      const marker = new google.maps.Marker({
+        position: center,
+        map,
+        draggable: true,
+        animation: google.maps.Animation.DROP,
       });
-    });
+      markerRef.current = marker;
 
-    // Search autocomplete in map
-    if (searchRef.current) {
-      const searchAC = new google.maps.places.Autocomplete(searchRef.current, {
-        componentRestrictions: { country: "id" },
-        fields: ["formatted_address", "geometry", "name"],
+      // Geocode when marker is dragged
+      marker.addListener("dragend", () => {
+        const pos = marker.getPosition();
+        if (!pos) return;
+        const lat = pos.lat();
+        const lng = pos.lng();
+        setSelectedLatLng({ lat, lng });
+
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          if (status === "OK" && results?.[0]) {
+            setSelectedAddress(results[0].formatted_address);
+          }
+        });
       });
-      searchAC.bindTo("bounds", map);
-      searchAC.addListener("place_changed", () => {
-        const place = searchAC.getPlace();
-        if (place?.geometry?.location) {
-          const loc = place.geometry.location;
-          map.setCenter(loc);
-          map.setZoom(16);
-          marker.setPosition(loc);
-          setSelectedLatLng({ lat: loc.lat(), lng: loc.lng() });
-          setSelectedAddress(
-            place.name
-              ? `${place.name}, ${place.formatted_address}`
-              : place.formatted_address || "",
-          );
-        }
+
+      // Click on map moves marker
+      map.addListener("click", (e: google.maps.MapMouseEvent) => {
+        if (!e.latLng) return;
+        const lat = e.latLng.lat();
+        const lng = e.latLng.lng();
+        marker.setPosition(e.latLng);
+        setSelectedLatLng({ lat, lng });
+
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          if (status === "OK" && results?.[0]) {
+            setSelectedAddress(results[0].formatted_address);
+          }
+        });
+      });
+
+      // Search autocomplete in map
+      if (searchRef.current) {
+        const searchAC = new google.maps.places.Autocomplete(
+          searchRef.current,
+          {
+            componentRestrictions: { country: "id" },
+            fields: ["formatted_address", "geometry", "name"],
+          },
+        );
+        searchAC.bindTo("bounds", map);
+        searchAC.addListener("place_changed", () => {
+          const place = searchAC.getPlace();
+          if (place?.geometry?.location) {
+            const loc = place.geometry.location;
+            map.setCenter(loc);
+            map.setZoom(16);
+            marker.setPosition(loc);
+            setSelectedLatLng({ lat: loc.lat(), lng: loc.lng() });
+            setSelectedAddress(
+              place.name
+                ? `${place.name}, ${place.formatted_address}`
+                : place.formatted_address || "",
+            );
+          }
+        });
+      }
+    }
+
+    // If Google Maps already loaded, init immediately; otherwise load first
+    if (googleMapsLoaded && window.google?.maps) {
+      initMap();
+    } else {
+      loadGoogleMaps().then(() => {
+        initMap();
       });
     }
   }, []);
