@@ -34,6 +34,8 @@ export function Topbar({ onMenuClick }: TopbarProps) {
     const [profileOpen, setProfileOpen] = React.useState(false);
     const [userName, setUserName] = React.useState("");
     const [userEmail, setUserEmail] = React.useState("");
+    const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
+    const [avatarTs, setAvatarTs] = React.useState(Date.now());
     const ref = React.useRef<HTMLDivElement>(null);
     const t = useTranslations("Topbar");
     const pathname = usePathname();
@@ -71,10 +73,12 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                 setUserEmail(user.email || "");
                 const { data: profile } = await supabase
                     .from("profiles")
-                    .select("full_name")
+                    .select("full_name, avatar_url")
                     .eq("id", user.id)
                     .single();
                 setUserName(profile?.full_name || user.email?.split("@")[0] || "User");
+                setAvatarUrl(profile?.avatar_url || null);
+                setAvatarTs(Date.now());
             }
         }
         fetchUser();
@@ -106,9 +110,13 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                 <div className="relative" ref={ref}>
                     <button
                         onClick={() => setProfileOpen(!profileOpen)}
-                        className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-medium text-sm cursor-pointer hover:opacity-90 transition-opacity ml-1"
+                        className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-medium text-sm cursor-pointer hover:opacity-90 transition-opacity ml-1 overflow-hidden"
                     >
-                        {userName ? userName.charAt(0).toUpperCase() : "U"}
+                        {avatarUrl ? (
+                            <img src={`${avatarUrl}?t=${avatarTs}`} alt={userName} className="w-full h-full object-cover" />
+                        ) : (
+                            userName ? userName.charAt(0).toUpperCase() : "U"
+                        )}
                     </button>
 
                     <div

@@ -43,6 +43,8 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     const t = useTranslations("Sidebar");
     const [isCollapsed, setIsCollapsed] = React.useState(false);
     const [userName, setUserName] = React.useState("");
+    const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
+    const [avatarTs, setAvatarTs] = React.useState(Date.now());
 
     React.useEffect(() => {
         const saved = localStorage.getItem("clientdesk_sidebar_collapsed");
@@ -56,10 +58,12 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
             if (user) {
                 const { data: profile } = await supabase
                     .from("profiles")
-                    .select("full_name")
+                    .select("full_name, avatar_url")
                     .eq("id", user.id)
                     .single();
                 setUserName(profile?.full_name || user.email?.split("@")[0] || "User");
+                setAvatarUrl(profile?.avatar_url || null);
+                setAvatarTs(Date.now());
             }
         }
         fetchUser();
@@ -167,8 +171,12 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                                 title={isCollapsed ? userName : undefined}
                                 className="flex items-center gap-3 flex-1 px-2 py-2 rounded-md hover:bg-muted transition-colors"
                             >
-                                <div className="w-8 h-8 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-medium text-sm">
-                                    {userName ? userName.charAt(0).toUpperCase() : "U"}
+                                <div className="w-8 h-8 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-medium text-sm overflow-hidden">
+                                    {avatarUrl ? (
+                                        <img src={`${avatarUrl}?t=${avatarTs}`} alt={userName} className="w-full h-full object-cover" />
+                                    ) : (
+                                        userName ? userName.charAt(0).toUpperCase() : "U"
+                                    )}
                                 </div>
                                 <div className={cn("flex-1 transition-opacity duration-300 min-w-0", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
                                     <p className="text-sm font-medium leading-none mb-1 truncate">{userName}</p>

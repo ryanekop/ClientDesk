@@ -162,6 +162,7 @@ export default function FeaturesPage() {
                         viewport={{ once: true }}
                         className="text-center max-w-2xl mx-auto bg-primary rounded-3xl p-8 sm:p-12 text-primary-foreground"
                     >
+                        <p className="text-primary-foreground/60 text-sm font-medium mb-3 uppercase tracking-wider">⏰ {tl('trialBadge')}</p>
                         <h2 className="text-3xl font-bold mb-4">{tl('ctaTitle')}</h2>
                         <p className="text-primary-foreground/80 text-lg mb-8">{tl('ctaSubtitle')}</p>
                         <Button size="lg" variant="secondary" asChild className="gap-2 text-lg px-8">
@@ -169,6 +170,7 @@ export default function FeaturesPage() {
                                 🎉 {t('startNow')} <ArrowRight className="h-5 w-5" />
                             </Link>
                         </Button>
+                        <p className="text-primary-foreground/50 text-xs mt-4">{tl('ctaTrialNote')}</p>
                     </motion.div>
                 </div>
             </section>

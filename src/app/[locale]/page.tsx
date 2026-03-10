@@ -47,9 +47,10 @@ export default async function Home() {
               {t('title')}
               {/* Mobile: allow wrapping naturally */}
               <span className="block text-primary mt-2 sm:hidden">{t('subtitle')}</span>
-              {/* Desktop: keep "& Profesional" on same line */}
+              {/* Desktop: force "& Profesional" on same line, no orphan */}
               <span className="hidden sm:block text-primary mt-2">
-                {t('subtitleLine1')} {t('subtitleLine2')}
+                <span className="block">{t('subtitleLine1')}</span>
+                <span className="whitespace-nowrap">{t('subtitleLine2')}</span>
               </span>
             </h1>
 
@@ -122,9 +123,11 @@ export default async function Home() {
       <section className="py-20">
         <div className="container mx-auto px-4">
           <AnimatedCTA>
+            <p className="text-primary-foreground/60 text-sm font-medium mb-3 uppercase tracking-wider">⏰ {t('trialBadge')}</p>
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">{t('ctaTitle')}</h2>
             <p className="text-primary-foreground/80 text-lg mb-8">{t('ctaSubtitle')}</p>
             <BottomCTA />
+            <p className="text-primary-foreground/50 text-xs mt-4">{t('ctaTrialNote')}</p>
           </AnimatedCTA>
         </div>
       </section>
