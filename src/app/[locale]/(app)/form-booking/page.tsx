@@ -386,54 +386,56 @@ export default function FormBookingPage() {
                 </div>
 
                 {/* RIGHT: Linktree-Style Preview — hidden on mobile when viewing settings */}
-                <div className={`sticky top-4 space-y-3 ${mobileTab === "settings" ? "hidden lg:block" : ""}`}>
-                    {/* Preview Header with Buttons */}
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-semibold text-muted-foreground">Preview</h3>
-                        <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIframeKey(k => k + 1)} title="Refresh">
-                                <RefreshCw className="w-3.5 h-3.5" />
-                            </Button>
-                            {vendorSlug && (
-                                <>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyUrl} title="Salin URL">
-                                        {copied ? <ClipboardCheck className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.open(formUrl, "_blank")} title="Buka di tab baru">
-                                        <ExternalLink className="w-3.5 h-3.5" />
-                                    </Button>
-                                </>
-                            )}
-                        </div>
-                    </div>
-
-                    {vendorSlug ? (
-                        <div className="flex justify-center">
-                            {/* Linktree-style phone preview */}
-                            <div className="w-full max-w-[380px]">
-                                {/* URL Bar */}
-                                <div className="bg-muted/80 dark:bg-muted/40 rounded-t-2xl px-4 py-2.5 flex items-center gap-2 border border-b-0">
-                                    <div className="flex gap-1">
-                                        <div className="w-2.5 h-2.5 rounded-full bg-red-400/60" />
-                                        <div className="w-2.5 h-2.5 rounded-full bg-yellow-400/60" />
-                                        <div className="w-2.5 h-2.5 rounded-full bg-green-400/60" />
-                                    </div>
-                                    <div className="flex-1 text-center">
-                                        <span className="text-[11px] text-muted-foreground truncate block">{formUrl.replace(/^https?:\/\//, "")}</span>
-                                    </div>
-                                </div>
-
-                                {/* iframe content — fits viewport height */}
-                                <div className="rounded-b-2xl overflow-hidden border border-t-0 bg-white dark:bg-background" style={{ height: "calc(100vh - 180px)" }}>
-                                    <iframe key={iframeKey} src={formUrl} className="w-full h-full" title="Form Preview" />
-                                </div>
+                <div className={`sticky top-4 ${mobileTab === "settings" ? "hidden lg:flex" : "flex"}`} style={{ height: "calc(100vh - 2rem)", maxHeight: "calc(100vh - 2rem)" }}>
+                    <div className="flex flex-col w-full">
+                        {/* Preview Header with Buttons */}
+                        <div className="flex items-center justify-between mb-3 shrink-0">
+                            <h3 className="text-sm font-semibold text-muted-foreground">Preview</h3>
+                            <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIframeKey(k => k + 1)} title="Refresh">
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                </Button>
+                                {vendorSlug && (
+                                    <>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyUrl} title="Salin URL">
+                                            {copied ? <ClipboardCheck className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.open(formUrl, "_blank")} title="Buka di tab baru">
+                                            <ExternalLink className="w-3.5 h-3.5" />
+                                        </Button>
+                                    </>
+                                )}
                             </div>
                         </div>
-                    ) : (
-                        <div className="flex items-center justify-center h-64 rounded-2xl border bg-muted/20">
-                            <p className="text-sm text-muted-foreground text-center px-6">Simpan pengaturan terlebih dahulu untuk melihat preview.</p>
-                        </div>
-                    )}
+
+                        {vendorSlug ? (
+                            <div className="flex justify-center flex-1 min-h-0">
+                                {/* Linktree-style phone preview */}
+                                <div className="w-full max-w-[380px] flex flex-col min-h-0">
+                                    {/* URL Bar */}
+                                    <div className="bg-muted/80 dark:bg-muted/40 rounded-t-2xl px-4 py-2.5 flex items-center gap-2 border border-b-0 shrink-0">
+                                        <div className="flex gap-1">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-red-400/60" />
+                                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-400/60" />
+                                            <div className="w-2.5 h-2.5 rounded-full bg-green-400/60" />
+                                        </div>
+                                        <div className="flex-1 text-center">
+                                            <span className="text-[11px] text-muted-foreground truncate block">{formUrl.replace(/^https?:\/\//, "")}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* iframe content — fills remaining space */}
+                                    <div className="rounded-b-2xl overflow-hidden border border-t-0 bg-white dark:bg-background flex-1 min-h-0">
+                                        <iframe key={iframeKey} src={formUrl} className="w-full h-full" title="Form Preview" />
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-center h-64 rounded-2xl border bg-muted/20">
+                                <p className="text-sm text-muted-foreground text-center px-6">Simpan pengaturan terlebih dahulu untuk melihat preview.</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
