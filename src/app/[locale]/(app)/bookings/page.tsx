@@ -295,8 +295,61 @@ export default function BookingsPage() {
                 </div>
             </div>
 
-            {/* Table */}
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {loading ? (
+                    <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+                ) : filteredBookings.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground text-sm">Data tidak ditemukan.</div>
+                ) : (
+                    filteredBookings.map((booking) => (
+                        <div key={booking.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <p className="font-semibold">{booking.client_name}</p>
+                                    <p className="text-xs text-muted-foreground">{booking.booking_code}</p>
+                                </div>
+                                <StatusBadge status={booking.status} />
+                            </div>
+                            <div className="border-t pt-2 space-y-1 text-sm text-muted-foreground">
+                                <div className="flex justify-between"><span>Paket</span><span className="text-foreground font-medium">{booking.services?.name || "-"}</span></div>
+                                <div className="flex justify-between"><span>Jadwal</span><span>{formatDate(booking.session_date)}</span></div>
+                                {booking.location && <div className="flex justify-between"><span>Lokasi</span><span className="truncate max-w-[180px]">{booking.location}</span></div>}
+                                <div className="flex justify-between"><span>Total</span><span className="text-foreground font-semibold">{formatCurrency(booking.total_price)}</span></div>
+                            </div>
+                            <div className="flex items-center gap-1 pt-1 border-t flex-wrap">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500" title="Salin Template" onClick={() => copyTemplate(booking)}>
+                                    {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500" title="Whatsapp"
+                                    disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
+                                    onClick={() => {
+                                        if (booking.booking_freelancers.length > 1) { setWaPopup({ open: true, freelancers: booking.booking_freelancers, booking }); }
+                                        else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
+                                            const f = booking.booking_freelancers[0];
+                                            const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
+                                            const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, f.name));
+                                            window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
+                                        } else { sendWhatsAppClient(booking); }
+                                    }}>
+                                    <MessageCircle className="w-4 h-4" />
+                                </Button>
+                                <Link href={`/bookings/${booking.id}`}><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500"><Info className="w-4 h-4" /></Button></Link>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-500" onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
+                                    <RefreshCcw className="w-4 h-4" />
+                                </Button>
+                                <Link href={`/bookings/${booking.id}/edit`}><Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500"><Edit2 className="w-4 h-4" /></Button></Link>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => setDeleteModal({ open: true, booking })}>
+                                    <Trash2 className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left border-collapse">
                         <thead className="text-[11px] uppercase bg-muted/30 border-b">

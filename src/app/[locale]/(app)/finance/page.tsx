@@ -153,8 +153,50 @@ export default function FinancePage() {
                 ))}
             </div>
 
-            {/* Table */}
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {loading ? (
+                    <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+                ) : filtered.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground text-sm">{t("tidakAdaData")}</div>
+                ) : filtered.map((b) => {
+                    const remaining = b.total_price - b.dp_paid;
+                    return (
+                        <div key={b.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <p className="font-semibold">{b.client_name}</p>
+                                    <p className="text-xs text-muted-foreground">{b.booking_code} · {b.services?.name || "-"}</p>
+                                </div>
+                                <button
+                                    onClick={() => b.is_fully_paid ? handleMarkUnpaid(b.id) : handleMarkPaid(b.id)}
+                                    className={`text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer ${b.is_fully_paid
+                                        ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
+                                        : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"}`}
+                                >
+                                    {b.is_fully_paid ? "✓ " + t("lunas") : t("belumLunas")}
+                                </button>
+                            </div>
+                            <div className="border-t pt-2 space-y-1 text-sm">
+                                <div className="flex justify-between"><span className="text-muted-foreground">{t("hargaTotal")}</span><span className="font-medium">{formatCurrency(b.total_price)}</span></div>
+                                <div className="flex justify-between"><span className="text-muted-foreground">{t("dpDibayar")}</span><span>{formatCurrency(b.dp_paid)}</span></div>
+                                <div className="flex justify-between"><span className="text-muted-foreground">{t("sisa")}</span><span className={remaining > 0 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-green-600 dark:text-green-400"}>{formatCurrency(remaining)}</span></div>
+                            </div>
+                            <div className="flex items-center gap-1 pt-1 border-t">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500" title="Kirim Invoice via WA" disabled={!b.client_whatsapp} onClick={() => sendInvoiceWhatsApp(b)}>
+                                    <MessageCircle className="w-4 h-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" title="Invoice" onClick={() => generateInvoice(b)}>
+                                    <FileText className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
                         <thead className="text-xs uppercase bg-muted/50 border-b">

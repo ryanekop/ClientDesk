@@ -152,65 +152,103 @@ export default function TeamPage() {
                     <p className="text-muted-foreground text-sm">{t("belumAdaDesc")}</p>
                 </div>
             ) : (
-                <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs uppercase bg-muted/50 border-b">
-                                <tr>
-                                    <th className="px-6 py-4 font-medium text-muted-foreground">{t("nama")}</th>
-                                    <th className="px-6 py-4 font-medium text-muted-foreground">{t("peran")}</th>
-                                    <th className="px-6 py-4 font-medium text-muted-foreground">{t("whatsapp")}</th>
-                                    <th className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>
-                                    <th className="px-6 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                                {members.map((member) => (
-                                    <tr key={member.id} className="hover:bg-muted/50 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-sm shrink-0">
-                                                    {member.name.charAt(0).toUpperCase()}
-                                                </div>
-                                                <span className="font-medium">{member.name}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                                                {member.role}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">{member.whatsapp_number || "-"}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <button
-                                                onClick={() => handleToggleStatus(member)}
-                                                className={`text-xs font-medium px-2 py-0.5 rounded-full cursor-pointer transition-colors ${member.status === "active"
-                                                    ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-500/20"
-                                                    : "bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-500/20"
-                                                    }`}
-                                            >
-                                                {member.status === "active" ? t("aktif") : t("nonaktif")}
-                                            </button>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button title="Kirim WA" onClick={() => sendWhatsApp(member.whatsapp_number, member.name)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
-                                                    <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-                                                </button>
-                                                <button title="Edit" onClick={() => { setEditingMember(member); setIsEditOpen(true); }} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
-                                                    <Edit2 className="w-4 h-4 text-muted-foreground" />
-                                                </button>
-                                                <button title="Hapus" onClick={() => handleDelete(member.id)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                <>
+                    {/* Mobile Cards */}
+                    <div className="md:hidden space-y-3">
+                        {members.map((member) => (
+                            <div key={member.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium shrink-0">
+                                        {member.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-semibold">{member.name}</p>
+                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{member.role}</span>
+                                    </div>
+                                    <button onClick={() => handleToggleStatus(member)}
+                                        className={`text-xs font-medium px-2 py-0.5 rounded-full cursor-pointer ${member.status === "active"
+                                            ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
+                                            : "bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400"}`}>
+                                        {member.status === "active" ? t("aktif") : t("nonaktif")}
+                                    </button>
+                                </div>
+                                {member.whatsapp_number && <p className="text-xs text-muted-foreground">{member.whatsapp_number}</p>}
+                                <div className="flex items-center gap-1 pt-1 border-t">
+                                    <button title="Kirim WA" onClick={() => sendWhatsApp(member.whatsapp_number, member.name)} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
+                                        <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                    </button>
+                                    <button title="Edit" onClick={() => { setEditingMember(member); setIsEditOpen(true); }} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
+                                        <Edit2 className="w-4 h-4 text-blue-500" />
+                                    </button>
+                                    <button title="Hapus" onClick={() => handleDelete(member.id)} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
+                                        <Trash2 className="w-4 h-4 text-red-500" />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
                     </div>
-                </div>
+
+                    {/* Desktop Table */}
+                    <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left">
+                                <thead className="text-xs uppercase bg-muted/50 border-b">
+                                    <tr>
+                                        <th className="px-6 py-4 font-medium text-muted-foreground">{t("nama")}</th>
+                                        <th className="px-6 py-4 font-medium text-muted-foreground">{t("peran")}</th>
+                                        <th className="px-6 py-4 font-medium text-muted-foreground">{t("whatsapp")}</th>
+                                        <th className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>
+                                        <th className="px-6 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                    {members.map((member) => (
+                                        <tr key={member.id} className="hover:bg-muted/50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-sm shrink-0">
+                                                        {member.name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <span className="font-medium">{member.name}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                                    {member.role}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">{member.whatsapp_number || "-"}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <button
+                                                    onClick={() => handleToggleStatus(member)}
+                                                    className={`text-xs font-medium px-2 py-0.5 rounded-full cursor-pointer transition-colors ${member.status === "active"
+                                                        ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-500/20"
+                                                        : "bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-500/20"
+                                                        }`}
+                                                >
+                                                    {member.status === "active" ? t("aktif") : t("nonaktif")}
+                                                </button>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button title="Kirim WA" onClick={() => sendWhatsApp(member.whatsapp_number, member.name)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
+                                                        <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                                    </button>
+                                                    <button title="Edit" onClick={() => { setEditingMember(member); setIsEditOpen(true); }} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
+                                                        <Edit2 className="w-4 h-4 text-muted-foreground" />
+                                                    </button>
+                                                    <button title="Hapus" onClick={() => handleDelete(member.id)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
+                                                        <Trash2 className="w-4 h-4 text-red-500" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </>
             )}
 
             {/* Edit Dialog */}

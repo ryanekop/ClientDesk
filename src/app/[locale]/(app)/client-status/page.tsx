@@ -134,8 +134,54 @@ export default function ClientStatusPage() {
                 </select>
             </div>
 
-            {/* Table */}
-            <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {filtered.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground text-sm">{bookings.length === 0 ? "Belum ada booking." : "Tidak ada hasil."}</div>
+                ) : filtered.map(b => (
+                    <div key={b.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+                        <div className="flex items-start justify-between">
+                            <Link href={`/bookings/${b.id}`} className="hover:underline">
+                                <p className="font-semibold">{b.client_name}</p>
+                                <p className="text-xs text-muted-foreground">{b.booking_code}</p>
+                            </Link>
+                            {b.client_status && (
+                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusColors[b.client_status] || "bg-muted text-muted-foreground"}`}>
+                                    {b.client_status}
+                                </span>
+                            )}
+                        </div>
+                        <div className="border-t pt-2 space-y-2">
+                            <div className="space-y-1">
+                                <label className="text-xs text-muted-foreground">Status</label>
+                                <select value={b.client_status || ""} onChange={e => updateStatus(b.id, e.target.value)} disabled={savingId === b.id} className={selectClass}>
+                                    <option value="">Belum diset</option>
+                                    {CLIENT_STATUSES.filter(s => s.value).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs text-muted-foreground shrink-0">Antrian</label>
+                                <input type="number" min={0} value={b.queue_position ?? ""} onChange={e => updateQueue(b.id, e.target.value === "" ? null : parseInt(e.target.value, 10))} placeholder="-" className={inputClass} />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-1 pt-1 border-t">
+                            {b.tracking_uuid && (
+                                <>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500" title="Buka Link" onClick={() => window.open(`${window.location.origin}/track/${b.tracking_uuid}`, "_blank")}>
+                                        <ExternalLink className="w-4 h-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500" title="Salin Link" onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}>
+                                        {copiedId === b.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                    </Button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="rounded-xl border bg-card shadow-sm overflow-hidden hidden md:block">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left border-collapse">
                         <thead className="text-[11px] uppercase bg-muted/30 border-b">
