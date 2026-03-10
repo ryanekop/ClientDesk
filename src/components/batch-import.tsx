@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Upload, Download, Loader2, X, FileSpreadsheet, CheckCircle2 } from "lucide-react";
+import { Zap, Download, Upload, Loader2, FileSpreadsheet, CheckCircle2, ArrowRight, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -14,9 +14,12 @@ function generateBookingCode() {
     return code;
 }
 
+type Step = "upload" | "preview" | "confirm";
+
 export function BatchImportButton({ onImported }: { onImported: () => void }) {
     const supabase = createClient();
     const [open, setOpen] = React.useState(false);
+    const [step, setStep] = React.useState<Step>("upload");
     const [file, setFile] = React.useState<File | null>(null);
     const [preview, setPreview] = React.useState<Record<string, string>[]>([]);
     const [importing, setImporting] = React.useState(false);
@@ -50,12 +53,12 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
             const workbook = XLSX.read(data, { type: "array" });
             const sheet = workbook.Sheets[workbook.SheetNames[0]];
             const json = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { defval: "" });
-            // Skip header-like rows
             const rows = json.filter(row => {
                 const name = String(row["Nama Klien *"] || "").trim();
                 return name && !name.startsWith("Contoh:");
             });
             setPreview(rows);
+            if (rows.length > 0) setStep("preview");
         };
         reader.readAsArrayBuffer(f);
     }
@@ -63,6 +66,7 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
     async function handleImport() {
         if (preview.length === 0) return;
         setImporting(true);
+        setStep("confirm");
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { setImporting(false); return; }
 
@@ -111,118 +115,154 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
         setFile(null);
         setPreview([]);
         setResult(null);
+        setStep("upload");
     }
+
+    const steps: { key: Step; label: string }[] = [
+        { key: "upload", label: "Upload File" },
+        { key: "preview", label: "Preview Data" },
+        { key: "confirm", label: "Konfirmasi" },
+    ];
+
+    const currentStepIdx = steps.findIndex(s => s.key === step);
 
     return (
         <>
-            <Button variant="outline" className="gap-2 h-9" onClick={() => setOpen(true)}>
-                <Upload className="w-4 h-4" /> Batch Import
+            <Button variant="outline" className="gap-2 h-9" onClick={() => setOpen(true)} title="Batch Import">
+                <Zap className="w-4 h-4" />
+                <span className="hidden sm:inline">Batch Import</span>
             </Button>
 
             <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-                <DialogContent className="sm:max-w-[600px]">
+                <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle>Batch Import Booking</DialogTitle>
-                        <DialogDescription>Import banyak booking sekaligus menggunakan file Excel (.xlsx/.xls)</DialogDescription>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Zap className="w-5 h-5" /> Batch Import Booking
+                        </DialogTitle>
+                        <DialogDescription>Import banyak booking sekaligus dari file Excel</DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-4 py-2">
-                        {/* Step 1: Download Template */}
-                        <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
-                            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-500/10">
-                                <Download className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div className="flex-1">
-                                <p className="text-sm font-medium">1. Download Template</p>
-                                <p className="text-xs text-muted-foreground">Download template Excel lalu isi data booking</p>
-                            </div>
-                            <Button variant="outline" size="sm" onClick={downloadTemplate}>
-                                <Download className="w-3.5 h-3.5 mr-1.5" /> Download
-                            </Button>
-                        </div>
-
-                        {/* Step 2: Upload */}
-                        <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
-                            <div className="p-2 rounded-lg bg-green-100 dark:bg-green-500/10">
-                                <Upload className="w-4 h-4 text-green-600 dark:text-green-400" />
-                            </div>
-                            <div className="flex-1">
-                                <p className="text-sm font-medium">2. Upload File</p>
-                                <p className="text-xs text-muted-foreground">
-                                    {file ? (
-                                        <span className="flex items-center gap-1.5">
-                                            <FileSpreadsheet className="w-3.5 h-3.5" />
-                                            {file.name} ({preview.length} data)
-                                        </span>
-                                    ) : "Pilih file Excel yang sudah diisi"}
-                                </p>
-                            </div>
-                            <label className="cursor-pointer">
-                                <input type="file" accept=".xlsx,.xls" onChange={handleFileSelect} className="hidden" />
-                                <Button variant="outline" size="sm" asChild>
-                                    <span><Upload className="w-3.5 h-3.5 mr-1.5" /> Pilih File</span>
-                                </Button>
-                            </label>
-                        </div>
-
-                        {/* Preview */}
-                        {preview.length > 0 && (
-                            <div className="rounded-lg border overflow-hidden">
-                                <div className="overflow-x-auto max-h-[200px]">
-                                    <table className="w-full text-xs">
-                                        <thead className="bg-muted/50 sticky top-0">
-                                            <tr>
-                                                <th className="px-3 py-2 text-left font-medium text-muted-foreground">#</th>
-                                                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Nama</th>
-                                                <th className="px-3 py-2 text-left font-medium text-muted-foreground">WA</th>
-                                                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Jadwal</th>
-                                                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Harga</th>
-                                                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border/50">
-                                            {preview.map((row, i) => (
-                                                <tr key={i} className="hover:bg-muted/30">
-                                                    <td className="px-3 py-1.5 text-muted-foreground">{i + 1}</td>
-                                                    <td className="px-3 py-1.5 font-medium">{row["Nama Klien *"]}</td>
-                                                    <td className="px-3 py-1.5">{row["WhatsApp"] || "-"}</td>
-                                                    <td className="px-3 py-1.5">{row["Tanggal Sesi (YYYY-MM-DD)"] || "-"}</td>
-                                                    <td className="px-3 py-1.5">{row["Harga Total"] || "0"}</td>
-                                                    <td className="px-3 py-1.5">{row["Status"] || "Pending"}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                    {/* Stepper */}
+                    <div className="flex items-center gap-1 py-2">
+                        {steps.map((s, i) => (
+                            <React.Fragment key={s.key}>
+                                <div className={`flex items-center gap-1.5 text-xs font-medium ${i <= currentStepIdx ? "text-foreground" : "text-muted-foreground"}`}>
+                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${i < currentStepIdx ? "bg-green-500 text-white" : i === currentStepIdx ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}`}>
+                                        {i < currentStepIdx ? "✓" : i + 1}
+                                    </div>
+                                    <span className="hidden sm:inline">{s.label}</span>
                                 </div>
-                            </div>
+                                {i < steps.length - 1 && <div className={`flex-1 h-px ${i < currentStepIdx ? "bg-green-500" : "bg-border"}`} />}
+                            </React.Fragment>
+                        ))}
+                    </div>
+
+                    <div className="space-y-4">
+                        {/* Step 1: Upload */}
+                        {step === "upload" && (
+                            <>
+                                <Button variant="outline" className="w-full gap-2 border-green-300 text-green-700 dark:text-green-400 dark:border-green-500/30 hover:bg-green-50 dark:hover:bg-green-500/10" onClick={downloadTemplate}>
+                                    <Download className="w-4 h-4" /> Download Template XLSX
+                                </Button>
+
+                                <label className="flex flex-col items-center justify-center gap-3 p-8 rounded-xl border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors cursor-pointer bg-muted/10">
+                                    <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileSelect} className="hidden" />
+                                    <Upload className="w-8 h-8 text-muted-foreground/50" />
+                                    <div className="text-center">
+                                        <p className="text-sm text-muted-foreground">Drag & drop file .xlsx atau .csv di sini</p>
+                                        <p className="text-xs text-muted-foreground/60 mt-1">atau</p>
+                                    </div>
+                                    <Button variant="outline" size="sm" asChild>
+                                        <span>Pilih File</span>
+                                    </Button>
+                                </label>
+                            </>
                         )}
 
-                        {/* Result */}
-                        {result && (
-                            <div className={`p-3 rounded-lg border text-sm ${result.errors.length === 0 ? "bg-green-50 dark:bg-green-500/5 border-green-200 dark:border-green-500/20" : "bg-amber-50 dark:bg-amber-500/5 border-amber-200 dark:border-amber-500/20"}`}>
-                                <div className="flex items-center gap-2 font-medium">
-                                    <CheckCircle2 className="w-4 h-4 text-green-600" />
-                                    {result.success} booking berhasil diimport
-                                </div>
-                                {result.errors.length > 0 && (
-                                    <div className="mt-2 text-xs text-red-600 dark:text-red-400">
-                                        {result.errors.map((err, i) => <p key={i}>{err}</p>)}
+                        {/* Step 2: Preview */}
+                        {step === "preview" && (
+                            <>
+                                {file && (
+                                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
+                                        <FileSpreadsheet className="w-4 h-4 text-green-600 shrink-0" />
+                                        <span className="flex-1 truncate font-medium">{file.name}</span>
+                                        <span className="text-xs text-muted-foreground shrink-0">{preview.length} data</span>
                                     </div>
                                 )}
-                            </div>
+
+                                <div className="rounded-lg border overflow-hidden">
+                                    <div className="overflow-x-auto max-h-[240px]">
+                                        <table className="w-full text-xs">
+                                            <thead className="bg-muted/50 sticky top-0">
+                                                <tr>
+                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">#</th>
+                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Nama</th>
+                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">WA</th>
+                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Jadwal</th>
+                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Harga</th>
+                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-border/50">
+                                                {preview.map((row, i) => (
+                                                    <tr key={i} className="hover:bg-muted/30">
+                                                        <td className="px-3 py-1.5 text-muted-foreground">{i + 1}</td>
+                                                        <td className="px-3 py-1.5 font-medium">{row["Nama Klien *"]}</td>
+                                                        <td className="px-3 py-1.5">{row["WhatsApp"] || "-"}</td>
+                                                        <td className="px-3 py-1.5">{row["Tanggal Sesi (YYYY-MM-DD)"] || "-"}</td>
+                                                        <td className="px-3 py-1.5">{row["Harga Total"] || "0"}</td>
+                                                        <td className="px-3 py-1.5">{row["Status"] || "Pending"}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* Step 3: Confirm / Result */}
+                        {step === "confirm" && (
+                            <>
+                                {importing ? (
+                                    <div className="flex flex-col items-center justify-center py-8 gap-3">
+                                        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                                        <p className="text-sm text-muted-foreground">Mengimport {preview.length} booking...</p>
+                                    </div>
+                                ) : result ? (
+                                    <div className={`p-4 rounded-lg border text-sm ${result.errors.length === 0 ? "bg-green-50 dark:bg-green-500/5 border-green-200 dark:border-green-500/20" : "bg-amber-50 dark:bg-amber-500/5 border-amber-200 dark:border-amber-500/20"}`}>
+                                        <div className="flex items-center gap-2 font-medium">
+                                            <CheckCircle2 className="w-5 h-5 text-green-600" />
+                                            {result.success} booking berhasil diimport
+                                        </div>
+                                        {result.errors.length > 0 && (
+                                            <div className="mt-2 text-xs text-red-600 dark:text-red-400 space-y-0.5">
+                                                {result.errors.map((err, i) => <p key={i}>{err}</p>)}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : null}
+                            </>
                         )}
                     </div>
 
-                    <DialogFooter className="gap-2">
-                        <Button variant="outline" onClick={handleClose}>Tutup</Button>
-                        <Button
-                            disabled={preview.length === 0 || importing || !!result}
-                            onClick={handleImport}
-                            className="gap-2"
-                        >
-                            {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                            Import {preview.length} Booking
-                        </Button>
+                    <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
+                        {step === "upload" && (
+                            <Button variant="outline" onClick={handleClose} className="w-full sm:w-auto">Tutup</Button>
+                        )}
+                        {step === "preview" && (
+                            <>
+                                <Button variant="outline" onClick={() => { setStep("upload"); setFile(null); setPreview([]); }} className="gap-1.5 w-full sm:w-auto">
+                                    <ArrowLeft className="w-3.5 h-3.5" /> Kembali
+                                </Button>
+                                <Button onClick={handleImport} className="gap-1.5 w-full sm:w-auto" disabled={preview.length === 0}>
+                                    Import {preview.length} Booking <ArrowRight className="w-3.5 h-3.5" />
+                                </Button>
+                            </>
+                        )}
+                        {step === "confirm" && result && (
+                            <Button onClick={handleClose} className="w-full sm:w-auto">Selesai</Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

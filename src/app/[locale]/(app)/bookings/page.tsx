@@ -113,6 +113,7 @@ export default function BookingsPage() {
     const [statusFilter, setStatusFilter] = React.useState("All");
     const [packageFilter, setPackageFilter] = React.useState("All");
     const [freelanceFilter, setFreelanceFilter] = React.useState("All");
+    const [monthFilter, setMonthFilter] = React.useState("All");
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
 
@@ -239,7 +240,12 @@ export default function BookingsPage() {
         const matchesStatus = statusFilter === "All" || b.status === statusFilter;
         const matchesPackage = packageFilter === "All" || b.services?.name === packageFilter;
         const matchesFreelance = freelanceFilter === "All" || b.booking_freelancers.some(f => f.name === freelanceFilter);
-        return matchesSearch && matchesStatus && matchesPackage && matchesFreelance;
+        const matchesMonth = monthFilter === "All" || (() => {
+            if (!b.session_date) return false;
+            const d = new Date(b.session_date);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` === monthFilter;
+        })();
+        return matchesSearch && matchesStatus && matchesPackage && matchesFreelance && matchesMonth;
     });
 
     return (
@@ -286,6 +292,14 @@ export default function BookingsPage() {
                     <select value={freelanceFilter} onChange={e => setFreelanceFilter(e.target.value)} className={selectFilterClass}>
                         <option value="All">Semua Freelance</option>
                         {freelancerNames.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                    <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className={selectFilterClass}>
+                        <option value="All">Semua Bulan</option>
+                        {Array.from(new Set(bookings.filter(b => b.session_date).map(b => { const d = new Date(b.session_date!); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }))).sort().reverse().map(m => {
+                            const [y, mo] = m.split("-");
+                            const label = new Date(parseInt(y), parseInt(mo) - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+                            return <option key={m} value={m}>{label}</option>;
+                        })}
                     </select>
                 </div>
                 <div className="relative">

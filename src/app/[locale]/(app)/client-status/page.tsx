@@ -155,16 +155,16 @@ export default function ClientStatusPage() {
                             )}
                         </div>
                         <div className="border-t pt-2 space-y-2">
-                            <div className="space-y-1">
-                                <label className="text-xs text-muted-foreground">Status</label>
-                                <select value={b.client_status || ""} onChange={e => updateStatus(b.id, e.target.value)} disabled={savingId === b.id} className={selectClass}>
+                            <div className="flex items-center gap-3">
+                                <label className="text-xs text-muted-foreground shrink-0 w-14">Status</label>
+                                <select value={b.client_status || ""} onChange={e => updateStatus(b.id, e.target.value)} disabled={savingId === b.id} className={`${selectClass} flex-1`}>
                                     <option value="">Belum diset</option>
                                     {CLIENT_STATUSES.filter(s => s.value).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                                 </select>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <label className="text-xs text-muted-foreground shrink-0">Antrian</label>
-                                <input type="number" min={0} value={b.queue_position ?? ""} onChange={e => updateQueue(b.id, e.target.value === "" ? null : parseInt(e.target.value, 10))} placeholder="-" className={inputClass} />
+                            <div className="flex items-center gap-3">
+                                <label className="text-xs text-muted-foreground shrink-0 w-14">Antrian</label>
+                                <input type="number" min={0} value={b.queue_position ?? ""} onChange={e => updateQueue(b.id, e.target.value === "" ? null : parseInt(e.target.value, 10))} placeholder="-" className={`${inputClass} flex-1`} />
                             </div>
                         </div>
                         <div className="flex items-center gap-1 pt-1 border-t">

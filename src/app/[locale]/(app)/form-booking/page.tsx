@@ -138,7 +138,7 @@ export default function FormBookingPage() {
         setGreeting(DEFAULTS.greeting);
         setSelectedEventTypes([...DEFAULTS.eventTypes]);
         setShowNotes(DEFAULTS.showNotes);
-        setShowProof(DEFAULTS.showProof);
+        setShowProof(false); // Requires Google Drive — don't enable by default
         setMinDpPercent(DEFAULTS.minDpPercent);
         setMinDpMap({});
         setBankAccounts([]);
@@ -397,7 +397,7 @@ export default function FormBookingPage() {
                 </div>
 
                 {/* RIGHT: Linktree-Style Preview — hidden on mobile when viewing settings */}
-                <div className={`sticky top-4 ${mobileTab === "settings" ? "hidden lg:flex" : "flex"}`} style={{ height: "calc(100vh - 10rem)", maxHeight: "calc(100vh - 10rem)" }}>
+                <div className={`sticky top-4 ${mobileTab === "settings" ? "hidden lg:flex" : "flex"}`} style={{ height: "calc(100vh - 12rem)", maxHeight: "calc(100vh - 12rem)" }}>
                     <div className="flex flex-col w-full">
                         {/* Preview Header with Buttons */}
                         <div className="flex items-center justify-between mb-3 shrink-0">

@@ -101,7 +101,7 @@ export default async function DashboardPage() {
             </div>
 
             {/* Row 1: 4 Stats Cards */}
-            <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
                 <StatsCard
                     title={t("totalBooking")}
                     value={`${totalBookings || 0}`}

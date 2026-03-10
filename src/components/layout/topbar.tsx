@@ -51,6 +51,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         if (pathname.startsWith("/client-status")) return "Status Booking";
         if (pathname.startsWith("/settings")) return "Pengaturan";
         if (pathname.startsWith("/profile")) return "Profil";
+        if (pathname.startsWith("/dashboard")) return "Dashboard";
         return "Client Desk";
     }, [pathname]);
 
@@ -93,10 +94,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                     <Menu className="w-5 h-5" />
                     <span className="sr-only">Toggle Sidebar</span>
                 </Button>
-                <h1 className="text-lg font-semibold md:hidden flex items-center gap-2">
-                    <img src="/icon-192.png" alt="" className="w-6 h-6 rounded-md" />
-                    {pageTitle}
-                </h1>
+                <h1 className="text-lg font-semibold md:hidden">{pageTitle}</h1>
             </div>
 
             <div className="flex items-center gap-2">
