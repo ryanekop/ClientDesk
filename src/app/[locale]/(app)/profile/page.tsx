@@ -214,7 +214,7 @@ export default function ProfilePage() {
 
                     {/* Status Membership */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Status Membership</label>
+                        <label className="text-sm font-medium">{t("statusMembership")}</label>
                         {subscription ? (() => {
                             const isLifetime = subscription.tier === 'lifetime';
                             const isPro = subscription.tier.startsWith('pro_') || isLifetime;
@@ -224,10 +224,10 @@ export default function ProfilePage() {
                             const daysLeft = expiry ? Math.max(0, Math.ceil((expiry.getTime() - Date.now()) / 86400000)) : null;
                             const isExpired = expiry ? expiry < new Date() : false;
 
-                            const tierLabel = isLifetime ? 'Lifetime' :
-                                subscription.tier === 'pro_yearly' ? 'Pro (1 Tahun)' :
-                                    subscription.tier === 'pro_quarterly' ? 'Pro (3 Bulan)' :
-                                        subscription.tier === 'pro_monthly' ? 'Pro (Bulanan)' :
+                            const tierLabel = isLifetime ? t('tierLifetime') :
+                                subscription.tier === 'pro_yearly' ? t('tierProYearly') :
+                                    subscription.tier === 'pro_quarterly' ? t('tierProQuarterly') :
+                                        subscription.tier === 'pro_monthly' ? t('tierProMonthly') :
                                             isTrial ? 'Trial' : 'Free';
 
                             const badgeBg = isPro
@@ -244,30 +244,30 @@ export default function ProfilePage() {
                                         <div>
                                             <p className="text-sm font-medium">{tierLabel}</p>
                                             {isLifetime ? (
-                                                <p className="text-xs text-muted-foreground">Berlaku selamanya ∞</p>
+                                                <p className="text-xs text-muted-foreground">{t('berlakuSelamanya')}</p>
                                             ) : expiry ? (
                                                 <p className={`text-xs ${isExpired ? 'text-red-500' : daysLeft !== null && daysLeft <= 7 ? 'text-amber-500' : 'text-muted-foreground'}`}>
                                                     {isExpired
-                                                        ? '⚠️ Expired'
-                                                        : `Berlaku sampai: ${expiry.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} (${daysLeft} hari lagi)`
+                                                        ? `⚠️ ${t('expired')}`
+                                                        : `${t('berlakuSampai')}: ${expiry.toLocaleDateString(locale === 'en' ? 'en-US' : 'id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} (${daysLeft} ${t('hariLagi')})`
                                                     }
                                                 </p>
                                             ) : null}
                                         </div>
                                     </div>
                                     <Link href={`/${locale}/pricing`}>
-                                        <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                                            <RefreshCw className="w-3 h-3" /> Ganti Paket
+                                        <Button size="sm" className="gap-1.5 text-xs">
+                                            <RefreshCw className="w-3 h-3" /> {t('gantiPaket')}
                                         </Button>
                                     </Link>
                                 </div>
                             );
                         })() : (
                             <div className="flex items-center justify-between rounded-lg border p-4">
-                                <p className="text-sm text-muted-foreground">Tidak ada data subscription</p>
+                                <p className="text-sm text-muted-foreground">{t('noSubscription')}</p>
                                 <Link href={`/${locale}/pricing`}>
-                                    <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                                        <RefreshCw className="w-3 h-3" /> Lihat Paket
+                                    <Button size="sm" className="gap-1.5 text-xs">
+                                        <RefreshCw className="w-3 h-3" /> {t('lihatPaket')}
                                     </Button>
                                 </Link>
                             </div>
@@ -279,14 +279,16 @@ export default function ProfilePage() {
                     {resetMsg && <p className="text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 rounded-lg px-4 py-3">{resetMsg}</p>}
 
                     {/* Save */}
-                    <Button onClick={handleSave} disabled={saving} className="gap-2 h-10 text-sm w-full">
-                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        {t("simpan")}
-                    </Button>
-                    <Button variant="outline" onClick={handleResetPassword} className="gap-2 h-10 text-sm w-full">
-                        <Key className="w-4 h-4" />
-                        {t("resetPassword")}
-                    </Button>
+                    <div className="grid grid-cols-2 gap-3">
+                        <Button onClick={handleSave} disabled={saving} className="gap-2 h-9 text-sm">
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                            {t("simpan")}
+                        </Button>
+                        <Button variant="outline" onClick={handleResetPassword} className="gap-2 h-9 text-sm">
+                            <Key className="w-4 h-4" />
+                            {t("resetPassword")}
+                        </Button>
+                    </div>
                 </div>
             </div>
 

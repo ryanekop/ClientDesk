@@ -274,7 +274,19 @@
         "berhasilSimpan": "Profil berhasil disimpan!",
         "gagalUpload": "Gagal upload foto",
         "resetSent": "Link reset password telah dikirim ke email Anda!",
-        "resetFailed": "Gagal mengirim email"
+        "resetFailed": "Gagal mengirim email",
+        "statusMembership": "Status Membership",
+        "tierLifetime": "Lifetime",
+        "tierProYearly": "Pro (1 Tahun)",
+        "tierProQuarterly": "Pro (3 Bulan)",
+        "tierProMonthly": "Pro (Bulanan)",
+        "berlakuSelamanya": "Berlaku selamanya ∞",
+        "berlakuSampai": "Berlaku sampai",
+        "hariLagi": "hari lagi",
+        "expired": "Expired",
+        "gantiPaket": "Ganti Paket",
+        "lihatPaket": "Lihat Paket",
+        "noSubscription": "Tidak ada data subscription"
     },
     "Landing": {
         "heroTagline": "Manajemen Klien Vendor #1",

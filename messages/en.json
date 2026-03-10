@@ -274,7 +274,19 @@
         "berhasilSimpan": "Profile saved successfully!",
         "gagalUpload": "Failed to upload photo",
         "resetSent": "Password reset link has been sent to your email!",
-        "resetFailed": "Failed to send email"
+        "resetFailed": "Failed to send email",
+        "statusMembership": "Membership Status",
+        "tierLifetime": "Lifetime",
+        "tierProYearly": "Pro (1 Year)",
+        "tierProQuarterly": "Pro (3 Months)",
+        "tierProMonthly": "Pro (Monthly)",
+        "berlakuSelamanya": "Valid forever ∞",
+        "berlakuSampai": "Valid until",
+        "hariLagi": "days left",
+        "expired": "Expired",
+        "gantiPaket": "Change Plan",
+        "lihatPaket": "View Plans",
+        "noSubscription": "No subscription data"
     },
     "Landing": {
         "heroTagline": "#1 Vendor Client Management",
