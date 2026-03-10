@@ -148,7 +148,7 @@ export default function ProfilePage() {
     return (
         <div className="max-w-2xl mx-auto space-y-6">
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-                <div className="p-6 sm:p-8 space-y-8">
+                <div className="p-6 sm:p-8 space-y-5">
                     {/* Avatar */}
                     <div className="flex flex-col items-center gap-3">
                         <div className="relative">
@@ -202,7 +202,7 @@ export default function ProfilePage() {
                     </div>
 
                     {/* Save */}
-                    <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="grid grid-cols-2 gap-3">
                         <Button onClick={handleSave} disabled={saving} className="gap-2 h-9 text-sm px-6">
                             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                             {t("simpan")}
