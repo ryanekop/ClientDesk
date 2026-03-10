@@ -548,7 +548,11 @@
         "saving": "Menyimpan...",
         "savePassword": "Simpan Kata Sandi",
         "passwordUpdated": "Kata Sandi Diperbarui!",
-        "passwordUpdatedDesc": "Kata sandi Anda berhasil diperbarui. Anda akan diarahkan ke dashboard..."
+        "passwordUpdatedDesc": "Kata sandi Anda berhasil diperbarui. Anda akan diarahkan ke dashboard...",
+        "authenticating": "Mengautentikasi...",
+        "authError": "Kesalahan Autentikasi",
+        "authTokenNotFound": "Token autentikasi tidak ditemukan. Coba klik link lagi atau minta link baru.",
+        "authFailed": "Gagal mengautentikasi. Silakan coba lagi."
     },
     "BookingsPage": {
         "addClient": "Tambah Klien Baru",

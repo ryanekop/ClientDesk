@@ -548,7 +548,11 @@
         "saving": "Saving...",
         "savePassword": "Save Password",
         "passwordUpdated": "Password Updated!",
-        "passwordUpdatedDesc": "Your password has been successfully updated. You will be redirected to the dashboard..."
+        "passwordUpdatedDesc": "Your password has been successfully updated. You will be redirected to the dashboard...",
+        "authenticating": "Authenticating...",
+        "authError": "Authentication Error",
+        "authTokenNotFound": "Authentication token not found. Try clicking the link again or request a new one.",
+        "authFailed": "Authentication failed. Please try again."
     },
     "BookingsPage": {
         "addClient": "Add New Client",

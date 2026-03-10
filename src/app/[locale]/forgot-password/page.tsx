@@ -6,15 +6,14 @@ import { useLocale, useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Loader2, Mail, ArrowLeft, KeyRound } from "lucide-react"
 import Link from "next/link"
-import { useTheme } from "next-themes"
-import { Sun, Moon, Languages } from "lucide-react"
+import { LanguageSwitcher } from "@/components/language-switcher"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
 
 export default function ForgotPasswordPage() {
     const supabase = createClient()
     const locale = useLocale()
-    const { theme, setTheme } = useTheme()
     const t = useTranslations("Auth")
 
     const [email, setEmail] = useState("")
@@ -133,15 +132,8 @@ export default function ForgotPasswordPage() {
                     </div>
 
                     <div className="flex items-center px-6 justify-center gap-2">
-                        <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9">
-                            <Languages className="h-[1.2rem] w-[1.2rem]" />
-                        </button>
-                        <button
-                            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9"
-                        >
-                            {theme === "dark" ? <Moon className="h-[1.2rem] w-[1.2rem]" /> : <Sun className="h-[1.2rem] w-[1.2rem]" />}
-                        </button>
+                        <LanguageSwitcher />
+                        <ThemeToggle />
                     </div>
                 </div>
             </div>

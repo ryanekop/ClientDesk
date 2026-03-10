@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Loader2 } from 'lucide-react'
 
 export default function AuthCallbackPage() {
@@ -11,6 +11,7 @@ export default function AuthCallbackPage() {
     const locale = useLocale()
     const supabase = createClient()
     const searchParams = useSearchParams()
+    const t = useTranslations('Auth')
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
@@ -110,10 +111,10 @@ export default function AuthCallbackPage() {
                         window.location.href = `/${locale}/dashboard`
                     }
                 } else {
-                    setError('Token autentikasi tidak ditemukan. Coba klik link lagi atau minta link baru.')
+                    setError(t('authTokenNotFound'))
                 }
             } catch {
-                setError('Gagal mengautentikasi. Silakan coba lagi.')
+                setError(t('authFailed'))
             }
         }
 
@@ -125,14 +126,14 @@ export default function AuthCallbackPage() {
             <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
                 <div className="w-full max-w-sm space-y-4 text-center">
                     <div className="p-4 bg-destructive/15 text-destructive rounded-md">
-                        <p className="font-medium">Kesalahan Autentikasi</p>
+                        <p className="font-medium">{t('authError')}</p>
                         <p className="text-sm mt-1">{error}</p>
                     </div>
                     <button
                         onClick={() => window.location.href = `/${locale}/login`}
                         className="text-primary hover:underline text-sm cursor-pointer"
                     >
-                        Kembali ke Login
+                        {t('backToLogin')}
                     </button>
                 </div>
             </div>
@@ -143,7 +144,7 @@ export default function AuthCallbackPage() {
         <div className="flex min-h-screen items-center justify-center bg-muted/40">
             <div className="text-center space-y-4">
                 <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-                <p className="text-muted-foreground">Mengautentikasi...</p>
+                <p className="text-muted-foreground">{t('authenticating')}</p>
             </div>
         </div>
     )

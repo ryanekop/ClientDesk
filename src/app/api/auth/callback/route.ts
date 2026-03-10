@@ -21,12 +21,13 @@ export async function GET(request: Request) {
             // =============================================
             const userId = sessionData?.user?.id
             if (userId) {
+                const userEmail = sessionData?.user?.email || 'unknown'
+                const fullName = sessionData?.user?.user_metadata?.full_name || ''
+
                 const existingSub = await getSubscription(userId)
                 if (!existingSub) {
                     await createTrialSubscription(userId)
                     // Notify admin via Telegram (fire-and-forget)
-                    const userEmail = sessionData?.user?.email || 'unknown'
-                    const fullName = sessionData?.user?.user_metadata?.full_name || ''
                     const ip = request.headers.get('cf-connecting-ip')
                         || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
                         || request.headers.get('x-real-ip')
@@ -41,6 +42,11 @@ export async function GET(request: Request) {
                         ip,
                         device,
                     }).catch(() => { })
+                }
+
+                // Sync full_name to profiles table
+                if (fullName) {
+                    await supabase.from('profiles').update({ full_name: fullName }).eq('id', userId)
                 }
             }
 
@@ -93,6 +99,17 @@ export async function POST(request: Request) {
                 ip,
                 device,
             }).catch(() => { })
+        }
+
+        // Sync full_name to profiles table
+        if (fullName) {
+            const { createClient } = await import('@supabase/supabase-js')
+            const supabaseAdmin = createClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.SUPABASE_SERVICE_ROLE_KEY!,
+                { auth: { autoRefreshToken: false, persistSession: false } }
+            )
+            await supabaseAdmin.from('profiles').update({ full_name: fullName }).eq('id', userId)
         }
 
         return NextResponse.json({ success: true })

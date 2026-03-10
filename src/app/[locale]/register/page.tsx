@@ -6,8 +6,8 @@ import { useLocale, useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Loader2, Eye, EyeOff, UserPlus, Mail, ArrowLeft } from "lucide-react"
 import Link from "next/link"
-import { useTheme } from "next-themes"
-import { Sun, Moon, Languages } from "lucide-react"
+import { LanguageSwitcher } from "@/components/language-switcher"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
 // Use implicit flow so confirmation link works on any device (no PKCE verifier needed)
@@ -24,7 +24,6 @@ const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-in
 export default function RegisterPage() {
     const router = useRouter()
     const locale = useLocale()
-    const { theme, setTheme } = useTheme()
     const t = useTranslations("Auth")
 
     const [fullName, setFullName] = useState("")
@@ -248,15 +247,8 @@ export default function RegisterPage() {
 
                     {/* Footer */}
                     <div className="flex items-center px-6 justify-center gap-2">
-                        <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9">
-                            <Languages className="h-[1.2rem] w-[1.2rem]" />
-                        </button>
-                        <button
-                            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9"
-                        >
-                            {theme === "dark" ? <Moon className="h-[1.2rem] w-[1.2rem]" /> : <Sun className="h-[1.2rem] w-[1.2rem]" />}
-                        </button>
+                        <LanguageSwitcher />
+                        <ThemeToggle />
                     </div>
                 </div>
             </div>

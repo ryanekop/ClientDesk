@@ -4,15 +4,15 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Loader2, Eye, EyeOff, UserPlus, Lock, Languages, Sun, Moon } from "lucide-react"
-import { useTheme } from "next-themes"
+import { Loader2, Eye, EyeOff, UserPlus, Lock } from "lucide-react"
 import { useLocale, useTranslations } from "next-intl"
 import Link from "next/link"
+import { LanguageSwitcher } from "@/components/language-switcher"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function LoginPage() {
     const router = useRouter()
     const supabase = createClient()
-    const { theme, setTheme } = useTheme()
     const locale = useLocale()
     const t = useTranslations("Auth")
 
@@ -158,15 +158,8 @@ export default function LoginPage() {
 
                     {/* Card Footer */}
                     <div className="flex items-center px-6 justify-center gap-2">
-                        <button className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9">
-                            <Languages className="h-[1.2rem] w-[1.2rem]" />
-                        </button>
-                        <button
-                            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-9 w-9"
-                        >
-                            {theme === "dark" ? <Moon className="h-[1.2rem] w-[1.2rem]" /> : <Sun className="h-[1.2rem] w-[1.2rem]" />}
-                        </button>
+                        <LanguageSwitcher />
+                        <ThemeToggle />
                     </div>
                 </div>
             </div>
