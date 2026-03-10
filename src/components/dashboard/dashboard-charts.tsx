@@ -36,18 +36,23 @@ export function DashboardCharts() {
 
             // Use local date keys to avoid UTC offset issues
             const toLocalKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            const toLocalLabel = (d: Date) => d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
 
             // Initialize all 30 days
             const revenueByDate: Record<string, number> = {};
+            const dateLabelMap: Record<string, string> = {};
             for (let i = 29; i >= 0; i--) {
                 const d = new Date();
                 d.setDate(d.getDate() - i);
-                revenueByDate[toLocalKey(d)] = 0;
+                const key = toLocalKey(d);
+                revenueByDate[key] = 0;
+                dateLabelMap[key] = toLocalLabel(d);
             }
 
             // Sum per-day income (non-cumulative)
             (recentBookings || []).forEach(b => {
-                const dateKey = toLocalKey(new Date(b.created_at));
+                const d = new Date(b.created_at);
+                const dateKey = toLocalKey(d);
                 const amount = b.is_fully_paid ? (b.total_price || 0) : (b.dp_paid || 0);
                 if (revenueByDate[dateKey] !== undefined) {
                     revenueByDate[dateKey] += amount;
@@ -55,13 +60,11 @@ export function DashboardCharts() {
             });
 
             const entries = Object.entries(revenueByDate);
-            const dailyPts: DailyPoint[] = entries.map(([date], idx) => {
-                const d = new Date(date);
-                const fullLabel = d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+            const dailyPts: DailyPoint[] = entries.map(([date, rev], idx) => {
                 return {
-                    name: idx % 5 === 0 || idx === entries.length - 1 ? fullLabel : "",
-                    dateLabel: fullLabel,
-                    revenue: revenueByDate[date],
+                    name: idx % 7 === 0 || idx === entries.length - 1 ? dateLabelMap[date] : "",
+                    dateLabel: dateLabelMap[date],
+                    revenue: rev,
                 };
             });
             setDailyData(dailyPts);

@@ -327,7 +327,7 @@ export default function CalendarPage() {
     };
 
     return (
-        <div className="space-y-6 h-[calc(100vh-8rem)] min-h-[600px] flex flex-col">
+        <div className="space-y-6 md:h-[calc(100vh-8rem)] min-h-[500px] md:min-h-[600px] flex flex-col">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
@@ -473,7 +473,7 @@ export default function CalendarPage() {
 
             {/* Event Popup */}
             <Dialog open={eventPopupOpen} onOpenChange={setEventPopupOpen}>
-                <DialogContent className="sm:max-w-md overflow-hidden">
+                <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle className="text-lg">{selectedEvent?.clientName}</DialogTitle>
                     </DialogHeader>

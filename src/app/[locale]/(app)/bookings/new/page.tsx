@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
-import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
@@ -111,6 +111,7 @@ export default function NewBookingPage() {
     const [sessionDate, setSessionDate] = React.useState("");
     const [statusVal, setStatusVal] = React.useState("Pending");
     const [notes, setNotes] = React.useState("");
+    const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
 
     // Custom popups
     const [showCustomServicePopup, setShowCustomServicePopup] = React.useState(false);
@@ -223,6 +224,7 @@ export default function NewBookingPage() {
             dp_paid: parseFloat(dpPaid.toString()) || 0,
             status: statusVal,
             notes: notes || null,
+            drive_folder_url: driveFolderUrl || null,
             extra_fields: Object.keys(extraFields).length > 0 ? extraFields : null,
         }).select("id").single();
 
@@ -431,6 +433,15 @@ export default function NewBookingPage() {
                         <StickyNote className="w-4 h-4" /> Catatan
                     </h3>
                     <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Permintaan khusus, detail tambahan..." className={textareaClass} />
+                </div>
+
+                {/* Link Google Drive */}
+                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-3">
+                    <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                        <Link2 className="w-4 h-4" /> Link Google Drive
+                    </h3>
+                    <input type="url" value={driveFolderUrl} onChange={e => setDriveFolderUrl(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." className={inputClass} />
+                    <p className="text-[11px] text-muted-foreground">Tempelkan link folder Google Drive klien di sini (opsional).</p>
                 </div>
 
                 <div className="flex gap-3 justify-end pt-4">

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
-import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
@@ -114,6 +114,7 @@ export default function EditBookingPage() {
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
     const [status, setStatus] = React.useState("Pending");
     const [notes, setNotes] = React.useState("");
+    const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
 
     const [showCustomServicePopup, setShowCustomServicePopup] = React.useState(false);
@@ -155,6 +156,7 @@ export default function EditBookingPage() {
                 setDpPaid(booking.dp_paid || "");
                 setStatus(booking.status || "Pending");
                 setNotes(booking.notes || "");
+                setDriveFolderUrl(booking.drive_folder_url || "");
                 setExtraFields(booking.extra_fields || {});
             }
             setServices((svcs || []) as Service[]);
@@ -239,6 +241,7 @@ export default function EditBookingPage() {
             is_fully_paid: dPaid >= tPrice && tPrice > 0,
             status,
             notes: notes || null,
+            drive_folder_url: driveFolderUrl || null,
             extra_fields: Object.keys(extraFields).length > 0 ? extraFields : null,
             updated_at: new Date().toISOString(),
         }).eq("id", id);
@@ -408,6 +411,15 @@ export default function EditBookingPage() {
                         <StickyNote className="w-4 h-4" /> Catatan
                     </h3>
                     <textarea rows={4} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Detail tambahan..." className={textareaClass} />
+                </div>
+
+                {/* Link Google Drive */}
+                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-3">
+                    <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                        <Link2 className="w-4 h-4" /> Link Google Drive
+                    </h3>
+                    <input type="url" value={driveFolderUrl} onChange={e => setDriveFolderUrl(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." className={inputClass} />
+                    <p className="text-[11px] text-muted-foreground">Tempelkan link folder Google Drive klien di sini (opsional).</p>
                 </div>
 
                 <div className="flex gap-3 justify-end pt-4">
