@@ -36,16 +36,31 @@ export default function ProfilePage() {
         setUserId(user.id);
         setEmail(user.email || "");
 
+        // Fetch full_name first (always exists)
         const { data: profile } = await supabase
             .from("profiles")
-            .select("full_name, avatar_url")
+            .select("full_name")
             .eq("id", user.id)
             .single();
 
         if (profile) {
             setFullName(profile.full_name || "");
-            setAvatarUrl(profile.avatar_url || null);
         }
+
+        // Try fetching avatar_url separately (column may not exist yet)
+        try {
+            const { data: avatarData } = await supabase
+                .from("profiles")
+                .select("avatar_url")
+                .eq("id", user.id)
+                .single();
+            if (avatarData?.avatar_url) {
+                setAvatarUrl(avatarData.avatar_url);
+            }
+        } catch {
+            // avatar_url column doesn't exist yet — ignore
+        }
+
         setLoading(false);
     }
 
