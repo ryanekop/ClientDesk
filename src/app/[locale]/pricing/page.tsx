@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LanguageSwitcher } from "@/components/language-switcher"
@@ -16,6 +17,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { createClient } from '@/utils/supabase/client'
 
 import { LandingNav } from "@/components/landing/landing-client"
 
@@ -23,6 +25,24 @@ export default function PricingPage() {
     const t = useTranslations('Pricing')
     const tl = useTranslations('Landing')
     const locale = useLocale()
+    const supabase = createClient()
+    const [currentTier, setCurrentTier] = useState<string | null>(null)
+
+    useEffect(() => {
+        async function fetchSubscription() {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+            const { data: sub } = await supabase
+                .from('subscriptions')
+                .select('tier, status')
+                .eq('user_id', user.id)
+                .single()
+            if (sub && sub.status !== 'expired') {
+                setCurrentTier(sub.tier)
+            }
+        }
+        fetchSubscription()
+    }, [])
 
     const sharedFeatures = [
         "featureFullAccess",
@@ -37,6 +57,7 @@ export default function PricingPage() {
     const plans = [
         {
             nameKey: "plan1Month",
+            tier: "pro_monthly",
             price: "39rb",
             durationKey: "perMonth",
             features: [...sharedFeatures],
@@ -47,6 +68,7 @@ export default function PricingPage() {
         },
         {
             nameKey: "plan3Months",
+            tier: "pro_quarterly",
             price: "99rb",
             durationKey: "per3Months",
             features: ["featurePerMonth3", ...sharedFeatures],
@@ -57,6 +79,7 @@ export default function PricingPage() {
         },
         {
             nameKey: "plan1Year",
+            tier: "pro_yearly",
             price: "349rb",
             durationKey: "perYear",
             features: ["featurePerMonth12", ...sharedFeatures],
@@ -67,6 +90,7 @@ export default function PricingPage() {
         },
         {
             nameKey: "planLifetime",
+            tier: "lifetime",
             price: "549rb",
             durationKey: "oneTime",
             features: ["featurePayOnce", "featureLimitedSlot", ...sharedFeatures, "featureFutureUpdates"],
@@ -124,50 +148,65 @@ export default function PricingPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
-                    {plans.map((plan) => (
-                        <Card key={plan.nameKey} className={cn(
-                            "flex flex-col relative",
-                            plan.popular ? "border-primary shadow-lg scale-105 z-10" : "border-border"
-                        )}>
-                            {plan.popular && (
-                                <div className="absolute -top-4 left-0 right-0 flex justify-center">
-                                    <Badge className="bg-primary text-primary-foreground px-3 py-1">{t('mostPopular')}</Badge>
-                                </div>
-                            )}
-                            <CardHeader>
-                                <div className="flex items-center gap-2 mb-2">
-                                    <plan.icon className={cn("h-5 w-5", plan.popular ? "text-primary" : "text-muted-foreground")} />
-                                    <CardTitle className="text-xl">{t(plan.nameKey)}</CardTitle>
-                                </div>
-                                <div className="flex items-end gap-2">
-                                    <div className="flex flex-col">
-                                        <span className="text-3xl font-bold">{plan.price}</span>
+                    {plans.map((plan) => {
+                        const isActive = currentTier === plan.tier
+                        return (
+                            <Card key={plan.nameKey} className={cn(
+                                "flex flex-col relative",
+                                isActive ? "border-green-500 border-2 shadow-lg" :
+                                    plan.popular ? "border-primary shadow-lg scale-105 z-10" : "border-border"
+                            )}>
+                                {isActive && (
+                                    <div className="absolute -top-4 left-0 right-0 flex justify-center">
+                                        <Badge className="bg-green-500 text-white px-3 py-1">✅ {t('currentPlan')}</Badge>
                                     </div>
-                                    <span className="text-muted-foreground text-sm mb-1">{t(plan.durationKey)}</span>
-                                </div>
-                                <CardDescription>
-                                    {plan.isLifetime ? t('billingOnce') : t('billingAuto')}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex-1">
-                                <ul className="space-y-3">
-                                    {plan.features.map((featureKey) => (
-                                        <li key={featureKey} className="flex items-center gap-2">
-                                            <Check className="h-4 w-4 text-green-500 shrink-0" />
-                                            <span className="text-sm text-muted-foreground">{t(featureKey)}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </CardContent>
-                            <CardFooter>
-                                <Button className="w-full cursor-pointer" variant={plan.popular ? "default" : "outline"} asChild>
-                                    <a href={plan.link}>
-                                        {t('selectPlan')}
-                                    </a>
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                    ))}
+                                )}
+                                {!isActive && plan.popular && (
+                                    <div className="absolute -top-4 left-0 right-0 flex justify-center">
+                                        <Badge className="bg-primary text-primary-foreground px-3 py-1">{t('mostPopular')}</Badge>
+                                    </div>
+                                )}
+                                <CardHeader>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <plan.icon className={cn("h-5 w-5", isActive ? "text-green-500" : plan.popular ? "text-primary" : "text-muted-foreground")} />
+                                        <CardTitle className="text-xl">{t(plan.nameKey)}</CardTitle>
+                                    </div>
+                                    <div className="flex items-end gap-2">
+                                        <div className="flex flex-col">
+                                            <span className="text-3xl font-bold">{plan.price}</span>
+                                        </div>
+                                        <span className="text-muted-foreground text-sm mb-1">{t(plan.durationKey)}</span>
+                                    </div>
+                                    <CardDescription>
+                                        {plan.isLifetime ? t('billingOnce') : t('billingAuto')}
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex-1">
+                                    <ul className="space-y-3">
+                                        {plan.features.map((featureKey) => (
+                                            <li key={featureKey} className="flex items-center gap-2">
+                                                <Check className="h-4 w-4 text-green-500 shrink-0" />
+                                                <span className="text-sm text-muted-foreground">{t(featureKey)}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </CardContent>
+                                <CardFooter>
+                                    {isActive ? (
+                                        <Button className="w-full" variant="outline" disabled>
+                                            ✅ {t('currentPlan')}
+                                        </Button>
+                                    ) : (
+                                        <Button className="w-full cursor-pointer" variant={plan.popular ? "default" : "outline"} asChild>
+                                            <a href={plan.link}>
+                                                {t('selectPlan')}
+                                            </a>
+                                        </Button>
+                                    )}
+                                </CardFooter>
+                            </Card>
+                        )
+                    })}
                 </div>
 
                 <div className="mt-16 text-center">
