@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createClient } from "@/utils/supabase/server";
-import { Users, CreditCard, TrendingUp, CalendarDays, User, Plus, Wallet, Calendar, Camera, Clock3 } from "lucide-react";
+import { Users, CreditCard, TrendingUp, CalendarDays, User, Plus, Wallet, Calendar, Camera, Clock3, ListOrdered } from "lucide-react";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import { UpcomingBookingCard } from "@/components/dashboard/dashboard-widgets";
 import { getTranslations } from "next-intl/server";
@@ -171,9 +171,9 @@ export default async function DashboardPage() {
                             </Link>
                             <Link href="/bookings" className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-center group">
                                 <div className="p-2 rounded-lg bg-foreground/5 dark:bg-foreground/10 group-hover:bg-foreground/10 dark:group-hover:bg-foreground/20 transition-colors">
-                                    <Users className="w-4 h-4 text-foreground" />
+                                    <ListOrdered className="w-4 h-4 text-foreground" />
                                 </div>
-                                <span className="text-[11px] font-medium">Daftar Klien</span>
+                                <span className="text-[11px] font-medium">Daftar Booking</span>
                             </Link>
                             <Link href="/calendar" className="flex flex-col items-center gap-1.5 p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-center group">
                                 <div className="p-2 rounded-lg bg-foreground/5 dark:bg-foreground/10 group-hover:bg-foreground/10 dark:group-hover:bg-foreground/20 transition-colors">

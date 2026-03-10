@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Edit2, Trash2, Package, ToggleLeft, ToggleRight, Loader2 } from "lucide-react";
+import { Plus, Edit2, Trash2, Package, ToggleLeft, ToggleRight, Loader2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -12,6 +12,7 @@ type Service = {
     name: string;
     description: string | null;
     price: number;
+    duration_minutes: number | null;
     is_active: boolean;
     created_at: string;
 };
@@ -51,6 +52,7 @@ export default function ServicesPage() {
             name: formData.get("name") as string,
             description: formData.get("description") as string || null,
             price: parseFloat(formData.get("price") as string) || 0,
+            duration_minutes: parseInt(formData.get("duration_minutes") as string) || 120,
             is_active: true,
         });
 
@@ -69,6 +71,7 @@ export default function ServicesPage() {
                 name: formData.get("name") as string,
                 description: formData.get("description") as string || null,
                 price: parseFloat(formData.get("price") as string) || 0,
+                duration_minutes: parseInt(formData.get("duration_minutes") as string) || 120,
             })
             .eq("id", editingService.id);
 
@@ -130,6 +133,12 @@ export default function ServicesPage() {
                                 <input name="price" type="number" min="0" step="1000" required placeholder="2500000"
                                     className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
                             </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Durasi (menit)</label>
+                                <input name="duration_minutes" type="number" min="15" step="15" defaultValue={120} placeholder="120"
+                                    className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
+                                <p className="text-xs text-muted-foreground">Durasi sesi yang akan digunakan di kalender</p>
+                            </div>
                             <DialogFooter>
                                 <Button type="submit">{t("simpan")}</Button>
                             </DialogFooter>
@@ -168,7 +177,15 @@ export default function ServicesPage() {
                                 </span>
                             </div>
 
-                            <div className="text-xl font-bold">{formatCurrency(service.price)}</div>
+                            <div className="flex items-center gap-3">
+                                <div className="text-xl font-bold">{formatCurrency(service.price)}</div>
+                                {service.duration_minutes && (
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                        <Clock className="w-3 h-3" />
+                                        {service.duration_minutes >= 60 ? `${Math.floor(service.duration_minutes / 60)} jam${service.duration_minutes % 60 ? ` ${service.duration_minutes % 60} mnt` : ""}` : `${service.duration_minutes} mnt`}
+                                    </span>
+                                )}
+                            </div>
 
                             <div className="flex items-center gap-2 pt-2 border-t">
                                 <Button
@@ -231,6 +248,12 @@ export default function ServicesPage() {
                                 <label className="text-sm font-medium">{t("harga")}</label>
                                 <input name="price" type="number" min="0" step="1000" required defaultValue={editingService.price}
                                     className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Durasi (menit)</label>
+                                <input name="duration_minutes" type="number" min="15" step="15" defaultValue={editingService.duration_minutes || 120}
+                                    className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
+                                <p className="text-xs text-muted-foreground">Durasi sesi yang akan digunakan di kalender</p>
                             </div>
                             <DialogFooter>
                                 <Button type="submit">{t("perbarui")}</Button>

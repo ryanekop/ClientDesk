@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
         // Get service name for calendar event
         const { data: service } = await supabaseAdmin
             .from("services")
-            .select("name")
+            .select("name, duration_minutes")
             .eq("id", serviceId)
             .single();
 
@@ -96,7 +96,8 @@ export async function POST(request: NextRequest) {
         if (vendor.google_access_token && vendor.google_refresh_token && sessionDate) {
             try {
                 const start = new Date(sessionDate);
-                const end = new Date(start.getTime() + 2 * 60 * 60 * 1000); // 2 hours default
+                const durationMs = ((service?.duration_minutes || 120) * 60 * 1000);
+                const end = new Date(start.getTime() + durationMs);
                 await pushEventToCalendar(
                     vendor.google_access_token,
                     vendor.google_refresh_token,

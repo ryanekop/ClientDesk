@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Save, Loader2, MessageSquare, Building2, Phone, Globe, Link2, Unlink, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Save, Loader2, MessageSquare, Building2, Phone, Globe, Link2, Unlink, CheckCircle, XCircle, AlertCircle, ImagePlus, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
+import { ImageCropModal } from "@/components/ui/image-crop-modal";
 
 const COUNTRY_CODES = [
     { code: "+62", flag: "🇮🇩", name: "Indonesia" },
@@ -53,43 +54,35 @@ function slugify(str: string) {
     return str.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 
-// Google Calendar SVG Logo
+// Google Calendar SVG Logo (official 2020)
 function GoogleCalendarLogo({ className }: { className?: string }) {
     return (
-        <svg className={className} viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M152.637 39.4023H47.3628V152.598H152.637V39.4023Z" fill="white" />
-            <path d="M118.125 86.7812C116.344 85.3047 113.555 83.5234 109.754 81.4375C105.949 79.3516 103.012 77.8672 100.93 76.9883C96.918 75.2305 94.1875 74.5547 92.7383 74.9727C91.2891 75.3867 90.4375 77.3398 90.168 80.832L89.7383 86.4375L80.5664 82.2695C79.7891 81.918 78.8047 82.3516 77.6172 83.5703C76.4258 84.793 75.832 85.7891 75.832 86.5625C75.832 87.3359 76.4258 88.3203 77.6172 89.5117C78.8047 90.707 79.7891 91.1602 80.5664 90.8094L89.4336 86.7812L88.8906 94.7734C88.6914 97.8438 89.2188 99.7266 90.4766 100.422C91.7344 101.117 94.6367 100.434 99.1836 98.375C101.266 97.4961 104.203 95.8789 107.996 93.5234C111.789 91.168 114.59 89.2266 116.395 87.6953C117.453 86.8164 118.078 86.2422 118.266 85.9727C118.453 85.7031 118.422 85.5 118.172 85.3672C117.926 85.2305 117.543 85.2734 117.031 85.4844C116.516 85.6953 116.117 85.8398 115.832 85.9141L118.125 86.7812Z" fill="white" />
-            <path d="M152.637 39.4023L130.883 17.7734L130.883 39.4023L152.637 39.4023Z" fill="#EA4335" />
-            <path d="M152.637 152.598L130.883 174.227L130.883 152.598L152.637 152.598Z" fill="#34A853" />
-            <path d="M47.3628 152.598L25.6094 174.227V152.598H47.3628Z" fill="#188038" />
-            <path d="M152.637 39.4023H130.883V17.7734L152.637 39.4023Z" fill="#EA4335" />
-            <path d="M25.6094 39.4023H47.3628L47.3628 17.7734L25.6094 39.4023Z" fill="#1967D2" />
-            <path d="M130.883 17.7734H47.3628V39.4023H130.883V17.7734Z" fill="#EA4335" />
-            <path d="M47.3628 39.4023H25.6094V152.598H47.3628V39.4023Z" fill="#4285F4" />
-            <path d="M130.883 152.598H47.3628V174.227H130.883V152.598Z" fill="#34A853" />
-            <path d="M152.637 39.4023V152.598H130.883V174.227L174.391 130.969V39.4023H152.637Z" fill="#FBBC04" />
-            <path d="M174.391 39.4023H152.637L174.391 17.7734V39.4023Z" fill="#EA4335" />
-            <path d="M174.391 130.969L152.637 152.598V130.969H174.391Z" fill="#E5AD06" />
-            <path d="M25.6094 174.227L47.3628 152.598V174.227H25.6094Z" fill="#188038" />
-            <path d="M25.6094 39.4023L47.3628 17.7734V39.4023H25.6094Z" fill="#1A73E8" />
-            <path d="M76.75 126.875C73.2461 124.309 70.6641 120.73 69.0039 116.133H75.5859C76.918 119.254 78.8906 121.746 81.5078 123.609C84.125 125.473 87.2578 126.402 90.9102 126.402C95.0586 126.402 98.4805 125.199 101.172 122.793C103.863 120.39 105.207 117.34 105.207 113.648C105.207 109.883 103.809 106.793 101.012 104.387C98.2148 101.98 94.6797 100.777 90.4062 100.777H86.0938V94.6484H90.0547C93.7773 94.6484 96.9336 93.5703 99.5195 91.418C102.105 89.2656 103.398 86.4648 103.398 83.0156C103.398 79.9219 102.258 77.418 99.9727 75.5C97.6875 73.582 94.8906 72.625 91.5742 72.625C88.332 72.625 85.5781 73.4961 83.3164 75.2383C81.0547 76.9805 79.3594 79.3516 78.2344 82.3438H71.8008C73.0703 77.9609 75.4258 74.3477 78.8672 71.5C82.3086 68.6523 86.4883 67.2305 91.4102 67.2305C94.9141 67.2305 98.0586 67.9805 100.844 69.4805C103.629 70.9805 105.809 73.0195 107.383 75.5977C108.953 78.1758 109.738 81.0195 109.738 84.125C109.738 87.3047 108.875 90.1602 107.148 92.6992C105.422 95.2344 103.121 97.1523 100.246 98.4531V98.8047C103.68 100.105 106.434 102.16 108.512 104.977C110.586 107.793 111.625 111.121 111.625 113.961C111.625 117.211 110.768 120.172 109.051 122.844C107.336 125.512 104.984 127.629 101.996 129.199C99.0078 130.766 95.6523 131.551 91.9297 131.551C86.2891 131.551 80.2539 129.441 76.75 126.875Z" fill="#4285F4" />
-            <path d="M126.797 130.852V69.9766L115.984 73.3867V67.582L131.504 61.875H132.945V130.852H126.797Z" fill="#4285F4" />
+        <svg className={className} viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <g transform="translate(3.75 3.75)">
+                <path fill="#FFFFFF" d="M148.882,43.618l-47.368-5.263l-57.895,5.263L38.355,96.25l5.263,52.632l52.632,6.579l52.632-6.579l5.263-53.947L148.882,43.618z" />
+                <path fill="#1A73E8" d="M65.211,125.276c-3.934-2.658-6.658-6.539-8.145-11.671l9.132-3.763c0.829,3.158,2.276,5.605,4.342,7.342c2.053,1.737,4.553,2.592,7.474,2.592c2.987,0,5.553-0.908,7.697-2.724s3.224-4.132,3.224-6.934c0-2.868-1.132-5.211-3.395-7.026s-5.105-2.724-8.5-2.724h-5.276v-9.039H76.5c2.921,0,5.382-0.789,7.382-2.368c2-1.579,3-3.737,3-6.487c0-2.447-0.895-4.395-2.684-5.855s-4.053-2.197-6.803-2.197c-2.684,0-4.816,0.711-6.395,2.145s-2.724,3.197-3.447,5.276l-9.039-3.763c1.197-3.395,3.395-6.395,6.618-8.987c3.224-2.592,7.342-3.895,12.342-3.895c3.697,0,7.026,0.711,9.974,2.145c2.947,1.434,5.263,3.421,6.934,5.947c1.671,2.539,2.5,5.382,2.5,8.539c0,3.224-0.776,5.947-2.329,8.184c-1.553,2.237-3.461,3.947-5.724,5.145v0.539c2.987,1.25,5.421,3.158,7.342,5.724c1.908,2.566,2.868,5.632,2.868,9.211s-0.908,6.776-2.724,9.579c-1.816,2.803-4.329,5.013-7.513,6.618c-3.197,1.605-6.789,2.421-10.776,2.421C73.408,129.263,69.145,127.934,65.211,125.276z" />
+                <path fill="#1A73E8" d="M121.25,79.961l-9.974,7.25l-5.013-7.605l17.987-12.974h6.895v61.197h-9.895L121.25,79.961z" />
+                <path fill="#EA4335" d="M148.882,196.25l47.368-47.368l-23.684-10.526l-23.684,10.526l-10.526,23.684L148.882,196.25z" />
+                <path fill="#34A853" d="M33.092,172.566l10.526,23.684h105.263v-47.368H43.618L33.092,172.566z" />
+                <path fill="#4285F4" d="M12.039-3.75C3.316-3.75-3.75,3.316-3.75,12.039v136.842l23.684,10.526l23.684-10.526V43.618h105.263l10.526-23.684L148.882-3.75H12.039z" />
+                <path fill="#188038" d="M-3.75,148.882v31.579c0,8.724,7.066,15.789,15.789,15.789h31.579v-47.368H-3.75z" />
+                <path fill="#FBBC04" d="M148.882,43.618v105.263h47.368V43.618l-23.684-10.526L148.882,43.618z" />
+                <path fill="#1967D2" d="M196.25,43.618V12.039c0-8.724-7.066-15.789-15.789-15.789h-31.579v47.368H196.25z" />
+            </g>
         </svg>
     );
 }
 
-// Google Drive SVG Logo
+// Google Drive SVG Logo (official 2020)
 function GoogleDriveLogo({ className }: { className?: string }) {
     return (
         <svg className={className} viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
-            <path d="M6.6 66.85L3.3 72.35 16.6 78H70.8L74.1 72.35 6.6 66.85Z" fill="#0066DA" />
-            <path d="M43.65 25L29.05 0H58.25L72.85 25L43.65 25Z" fill="#00AC47" />
-            <path d="M72.85 25L87.3 50.35 74.1 72.35 70.8 78 43.65 25H72.85Z" fill="#EA4335" />
-            <path d="M43.65 25L29.05 0 0 50.35 3.3 72.35 6.6 66.85L43.65 25Z" fill="#00832D" />
-            <path d="M0 50.35L16.6 78H6.6L3.3 72.35L0 50.35Z" fill="#2684FC" />
-            <path d="M43.65 25L6.6 66.85L74.1 72.35L43.65 25Z" fill="#FFBA00" />
-            <path d="M74.1 72.35L87.3 50.35L72.85 25L43.65 25L74.1 72.35Z" fill="#EA4335" />
-            <path d="M29.05 0L0 50.35L43.65 25L29.05 0Z" fill="#00AC47" />
+            <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da" />
+            <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0-1.2 4.5h27.5z" fill="#00ac47" />
+            <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335" />
+            <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d" />
+            <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc" />
+            <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00" />
         </svg>
     );
 }
@@ -131,6 +124,14 @@ export default function SettingsPage() {
     const [disconnectModal, setDisconnectModal] = React.useState<{ open: boolean; service: "calendar" | "drive" | null }>({ open: false, service: null });
     const [isDisconnecting, setIsDisconnecting] = React.useState(false);
 
+    // Logo studio
+    const [logoUrl, setLogoUrl] = React.useState<string | null>(null);
+    const [logoCropSrc, setLogoCropSrc] = React.useState<string | null>(null);
+    const [showLogoCrop, setShowLogoCrop] = React.useState(false);
+    const [logoUploading, setLogoUploading] = React.useState(false);
+    const [dragOver, setDragOver] = React.useState(false);
+    const logoInputRef = React.useRef<HTMLInputElement>(null);
+
     React.useEffect(() => { fetchAll(); }, []);
 
     // Listen for Google auth popup callbacks
@@ -148,12 +149,13 @@ export default function SettingsPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const { data: p } = await supabase.from("profiles").select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token").eq("id", user.id).single();
+        const { data: p } = await supabase.from("profiles").select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, invoice_logo_url").eq("id", user.id).single();
         const prof = p as Profile;
         setProfile(prof);
         setStudioName(prof?.studio_name || "");
         setIsCalendarConnected(!!(prof as any)?.google_access_token);
         setIsDriveConnected(!!(prof as any)?.google_drive_access_token);
+        setLogoUrl((prof as any)?.invoice_logo_url || null);
         const savedWa = prof?.whatsapp_number || "";
         const matchedCode = COUNTRY_CODES.find(c => savedWa.startsWith(c.code));
         if (matchedCode) {
@@ -259,6 +261,48 @@ export default function SettingsPage() {
     }
 
     const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
+
+    // Logo handlers
+    function handleLogoFileSelected(file: File) {
+        if (file.size > 500 * 1024) {
+            alert("Ukuran file melebihi 500KB. Silakan pilih gambar yang lebih kecil.");
+            return;
+        }
+        if (!file.type.startsWith("image/")) {
+            alert("File harus berupa gambar (PNG/JPG).");
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            setLogoCropSrc(reader.result as string);
+            setShowLogoCrop(true);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function handleCroppedLogo(blob: Blob) {
+        setShowLogoCrop(false);
+        setLogoCropSrc(null);
+        if (!profile?.id) return;
+        setLogoUploading(true);
+        try {
+            const path = `logos/${profile.id}_invoice.png`;
+            const { error } = await supabase.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/png" });
+            if (error) { alert("Gagal upload logo: " + error.message); setLogoUploading(false); return; }
+            const { data: publicUrl } = supabase.storage.from("avatars").getPublicUrl(path);
+            await supabase.from("profiles").update({ invoice_logo_url: publicUrl.publicUrl }).eq("id", profile.id);
+            setLogoUrl(publicUrl.publicUrl + "?t=" + Date.now());
+        } catch {
+            alert("Gagal upload logo.");
+        }
+        setLogoUploading(false);
+    }
+
+    async function handleRemoveLogo() {
+        if (!profile?.id) return;
+        await supabase.from("profiles").update({ invoice_logo_url: null }).eq("id", profile.id);
+        setLogoUrl(null);
+    }
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "https://clientdesk.ryanekoapp.web.id";
     const slugPreview = slugify(vendorSlug || studioName) || "nama-vendor";
 
@@ -416,212 +460,270 @@ export default function SettingsPage() {
     }
 
     return (
-        <div className="space-y-6 max-w-4xl mx-auto">
-            <div>
-                <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
-                <p className="text-muted-foreground">{t("subtitle")}</p>
-            </div>
-
-            {/* Tab Navigation */}
-            <div className="border-b">
-                <div className="flex gap-0">
-                    {tabs.map(tab => (
-                        <button
-                            key={tab.key}
-                            onClick={() => setActiveTab(tab.key)}
-                            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === tab.key
-                                ? "border-foreground text-foreground"
-                                : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
-                                }`}
-                        >
-                            {tab.label}
-                        </button>
-                    ))}
+        <>
+            <div className="space-y-6 max-w-4xl mx-auto">
+                <div>
+                    <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
+                    <p className="text-muted-foreground">{t("subtitle")}</p>
                 </div>
-            </div>
 
-            {/* ═══ TAB: Umum ═══ */}
-            {activeTab === "umum" && (
-                <div className="space-y-6">
-                    {/* Profile Section */}
+                {/* Tab Navigation */}
+                <div className="border-b">
+                    <div className="flex gap-0">
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveTab(tab.key)}
+                                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === tab.key
+                                    ? "border-foreground text-foreground"
+                                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
+                                    }`}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* ═══ TAB: Umum ═══ */}
+                {activeTab === "umum" && (
+                    <div className="space-y-6">
+                        {/* Profile Section */}
+                        <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                            <div className="px-6 py-4 border-b">
+                                <h3 className="font-semibold flex items-center gap-2"><Building2 className="w-4 h-4" /> {t("profilStudio")}</h3>
+                                <p className="text-sm text-muted-foreground">{t("infoStudio")}</p>
+                            </div>
+                            <form onSubmit={handleSaveProfile} className="p-6 space-y-4">
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5" /> Nama Vendor/Studio</label>
+                                        <input value={studioName} onChange={e => setStudioName(e.target.value)} placeholder="Misal: Memori Studio" className={inputClass} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {t("nomorWA")}</label>
+                                        <div className="flex gap-2">
+                                            <select value={countryCode} onChange={e => setCountryCode(e.target.value)} className={inputClass + " !w-28 shrink-0 cursor-pointer"}>
+                                                {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                                            </select>
+                                            <input type="tel" value={waNumber} onChange={e => { const val = e.target.value.replace(/[^0-9]/g, ""); setWaNumber(val.startsWith("0") ? val.slice(1) : val); }} placeholder="8123456789" className={inputClass} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Custom URL Slug */}
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> Custom URL Form Booking</label>
+                                    <input
+                                        value={vendorSlug}
+                                        onChange={e => setVendorSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                                        placeholder={slugify(studioName) || "nama-vendor"}
+                                        className={inputClass}
+                                    />
+                                    <div className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md break-all">
+                                        {siteUrl}/formbooking/<span className="text-primary font-semibold">{slugPreview}</span>
+                                    </div>
+                                </div>
+
+                                {/* Logo Studio */}
+                                <div className="space-y-3 pt-2 border-t">
+                                    <div>
+                                        <label className="text-sm font-medium flex items-center gap-1.5"><ImagePlus className="w-3.5 h-3.5" /> Logo Studio</label>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Logo akan digunakan di invoice. Maks 500KB, rekomendasi 512×512px (persegi). Jika kosong, menggunakan nama studio.</p>
+                                    </div>
+                                    <div className="flex items-start gap-4">
+                                        {/* Preview */}
+                                        <div className="w-24 h-24 rounded-xl border-2 border-dashed border-muted overflow-hidden bg-muted/30 flex items-center justify-center shrink-0">
+                                            {logoUrl ? (
+                                                <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
+                                            ) : (
+                                                <ImagePlus className="w-8 h-8 text-muted-foreground/40" />
+                                            )}
+                                        </div>
+                                        {/* Upload area */}
+                                        <div className="flex-1 space-y-2">
+                                            <div
+                                                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                                                onDragLeave={() => setDragOver(false)}
+                                                onDrop={(e) => {
+                                                    e.preventDefault(); setDragOver(false);
+                                                    const file = e.dataTransfer.files?.[0];
+                                                    if (file) handleLogoFileSelected(file);
+                                                }}
+                                                onClick={() => logoInputRef.current?.click()}
+                                                className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${dragOver ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"}`}
+                                            >
+                                                <Upload className="w-5 h-5 mx-auto text-muted-foreground mb-1" />
+                                                <p className="text-xs text-muted-foreground">Klik atau drag & drop gambar</p>
+                                                <p className="text-[10px] text-muted-foreground/60">PNG, JPG • Maks 500KB</p>
+                                            </div>
+                                            <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleLogoFileSelected(e.target.files[0]); e.target.value = ""; }} />
+                                            {logoUrl && (
+                                                <button onClick={handleRemoveLogo} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 cursor-pointer">
+                                                    <Trash2 className="w-3 h-3" /> Hapus Logo
+                                                </button>
+                                            )}
+                                            {logoUploading && <p className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Uploading...</p>}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 pt-2">
+                                    <Button type="submit" disabled={saving} className="gap-2">
+                                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                        {t("simpanProfil")}
+                                    </Button>
+                                    {savedMsg && <span className="text-sm text-green-600 dark:text-green-400">{savedMsg}</span>}
+                                </div>
+                            </form>
+                        </div>
+
+                        {/* Google Integration Section */}
+                        <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                            <div className="px-6 py-4 border-b">
+                                <h3 className="font-semibold flex items-center gap-2">
+                                    <svg className="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>
+                                    Integrasi Google
+                                </h3>
+                                <p className="text-sm text-muted-foreground">Hubungkan akun Google untuk sinkronisasi kalender dan penyimpanan file.</p>
+                            </div>
+                            <div className="p-6 space-y-4">
+                                {/* Google Calendar */}
+                                <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-white dark:bg-white/10 flex items-center justify-center border">
+                                            <GoogleCalendarLogo className="w-7 h-7" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium">Google Calendar</p>
+                                            <p className="text-xs text-muted-foreground">Sinkronisasi jadwal sesi ke Google Calendar</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {isCalendarConnected ? (
+                                            <>
+                                                <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Terhubung</span>
+                                                <Button variant="outline" size="sm" className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10" onClick={() => setDisconnectModal({ open: true, service: "calendar" })}>
+                                                    <Unlink className="w-3.5 h-3.5" /> Putuskan
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="text-xs text-muted-foreground flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Belum terhubung</span>
+                                                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+                                                    const w = 500, h = 600;
+                                                    const left = window.screenX + (window.outerWidth - w) / 2;
+                                                    const top = window.screenY + (window.outerHeight - h) / 2;
+                                                    window.open("/api/google/auth", "google-auth", `width=${w},height=${h},left=${left},top=${top},popup=yes`);
+                                                }}>
+                                                    <Link2 className="w-3.5 h-3.5" /> Hubungkan
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Google Drive */}
+                                <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-white dark:bg-white/10 flex items-center justify-center border">
+                                            <GoogleDriveLogo className="w-7 h-7" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium">Google Drive</p>
+                                            <p className="text-xs text-muted-foreground">Simpan file klien langsung ke Google Drive</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {isDriveConnected ? (
+                                            <>
+                                                <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Terhubung</span>
+                                                <Button variant="outline" size="sm" className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10" onClick={() => setDisconnectModal({ open: true, service: "drive" })}>
+                                                    <Unlink className="w-3.5 h-3.5" /> Putuskan
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="text-xs text-muted-foreground flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Belum terhubung</span>
+                                                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+                                                    const w = 500, h = 600;
+                                                    const left = window.screenX + (window.outerWidth - w) / 2;
+                                                    const top = window.screenY + (window.outerHeight - h) / 2;
+                                                    window.open("/api/google/drive/auth", "google-drive-auth", `width=${w},height=${h},left=${left},top=${top},popup=yes`);
+                                                }}>
+                                                    <Link2 className="w-3.5 h-3.5" /> Hubungkan
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ═══ TAB: Template Pesan ═══ */}
+                {activeTab === "template" && (
+                    <div className="space-y-6">
+                        {templateTypes.map(tt => renderTemplateCard(tt))}
+                    </div>
+                )}
+
+                {/* ═══ TAB: Bot Telegram ═══ */}
+                {activeTab === "telegram" && (
                     <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
                         <div className="px-6 py-4 border-b">
-                            <h3 className="font-semibold flex items-center gap-2"><Building2 className="w-4 h-4" /> {t("profilStudio")}</h3>
-                            <p className="text-sm text-muted-foreground">{t("infoStudio")}</p>
+                            <h3 className="font-semibold">Bot Telegram</h3>
+                            <p className="text-sm text-muted-foreground">Konfigurasi bot Telegram untuk notifikasi otomatis.</p>
                         </div>
-                        <form onSubmit={handleSaveProfile} className="p-6 space-y-4">
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5" /> Nama Vendor/Studio</label>
-                                    <input value={studioName} onChange={e => setStudioName(e.target.value)} placeholder="Misal: Memori Studio" className={inputClass} />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {t("nomorWA")}</label>
-                                    <div className="flex gap-2">
-                                        <select value={countryCode} onChange={e => setCountryCode(e.target.value)} className={inputClass + " !w-28 shrink-0 cursor-pointer"}>
-                                            {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                                        </select>
-                                        <input type="tel" value={waNumber} onChange={e => { const val = e.target.value.replace(/[^0-9]/g, ""); setWaNumber(val.startsWith("0") ? val.slice(1) : val); }} placeholder="8123456789" className={inputClass} />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Custom URL Slug */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> Custom URL Form Booking</label>
-                                <input
-                                    value={vendorSlug}
-                                    onChange={e => setVendorSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                                    placeholder={slugify(studioName) || "nama-vendor"}
-                                    className={inputClass}
-                                />
-                                <div className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md break-all">
-                                    {siteUrl}/formbooking/<span className="text-primary font-semibold">{slugPreview}</span>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 pt-2">
-                                <Button type="submit" disabled={saving} className="gap-2">
-                                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                    {t("simpanProfil")}
-                                </Button>
-                                {savedMsg && <span className="text-sm text-green-600 dark:text-green-400">{savedMsg}</span>}
-                            </div>
-                        </form>
-                    </div>
-
-                    {/* Google Integration Section */}
-                    <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-                        <div className="px-6 py-4 border-b">
-                            <h3 className="font-semibold flex items-center gap-2">
-                                <svg className="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" /></svg>
-                                Integrasi Google
-                            </h3>
-                            <p className="text-sm text-muted-foreground">Hubungkan akun Google untuk sinkronisasi kalender dan penyimpanan file.</p>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            {/* Google Calendar */}
-                            <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-lg bg-white dark:bg-white/10 flex items-center justify-center border">
-                                        <GoogleCalendarLogo className="w-7 h-7" />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium">Google Calendar</p>
-                                        <p className="text-xs text-muted-foreground">Sinkronisasi jadwal sesi ke Google Calendar</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    {isCalendarConnected ? (
-                                        <>
-                                            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Terhubung</span>
-                                            <Button variant="outline" size="sm" className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10" onClick={() => setDisconnectModal({ open: true, service: "calendar" })}>
-                                                <Unlink className="w-3.5 h-3.5" /> Putuskan
-                                            </Button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="text-xs text-muted-foreground flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Belum terhubung</span>
-                                            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
-                                                const w = 500, h = 600;
-                                                const left = window.screenX + (window.outerWidth - w) / 2;
-                                                const top = window.screenY + (window.outerHeight - h) / 2;
-                                                window.open("/api/google/auth", "google-auth", `width=${w},height=${h},left=${left},top=${top},popup=yes`);
-                                            }}>
-                                                <Link2 className="w-3.5 h-3.5" /> Hubungkan
-                                            </Button>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Google Drive */}
-                            <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-lg bg-white dark:bg-white/10 flex items-center justify-center border">
-                                        <GoogleDriveLogo className="w-7 h-7" />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium">Google Drive</p>
-                                        <p className="text-xs text-muted-foreground">Simpan file klien langsung ke Google Drive</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    {isDriveConnected ? (
-                                        <>
-                                            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Terhubung</span>
-                                            <Button variant="outline" size="sm" className="gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10" onClick={() => setDisconnectModal({ open: true, service: "drive" })}>
-                                                <Unlink className="w-3.5 h-3.5" /> Putuskan
-                                            </Button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="text-xs text-muted-foreground flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Belum terhubung</span>
-                                            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
-                                                const w = 500, h = 600;
-                                                const left = window.screenX + (window.outerWidth - w) / 2;
-                                                const top = window.screenY + (window.outerHeight - h) / 2;
-                                                window.open("/api/google/drive/auth", "google-drive-auth", `width=${w},height=${h},left=${left},top=${top},popup=yes`);
-                                            }}>
-                                                <Link2 className="w-3.5 h-3.5" /> Hubungkan
-                                            </Button>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
+                        <div className="p-8 text-center space-y-3">
+                            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto text-3xl">🤖</div>
+                            <h4 className="font-semibold">Segera Hadir</h4>
+                            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                                Fitur Bot Telegram sedang dalam pengembangan. Anda akan dapat menerima notifikasi booking baru secara otomatis.
+                            </p>
                         </div>
                     </div>
-                </div>
+                )}
+
+                {/* Disconnect Confirmation Modal */}
+                <Dialog open={disconnectModal.open} onOpenChange={(o) => !o && setDisconnectModal({ open: false, service: null })}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader className="items-center text-center">
+                            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mb-2">
+                                <AlertCircle className="w-6 h-6 text-red-600" />
+                            </div>
+                            <DialogTitle className="text-xl">Putuskan Koneksi?</DialogTitle>
+                            <DialogDescription>
+                                {disconnectModal.service === "calendar"
+                                    ? "Apakah Anda yakin ingin memutuskan koneksi Google Calendar? Sinkronisasi jadwal akan berhenti."
+                                    : "Apakah Anda yakin ingin memutuskan koneksi Google Drive? Penyimpanan file otomatis akan berhenti."
+                                }
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter className="sm:justify-center gap-2 pt-2">
+                            <Button variant="outline" className="flex-1" onClick={() => setDisconnectModal({ open: false, service: null })} disabled={isDisconnecting}>Batal</Button>
+                            <Button variant="destructive" className="flex-1" onClick={handleDisconnect} disabled={isDisconnecting}>
+                                {isDisconnecting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Unlink className="w-4 h-4 mr-2" />}
+                                Ya, Putuskan
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </div>
+
+            {/* Logo Crop Modal */}
+            {logoCropSrc && (
+                <ImageCropModal
+                    open={showLogoCrop}
+                    imageSrc={logoCropSrc}
+                    title="Crop Logo Studio"
+                    aspect={1}
+                    cropShape="rect"
+                    onClose={() => { setShowLogoCrop(false); setLogoCropSrc(null); }}
+                    onCropComplete={handleCroppedLogo}
+                />
             )}
-
-            {/* ═══ TAB: Template Pesan ═══ */}
-            {activeTab === "template" && (
-                <div className="space-y-6">
-                    {templateTypes.map(tt => renderTemplateCard(tt))}
-                </div>
-            )}
-
-            {/* ═══ TAB: Bot Telegram ═══ */}
-            {activeTab === "telegram" && (
-                <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-                    <div className="px-6 py-4 border-b">
-                        <h3 className="font-semibold">Bot Telegram</h3>
-                        <p className="text-sm text-muted-foreground">Konfigurasi bot Telegram untuk notifikasi otomatis.</p>
-                    </div>
-                    <div className="p-8 text-center space-y-3">
-                        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto text-3xl">🤖</div>
-                        <h4 className="font-semibold">Segera Hadir</h4>
-                        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                            Fitur Bot Telegram sedang dalam pengembangan. Anda akan dapat menerima notifikasi booking baru secara otomatis.
-                        </p>
-                    </div>
-                </div>
-            )}
-
-            {/* Disconnect Confirmation Modal */}
-            <Dialog open={disconnectModal.open} onOpenChange={(o) => !o && setDisconnectModal({ open: false, service: null })}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader className="items-center text-center">
-                        <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mb-2">
-                            <AlertCircle className="w-6 h-6 text-red-600" />
-                        </div>
-                        <DialogTitle className="text-xl">Putuskan Koneksi?</DialogTitle>
-                        <DialogDescription>
-                            {disconnectModal.service === "calendar"
-                                ? "Apakah Anda yakin ingin memutuskan koneksi Google Calendar? Sinkronisasi jadwal akan berhenti."
-                                : "Apakah Anda yakin ingin memutuskan koneksi Google Drive? Penyimpanan file otomatis akan berhenti."
-                            }
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="sm:justify-center gap-2 pt-2">
-                        <Button variant="outline" className="flex-1" onClick={() => setDisconnectModal({ open: false, service: null })} disabled={isDisconnecting}>Batal</Button>
-                        <Button variant="destructive" className="flex-1" onClick={handleDisconnect} disabled={isDisconnecting}>
-                            {isDisconnecting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Unlink className="w-4 h-4 mr-2" />}
-                            Ya, Putuskan
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </div>
+        </>
     );
 }

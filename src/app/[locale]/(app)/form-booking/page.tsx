@@ -386,7 +386,7 @@ export default function FormBookingPage() {
                 </div>
 
                 {/* RIGHT: Linktree-Style Preview — hidden on mobile when viewing settings */}
-                <div className={`sticky top-4 ${mobileTab === "settings" ? "hidden lg:flex" : "flex"}`} style={{ height: "calc(100vh - 2rem)", maxHeight: "calc(100vh - 2rem)" }}>
+                <div className={`sticky top-4 ${mobileTab === "settings" ? "hidden lg:flex" : "flex"}`} style={{ height: "calc(100vh - 6rem)", maxHeight: "calc(100vh - 6rem)" }}>
                     <div className="flex flex-col w-full">
                         {/* Preview Header with Buttons */}
                         <div className="flex items-center justify-between mb-3 shrink-0">

@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Camera, Trash2, Save, Key, Loader2, ImagePlus } from "lucide-react";
+import { Camera, Trash2, Save, Key, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
-import { compressImage } from "@/utils/compress-image";
+import { ImageCropModal } from "@/components/ui/image-crop-modal";
 
 export default function ProfilePage() {
     const supabase = createClient();
@@ -19,10 +19,12 @@ export default function ProfilePage() {
     const [fullName, setFullName] = React.useState("");
     const [email, setEmail] = React.useState("");
     const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
-    const [invoiceLogoUrl, setInvoiceLogoUrl] = React.useState<string | null>(null);
 
     const fileInputRef = React.useRef<HTMLInputElement>(null);
-    const logoInputRef = React.useRef<HTMLInputElement>(null);
+
+    // Crop state
+    const [cropSrc, setCropSrc] = React.useState<string | null>(null);
+    const [showCrop, setShowCrop] = React.useState(false);
 
     React.useEffect(() => { fetchProfile(); }, []);
 
@@ -36,14 +38,13 @@ export default function ProfilePage() {
 
         const { data: profile } = await supabase
             .from("profiles")
-            .select("full_name, avatar_url, invoice_logo_url")
+            .select("full_name, avatar_url")
             .eq("id", user.id)
             .single();
 
         if (profile) {
             setFullName(profile.full_name || "");
             setAvatarUrl(profile.avatar_url || null);
-            setInvoiceLogoUrl(profile.invoice_logo_url || null);
         }
         setLoading(false);
     }
@@ -59,17 +60,31 @@ export default function ProfilePage() {
         setSaving(false);
     }
 
-    async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    // When file selected, show crop modal
+    function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
-        if (!file || !userId) return;
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            setCropSrc(reader.result as string);
+            setShowCrop(true);
+        };
+        reader.readAsDataURL(file);
+        e.target.value = ""; // reset so same file can be selected again
+    }
+
+    // After crop, upload the cropped blob
+    async function handleCroppedAvatar(blob: Blob) {
+        setShowCrop(false);
+        setCropSrc(null);
+        if (!userId) return;
 
         try {
-            const compressed = await compressImage(file, 512, 0.8);
-            const path = `avatars/${userId}.jpg`;
+            const path = `avatars/${userId}.png`;
 
             const { error } = await supabase.storage
                 .from("avatars")
-                .upload(path, compressed, { upsert: true, contentType: "image/jpeg" });
+                .upload(path, blob, { upsert: true, contentType: "image/png" });
 
             if (error) {
                 alert(t("gagalUpload") + ": " + error.message);
@@ -84,7 +99,7 @@ export default function ProfilePage() {
 
             setAvatarUrl(publicUrl.publicUrl + "?t=" + Date.now());
         } catch {
-            alert("Gagal compress foto.");
+            alert("Gagal upload foto.");
         }
     }
 
@@ -93,42 +108,6 @@ export default function ProfilePage() {
             avatar_url: null,
         }).eq("id", userId);
         setAvatarUrl(null);
-    }
-
-    async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-        const file = e.target.files?.[0];
-        if (!file || !userId) return;
-
-        try {
-            const compressed = await compressImage(file, 800, 0.8);
-            const path = `logos/${userId}_invoice.jpg`;
-
-            const { error } = await supabase.storage
-                .from("avatars")
-                .upload(path, compressed, { upsert: true, contentType: "image/jpeg" });
-
-            if (error) {
-                alert("Gagal upload logo: " + error.message);
-                return;
-            }
-
-            const { data: publicUrl } = supabase.storage.from("avatars").getPublicUrl(path);
-
-            await supabase.from("profiles").update({
-                invoice_logo_url: publicUrl.publicUrl,
-            }).eq("id", userId);
-
-            setInvoiceLogoUrl(publicUrl.publicUrl + "?t=" + Date.now());
-        } catch {
-            alert("Gagal compress/upload logo.");
-        }
-    }
-
-    async function handleRemoveLogo() {
-        await supabase.from("profiles").update({
-            invoice_logo_url: null,
-        }).eq("id", userId);
-        setInvoiceLogoUrl(null);
     }
 
     async function handleResetPassword() {
@@ -175,7 +154,7 @@ export default function ProfilePage() {
                             >
                                 <Camera className="w-4 h-4" />
                             </button>
-                            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelected} />
                         </div>
                         <div className="flex items-center gap-2 text-sm">
                             <span className="text-muted-foreground">{t("klikUpload")}</span>
@@ -196,32 +175,6 @@ export default function ProfilePage() {
                             className={inputClass}
                             placeholder={t("namaPlaceholder")}
                         />
-                    </div>
-
-                    {/* Invoice Logo */}
-                    <div className="space-y-3">
-                        <label className="text-sm font-medium">Logo Invoice</label>
-                        <p className="text-xs text-muted-foreground -mt-1">Logo ini akan digunakan di invoice. Jika kosong, akan menggunakan nama studio.</p>
-                        <div className="flex items-center gap-4">
-                            <div className="w-32 h-16 rounded-lg border-2 border-dashed border-muted overflow-hidden bg-muted/30 flex items-center justify-center">
-                                {invoiceLogoUrl ? (
-                                    <img src={invoiceLogoUrl} alt="Logo" className="max-w-full max-h-full object-contain p-1" />
-                                ) : (
-                                    <ImagePlus className="w-6 h-6 text-muted-foreground" />
-                                )}
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <Button variant="outline" size="sm" onClick={() => logoInputRef.current?.click()} className="gap-1.5 cursor-pointer">
-                                    <Camera className="w-3.5 h-3.5" /> {invoiceLogoUrl ? "Ganti Logo" : "Upload Logo"}
-                                </Button>
-                                {invoiceLogoUrl && (
-                                    <button onClick={handleRemoveLogo} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 cursor-pointer">
-                                        <Trash2 className="w-3 h-3" /> Hapus Logo
-                                    </button>
-                                )}
-                            </div>
-                            <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                        </div>
                     </div>
 
                     {/* Email (readonly) */}
@@ -250,6 +203,19 @@ export default function ProfilePage() {
                     {resetMsg && <p className="text-center text-sm text-muted-foreground">{resetMsg}</p>}
                 </div>
             </div>
+
+            {/* Avatar Crop Modal */}
+            {cropSrc && (
+                <ImageCropModal
+                    open={showCrop}
+                    imageSrc={cropSrc}
+                    title="Crop Foto Profil"
+                    aspect={1}
+                    cropShape="round"
+                    onClose={() => { setShowCrop(false); setCropSrc(null); }}
+                    onCropComplete={handleCroppedAvatar}
+                />
+            )}
         </div>
     );
 }
