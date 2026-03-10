@@ -110,7 +110,7 @@ export default function FinancePage() {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 rounded-lg bg-green-100 dark:bg-green-500/10">
@@ -130,16 +130,6 @@ export default function FinancePage() {
                     </div>
                     <div className="text-2xl font-bold">{formatCurrency(totalPending)}</div>
                     <p className="text-xs text-muted-foreground mt-1">{t("dariBookingBelumLunas", { count: bookings.filter(b => !b.is_fully_paid).length })}</p>
-                </div>
-                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-500/10">
-                            <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("totalDPDiterima")}</span>
-                    </div>
-                    <div className="text-2xl font-bold">{formatCurrency(totalDP)}</div>
-                    <p className="text-xs text-muted-foreground mt-1">{t("dariSeluruhBooking")}</p>
                 </div>
             </div>
 

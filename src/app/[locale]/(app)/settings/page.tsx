@@ -608,7 +608,7 @@ export default function SettingsPage() {
                             </div>
                             <div className="p-6 space-y-4">
                                 {/* Google Calendar */}
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-lg border bg-muted/30">
+                                <div className="p-4 rounded-lg border bg-muted/30">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-lg bg-white dark:bg-white/10 flex items-center justify-center border">
                                             <GoogleCalendarLogo className="w-7 h-7" />
@@ -618,7 +618,7 @@ export default function SettingsPage() {
                                             <p className="text-xs text-muted-foreground">Sinkronisasi jadwal sesi ke Google Calendar</p>
                                         </div>
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-2">
+                                    <div className="border-t mt-3 pt-3 flex items-center justify-between">
                                         {isCalendarConnected ? (
                                             <>
                                                 <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Terhubung</span>
@@ -643,7 +643,7 @@ export default function SettingsPage() {
                                 </div>
 
                                 {/* Google Drive */}
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-lg border bg-muted/30">
+                                <div className="p-4 rounded-lg border bg-muted/30">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-lg bg-white dark:bg-white/10 flex items-center justify-center border">
                                             <GoogleDriveLogo className="w-7 h-7" />
@@ -653,7 +653,7 @@ export default function SettingsPage() {
                                             <p className="text-xs text-muted-foreground">Simpan file klien langsung ke Google Drive</p>
                                         </div>
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-2">
+                                    <div className="border-t mt-3 pt-3 flex items-center justify-between">
                                         {isDriveConnected ? (
                                             <>
                                                 <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Terhubung</span>

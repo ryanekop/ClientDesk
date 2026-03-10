@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Folder, FolderPlus, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, AlertTriangle, X, Download } from "lucide-react";
+import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, AlertTriangle, X, Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -10,7 +10,6 @@ import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
 import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
-import { DriveBrowser } from "@/components/drive-browser";
 import { BatchImportButton } from "@/components/batch-import";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import * as XLSX from "xlsx";
@@ -102,11 +101,6 @@ export default function BookingsPage() {
     const [packages, setPackages] = React.useState<string[]>([]);
     const [freelancerNames, setFreelancerNames] = React.useState<string[]>([]);
     const [loading, setLoading] = React.useState(true);
-    const [isDriveConnected, setIsDriveConnected] = React.useState(false);
-    const [driveWarningDismissed, setDriveWarningDismissed] = React.useState(() => {
-        if (typeof window !== "undefined") return localStorage.getItem("dismiss_drive_warning") === "1";
-        return false;
-    });
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
     // Filters & Search
@@ -126,18 +120,18 @@ export default function BookingsPage() {
     const [deleteModal, setDeleteModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [isDeleting, setIsDeleting] = React.useState(false);
 
-    // Drive browser
-    const [driveBrowser, setDriveBrowser] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
+    // Drive link popup
+    const [driveLinkPopup, setDriveLinkPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
+    const [driveLinkInput, setDriveLinkInput] = React.useState("");
+    const [savingDriveLink, setSavingDriveLink] = React.useState(false);
 
     // WA Freelancer popup
     const [waPopup, setWaPopup] = React.useState<{ open: boolean; freelancers: FreelancerInfo[]; booking: Booking | null }>({ open: false, freelancers: [], booking: null });
 
     React.useEffect(() => {
         fetchData();
-        checkDriveConnection();
         fetchTemplates();
         const handleMessage = (event: MessageEvent) => {
-            if (event.data?.type === "GOOGLE_DRIVE_SUCCESS") setIsDriveConnected(true);
         };
         window.addEventListener("message", handleMessage);
         return () => window.removeEventListener("message", handleMessage);
@@ -150,19 +144,7 @@ export default function BookingsPage() {
         setSavedTemplates((data || []) as SavedTemplate[]);
     }
 
-    async function checkDriveConnection() {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data: profile } = await supabase.from("profiles").select("google_drive_access_token").eq("id", user.id).single();
-        if (profile?.google_drive_access_token) setIsDriveConnected(true);
-    }
 
-    function handleConnectDrive() {
-        const w = 500, h = 600;
-        const left = window.screenX + (window.outerWidth - w) / 2;
-        const top = window.screenY + (window.outerHeight - h) / 2;
-        window.open("/api/google/drive/auth", "google-drive-auth", `width=${w},height=${h},left=${left},top=${top},popup=yes`);
-    }
 
 
     async function fetchData() {
@@ -286,18 +268,7 @@ export default function BookingsPage() {
                 </div>
             </div>
 
-            {/* Drive warning banner */}
-            {!isDriveConnected && !driveWarningDismissed && (
-                <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 px-4 py-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <p className="text-sm text-amber-800 dark:text-amber-300 flex-1">
-                        Google Drive belum terhubung. <a href="/id/settings" className="underline font-medium">Hubungkan di Pengaturan</a> untuk menyimpan file klien otomatis.
-                    </p>
-                    <button onClick={() => { setDriveWarningDismissed(true); localStorage.setItem("dismiss_drive_warning", "1"); }} className="p-1 rounded hover:bg-amber-200/50 dark:hover:bg-amber-500/20 transition-colors cursor-pointer">
-                        <X className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    </button>
-                </div>
-            )}
+
             {/* Filters Row (top) + Search Row (bottom) */}
             <div className="space-y-3">
                 <div className="flex flex-wrap gap-2 items-center">
@@ -470,14 +441,13 @@ export default function BookingsPage() {
                                                 </Button>
                                                 {/* 3. Drive Folder */}
                                                 {booking.drive_folder_url ? (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" title="Buka Folder" onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" title="Buka Drive" onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
                                                         <Folder className="w-4 h-4" />
                                                     </Button>
                                                 ) : (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-500" title="Buat Folder"
-                                                        disabled={!isDriveConnected}
-                                                        onClick={() => setDriveBrowser({ open: true, booking })}>
-                                                        <FolderPlus className="w-4 h-4" />
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-500" title="Set Link Drive"
+                                                        onClick={() => { setDriveLinkInput(""); setDriveLinkPopup({ open: true, booking }); }}>
+                                                        <Link2 className="w-4 h-4" />
                                                     </Button>
                                                 )}
                                                 {/* 4. Detail */}
@@ -598,26 +568,38 @@ export default function BookingsPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Drive Browser */}
-            {driveBrowser.booking && (
-                <DriveBrowser
-                    open={driveBrowser.open}
-                    onOpenChange={o => { if (!o) setDriveBrowser({ open: false, booking: null }); }}
-                    bookingId={driveBrowser.booking.id}
-                    defaultFolderName={`${driveBrowser.booking.booking_code} - ${driveBrowser.booking.client_name}`}
-                    onFolderCreated={(url) => {
-                        setBookings(prev => prev.map(b => b.id === driveBrowser.booking?.id ? { ...b, drive_folder_url: url } : b));
-                        window.open(url, "_blank");
-                    }}
-                    onFolderSelected={(url) => {
-                        // Save selected folder URL to booking
-                        supabase.from("bookings").update({ drive_folder_url: url }).eq("id", driveBrowser.booking!.id).then(() => {
-                            setBookings(prev => prev.map(b => b.id === driveBrowser.booking?.id ? { ...b, drive_folder_url: url } : b));
-                        });
-                        window.open(url, "_blank");
-                    }}
-                />
-            )}
+            {/* Drive Link Popup */}
+            <Dialog open={driveLinkPopup.open} onOpenChange={(o) => { if (!o) setDriveLinkPopup({ open: false, booking: null }); }}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Set Link Google Drive</DialogTitle>
+                        <DialogDescription>Tempelkan link folder Google Drive untuk booking ini.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3 py-2">
+                        <input
+                            type="url"
+                            value={driveLinkInput}
+                            onChange={e => setDriveLinkInput(e.target.value)}
+                            placeholder="https://drive.google.com/drive/folders/..."
+                            className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setDriveLinkPopup({ open: false, booking: null })}>Batal</Button>
+                        <Button disabled={!driveLinkInput || savingDriveLink} className="gap-2" onClick={async () => {
+                            if (!driveLinkPopup.booking || !driveLinkInput) return;
+                            setSavingDriveLink(true);
+                            await supabase.from("bookings").update({ drive_folder_url: driveLinkInput }).eq("id", driveLinkPopup.booking.id);
+                            setBookings(prev => prev.map(b => b.id === driveLinkPopup.booking?.id ? { ...b, drive_folder_url: driveLinkInput } : b));
+                            setSavingDriveLink(false);
+                            setDriveLinkPopup({ open: false, booking: null });
+                        }}>
+                            {savingDriveLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                            Simpan
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
