@@ -174,24 +174,24 @@ export default function ProfilePage() {
                         <input
                             value={email}
                             readOnly
-                            className={`${inputClass} bg-muted/50 cursor-not-allowed`}
+                            className={`${inputClass} bg-muted text-muted-foreground cursor-not-allowed`}
                         />
                         <p className="text-xs text-muted-foreground">{t("emailNote")}</p>
                     </div>
 
                     {/* Save */}
-                    <Button onClick={handleSave} disabled={saving} className="w-full gap-2 h-11 text-base">
-                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        {t("simpan")}
-                    </Button>
-                    {savedMsg && <p className="text-center text-sm text-green-600 dark:text-green-400">{savedMsg}</p>}
-
-                    {/* Reset Password */}
-                    <Button variant="outline" onClick={handleResetPassword} className="w-full gap-2 h-11 text-base">
-                        <Key className="w-4 h-4" />
-                        {t("resetPassword")}
-                    </Button>
-                    {resetMsg && <p className="text-center text-sm text-muted-foreground">{resetMsg}</p>}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <Button onClick={handleSave} disabled={saving} className="gap-2 h-9 text-sm px-6">
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                            {t("simpan")}
+                        </Button>
+                        <Button variant="outline" onClick={handleResetPassword} className="gap-2 h-9 text-sm px-6">
+                            <Key className="w-4 h-4" />
+                            {t("resetPassword")}
+                        </Button>
+                    </div>
+                    {savedMsg && <p className="text-sm text-green-600 dark:text-green-400">{savedMsg}</p>}
+                    {resetMsg && <p className="text-sm text-muted-foreground">{resetMsg}</p>}
                 </div>
             </div>
 
