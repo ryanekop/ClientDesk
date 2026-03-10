@@ -212,83 +212,81 @@ export default function ProfilePage() {
                         <p className="text-xs text-muted-foreground">{t("emailNote")}</p>
                     </div>
 
-                    {/* Save */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <Button onClick={handleSave} disabled={saving} className="gap-2 h-9 text-sm px-6">
-                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            {t("simpan")}
-                        </Button>
-                        <Button variant="outline" onClick={handleResetPassword} className="gap-2 h-9 text-sm px-6">
-                            <Key className="w-4 h-4" />
-                            {t("resetPassword")}
-                        </Button>
-                    </div>
-                    {savedMsg && <p className="text-sm text-green-600 dark:text-green-400">{savedMsg}</p>}
-                    {resetMsg && <p className="text-sm text-muted-foreground">{resetMsg}</p>}
-                </div>
-            </div>
+                    {/* Status Membership */}
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium">Status Membership</label>
+                        {subscription ? (() => {
+                            const isLifetime = subscription.tier === 'lifetime';
+                            const isPro = subscription.tier.startsWith('pro_') || isLifetime;
+                            const isTrial = subscription.status === 'trial' || subscription.tier === 'free';
+                            const expiryDate = isLifetime ? null : (subscription.end_date || subscription.trial_end_date);
+                            const expiry = expiryDate ? new Date(expiryDate) : null;
+                            const daysLeft = expiry ? Math.max(0, Math.ceil((expiry.getTime() - Date.now()) / 86400000)) : null;
+                            const isExpired = expiry ? expiry < new Date() : false;
 
-            {/* Status Membership */}
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-                <div className="p-6 sm:p-8 space-y-4">
-                    <h3 className="text-sm font-semibold">Status Membership</h3>
-                    {subscription ? (() => {
-                        const isLifetime = subscription.tier === 'lifetime';
-                        const isPro = subscription.tier.startsWith('pro_') || isLifetime;
-                        const isTrial = subscription.status === 'trial' || subscription.tier === 'free';
-                        const expiryDate = isLifetime ? null : (subscription.end_date || subscription.trial_end_date);
-                        const expiry = expiryDate ? new Date(expiryDate) : null;
-                        const daysLeft = expiry ? Math.max(0, Math.ceil((expiry.getTime() - Date.now()) / 86400000)) : null;
-                        const isExpired = expiry ? expiry < new Date() : false;
+                            const tierLabel = isLifetime ? 'Lifetime' :
+                                subscription.tier === 'pro_yearly' ? 'Pro (1 Tahun)' :
+                                    subscription.tier === 'pro_quarterly' ? 'Pro (3 Bulan)' :
+                                        subscription.tier === 'pro_monthly' ? 'Pro (Bulanan)' :
+                                            isTrial ? 'Trial' : 'Free';
 
-                        const tierLabel = isLifetime ? 'Lifetime' :
-                            subscription.tier === 'pro_yearly' ? 'Pro (1 Tahun)' :
-                                subscription.tier === 'pro_quarterly' ? 'Pro (3 Bulan)' :
-                                    subscription.tier === 'pro_monthly' ? 'Pro (Bulanan)' :
-                                        isTrial ? 'Trial' : 'Free';
+                            const badgeBg = isPro
+                                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
+                                : 'bg-muted text-muted-foreground border';
+                            const badgeIcon = isLifetime ? '👑' : isPro ? '🔥' : '⏱️';
 
-                        const badgeBg = isPro
-                            ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
-                            : 'bg-muted text-muted-foreground border';
-                        const badgeIcon = isLifetime ? '👑' : isPro ? '🔥' : '⏱️';
-
-                        return (
-                            <div className={`flex items-center justify-between rounded-lg border p-4 ${isExpired ? 'border-red-300 bg-red-50 dark:bg-red-950/20' : ''}`}>
-                                <div className="flex items-center gap-3">
-                                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${badgeBg}`}>
-                                        {badgeIcon} {isPro ? 'Pro' : 'Trial'}
-                                    </span>
-                                    <div>
-                                        <p className="text-sm font-medium">{tierLabel}</p>
-                                        {isLifetime ? (
-                                            <p className="text-xs text-muted-foreground">Berlaku selamanya ∞</p>
-                                        ) : expiry ? (
-                                            <p className={`text-xs ${isExpired ? 'text-red-500' : daysLeft !== null && daysLeft <= 7 ? 'text-amber-500' : 'text-muted-foreground'}`}>
-                                                {isExpired
-                                                    ? '⚠️ Expired'
-                                                    : `Berlaku sampai: ${expiry.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} (${daysLeft} hari lagi)`
-                                                }
-                                            </p>
-                                        ) : null}
+                            return (
+                                <div className={`flex items-center justify-between rounded-lg border p-4 ${isExpired ? 'border-red-300 bg-red-50 dark:bg-red-950/20' : ''}`}>
+                                    <div className="flex items-center gap-3">
+                                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${badgeBg}`}>
+                                            {badgeIcon} {isPro ? 'Pro' : 'Trial'}
+                                        </span>
+                                        <div>
+                                            <p className="text-sm font-medium">{tierLabel}</p>
+                                            {isLifetime ? (
+                                                <p className="text-xs text-muted-foreground">Berlaku selamanya ∞</p>
+                                            ) : expiry ? (
+                                                <p className={`text-xs ${isExpired ? 'text-red-500' : daysLeft !== null && daysLeft <= 7 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                                                    {isExpired
+                                                        ? '⚠️ Expired'
+                                                        : `Berlaku sampai: ${expiry.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} (${daysLeft} hari lagi)`
+                                                    }
+                                                </p>
+                                            ) : null}
+                                        </div>
                                     </div>
+                                    <Link href={`/${locale}/pricing`}>
+                                        <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+                                            <RefreshCw className="w-3 h-3" /> Ganti Paket
+                                        </Button>
+                                    </Link>
                                 </div>
+                            );
+                        })() : (
+                            <div className="flex items-center justify-between rounded-lg border p-4">
+                                <p className="text-sm text-muted-foreground">Tidak ada data subscription</p>
                                 <Link href={`/${locale}/pricing`}>
                                     <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                                        <RefreshCw className="w-3 h-3" /> Ganti Paket
+                                        <RefreshCw className="w-3 h-3" /> Lihat Paket
                                     </Button>
                                 </Link>
                             </div>
-                        );
-                    })() : (
-                        <div className="flex items-center justify-between rounded-lg border p-4">
-                            <p className="text-sm text-muted-foreground">Tidak ada data subscription</p>
-                            <Link href={`/${locale}/pricing`}>
-                                <Button variant="outline" size="sm" className="gap-1.5 text-xs">
-                                    <RefreshCw className="w-3 h-3" /> Lihat Paket
-                                </Button>
-                            </Link>
-                        </div>
-                    )}
+                        )}
+                    </div>
+
+                    {/* Messages */}
+                    {savedMsg && <p className="text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 rounded-lg px-4 py-3">{savedMsg}</p>}
+                    {resetMsg && <p className="text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 rounded-lg px-4 py-3">{resetMsg}</p>}
+
+                    {/* Save */}
+                    <Button onClick={handleSave} disabled={saving} className="gap-2 h-10 text-sm w-full">
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        {t("simpan")}
+                    </Button>
+                    <Button variant="outline" onClick={handleResetPassword} className="gap-2 h-10 text-sm w-full">
+                        <Key className="w-4 h-4" />
+                        {t("resetPassword")}
+                    </Button>
                 </div>
             </div>
 
