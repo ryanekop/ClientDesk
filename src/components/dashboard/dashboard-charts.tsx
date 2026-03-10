@@ -7,7 +7,7 @@ import {
 } from "recharts";
 import { createClient } from "@/utils/supabase/client";
 
-type DailyPoint = { name: string; revenue: number };
+type DailyPoint = { name: string; dateLabel: string; revenue: number };
 type MonthlyPoint = { name: string; revenue: number };
 
 export function DashboardCharts() {
@@ -54,10 +54,10 @@ export function DashboardCharts() {
             const entries = Object.entries(revenueByDate);
             const dailyPts: DailyPoint[] = entries.map(([date], idx) => {
                 const d = new Date(date);
+                const fullLabel = d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
                 return {
-                    name: idx % 5 === 0 || idx === entries.length - 1
-                        ? d.toLocaleDateString("id-ID", { day: "numeric", month: "short" })
-                        : "",
+                    name: idx % 5 === 0 || idx === entries.length - 1 ? fullLabel : "",
+                    dateLabel: fullLabel,
                     revenue: revenueByDate[date],
                 };
             });
@@ -135,12 +135,20 @@ export function DashboardCharts() {
                                 </linearGradient>
                             </defs>
                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} dy={10} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} tickFormatter={formatShort} width={48} />
                             <Tooltip
-                                formatter={(value: any) => [formatCurrency(Number(value)), "Pemasukan"]}
-                                contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)', borderRadius: '8px', fontSize: '13px' }}
-                                itemStyle={{ color: 'var(--foreground)' }}
+                                content={({ active, payload }) => {
+                                    if (!active || !payload?.length) return null;
+                                    const p = payload[0].payload as DailyPoint;
+                                    return (
+                                        <div style={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}>
+                                            <div style={{ fontWeight: 600, marginBottom: 2 }}>{p.dateLabel}</div>
+                                            <div style={{ color: 'var(--foreground)' }}>Pemasukan: {formatCurrency(p.revenue)}</div>
+                                        </div>
+                                    );
+                                }}
                             />
-                            <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
+                            <Area type="linear" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>

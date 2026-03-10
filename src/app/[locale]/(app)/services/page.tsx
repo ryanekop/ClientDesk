@@ -55,7 +55,7 @@ export default function ServicesPage() {
             name: formData.get("name") as string,
             description: formData.get("description") as string || null,
             price: parseFloat(formData.get("price") as string) || 0,
-            duration_minutes: parseInt(formData.get("duration_minutes") as string) || 120,
+            duration_minutes: parseInt(formData.get("duration_hours") as string || "0") * 60 + parseInt(formData.get("duration_mins") as string || "0"),
             is_active: true,
         });
 
@@ -74,7 +74,7 @@ export default function ServicesPage() {
                 name: formData.get("name") as string,
                 description: formData.get("description") as string || null,
                 price: parseFloat(formData.get("price") as string) || 0,
-                duration_minutes: parseInt(formData.get("duration_minutes") as string) || 120,
+                duration_minutes: parseInt(formData.get("duration_hours") as string || "0") * 60 + parseInt(formData.get("duration_mins") as string || "0"),
             })
             .eq("id", editingService.id);
 
@@ -137,10 +137,15 @@ export default function ServicesPage() {
                                     className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Durasi (menit)</label>
-                                <input name="duration_minutes" type="number" min="15" step="15" defaultValue={120} placeholder="120"
-                                    className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
-                                <p className="text-xs text-muted-foreground">Durasi sesi yang akan digunakan di kalender</p>
+                                <label className="text-sm font-medium">Durasi</label>
+                                <div className="flex items-center gap-2">
+                                    <input name="duration_hours" type="number" min="0" max="24" defaultValue={2} placeholder="0"
+                                        className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-20 min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
+                                    <span className="text-sm text-muted-foreground">Jam</span>
+                                    <input name="duration_mins" type="number" min="0" max="59" step="5" defaultValue={0} placeholder="0"
+                                        className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-20 min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
+                                    <span className="text-sm text-muted-foreground">Menit</span>
+                                </div>
                             </div>
                             <DialogFooter>
                                 <Button type="submit">{t("simpan")}</Button>
@@ -256,10 +261,15 @@ export default function ServicesPage() {
                                     className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Durasi (menit)</label>
-                                <input name="duration_minutes" type="number" min="15" step="15" defaultValue={editingService.duration_minutes || 120}
-                                    className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
-                                <p className="text-xs text-muted-foreground">Durasi sesi yang akan digunakan di kalender</p>
+                                <label className="text-sm font-medium">Durasi</label>
+                                <div className="flex items-center gap-2">
+                                    <input name="duration_hours" type="number" min="0" max="24" defaultValue={Math.floor((editingService.duration_minutes || 120) / 60)}
+                                        className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-20 min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
+                                    <span className="text-sm text-muted-foreground">Jam</span>
+                                    <input name="duration_mins" type="number" min="0" max="59" step="5" defaultValue={(editingService.duration_minutes || 120) % 60}
+                                        className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-20 min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
+                                    <span className="text-sm text-muted-foreground">Menit</span>
+                                </div>
                             </div>
                             <DialogFooter>
                                 <Button type="submit">{t("perbarui")}</Button>

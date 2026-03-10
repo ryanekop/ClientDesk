@@ -212,8 +212,8 @@ export default async function DashboardPage() {
                             <tr className="border-b text-xs text-muted-foreground">
                                 <th className="text-left font-medium px-6 py-3">Klien</th>
                                 <th className="text-left font-medium px-4 py-3 hidden sm:table-cell">Paket</th>
-                                <th className="text-left font-medium px-4 py-3 hidden md:table-cell">Jadwal</th>
                                 <th className="text-left font-medium px-4 py-3 hidden md:table-cell">Tanggal Booking</th>
+                                <th className="text-left font-medium px-4 py-3 hidden md:table-cell">Jadwal</th>
                                 <th className="text-left font-medium px-4 py-3">Status</th>
                                 <th className="text-right font-medium px-6 py-3 hidden sm:table-cell">Total</th>
                             </tr>
@@ -238,8 +238,8 @@ export default async function DashboardPage() {
                                             </Link>
                                         </td>
                                         <td className="px-4 py-3 text-sm hidden sm:table-cell">{(b.services as any)?.name || "-"}</td>
-                                        <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">{formatDate(b.session_date)}</td>
                                         <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">{formatDate((b as any).created_at)}</td>
+                                        <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">{formatDate(b.session_date)}</td>
                                         <td className="px-4 py-3">
                                             <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${statusColors[b.status?.toLowerCase()] || statusColors.pending}`}>
                                                 {b.status}
