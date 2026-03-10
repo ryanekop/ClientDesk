@@ -49,6 +49,7 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
     const serviceName = booking.services?.name || "-";
 
     // Build replacement map
+    const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
     const vars: Record<string, string> = {
         client_name: booking.client_name,
         booking_code: booking.booking_code,
@@ -60,6 +61,7 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
         freelancer_name: freelancerName || "",
         event_type: serviceName,
         location: booking.location || "-",
+        invoice_url: `${siteUrl}/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}`,
     };
 
     function applyVars(tpl: string) {

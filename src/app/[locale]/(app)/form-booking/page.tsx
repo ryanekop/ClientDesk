@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useLocale } from "next-intl";
-import { ExternalLink, Copy, ClipboardCheck, Loader2, Percent, Palette, List, ToggleRight, RotateCcw, CreditCard, Plus, Trash2, RefreshCw } from "lucide-react";
+import { ExternalLink, Copy, ClipboardCheck, Loader2, Percent, Palette, List, ToggleRight, RotateCcw, CreditCard, Plus, Trash2, RefreshCw, Settings2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 
@@ -49,6 +49,7 @@ export default function FormBookingPage() {
     const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
 
     const [iframeKey, setIframeKey] = React.useState(0);
+    const [mobileTab, setMobileTab] = React.useState<"settings" | "preview">("settings");
 
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
     const formUrl = vendorSlug ? `${siteUrl}/${locale}/formbooking/${vendorSlug}` : "";
@@ -182,9 +183,9 @@ export default function FormBookingPage() {
             </div>
 
             {/* Main Content: Settings + Preview */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-                {/* LEFT: Settings */}
-                <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start pb-20 lg:pb-0">
+                {/* LEFT: Settings — hidden on mobile when viewing preview */}
+                <div className={`space-y-6 ${mobileTab === "preview" ? "hidden lg:block" : ""}`}>
                     {/* Payment Settings */}
                     <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
                         <div className="px-6 py-4 border-b">
@@ -384,8 +385,8 @@ export default function FormBookingPage() {
                     )}
                 </div>
 
-                {/* RIGHT: Linktree-Style Preview */}
-                <div className="sticky top-4 space-y-3">
+                {/* RIGHT: Linktree-Style Preview — hidden on mobile when viewing settings */}
+                <div className={`sticky top-4 space-y-3 ${mobileTab === "settings" ? "hidden lg:block" : ""}`}>
                     {/* Preview Header with Buttons */}
                     <div className="flex items-center justify-between">
                         <h3 className="text-sm font-semibold text-muted-foreground">Preview</h3>
@@ -422,8 +423,8 @@ export default function FormBookingPage() {
                                     </div>
                                 </div>
 
-                                {/* iframe content */}
-                                <div className="aspect-[9/16] max-h-[700px] rounded-b-2xl overflow-hidden border border-t-0 bg-white dark:bg-background">
+                                {/* iframe content — fits viewport height */}
+                                <div className="rounded-b-2xl overflow-hidden border border-t-0 bg-white dark:bg-background" style={{ height: "calc(100vh - 180px)" }}>
                                     <iframe key={iframeKey} src={formUrl} className="w-full h-full" title="Form Preview" />
                                 </div>
                             </div>
@@ -433,6 +434,26 @@ export default function FormBookingPage() {
                             <p className="text-sm text-muted-foreground text-center px-6">Simpan pengaturan terlebih dahulu untuk melihat preview.</p>
                         </div>
                     )}
+                </div>
+            </div>
+
+            {/* Mobile Bottom Tab Bar */}
+            <div className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-md border-t z-40 lg:hidden">
+                <div className="flex">
+                    <button
+                        onClick={() => setMobileTab("settings")}
+                        className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${mobileTab === "settings" ? "text-primary" : "text-muted-foreground"}`}
+                    >
+                        <Settings2 className="w-5 h-5" />
+                        Settings
+                    </button>
+                    <button
+                        onClick={() => setMobileTab("preview")}
+                        className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${mobileTab === "preview" ? "text-primary" : "text-muted-foreground"}`}
+                    >
+                        <Eye className="w-5 h-5" />
+                        Preview
+                    </button>
                 </div>
             </div>
         </div>

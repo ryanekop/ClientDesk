@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import type { TDocumentDefinitions, Content } from "pdfmake/interfaces";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const PdfPrinter = require("pdfmake");
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,10 +13,19 @@ function formatCurrency(n: number) {
     return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
 }
 
+const fonts = {
+    Helvetica: {
+        normal: "Helvetica",
+        bold: "Helvetica-Bold",
+        italics: "Helvetica-Oblique",
+        bolditalics: "Helvetica-BoldOblique",
+    },
+};
+
 export async function GET(request: NextRequest) {
     const code = request.nextUrl.searchParams.get("code");
     if (!code) {
-        return new NextResponse("Booking code required", { status: 400 });
+        return NextResponse.json({ error: "Booking code required" }, { status: 400 });
     }
 
     // Fetch booking
@@ -24,7 +36,7 @@ export async function GET(request: NextRequest) {
         .single();
 
     if (!booking || error) {
-        return new NextResponse("Booking not found", { status: 404 });
+        return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
     // Fetch vendor info
@@ -35,101 +47,136 @@ export async function GET(request: NextRequest) {
         .single();
 
     const studioName = profile?.studio_name || "Studio";
-    const invoiceLogoUrl = profile?.invoice_logo_url || null;
     const remaining = booking.total_price - booking.dp_paid;
-    const date = booking.session_date ? new Date(booking.session_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-";
+    const date = booking.session_date
+        ? new Date(booking.session_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
+        : "-";
     const now = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+    const serviceName = (booking.services as any)?.name || "Layanan";
+    const paymentStatus = booking.is_fully_paid ? "Lunas" : "Belum Lunas";
 
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Invoice ${booking.booking_code}</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Segoe UI', system-ui, sans-serif; padding: 40px; color: #1a1a1a; max-width: 800px; margin: auto; }
-.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 2px solid #e5e7eb; }
-.brand h1 { font-size: 24px; font-weight: 700; }
-.brand p { color: #6b7280; font-size: 14px; }
-.invoice-info { text-align: right; }
-.invoice-info h2 { font-size: 28px; font-weight: 700; color: #111; margin-bottom: 4px; }
-.invoice-info p { font-size: 13px; color: #6b7280; }
-.section { margin-bottom: 24px; }
-.section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; margin-bottom: 8px; }
-.client-info p { font-size: 14px; line-height: 1.6; }
-.client-info strong { font-weight: 600; }
-table { width: 100%; border-collapse: collapse; margin: 24px 0; }
-th { background: #f9fafb; text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
-td { padding: 14px 16px; font-size: 14px; border-bottom: 1px solid #f3f4f6; }
-.text-right { text-align: right; }
-.summary { margin-top: 16px; display: flex; justify-content: flex-end; }
-.summary-table { width: 280px; }
-.summary-table tr td { padding: 8px 0; font-size: 14px; }
-.summary-table .total td { font-weight: 700; font-size: 18px; padding-top: 12px; border-top: 2px solid #111; }
-.paid-badge { display: inline-block; background: #dcfce7; color: #16a34a; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-.unpaid-badge { display: inline-block; background: #fef3c7; color: #d97706; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-.footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; color: #9ca3af; font-size: 12px; }
-@media print { body { padding: 20px; } .no-print { display: none; } }
-.print-btn { display: block; margin: 0 auto 24px; padding: 10px 32px; background: #111; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-.print-btn:hover { background: #333; }
-</style>
-</head>
-<body>
-<button class="print-btn no-print" onclick="window.print()">🖨️ Cetak / Download PDF</button>
-<div class="header">
-<div class="brand">
-    ${invoiceLogoUrl ? `<img src="${invoiceLogoUrl}" alt="Logo" style="max-height:48px;max-width:200px;object-fit:contain;margin-bottom:4px;">` : `<h1>${studioName}</h1>`}
-    <p>Studio Management</p>
-</div>
-<div class="invoice-info">
-    <h2>INVOICE</h2>
-    <p>${booking.booking_code}</p>
-    <p>${now}</p>
-</div>
-</div>
+    const docDefinition: TDocumentDefinitions = {
+        defaultStyle: { font: "Helvetica", fontSize: 10 },
+        pageSize: "A4",
+        pageMargins: [40, 40, 40, 40],
+        content: [
+            // Header
+            {
+                columns: [
+                    {
+                        stack: [
+                            { text: studioName, fontSize: 18, bold: true, margin: [0, 0, 0, 2] } as Content,
+                            { text: "Studio Management", fontSize: 9, color: "#6b7280" } as Content,
+                        ],
+                        width: "*",
+                    },
+                    {
+                        stack: [
+                            { text: "INVOICE", fontSize: 22, bold: true, alignment: "right", margin: [0, 0, 0, 2] } as Content,
+                            { text: booking.booking_code, fontSize: 10, color: "#6b7280", alignment: "right" } as Content,
+                            { text: now, fontSize: 9, color: "#6b7280", alignment: "right" } as Content,
+                        ],
+                        width: "auto",
+                    },
+                ],
+                margin: [0, 0, 0, 20],
+            } as Content,
 
-<div class="section">
-<div class="section-title">Detail Klien</div>
-<div class="client-info">
-    <p><strong>${booking.client_name}</strong></p>
-    <p>${booking.client_whatsapp || "-"}</p>
-</div>
-</div>
+            // Divider
+            { canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: "#e5e7eb" }], margin: [0, 0, 0, 20] } as Content,
 
-<table>
-<thead>
-    <tr>
-        <th>Layanan</th>
-        <th>Jadwal</th>
-        <th>Status</th>
-        <th class="text-right">Total</th>
-    </tr>
-</thead>
-<tbody>
-    <tr>
-        <td>${(booking.services as any)?.name || "Layanan"}</td>
-        <td>${date}</td>
-        <td><span class="${booking.is_fully_paid ? 'paid-badge' : 'unpaid-badge'}">${booking.is_fully_paid ? 'Lunas' : 'Belum Lunas'}</span></td>
-        <td class="text-right">${formatCurrency(booking.total_price)}</td>
-    </tr>
-</tbody>
-</table>
+            // Client Info
+            { text: "DETAIL KLIEN", fontSize: 8, bold: true, color: "#9ca3af", letterSpacing: 1, margin: [0, 0, 0, 6] } as Content,
+            { text: booking.client_name, fontSize: 12, bold: true, margin: [0, 0, 0, 2] } as Content,
+            { text: booking.client_whatsapp || "-", fontSize: 10, color: "#6b7280", margin: [0, 0, 0, 20] } as Content,
 
-<div class="summary">
-<table class="summary-table">
-    <tr><td>Sub Total</td><td class="text-right">${formatCurrency(booking.total_price)}</td></tr>
-    <tr><td>DP Dibayar</td><td class="text-right">- ${formatCurrency(booking.dp_paid)}</td></tr>
-    <tr class="total"><td>Sisa Pembayaran</td><td class="text-right">${formatCurrency(remaining)}</td></tr>
-</table>
-</div>
+            // Table
+            {
+                table: {
+                    headerRows: 1,
+                    widths: ["*", "auto", "auto", "auto"],
+                    body: [
+                        [
+                            { text: "Layanan", bold: true, fontSize: 8, color: "#6b7280", fillColor: "#f9fafb", margin: [0, 6, 0, 6] },
+                            { text: "Jadwal", bold: true, fontSize: 8, color: "#6b7280", fillColor: "#f9fafb", margin: [0, 6, 0, 6] },
+                            { text: "Status", bold: true, fontSize: 8, color: "#6b7280", fillColor: "#f9fafb", margin: [0, 6, 0, 6] },
+                            { text: "Total", bold: true, fontSize: 8, color: "#6b7280", fillColor: "#f9fafb", alignment: "right", margin: [0, 6, 0, 6] },
+                        ],
+                        [
+                            { text: serviceName, fontSize: 10, margin: [0, 8, 0, 8] },
+                            { text: date, fontSize: 10, margin: [0, 8, 0, 8] },
+                            { text: paymentStatus, fontSize: 10, color: booking.is_fully_paid ? "#16a34a" : "#d97706", bold: true, margin: [0, 8, 0, 8] },
+                            { text: formatCurrency(booking.total_price), fontSize: 10, alignment: "right", margin: [0, 8, 0, 8] },
+                        ],
+                    ],
+                },
+                layout: {
+                    hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length) ? 0 : 0.5,
+                    vLineWidth: () => 0,
+                    hLineColor: () => "#e5e7eb",
+                    paddingLeft: () => 8,
+                    paddingRight: () => 8,
+                },
+                margin: [0, 0, 0, 20],
+            } as Content,
 
-<div class="footer">
-<p>Terima kasih atas kepercayaan Anda. Invoice ini digenerate otomatis oleh ${studioName}.</p>
-</div>
-</body>
-</html>`;
+            // Summary
+            {
+                columns: [
+                    { width: "*", text: "" },
+                    {
+                        width: 220,
+                        table: {
+                            widths: ["*", "auto"],
+                            body: [
+                                [
+                                    { text: "Sub Total", fontSize: 10, border: [false, false, false, false], margin: [0, 4, 0, 4] },
+                                    { text: formatCurrency(booking.total_price), fontSize: 10, alignment: "right", border: [false, false, false, false], margin: [0, 4, 0, 4] },
+                                ],
+                                [
+                                    { text: "DP Dibayar", fontSize: 10, border: [false, false, false, false], margin: [0, 4, 0, 4] },
+                                    { text: `- ${formatCurrency(booking.dp_paid)}`, fontSize: 10, alignment: "right", border: [false, false, false, false], margin: [0, 4, 0, 4] },
+                                ],
+                                [
+                                    { text: "Sisa Pembayaran", fontSize: 13, bold: true, border: [false, true, false, false], margin: [0, 8, 0, 4] },
+                                    { text: formatCurrency(remaining), fontSize: 13, bold: true, alignment: "right", border: [false, true, false, false], margin: [0, 8, 0, 4] },
+                                ],
+                            ],
+                        },
+                        layout: {
+                            hLineWidth: (i: number) => i === 2 ? 1.5 : 0,
+                            vLineWidth: () => 0,
+                            hLineColor: () => "#111",
+                        },
+                    },
+                ],
+                margin: [0, 0, 0, 40],
+            } as Content,
 
-    return new NextResponse(html, {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+            // Footer
+            { canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: "#e5e7eb" }], margin: [0, 0, 0, 12] } as Content,
+            { text: `Terima kasih atas kepercayaan Anda. Invoice ini digenerate otomatis oleh ${studioName}.`, alignment: "center", fontSize: 9, color: "#9ca3af" } as Content,
+        ],
+    };
+
+    const printer = new PdfPrinter(fonts);
+    const pdfDoc = printer.createPdfKitDocument(docDefinition);
+
+    // Collect PDF into buffer
+    const chunks: Buffer[] = [];
+    return new Promise<NextResponse>((resolve) => {
+        pdfDoc.on("data", (chunk: Buffer) => chunks.push(chunk));
+        pdfDoc.on("end", () => {
+            const pdfBuffer = Buffer.concat(chunks);
+            resolve(
+                new NextResponse(pdfBuffer, {
+                    headers: {
+                        "Content-Type": "application/pdf",
+                        "Content-Disposition": `inline; filename="Invoice-${booking.booking_code}.pdf"`,
+                    },
+                })
+            );
+        });
+        pdfDoc.end();
     });
 }
