@@ -38,7 +38,7 @@ export default function PricingPage() {
             price: "39rb",
             durationKey: "perMonth",
             features: [...sharedFeatures],
-            link: "#",
+            link: "https://ryaneko.myr.id/m/client-desk-pro-access",
             popular: false,
             icon: Zap,
             isLifetime: false
@@ -48,7 +48,7 @@ export default function PricingPage() {
             price: "99rb",
             durationKey: "per3Months",
             features: ["featurePerMonth3", ...sharedFeatures],
-            link: "#",
+            link: "https://ryaneko.myr.id/m/client-desk-pro-access",
             popular: false,
             icon: Star,
             isLifetime: false
@@ -58,7 +58,7 @@ export default function PricingPage() {
             price: "349rb",
             durationKey: "perYear",
             features: ["featurePerMonth12", ...sharedFeatures],
-            link: "#",
+            link: "https://ryaneko.myr.id/m/client-desk-pro-access",
             popular: true,
             icon: Crown,
             isLifetime: false
@@ -68,7 +68,7 @@ export default function PricingPage() {
             price: "549rb",
             durationKey: "oneTime",
             features: ["featurePayOnce", "featureLimitedSlot", ...sharedFeatures, "featureFutureUpdates"],
-            link: "#",
+            link: "https://ryaneko.myr.id/m/client-desk-pro-access",
             popular: false,
             icon: InfinityIcon,
             isLifetime: true

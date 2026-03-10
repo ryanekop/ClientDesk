@@ -113,7 +113,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                         className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-medium text-sm cursor-pointer hover:opacity-90 transition-opacity ml-1 overflow-hidden"
                     >
                         {avatarUrl ? (
-                            <img src={`${avatarUrl}?t=${avatarTs}`} alt={userName} className="w-full h-full object-cover" />
+                            <img src={`${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}t=${avatarTs}`} alt={userName} className="w-full h-full object-cover" />
                         ) : (
                             userName ? userName.charAt(0).toUpperCase() : "U"
                         )}

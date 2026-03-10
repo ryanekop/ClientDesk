@@ -45,13 +45,7 @@ export default async function Home() {
 
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight">
               {t('title')}
-              {/* Mobile: allow wrapping naturally */}
-              <span className="block text-primary mt-2 sm:hidden">{t('subtitle')}</span>
-              {/* Desktop: force "& Profesional" on same line, no orphan */}
-              <span className="hidden sm:block text-primary mt-2">
-                <span className="block">{t('subtitleLine1')}</span>
-                <span className="whitespace-nowrap">{t('subtitleLine2')}</span>
-              </span>
+              <span className="block text-primary mt-2">{t('subtitle')}</span>
             </h1>
 
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
