@@ -554,7 +554,7 @@ export default function SettingsPage() {
                                     {logoUrl && (
                                         <div className="space-y-2">
                                             <p className="text-xs text-muted-foreground font-medium">Preview:</p>
-                                            <div className={`rounded-xl border bg-muted/20 overflow-hidden flex items-center justify-center ${logoOrientation === "horizontal" ? "w-48 h-24" : "w-32 h-32"}`}>
+                                            <div className={`rounded-xl border bg-muted/20 overflow-hidden flex items-center justify-center ${logoOrientation === "horizontal" ? "w-40 h-16" : "w-24 h-24"}`}>
                                                 <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
                                             </div>
                                             {/* 3. Delete */}

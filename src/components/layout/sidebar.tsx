@@ -103,7 +103,8 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                             <Menu className="w-5 h-5 shrink-0" />
                             <span className="sr-only">Toggle Sidebar</span>
                         </Button>
-                        <Link href="/dashboard" className={cn("flex flex-col transition-opacity duration-300", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
+                        <Link href="/dashboard" className={cn("flex items-center gap-2 transition-opacity duration-300", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
+                            <img src="/icon-192.png" alt="Client Desk" className="w-7 h-7 rounded-lg" />
                             <span className="font-bold tracking-tight leading-none text-base">Client Desk</span>
                         </Link>
                     </div>

@@ -169,7 +169,7 @@ export default function ServicesPage() {
                 <>
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {paginateArray(services, currentPage, itemsPerPage).map((service) => (
-                            <div key={service.id} className="rounded-xl border bg-card text-card-foreground shadow-sm p-5 flex flex-col gap-3 relative">
+                            <div key={service.id} className="rounded-xl border bg-card text-card-foreground shadow-sm p-5 flex flex-col relative">
                                 {/* Active badge */}
                                 <div className="flex items-start justify-between">
                                     <div className="flex-1">
@@ -186,7 +186,7 @@ export default function ServicesPage() {
                                     </span>
                                 </div>
 
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-3 mt-3">
                                     <div className="text-xl font-bold">{formatCurrency(service.price)}</div>
                                     {service.duration_minutes && (
                                         <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -196,7 +196,7 @@ export default function ServicesPage() {
                                     )}
                                 </div>
 
-                                <div className="flex items-center gap-2 pt-2 border-t">
+                                <div className="flex items-center gap-2 pt-2 border-t mt-auto">
                                     <Button
                                         variant="outline"
                                         size="sm"

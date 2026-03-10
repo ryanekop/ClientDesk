@@ -88,7 +88,9 @@ export async function GET(request: NextRequest) {
     }
     page.drawText("INVOICE", { x: w - mx - helveticaBold.widthOfTextAtSize("INVOICE", 22), y, font: helveticaBold, size: 22, color: black });
     y -= 18;
-    page.drawText("Studio Management", { x: mx, y, font: helvetica, size: 9, color: gray });
+    if (!logoDrawn) {
+        page.drawText("Studio Management", { x: mx, y, font: helvetica, size: 9, color: gray });
+    }
     const codeW = helvetica.widthOfTextAtSize(booking.booking_code, 10);
     page.drawText(booking.booking_code, { x: w - mx - codeW, y, font: helvetica, size: 10, color: gray });
     y -= 14;
@@ -166,7 +168,7 @@ export async function GET(request: NextRequest) {
     y -= 60;
     page.drawLine({ start: { x: mx, y }, end: { x: w - mx, y }, thickness: 0.5, color: lightGray });
     y -= 16;
-    const footerText = `Terima kasih atas kepercayaan Anda. Invoice ini digenerate otomatis oleh ${studioName}.`;
+    const footerText = `Terima kasih atas kepercayaan Anda. Invoice ini digenerate otomatis oleh Client Desk.`;
     const ftw = helvetica.widthOfTextAtSize(footerText, 9);
     page.drawText(footerText, { x: (w - ftw) / 2, y, font: helvetica, size: 9, color: gray });
 

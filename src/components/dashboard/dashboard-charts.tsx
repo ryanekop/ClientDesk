@@ -34,17 +34,20 @@ export function DashboardCharts() {
                 .gte("created_at", thirtyDaysAgo.toISOString())
                 .order("created_at", { ascending: true });
 
+            // Use local date keys to avoid UTC offset issues
+            const toLocalKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
             // Initialize all 30 days
             const revenueByDate: Record<string, number> = {};
             for (let i = 29; i >= 0; i--) {
                 const d = new Date();
                 d.setDate(d.getDate() - i);
-                revenueByDate[d.toISOString().split("T")[0]] = 0;
+                revenueByDate[toLocalKey(d)] = 0;
             }
 
             // Sum per-day income (non-cumulative)
             (recentBookings || []).forEach(b => {
-                const dateKey = new Date(b.created_at).toISOString().split("T")[0];
+                const dateKey = toLocalKey(new Date(b.created_at));
                 const amount = b.is_fully_paid ? (b.total_price || 0) : (b.dp_paid || 0);
                 if (revenueByDate[dateKey] !== undefined) {
                     revenueByDate[dateKey] += amount;
