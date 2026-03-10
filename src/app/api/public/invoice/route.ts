@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import type { TDocumentDefinitions, Content } from "pdfmake/interfaces";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const PdfPrinter = require("pdfmake");
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,22 +11,12 @@ function formatCurrency(n: number) {
     return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
 }
 
-const fonts = {
-    Helvetica: {
-        normal: "Helvetica",
-        bold: "Helvetica-Bold",
-        italics: "Helvetica-Oblique",
-        bolditalics: "Helvetica-BoldOblique",
-    },
-};
-
 export async function GET(request: NextRequest) {
     const code = request.nextUrl.searchParams.get("code");
     if (!code) {
         return NextResponse.json({ error: "Booking code required" }, { status: 400 });
     }
 
-    // Fetch booking
     const { data: booking, error } = await supabaseAdmin
         .from("bookings")
         .select("id, booking_code, client_name, client_whatsapp, session_date, total_price, dp_paid, is_fully_paid, status, user_id, services(name)")
@@ -39,144 +27,130 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
-    // Fetch vendor info
     const { data: profile } = await supabaseAdmin
         .from("profiles")
-        .select("studio_name, invoice_logo_url")
+        .select("studio_name")
         .eq("id", booking.user_id)
         .single();
 
     const studioName = profile?.studio_name || "Studio";
     const remaining = booking.total_price - booking.dp_paid;
-    const date = booking.session_date
+    const sessionDate = booking.session_date
         ? new Date(booking.session_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })
         : "-";
     const now = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
     const serviceName = (booking.services as any)?.name || "Layanan";
     const paymentStatus = booking.is_fully_paid ? "Lunas" : "Belum Lunas";
 
-    const docDefinition: TDocumentDefinitions = {
-        defaultStyle: { font: "Helvetica", fontSize: 10 },
-        pageSize: "A4",
-        pageMargins: [40, 40, 40, 40],
-        content: [
-            // Header
-            {
-                columns: [
-                    {
-                        stack: [
-                            { text: studioName, fontSize: 18, bold: true, margin: [0, 0, 0, 2] } as Content,
-                            { text: "Studio Management", fontSize: 9, color: "#6b7280" } as Content,
-                        ],
-                        width: "*",
-                    },
-                    {
-                        stack: [
-                            { text: "INVOICE", fontSize: 22, bold: true, alignment: "right", margin: [0, 0, 0, 2] } as Content,
-                            { text: booking.booking_code, fontSize: 10, color: "#6b7280", alignment: "right" } as Content,
-                            { text: now, fontSize: 9, color: "#6b7280", alignment: "right" } as Content,
-                        ],
-                        width: "auto",
-                    },
-                ],
-                margin: [0, 0, 0, 20],
-            } as Content,
+    // Create PDF
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595, 842]); // A4
+    const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-            // Divider
-            { canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: "#e5e7eb" }], margin: [0, 0, 0, 20] } as Content,
+    const black = rgb(0.1, 0.1, 0.1);
+    const gray = rgb(0.42, 0.44, 0.47);
+    const lightGray = rgb(0.9, 0.91, 0.92);
+    const green = rgb(0.086, 0.64, 0.26);
+    const amber = rgb(0.85, 0.47, 0.02);
 
-            // Client Info
-            { text: "DETAIL KLIEN", fontSize: 8, bold: true, color: "#9ca3af", letterSpacing: 1, margin: [0, 0, 0, 6] } as Content,
-            { text: booking.client_name, fontSize: 12, bold: true, margin: [0, 0, 0, 2] } as Content,
-            { text: booking.client_whatsapp || "-", fontSize: 10, color: "#6b7280", margin: [0, 0, 0, 20] } as Content,
+    const w = 595;
+    const mx = 40; // margin x
+    const contentW = w - mx * 2;
+    let y = 802; // start from top
 
-            // Table
-            {
-                table: {
-                    headerRows: 1,
-                    widths: ["*", "auto", "auto", "auto"],
-                    body: [
-                        [
-                            { text: "Layanan", bold: true, fontSize: 8, color: "#6b7280", fillColor: "#f9fafb", margin: [0, 6, 0, 6] },
-                            { text: "Jadwal", bold: true, fontSize: 8, color: "#6b7280", fillColor: "#f9fafb", margin: [0, 6, 0, 6] },
-                            { text: "Status", bold: true, fontSize: 8, color: "#6b7280", fillColor: "#f9fafb", margin: [0, 6, 0, 6] },
-                            { text: "Total", bold: true, fontSize: 8, color: "#6b7280", fillColor: "#f9fafb", alignment: "right", margin: [0, 6, 0, 6] },
-                        ],
-                        [
-                            { text: serviceName, fontSize: 10, margin: [0, 8, 0, 8] },
-                            { text: date, fontSize: 10, margin: [0, 8, 0, 8] },
-                            { text: paymentStatus, fontSize: 10, color: booking.is_fully_paid ? "#16a34a" : "#d97706", bold: true, margin: [0, 8, 0, 8] },
-                            { text: formatCurrency(booking.total_price), fontSize: 10, alignment: "right", margin: [0, 8, 0, 8] },
-                        ],
-                    ],
-                },
-                layout: {
-                    hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length) ? 0 : 0.5,
-                    vLineWidth: () => 0,
-                    hLineColor: () => "#e5e7eb",
-                    paddingLeft: () => 8,
-                    paddingRight: () => 8,
-                },
-                margin: [0, 0, 0, 20],
-            } as Content,
+    // --- HEADER ---
+    page.drawText(studioName, { x: mx, y, font: helveticaBold, size: 18, color: black });
+    page.drawText("INVOICE", { x: w - mx - helveticaBold.widthOfTextAtSize("INVOICE", 22), y, font: helveticaBold, size: 22, color: black });
+    y -= 18;
+    page.drawText("Studio Management", { x: mx, y, font: helvetica, size: 9, color: gray });
+    const codeW = helvetica.widthOfTextAtSize(booking.booking_code, 10);
+    page.drawText(booking.booking_code, { x: w - mx - codeW, y, font: helvetica, size: 10, color: gray });
+    y -= 14;
+    const dateW = helvetica.widthOfTextAtSize(now, 9);
+    page.drawText(now, { x: w - mx - dateW, y, font: helvetica, size: 9, color: gray });
 
-            // Summary
-            {
-                columns: [
-                    { width: "*", text: "" },
-                    {
-                        width: 220,
-                        table: {
-                            widths: ["*", "auto"],
-                            body: [
-                                [
-                                    { text: "Sub Total", fontSize: 10, border: [false, false, false, false], margin: [0, 4, 0, 4] },
-                                    { text: formatCurrency(booking.total_price), fontSize: 10, alignment: "right", border: [false, false, false, false], margin: [0, 4, 0, 4] },
-                                ],
-                                [
-                                    { text: "DP Dibayar", fontSize: 10, border: [false, false, false, false], margin: [0, 4, 0, 4] },
-                                    { text: `- ${formatCurrency(booking.dp_paid)}`, fontSize: 10, alignment: "right", border: [false, false, false, false], margin: [0, 4, 0, 4] },
-                                ],
-                                [
-                                    { text: "Sisa Pembayaran", fontSize: 13, bold: true, border: [false, true, false, false], margin: [0, 8, 0, 4] },
-                                    { text: formatCurrency(remaining), fontSize: 13, bold: true, alignment: "right", border: [false, true, false, false], margin: [0, 8, 0, 4] },
-                                ],
-                            ],
-                        },
-                        layout: {
-                            hLineWidth: (i: number) => i === 2 ? 1.5 : 0,
-                            vLineWidth: () => 0,
-                            hLineColor: () => "#111",
-                        },
-                    },
-                ],
-                margin: [0, 0, 0, 40],
-            } as Content,
+    // Divider
+    y -= 16;
+    page.drawLine({ start: { x: mx, y }, end: { x: w - mx, y }, thickness: 1, color: lightGray });
 
-            // Footer
-            { canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: "#e5e7eb" }], margin: [0, 0, 0, 12] } as Content,
-            { text: `Terima kasih atas kepercayaan Anda. Invoice ini digenerate otomatis oleh ${studioName}.`, alignment: "center", fontSize: 9, color: "#9ca3af" } as Content,
-        ],
-    };
+    // --- CLIENT INFO ---
+    y -= 24;
+    page.drawText("DETAIL KLIEN", { x: mx, y, font: helveticaBold, size: 8, color: gray });
+    y -= 18;
+    page.drawText(booking.client_name, { x: mx, y, font: helveticaBold, size: 12, color: black });
+    y -= 16;
+    page.drawText(booking.client_whatsapp || "-", { x: mx, y, font: helvetica, size: 10, color: gray });
 
-    const printer = new PdfPrinter(fonts);
-    const pdfDoc = printer.createPdfKitDocument(docDefinition);
+    // --- TABLE ---
+    y -= 30;
+    const colX = [mx, mx + 200, mx + 320, w - mx];
+    const headers = ["Layanan", "Jadwal", "Status", "Total"];
 
-    // Collect PDF into buffer
-    const chunks: Buffer[] = [];
-    return new Promise<NextResponse>((resolve) => {
-        pdfDoc.on("data", (chunk: Buffer) => chunks.push(chunk));
-        pdfDoc.on("end", () => {
-            const pdfBuffer = Buffer.concat(chunks);
-            resolve(
-                new NextResponse(pdfBuffer, {
-                    headers: {
-                        "Content-Type": "application/pdf",
-                        "Content-Disposition": `inline; filename="Invoice-${booking.booking_code}.pdf"`,
-                    },
-                })
-            );
-        });
-        pdfDoc.end();
+    // Table header bg
+    page.drawRectangle({ x: mx, y: y - 4, width: contentW, height: 28, color: rgb(0.976, 0.98, 0.984) });
+    headers.forEach((h, i) => {
+        const tx = i === 3 ? colX[i] - helveticaBold.widthOfTextAtSize(h, 8) : colX[i] + 8;
+        page.drawText(h, { x: tx, y: y + 6, font: helveticaBold, size: 8, color: gray });
+    });
+
+    // Table header bottom line
+    y -= 6;
+    page.drawLine({ start: { x: mx, y }, end: { x: w - mx, y }, thickness: 0.5, color: lightGray });
+
+    // Table row
+    y -= 20;
+    page.drawText(serviceName, { x: colX[0] + 8, y, font: helvetica, size: 10, color: black });
+    page.drawText(sessionDate, { x: colX[1] + 8, y, font: helvetica, size: 10, color: black });
+    const statusColor = booking.is_fully_paid ? green : amber;
+    page.drawText(paymentStatus, { x: colX[2] + 8, y, font: helveticaBold, size: 10, color: statusColor });
+    const totalStr = formatCurrency(booking.total_price);
+    page.drawText(totalStr, { x: colX[3] - helvetica.widthOfTextAtSize(totalStr, 10), y, font: helvetica, size: 10, color: black });
+
+    // Table row bottom line
+    y -= 14;
+    page.drawLine({ start: { x: mx, y }, end: { x: w - mx, y }, thickness: 0.5, color: rgb(0.95, 0.96, 0.96) });
+
+    // --- SUMMARY (right-aligned) ---
+    y -= 30;
+    const sumX = w - mx - 220;
+    const sumValX = w - mx;
+
+    // Sub Total
+    page.drawText("Sub Total", { x: sumX, y, font: helvetica, size: 10, color: black });
+    const st = formatCurrency(booking.total_price);
+    page.drawText(st, { x: sumValX - helvetica.widthOfTextAtSize(st, 10), y, font: helvetica, size: 10, color: black });
+
+    // DP Dibayar
+    y -= 22;
+    page.drawText("DP Dibayar", { x: sumX, y, font: helvetica, size: 10, color: black });
+    const dp = `- ${formatCurrency(booking.dp_paid)}`;
+    page.drawText(dp, { x: sumValX - helvetica.widthOfTextAtSize(dp, 10), y, font: helvetica, size: 10, color: black });
+
+    // Total divider
+    y -= 14;
+    page.drawLine({ start: { x: sumX, y }, end: { x: sumValX, y }, thickness: 1.5, color: black });
+
+    // Sisa Pembayaran
+    y -= 20;
+    page.drawText("Sisa Pembayaran", { x: sumX, y, font: helveticaBold, size: 13, color: black });
+    const rem = formatCurrency(remaining);
+    page.drawText(rem, { x: sumValX - helveticaBold.widthOfTextAtSize(rem, 13), y, font: helveticaBold, size: 13, color: black });
+
+    // --- FOOTER ---
+    y -= 60;
+    page.drawLine({ start: { x: mx, y }, end: { x: w - mx, y }, thickness: 0.5, color: lightGray });
+    y -= 16;
+    const footerText = `Terima kasih atas kepercayaan Anda. Invoice ini digenerate otomatis oleh ${studioName}.`;
+    const ftw = helvetica.widthOfTextAtSize(footerText, 9);
+    page.drawText(footerText, { x: (w - ftw) / 2, y, font: helvetica, size: 9, color: gray });
+
+    const pdfBytes = await pdfDoc.save();
+
+    return new NextResponse(Buffer.from(pdfBytes), {
+        headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `inline; filename="Invoice-${booking.booking_code}.pdf"`,
+        },
     });
 }
