@@ -5,7 +5,7 @@ module.exports = {
       script: ".next/standalone/server.js",
       cwd: "/var/www/clientdesk",
       env: {
-        PORT: 3000,
+        PORT: 3001,
         NODE_ENV: "production",
         HOSTNAME: "0.0.0.0",
       },
