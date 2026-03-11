@@ -213,6 +213,7 @@ export function BookingFormClient({
   );
   const [dpDisplay, setDpDisplay] = React.useState("");
   const [location, setLocation] = React.useState("");
+  const [locationDetail, setLocationDetail] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [instagram, setInstagram] = React.useState("");
   const [extraData, setExtraData] = React.useState<Record<string, string>>({});
@@ -359,6 +360,7 @@ export function BookingFormClient({
           totalPrice: selectedService?.price || 0,
           dpPaid: dpValue,
           location: finalLocation || null,
+          locationDetail: locationDetail || null,
           notes: notes || null,
           extraData: Object.keys(extraData).length > 0 ? extraData : null,
           paymentProofUrl,
@@ -698,6 +700,19 @@ export function BookingFormClient({
                 />
               </div>
             )}
+
+            {/* Detail Lokasi */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">
+                Detail Lokasi
+              </label>
+              <input
+                value={locationDetail}
+                onChange={(e) => setLocationDetail(e.target.value)}
+                placeholder="Contoh: Gedung Utama, Lt. 3, Ruang Ballroom A"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              />
+            </div>
           </div>
 
           {/* Package & Payment */}

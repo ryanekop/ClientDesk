@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Save, Loader2, MessageSquare, Building2, Phone, Globe, Link2, Unlink, CheckCircle, XCircle, AlertCircle, ImagePlus, Trash2, Upload } from "lucide-react";
+import { Save, Loader2, MessageSquare, Building2, Phone, Globe, Link2, Unlink, CheckCircle, XCircle, AlertCircle, ImagePlus, Trash2, Upload, Plus, GripVertical, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -45,8 +45,17 @@ const templateTypes = [
 ];
 
 const variableHints: Record<string, string[]> = {
-    whatsapp_client: ["{{client_name}}", "{{booking_code}}", "{{session_date}}", "{{service_name}}", "{{total_price}}", "{{dp_paid}}", "{{studio_name}}", "{{invoice_url}}"],
-    whatsapp_freelancer: ["{{freelancer_name}}", "{{client_name}}", "{{session_date}}", "{{service_name}}", "{{studio_name}}", "{{event_type}}", "{{location}}"],
+    whatsapp_client: [
+        "{{client_name}}", "{{booking_code}}", "{{session_date}}", "{{service_name}}",
+        "{{total_price}}", "{{dp_paid}}", "{{studio_name}}", "{{event_type}}",
+        "{{location}}", "{{location_maps_url}}", "{{detail_location}}", "{{notes}}",
+        "{{tracking_link}}", "{{invoice_url}}",
+    ],
+    whatsapp_freelancer: [
+        "{{freelancer_name}}", "{{client_name}}", "{{booking_code}}", "{{session_date}}",
+        "{{service_name}}", "{{studio_name}}", "{{event_type}}",
+        "{{location}}", "{{location_maps_url}}", "{{detail_location}}", "{{notes}}",
+    ],
     invoice: ["{{client_name}}", "{{booking_code}}", "{{service_name}}", "{{total_price}}", "{{dp_paid}}", "{{session_date}}", "{{invoice_url}}"],
 };
 
@@ -135,6 +144,18 @@ export default function SettingsPage() {
     const [dragOver, setDragOver] = React.useState(false);
     const logoInputRef = React.useRef<HTMLInputElement>(null);
 
+    // Custom statuses
+    const [customStatuses, setCustomStatuses] = React.useState<string[]>(["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"]);
+    const [newStatusName, setNewStatusName] = React.useState("");
+    const [editingStatusIdx, setEditingStatusIdx] = React.useState<number | null>(null);
+    const [editingStatusName, setEditingStatusName] = React.useState("");
+    const [statusSaving, setStatusSaving] = React.useState(false);
+    const [statusSaved, setStatusSaved] = React.useState(false);
+    const [dragIdx, setDragIdx] = React.useState<number | null>(null);
+
+    // Default WA target
+    const [defaultWaTarget, setDefaultWaTarget] = React.useState<"client" | "freelancer">("client");
+
     React.useEffect(() => { fetchAll(); }, []);
 
     // Listen for Google auth popup callbacks
@@ -159,6 +180,12 @@ export default function SettingsPage() {
         setIsCalendarConnected(!!(prof as any)?.google_access_token);
         setIsDriveConnected(!!(prof as any)?.google_drive_access_token);
         setLogoUrl((prof as any)?.invoice_logo_url || null);
+        if ((prof as any)?.custom_statuses) {
+            setCustomStatuses((prof as any).custom_statuses);
+        }
+        if ((prof as any)?.default_wa_target) {
+            setDefaultWaTarget((prof as any).default_wa_target);
+        }
         const savedWa = prof?.whatsapp_number || "";
         const matchedCode = COUNTRY_CODES.find(c => savedWa.startsWith(c.code));
         if (matchedCode) {
@@ -207,6 +234,7 @@ export default function SettingsPage() {
             studio_name: studioName || null,
             whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
             vendor_slug: slug || null,
+            default_wa_target: defaultWaTarget,
         }).eq("id", profile.id);
 
         setVendorSlug(slug);
@@ -322,6 +350,7 @@ export default function SettingsPage() {
     const tabs = [
         { key: "umum", label: tp("tabGeneral") },
         { key: "template", label: tp("tabTemplates") },
+        { key: "status", label: "Status Booking" },
         { key: "telegram", label: tp("tabTelegram") },
     ];
 
@@ -336,6 +365,10 @@ export default function SettingsPage() {
         freelancer_name: "Andi",
         event_type: selectedEventType,
         location: "Jakarta Convention Center",
+        location_maps_url: "https://maps.google.com/maps?q=Jakarta+Convention+Center",
+        detail_location: "Gedung Utama, Lt. 3, Ruang Ballroom A",
+        notes: "Mohon datang 30 menit lebih awal",
+        tracking_link: "https://clientdesk.ryanekoapp.web.id/id/track/abc123",
         invoice_url: "https://clientdesk.ryanekoapp.web.id/api/public/invoice?code=INV-100120250001",
     };
 
@@ -607,6 +640,22 @@ export default function SettingsPage() {
                                     </div>
                                 </div>
 
+                                {/* Default WA Target */}
+                                <div className="space-y-2 pt-2 border-t">
+                                    <label className="text-sm font-medium flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Default Penerima WA</label>
+                                    <p className="text-xs text-muted-foreground">Tentukan siapa yang dikirim pesan WhatsApp dari tombol WA di daftar booking.</p>
+                                    <div className="flex rounded-lg border border-input overflow-hidden w-fit">
+                                        <button type="button" onClick={() => setDefaultWaTarget("client")}
+                                            className={`px-4 py-1.5 text-xs font-medium transition-colors cursor-pointer ${defaultWaTarget === "client" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}>
+                                            Klien
+                                        </button>
+                                        <button type="button" onClick={() => setDefaultWaTarget("freelancer")}
+                                            className={`px-4 py-1.5 text-xs font-medium transition-colors cursor-pointer ${defaultWaTarget === "freelancer" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}>
+                                            Freelancer
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <div className="flex items-center gap-3 pt-2">
                                     <Button type="submit" disabled={saving} className="gap-2">
                                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -705,6 +754,150 @@ export default function SettingsPage() {
                 {activeTab === "template" && (
                     <div className="space-y-6">
                         {templateTypes.map(tt => renderTemplateCard(tt))}
+                    </div>
+                )}
+
+                {/* ═══ TAB: Status Booking ═══ */}
+                {activeTab === "status" && (
+                    <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                        <div className="px-6 py-4 border-b">
+                            <h3 className="font-semibold">Status Booking</h3>
+                            <p className="text-sm text-muted-foreground">Atur status booking sesuai alur kerja kamu. Drag untuk mengubah urutan.</p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {/* Status list with drag-reorder */}
+                            <div className="space-y-1">
+                                {customStatuses.map((s, idx) => (
+                                    <div
+                                        key={idx}
+                                        draggable
+                                        onDragStart={() => setDragIdx(idx)}
+                                        onDragOver={(e) => { e.preventDefault(); }}
+                                        onDrop={() => {
+                                            if (dragIdx === null || dragIdx === idx) return;
+                                            const arr = [...customStatuses];
+                                            const [moved] = arr.splice(dragIdx, 1);
+                                            arr.splice(idx, 0, moved);
+                                            setCustomStatuses(arr);
+                                            setDragIdx(null);
+                                        }}
+                                        onDragEnd={() => setDragIdx(null)}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border bg-background transition-all ${
+                                            dragIdx === idx ? "opacity-50 border-dashed" : "hover:bg-muted/50"
+                                        }`}
+                                    >
+                                        <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab shrink-0" />
+                                        {editingStatusIdx === idx ? (
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <input
+                                                    autoFocus
+                                                    value={editingStatusName}
+                                                    onChange={e => setEditingStatusName(e.target.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === "Enter" && editingStatusName.trim()) {
+                                                            const arr = [...customStatuses];
+                                                            arr[idx] = editingStatusName.trim();
+                                                            setCustomStatuses(arr);
+                                                            setEditingStatusIdx(null);
+                                                        }
+                                                        if (e.key === "Escape") setEditingStatusIdx(null);
+                                                    }}
+                                                    className="h-7 flex-1 rounded border border-input px-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                />
+                                                <button
+                                                    onClick={() => {
+                                                        if (editingStatusName.trim()) {
+                                                            const arr = [...customStatuses];
+                                                            arr[idx] = editingStatusName.trim();
+                                                            setCustomStatuses(arr);
+                                                        }
+                                                        setEditingStatusIdx(null);
+                                                    }}
+                                                    className="text-green-600 hover:text-green-700 cursor-pointer"
+                                                >
+                                                    <CheckCircle className="w-4 h-4" />
+                                                </button>
+                                                <button onClick={() => setEditingStatusIdx(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <span className="flex-1 text-sm">{s}</span>
+                                                <button
+                                                    onClick={() => { setEditingStatusIdx(idx); setEditingStatusName(s); }}
+                                                    className="text-muted-foreground hover:text-foreground cursor-pointer p-1 rounded hover:bg-muted"
+                                                    title="Rename"
+                                                >
+                                                    <Pencil className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        if (customStatuses.length <= 2) { alert("Minimal 2 status harus ada."); return; }
+                                                        setCustomStatuses(customStatuses.filter((_, i) => i !== idx));
+                                                    }}
+                                                    className="text-muted-foreground hover:text-red-600 cursor-pointer p-1 rounded hover:bg-muted"
+                                                    title="Hapus"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Add new status */}
+                            <div className="flex items-center gap-2">
+                                <input
+                                    value={newStatusName}
+                                    onChange={e => setNewStatusName(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === "Enter" && newStatusName.trim()) {
+                                            setCustomStatuses([...customStatuses, newStatusName.trim()]);
+                                            setNewStatusName("");
+                                        }
+                                    }}
+                                    placeholder="Nama status baru..."
+                                    className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                />
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!newStatusName.trim()}
+                                    onClick={() => {
+                                        if (newStatusName.trim()) {
+                                            setCustomStatuses([...customStatuses, newStatusName.trim()]);
+                                            setNewStatusName("");
+                                        }
+                                    }}
+                                    className="gap-1"
+                                >
+                                    <Plus className="w-4 h-4" /> Tambah
+                                </Button>
+                            </div>
+
+                            {/* Save button */}
+                            <div className="flex items-center gap-3 pt-2">
+                                <Button
+                                    size="sm"
+                                    disabled={statusSaving}
+                                    onClick={async () => {
+                                        if (!profile) return;
+                                        setStatusSaving(true);
+                                        await supabase.from("profiles").update({ custom_statuses: customStatuses }).eq("id", profile.id);
+                                        setStatusSaving(false);
+                                        setStatusSaved(true);
+                                        setTimeout(() => setStatusSaved(false), 2000);
+                                    }}
+                                    className="gap-1.5"
+                                >
+                                    {statusSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    Simpan Status
+                                </Button>
+                                {statusSaved && <span className="text-xs text-green-600 dark:text-green-400">Tersimpan!</span>}
+                            </div>
+                        </div>
                     </div>
                 )}
 

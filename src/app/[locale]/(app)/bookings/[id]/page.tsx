@@ -40,6 +40,7 @@ type Booking = {
     dp_paid: number;
     drive_folder_url: string | null;
     location: string | null;
+    location_detail: string | null;
     instagram: string | null;
     event_type: string | null;
     notes: string | null;
@@ -117,7 +118,7 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token, studio_name").eq("id", user.id).single(),
             ]);
@@ -202,6 +203,10 @@ export default function BookingDetailPage() {
                     studio_name: studioName || "",
                     event_type: booking?.event_type || "-",
                     location: booking?.location || "-",
+                    location_maps_url: booking?.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
+                    detail_location: (booking as any)?.location_detail || "-",
+                    notes: booking?.notes || "-",
+                    tracking_link: booking?.tracking_uuid ? `${window.location.origin}/id/track/${booking.tracking_uuid}` : "-",
                     invoice_url: `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking?.booking_code || "")}`,
                 };
                 msg = content.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || `{{${key}}}`);
@@ -233,6 +238,9 @@ export default function BookingDetailPage() {
                     studio_name: studioName || "",
                     event_type: booking?.event_type || "-",
                     location: booking?.location || "-",
+                    location_maps_url: booking?.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
+                    detail_location: (booking as any)?.location_detail || "-",
+                    notes: booking?.notes || "-",
                 };
                 msg = content.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || `{{${key}}}`);
             } else {
@@ -361,6 +369,9 @@ export default function BookingDetailPage() {
                 <InfoRow label="Jadwal" value={formatDate(booking.session_date)} />
                 {booking.location && (
                     <InfoRow label="Lokasi" value={<LocationValue address={booking.location} />} />
+                )}
+                {booking.location_detail && (
+                    <InfoRow label="Detail Lokasi" value={booking.location_detail} />
                 )}
                 <InfoRow label="Paket" value={booking.services?.name || "-"} />
                 <InfoRow label="Freelance" value={

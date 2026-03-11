@@ -116,6 +116,7 @@ export default function NewBookingPage() {
     const [eventType, setEventType] = React.useState("Umum");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
     const [location, setLocation] = React.useState("");
+    const [locationDetail, setLocationDetail] = React.useState("");
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
     const [selectedServiceId, setSelectedServiceId] = React.useState("");
@@ -140,17 +141,21 @@ export default function NewBookingPage() {
     const [customFreelancerWa, setCustomFreelancerWa] = React.useState("");
     const [customFreelancerRole, setCustomFreelancerRole] = React.useState("Photographer");
     const [savingCustomFreelancer, setSavingCustomFreelancer] = React.useState(false);
+    const [customStatuses, setCustomStatuses] = React.useState<string[]>(["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"]);
+    const [customFreelancerCountryCode, setCustomFreelancerCountryCode] = React.useState("+62");
 
     React.useEffect(() => {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
-            const [{ data: svcs }, { data: frees }] = await Promise.all([
+            const [{ data: svcs }, { data: frees }, { data: prof }] = await Promise.all([
                 supabase.from("services").select("id, name, price").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
+                supabase.from("profiles").select("custom_statuses").eq("id", user.id).single(),
             ]);
             setServices((svcs || []) as Service[]);
             setFreelancers((frees || []) as Freelance[]);
+            if (prof?.custom_statuses) setCustomStatuses(prof.custom_statuses as string[]);
         }
         load();
     }, []);
@@ -201,14 +206,14 @@ export default function NewBookingPage() {
             user_id: user.id,
             name: customFreelancerName.trim(),
             role: customFreelancerRole || "Photographer",
-            whatsapp_number: customFreelancerWa || null,
+            whatsapp_number: customFreelancerWa ? `${customFreelancerCountryCode}${customFreelancerWa}`.replace(/[^0-9+]/g, "") : null,
             status: "active",
         }).select("id, name").single();
         if (!error && data) {
             const f = data as Freelance;
             setFreelancers(prev => [...prev, f]);
             setSelectedFreelancerIds(prev => prev.length < 5 ? [...prev, f.id] : prev);
-            setCustomFreelancerName(""); setCustomFreelancerWa(""); setCustomFreelancerRole("Photographer");
+            setCustomFreelancerName(""); setCustomFreelancerWa(""); setCustomFreelancerRole("Photographer"); setCustomFreelancerCountryCode("+62");
             setShowCustomFreelancerPopup(false);
         } else { console.error(error); alert("Gagal menyimpan freelance baru."); }
         setSavingCustomFreelancer(false);
@@ -231,6 +236,7 @@ export default function NewBookingPage() {
             client_whatsapp: fullPhone,
             session_date: sessionDate || null,
             location: (eventType === "Wedding" ? (extraFields.tempat_akad || extraFields.tempat_resepsi || location) : location) || null,
+            location_detail: locationDetail || null,
             instagram: instagram || null,
             event_type: eventType,
             service_id: selectedServiceId || null,
@@ -405,7 +411,7 @@ export default function NewBookingPage() {
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Status{reqMark}</label>
                             <select value={statusVal} onChange={e => setStatusVal(e.target.value)} required className={selectClass}>
-                                {["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"].map(s => <option key={s} value={s}>{s}</option>)}
+                                {customStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
                         {eventType !== "Wedding" && (
@@ -414,6 +420,10 @@ export default function NewBookingPage() {
                                 <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi sesi foto..." />
                             </div>
                         )}
+                        <div className="col-span-full space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Detail Lokasi</label>
+                            <input value={locationDetail} onChange={e => setLocationDetail(e.target.value)} placeholder="Contoh: Gedung Utama, Lt. 3, Ruang Ballroom A" className={inputClass} />
+                        </div>
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Paket / Layanan{reqMark}</label>
                             <select value={selectedServiceId} onChange={handleServiceChange} className={selectClass} required>
@@ -568,7 +578,15 @@ export default function NewBookingPage() {
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Nomor WhatsApp</label>
-                            <input value={customFreelancerWa} onChange={e => setCustomFreelancerWa(e.target.value)} placeholder="08..." className={inputClass} />
+                            <div className="flex gap-2">
+                                <select value={customFreelancerCountryCode} onChange={e => setCustomFreelancerCountryCode(e.target.value)} className={selectClass + " !w-28 shrink-0"}>
+                                    {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                                </select>
+                                <input value={customFreelancerWa} onChange={e => {
+                                    const val = e.target.value.replace(/[^0-9]/g, "");
+                                    setCustomFreelancerWa(val.startsWith("0") ? val.slice(1) : val.startsWith("62") ? val.slice(2) : val);
+                                }} placeholder="8123456789" className={inputClass} />
+                            </div>
                         </div>
                     </div>
                     <DialogFooter>

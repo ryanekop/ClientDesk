@@ -21,6 +21,18 @@ type Freelancer = {
 
 const roleOptions = ["Photographer", "Videographer", "MUA", "WCC", "Editor", "Asisten", "Lainnya"];
 
+const COUNTRY_CODES = [
+    { code: "+62", flag: "🇮🇩" },
+    { code: "+60", flag: "🇲🇾" },
+    { code: "+65", flag: "🇸🇬" },
+    { code: "+66", flag: "🇹🇭" },
+    { code: "+1", flag: "🇺🇸" },
+    { code: "+44", flag: "🇬🇧" },
+    { code: "+81", flag: "🇯🇵" },
+    { code: "+82", flag: "🇰🇷" },
+    { code: "+61", flag: "🇦🇺" },
+];
+
 export default function TeamPage() {
     const supabase = createClient();
     const t = useTranslations("Team");
@@ -32,6 +44,8 @@ export default function TeamPage() {
     const [isEditOpen, setIsEditOpen] = React.useState(false);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
+    const [addCountryCode, setAddCountryCode] = React.useState("+62");
+    const [editCountryCode, setEditCountryCode] = React.useState("+62");
 
     React.useEffect(() => { fetchMembers(); }, []);
 
@@ -54,11 +68,14 @@ export default function TeamPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
+        const rawWa = formData.get("whatsapp_number") as string;
+        const fullWa = rawWa ? `${addCountryCode}${rawWa}`.replace(/[^0-9+]/g, "") : null;
+
         const { error } = await supabase.from("freelance").insert({
             user_id: user.id,
             name: formData.get("name") as string,
             role: formData.get("role") as string,
-            whatsapp_number: formData.get("whatsapp_number") as string || null,
+            whatsapp_number: fullWa || null,
             google_email: formData.get("google_email") as string || null,
             status: "active",
         });
@@ -69,12 +86,15 @@ export default function TeamPage() {
     async function handleEdit(formData: FormData) {
         if (!editingMember) return;
 
+        const rawWa = formData.get("whatsapp_number") as string;
+        const fullWa = rawWa ? `${editCountryCode}${rawWa}`.replace(/[^0-9+]/g, "") : null;
+
         const { error } = await supabase
             .from("freelance")
             .update({
                 name: formData.get("name") as string,
                 role: formData.get("role") as string,
-                whatsapp_number: formData.get("whatsapp_number") as string || null,
+                whatsapp_number: fullWa || null,
                 google_email: formData.get("google_email") as string || null,
             })
             .eq("id", editingMember.id);
@@ -134,7 +154,17 @@ export default function TeamPage() {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">{t("whatsapp")}</label>
-                                <input name="whatsapp_number" type="tel" placeholder="08123456789" className={inputClass} />
+                                <div className="flex gap-2">
+                                    <select value={addCountryCode} onChange={e => setAddCountryCode(e.target.value)} className={inputClass + " !w-28 shrink-0 cursor-pointer"}>
+                                        {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                                    </select>
+                                    <input name="whatsapp_number" type="tel" placeholder="8123456789"
+                                        onChange={e => {
+                                            const val = e.target.value.replace(/[^0-9]/g, "");
+                                            e.target.value = val.startsWith("0") ? val.slice(1) : val.startsWith("62") ? val.slice(2) : val;
+                                        }}
+                                        className={inputClass} />
+                                </div>
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Google Email</label>
@@ -182,7 +212,13 @@ export default function TeamPage() {
                                     <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number, member.name)} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
                                         <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                                     </button>
-                                    <button title="Edit" onClick={() => { setEditingMember(member); setIsEditOpen(true); }} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
+                                    <button title="Edit" onClick={() => {
+                                        setEditingMember(member);
+                                        const wa = member.whatsapp_number || "";
+                                        const match = COUNTRY_CODES.find(c => wa.startsWith(c.code));
+                                        setEditCountryCode(match ? match.code : "+62");
+                                        setIsEditOpen(true);
+                                    }} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
                                         <Edit2 className="w-4 h-4 text-blue-500" />
                                     </button>
                                     <button title="Hapus" onClick={() => handleDelete(member.id)} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
@@ -239,7 +275,13 @@ export default function TeamPage() {
                                                     <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number, member.name)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
                                                         <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                                                     </button>
-                                                    <button title="Edit" onClick={() => { setEditingMember(member); setIsEditOpen(true); }} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
+                                                    <button title="Edit" onClick={() => {
+                                                        setEditingMember(member);
+                                                        const wa = member.whatsapp_number || "";
+                                                        const match = COUNTRY_CODES.find(c => wa.startsWith(c.code));
+                                                        setEditCountryCode(match ? match.code : "+62");
+                                                        setIsEditOpen(true);
+                                                    }} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
                                                         <Edit2 className="w-4 h-4 text-muted-foreground" />
                                                     </button>
                                                     <button title="Hapus" onClick={() => handleDelete(member.id)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
@@ -278,7 +320,22 @@ export default function TeamPage() {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">{t("whatsapp")}</label>
-                                <input name="whatsapp_number" type="tel" defaultValue={editingMember.whatsapp_number || ""} className={inputClass} />
+                                <div className="flex gap-2">
+                                    <select value={editCountryCode} onChange={e => setEditCountryCode(e.target.value)} className={inputClass + " !w-28 shrink-0 cursor-pointer"}>
+                                        {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                                    </select>
+                                    <input name="whatsapp_number" type="tel" placeholder="8123456789"
+                                        defaultValue={(() => {
+                                            const wa = editingMember?.whatsapp_number || "";
+                                            const match = COUNTRY_CODES.find(c => wa.startsWith(c.code));
+                                            return match ? wa.slice(match.code.length) : wa.replace(/^0/, "");
+                                        })()}
+                                        onChange={e => {
+                                            const val = e.target.value.replace(/[^0-9]/g, "");
+                                            e.target.value = val.startsWith("0") ? val.slice(1) : val.startsWith("62") ? val.slice(2) : val;
+                                        }}
+                                        className={inputClass} />
+                                </div>
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Google Email</label>
