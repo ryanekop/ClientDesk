@@ -225,6 +225,12 @@ export default function NewBookingPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { setSaving(false); return; }
 
+        if (eventType === "Wedding" && (!extraFields.tempat_akad || !extraFields.tempat_resepsi)) {
+            alert("Lokasi Akad dan Lokasi Resepsi wajib diisi untuk acara Wedding.");
+            setSaving(false);
+            return;
+        }
+
         const bookingCode = generateBookingCode();
         const invoiceCode = `INV-${bookingCode}`;
         const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;

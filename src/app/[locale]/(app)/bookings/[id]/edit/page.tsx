@@ -245,6 +245,13 @@ export default function EditBookingPage() {
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         setSaving(true);
+
+        if (eventType === "Wedding" && (!extraFields.tempat_akad || !extraFields.tempat_resepsi)) {
+            alert("Lokasi Akad dan Lokasi Resepsi wajib diisi untuk acara Wedding.");
+            setSaving(false);
+            return;
+        }
+
         const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
         const tPrice = parseFloat(totalPrice.toString()) || 0;
         const dPaid = parseFloat(dpPaid.toString()) || 0;
