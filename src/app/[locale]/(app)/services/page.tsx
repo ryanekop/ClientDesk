@@ -216,14 +216,14 @@ export default function ServicesPage() {
 
             {/* Search + Filter */}
             {!loading && services.length > 0 && (
-                <div className="space-y-3">
-                    <div className="relative">
+                <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder={ts("searchPlaceholder")}
-                            className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent pl-9 pr-8 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                            className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-10 w-full min-w-0 rounded-lg border bg-transparent pl-9 pr-8 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                         />
                         {searchQuery && (
                             <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -232,23 +232,16 @@ export default function ServicesPage() {
                         )}
                     </div>
                     {usedEventTypes.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                            <button
-                                onClick={() => setSelectedEventFilter("")}
-                                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer ${!selectedEventFilter ? "bg-foreground text-background border-foreground" : "bg-transparent text-muted-foreground border-input hover:bg-muted/50"}`}
-                            >
-                                {ts("allCategories")}
-                            </button>
+                        <select
+                            value={selectedEventFilter}
+                            onChange={(e) => setSelectedEventFilter(e.target.value)}
+                            className="h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer"
+                        >
+                            <option value="">{ts("allCategories")}</option>
                             {usedEventTypes.map(et => (
-                                <button
-                                    key={et}
-                                    onClick={() => setSelectedEventFilter(selectedEventFilter === et ? "" : et)}
-                                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer ${selectedEventFilter === et ? "bg-foreground text-background border-foreground" : "bg-transparent text-muted-foreground border-input hover:bg-muted/50"}`}
-                                >
-                                    {et}
-                                </button>
+                                <option key={et} value={et}>{et}</option>
                             ))}
-                        </div>
+                        </select>
                     )}
                 </div>
             )}

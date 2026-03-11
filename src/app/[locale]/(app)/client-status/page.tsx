@@ -85,7 +85,7 @@ export default function ClientStatusPage() {
     }
 
     function copyTrackLink(uuid: string, id: string) {
-        const url = `${window.location.origin}/id/track/${uuid}`;
+        const url = `${window.location.origin}/${locale}/track/${uuid}`;
         navigator.clipboard.writeText(url);
         setCopiedId(id);
         setTimeout(() => setCopiedId(null), 2000);
@@ -172,7 +172,7 @@ export default function ClientStatusPage() {
                         <div className="flex items-center gap-1 pt-1 border-t">
                             {b.tracking_uuid && (
                                 <>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500" title={t("bukaLink")} onClick={() => window.open(`${window.location.origin}/track/${b.tracking_uuid}`, "_blank")}>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500" title={t("bukaLink")} onClick={() => window.open(`${window.location.origin}/${locale}/track/${b.tracking_uuid}`, "_blank")}>
                                         <ExternalLink className="w-4 h-4" />
                                     </Button>
                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500" title={t("salinLink")} onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}>
