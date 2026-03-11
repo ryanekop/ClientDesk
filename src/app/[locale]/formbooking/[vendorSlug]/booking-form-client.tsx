@@ -137,9 +137,18 @@ const EXTRA_FIELDS: Record<
       required: true,
     },
   ],
-  Maternity: [{ key: "usia_kandungan", label: "Usia Kandungan (bulan)" }],
-  Newborn: [{ key: "nama_bayi", label: "Nama Bayi" }],
-  Komersil: [{ key: "tipe_konten", label: "Tipe Konten" }],
+  Maternity: [
+    { key: "usia_kehamilan", label: "Usia Kehamilan" },
+    { key: "gender_bayi", label: "Gender Bayi" },
+  ],
+  Newborn: [
+    { key: "nama_bayi", label: "Nama Bayi" },
+    { key: "tanggal_lahir", label: "Tanggal Lahir" },
+  ],
+  Komersil: [
+    { key: "nama_brand", label: "Nama Brand" },
+    { key: "tipe_konten", label: "Tipe Konten" },
+  ],
   Family: [{ key: "jumlah_anggota", label: "Jumlah Anggota" }],
 };
 

@@ -12,7 +12,6 @@ import { formatSessionDate } from "@/utils/format-date";
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
     fakultas: "Fakultas",
-    angkatan: "Angkatan",
     nama_pasangan: "Nama Pasangan",
     tempat_akad: "Lokasi Akad",
     tempat_resepsi: "Lokasi Resepsi",
