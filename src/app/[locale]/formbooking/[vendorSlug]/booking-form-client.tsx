@@ -74,6 +74,7 @@ const EXTRA_FIELDS: Record<
     isLocation?: boolean;
     fullWidth?: boolean;
     required?: boolean;
+    isNumeric?: boolean;
   }[]
 > = {
   Wisuda: [
@@ -87,7 +88,7 @@ const EXTRA_FIELDS: Record<
       fullWidth: true,
       required: true,
     },
-    { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true },
+    { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true, isNumeric: true },
     {
       key: "tempat_akad",
       label: "Lokasi Akad",
@@ -108,7 +109,7 @@ const EXTRA_FIELDS: Record<
       fullWidth: true,
       required: true,
     },
-    { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true },
+    { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true, isNumeric: true },
   ],
   Resepsi: [
     {
@@ -117,7 +118,7 @@ const EXTRA_FIELDS: Record<
       fullWidth: true,
       required: true,
     },
-    { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true },
+    { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true, isNumeric: true },
   ],
   Lamaran: [
     {
@@ -126,7 +127,7 @@ const EXTRA_FIELDS: Record<
       fullWidth: true,
       required: true,
     },
-    { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true },
+    { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true, isNumeric: true },
   ],
   Prewedding: [
     {
@@ -672,6 +673,22 @@ export function BookingFormClient({
                           setExtraData((prev) => ({ ...prev, [f.key]: v }))
                         }
                         placeholder={`Cari lokasi ${f.label.toLowerCase()}...`}
+                      />
+                    ) : f.isNumeric ? (
+                      <input
+                        value={extraData[f.key] || ""}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^0-9]/g, "");
+                          const num = parseInt(raw, 10);
+                          setExtraData((prev) => ({
+                            ...prev,
+                            [f.key]: raw === "" ? "" : new Intl.NumberFormat("id-ID").format(num),
+                          }));
+                        }}
+                        placeholder={f.label}
+                        className={inputClass}
+                        required={f.required}
+                        inputMode="numeric"
                       />
                     ) : (
                       <input

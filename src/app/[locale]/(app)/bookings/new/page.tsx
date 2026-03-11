@@ -31,24 +31,24 @@ const COUNTRY_CODES = [
     { code: "+670", flag: "🇹🇱", name: "Timor Leste" },
 ];
 
-const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string; isLocation?: boolean; fullWidth?: boolean; required?: boolean }[]> = {
+const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string; isLocation?: boolean; fullWidth?: boolean; required?: boolean; isNumeric?: boolean }[]> = {
     Wisuda: [
         { key: "universitas", label: "Universitas", labelEn: "University" },
         { key: "fakultas", label: "Fakultas", labelEn: "Faculty" },
     ],
     Wedding: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
-        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true },
+        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true, isNumeric: true },
         { key: "tempat_akad", label: "Lokasi Akad", labelEn: "Akad Venue", isLocation: true, required: true },
         { key: "tempat_resepsi", label: "Lokasi Resepsi", labelEn: "Reception Venue", isLocation: true, required: true },
     ],
     Akad: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
-        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true },
+        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true, isNumeric: true },
     ],
     Resepsi: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
-        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true },
+        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true, isNumeric: true },
     ],
     Maternity: [
         { key: "usia_kehamilan", label: "Usia Kehamilan", labelEn: "Pregnancy Age" },
@@ -65,7 +65,7 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string
     Family: [{ key: "jumlah_anggota", label: "Jumlah Anggota", labelEn: "Number of Members" }],
     Lamaran: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
-        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true },
+        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true, isNumeric: true },
     ],
     Prewedding: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
@@ -383,6 +383,12 @@ export default function NewBookingPage() {
                                     <label className="text-xs font-medium text-muted-foreground">{locale === "id" ? f.label : f.labelEn}{f.required && <span className="text-red-500 ml-0.5">*</span>}</label>
                                     {f.isLocation ? (
                                         <LocationAutocomplete value={extraFields[f.key] || ""} onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))} placeholder={`Cari lokasi ${f.label.toLowerCase()}...`} />
+                                    ) : f.isNumeric ? (
+                                        <input placeholder={f.label} value={extraFields[f.key] || ""} onChange={e => {
+                                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                                            const num = parseInt(raw, 10);
+                                            setExtraFields(prev => ({ ...prev, [f.key]: raw === "" ? "" : new Intl.NumberFormat("id-ID").format(num) }));
+                                        }} className={inputClass} required={f.required} inputMode="numeric" />
                                     ) : (
                                         <input placeholder={f.label} value={extraFields[f.key] || ""} onChange={e => setExtraFields(prev => ({ ...prev, [f.key]: e.target.value }))} className={inputClass} required={f.required} />
                                     )}
