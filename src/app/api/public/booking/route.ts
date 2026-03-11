@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
             notes,
             extraData,
             paymentProofUrl,
+            instagram,
         } = body;
 
         if (!vendorSlug || !clientName || !clientWhatsapp || !sessionDate || !serviceId) {
@@ -83,6 +84,7 @@ export async function POST(request: NextRequest) {
                 notes: notes || null,
                 extra_fields: extraData || null,
                 payment_proof_url: paymentProofUrl || null,
+                instagram: instagram || null,
                 status: "Pending",
                 is_fully_paid: dpPaid >= totalPrice,
             })
@@ -115,45 +117,58 @@ export async function POST(request: NextRequest) {
         }
 
         // Upload payment proof to vendor's Google Drive (fire-and-forget)
-        if (vendor.google_drive_access_token && vendor.google_drive_refresh_token && paymentProofUrl && paymentProofUrl.startsWith("data:")) {
+        if (vendor.google_drive_access_token && vendor.google_drive_refresh_token && paymentProofUrl) {
             try {
-                // Parse base64 data URI
-                const matches = paymentProofUrl.match(/^data:(.+);base64,(.+)$/);
-                if (matches) {
-                    const mimeType = matches[1];
-                    const buffer = Buffer.from(matches[2], "base64");
-                    const ext = mimeType.includes("png") ? "png" : mimeType.includes("webp") ? "webp" : "jpg";
-                    const fileName = `${bookingCode}_${clientName.replace(/[^a-zA-Z0-9]/g, "_")}.${ext}`;
+                let mimeType = "image/jpeg";
+                let buffer: Buffer;
 
-                    // Find or create the parent folder
-                    const folder = await findOrCreateFolder(
-                        vendor.google_drive_access_token,
-                        vendor.google_drive_refresh_token,
-                        "Bukti Pembayaran Client Desk"
-                    );
+                if (paymentProofUrl.startsWith("data:")) {
+                    // Handle base64 data URI (legacy / edge case)
+                    const matches = paymentProofUrl.match(/^data:(.+);base64,(.+)$/);
+                    if (!matches) throw new Error("Invalid data URI");
+                    mimeType = matches[1];
+                    buffer = Buffer.from(matches[2], "base64");
+                } else {
+                    // Handle Supabase Storage URL — download the file first
+                    const fileRes = await fetch(paymentProofUrl);
+                    if (!fileRes.ok) throw new Error("Failed to download payment proof");
+                    mimeType = fileRes.headers.get("content-type") || "image/jpeg";
+                    const arrayBuffer = await fileRes.arrayBuffer();
+                    buffer = Buffer.from(arrayBuffer);
+                }
 
-                    if (!folder.folderId) throw new Error("Folder creation failed");
+                const ext = mimeType.includes("png") ? "png" : mimeType.includes("webp") ? "webp" : mimeType.includes("pdf") ? "pdf" : "jpg";
+                const fileName = `${bookingCode}_${clientName.replace(/[^a-zA-Z0-9]/g, "_")}.${ext}`;
 
-                    // Upload file
-                    const uploaded = await uploadFileToDrive(
-                        vendor.google_drive_access_token,
-                        vendor.google_drive_refresh_token,
-                        fileName,
-                        mimeType,
-                        buffer,
-                        folder.folderId
-                    );
+                // Find or create the parent folder
+                const folder = await findOrCreateFolder(
+                    vendor.google_drive_access_token,
+                    vendor.google_drive_refresh_token,
+                    "Bukti Pembayaran Client Desk"
+                );
 
-                    // Update booking with Drive URL
-                    if (uploaded.fileUrl) {
-                        await supabaseAdmin
-                            .from("bookings")
-                            .update({ payment_proof_url: uploaded.fileUrl })
-                            .eq("id", booking.id);
-                    }
+                if (!folder.folderId) throw new Error("Folder creation failed");
+
+                // Upload file
+                const uploaded = await uploadFileToDrive(
+                    vendor.google_drive_access_token,
+                    vendor.google_drive_refresh_token,
+                    fileName,
+                    mimeType,
+                    buffer,
+                    folder.folderId
+                );
+
+                // Update booking with Drive URL (replace Supabase URL with Drive URL)
+                if (uploaded.fileUrl) {
+                    await supabaseAdmin
+                        .from("bookings")
+                        .update({ payment_proof_url: uploaded.fileUrl })
+                        .eq("id", booking.id);
                 }
             } catch {
                 // Silently ignore — Drive upload is best-effort
+                // Payment proof is still saved in Supabase Storage as fallback
             }
         }
 

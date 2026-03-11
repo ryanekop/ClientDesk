@@ -4,6 +4,7 @@ import createNextIntlPlugin from "next-intl/plugin";
 const withNextIntl = createNextIntlPlugin();
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   experimental: {
     // Tree-shake hanya icons/komponen yang benar-benar dipakai
     // dari library besar — mengurangi bundle size secara signifikan

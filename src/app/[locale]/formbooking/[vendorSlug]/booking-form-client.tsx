@@ -24,6 +24,7 @@ export type Service = {
   name: string;
   price: number;
   description: string | null;
+  event_types: string[] | null;
 };
 
 export type Vendor = {
@@ -192,6 +193,7 @@ export function BookingFormClient({
   const [dpDisplay, setDpDisplay] = React.useState("");
   const [location, setLocation] = React.useState("");
   const [notes, setNotes] = React.useState("");
+  const [instagram, setInstagram] = React.useState("");
   const [extraData, setExtraData] = React.useState<Record<string, string>>({});
   const [proofFile, setProofFile] = React.useState<File | null>(null);
   const [proofPreview, setProofPreview] = React.useState<string | null>(null);
@@ -339,6 +341,7 @@ export function BookingFormClient({
           notes: notes || null,
           extraData: Object.keys(extraData).length > 0 ? extraData : null,
           paymentProofUrl,
+          instagram: instagram || null,
         }),
       });
 
@@ -384,6 +387,7 @@ export function BookingFormClient({
       `\n💰 Total: ${formatCurrency(selectedService?.price || 0)}\n` +
       `✅ DP: ${formatCurrency(dpVal)}\n` +
       (proofFile ? "📎 Bukti transfer sudah diupload.\n" : "") +
+      (instagram ? `📸 Instagram: ${instagram}\n` : "") +
       `\nMohon konfirmasi booking saya. Terima kasih! 🙏`;
 
     window.open(
@@ -406,6 +410,11 @@ export function BookingFormClient({
   const availableEventTypes = vendor.form_event_types?.length
     ? vendor.form_event_types
     : EVENT_TYPES;
+
+  // Filter services by selected event type
+  const filteredServices = eventType
+    ? services.filter(s => !s.event_types || s.event_types.length === 0 || s.event_types.includes(eventType))
+    : services;
 
   // ── Success screen ──
 
@@ -528,6 +537,24 @@ export function BookingFormClient({
                 />
               </div>
             </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">
+                Instagram
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
+                <input
+                  value={instagram}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/^@/, "");
+                    setInstagram(val);
+                  }}
+                  placeholder="username"
+                  className={inputClass + " pl-7"}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Session Details */}
@@ -547,6 +574,10 @@ export function BookingFormClient({
                   onChange={(e) => {
                     setEventType(e.target.value);
                     setExtraData({});
+                    // Reset service selection when event type changes (package may be filtered out)
+                    setServiceId("");
+                    setSelectedService(null);
+                    setDpDisplay("");
                     if (selectedService) {
                       const newMinDP = getMinDpForEvent(e.target.value);
                       const minAmount = Math.ceil(
@@ -653,7 +684,7 @@ export function BookingFormClient({
                 required
               >
                 <option value="">{t("pilihPaket")}</option>
-                {services.map((s) => (
+                {filteredServices.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} — {formatCurrency(s.price)}
                   </option>

@@ -598,6 +598,12 @@ export default function FormBookingPage() {
                       fitur ini.
                     </p>
                   )}
+                  {item.label === "Upload Bukti Pembayaran" && !item.disabled && (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      📁 File tersimpan di Google Drive pada folder{" "}
+                      <span className="font-semibold">"Bukti Pembayaran Client Desk"</span>
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
@@ -762,7 +768,10 @@ export default function FormBookingPage() {
             Settings
           </button>
           <button
-            onClick={() => setMobileTab("preview")}
+            onClick={() => {
+              setMobileTab("preview");
+              setIframeKey((k) => k + 1);
+            }}
             className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${mobileTab === "preview" ? "text-primary" : "text-muted-foreground"}`}
           >
             <Eye className="w-5 h-5" />

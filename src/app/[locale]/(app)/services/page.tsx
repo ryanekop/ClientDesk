@@ -17,7 +17,10 @@ type Service = {
     duration_minutes: number | null;
     is_active: boolean;
     created_at: string;
+    event_types: string[] | null;
 };
+
+const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
 export default function ServicesPage() {
     const supabase = createClient();
@@ -59,6 +62,7 @@ export default function ServicesPage() {
             price: parseFloat(formData.get("price") as string) || 0,
             duration_minutes: parseInt(formData.get("duration_hours") as string || "0") * 60 + parseInt(formData.get("duration_mins") as string || "0"),
             is_active: true,
+            event_types: formData.getAll("event_types").length > 0 ? formData.getAll("event_types") as string[] : null,
         });
 
         if (!error) {
@@ -77,6 +81,7 @@ export default function ServicesPage() {
                 description: formData.get("description") as string || null,
                 price: parseFloat(formData.get("price") as string) || 0,
                 duration_minutes: parseInt(formData.get("duration_hours") as string || "0") * 60 + parseInt(formData.get("duration_mins") as string || "0"),
+                event_types: formData.getAll("event_types").length > 0 ? formData.getAll("event_types") as string[] : null,
             })
             .eq("id", editingService.id);
 
@@ -149,6 +154,18 @@ export default function ServicesPage() {
                                     <span className="text-sm text-muted-foreground">{ts("minutes")}</span>
                                 </div>
                             </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Jenis Acara</label>
+                                <p className="text-[11px] text-muted-foreground -mt-1">Kosongkan jika paket ini untuk semua jenis acara.</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {EVENT_TYPES.map(et => (
+                                        <label key={et} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-foreground has-[:checked]:bg-foreground/5">
+                                            <input type="checkbox" name="event_types" value={et} className="accent-foreground w-3 h-3" />
+                                            {et}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
                             <DialogFooter>
                                 <Button type="submit">{t("simpan")}</Button>
                             </DialogFooter>
@@ -187,6 +204,14 @@ export default function ServicesPage() {
                                         {service.is_active ? t("aktif") : t("nonaktif")}
                                     </span>
                                 </div>
+
+                                {service.event_types && service.event_types.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                        {service.event_types.map(et => (
+                                            <span key={et} className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">{et}</span>
+                                        ))}
+                                    </div>
+                                )}
 
                                 <div className="flex items-center gap-3 mt-3">
                                     <div className="text-xl font-bold">{formatCurrency(service.price)}</div>
@@ -271,6 +296,18 @@ export default function ServicesPage() {
                                     <input name="duration_mins" type="number" min="0" max="59" step="5" defaultValue={(editingService.duration_minutes || 120) % 60}
                                         className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-20 min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
                                     <span className="text-sm text-muted-foreground">{ts("minutes")}</span>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Jenis Acara</label>
+                                <p className="text-[11px] text-muted-foreground -mt-1">Kosongkan jika paket ini untuk semua jenis acara.</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {EVENT_TYPES.map(et => (
+                                        <label key={et} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs cursor-pointer hover:bg-muted/50 transition-colors has-[:checked]:border-foreground has-[:checked]:bg-foreground/5">
+                                            <input type="checkbox" name="event_types" value={et} defaultChecked={editingService.event_types?.includes(et)} className="accent-foreground w-3 h-3" />
+                                            {et}
+                                        </label>
+                                    ))}
                                 </div>
                             </div>
                             <DialogFooter>
