@@ -30,11 +30,12 @@ echo ""
 echo "🔨 [3/5] Building application (standalone)..."
 NODE_OPTIONS="--max-old-space-size=2048" npm run build
 
-# 4. Copy static files to standalone
+# 4. Copy static files + env to standalone
 echo ""
-echo "📂 [4/5] Copying static files..."
+echo "📂 [4/5] Copying static files & env..."
 cp -r public .next/standalone/public
 cp -r .next/static .next/standalone/.next/static
+cp .env.local .next/standalone/.env.local 2>/dev/null || true
 
 # 5. Restart PM2
 echo ""
