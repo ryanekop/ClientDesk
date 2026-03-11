@@ -25,17 +25,25 @@ echo ""
 echo "📦 [2/5] Installing dependencies..."
 npm ci --production=false
 
+# 2.5 Validate .env.local exists
+if [ ! -f .env.local ]; then
+    echo "❌ ERROR: .env.local not found! Create it first."
+    exit 1
+fi
+echo "✅ .env.local found"
+
 # 3. Build
 echo ""
 echo "🔨 [3/5] Building application (standalone)..."
-NODE_OPTIONS="--max-old-space-size=2048" npm run build
+NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
 # 4. Copy static files + env to standalone
 echo ""
 echo "📂 [4/5] Copying static files & env..."
 cp -r public .next/standalone/public
 cp -r .next/static .next/standalone/.next/static
-cp .env.local .next/standalone/.env.local 2>/dev/null || true
+cp .env.local .next/standalone/.env.local
+echo "✅ .env.local copied to standalone"
 
 # 5. Restart PM2
 echo ""
