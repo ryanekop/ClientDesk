@@ -690,7 +690,11 @@
         "minuteShort": "mnt",
         "descPlaceholder": "Deskripsi singkat layanan...",
         "editDesc": "Perubahan akan langsung tersimpan.",
-        "deleteConfirm": "Hapus layanan ini? Booking yang sudah terhubung akan kehilangan referensi layanan."
+        "deleteConfirm": "Hapus layanan ini? Booking yang sudah terhubung akan kehilangan referensi layanan.",
+        "searchPlaceholder": "Cari nama atau deskripsi layanan...",
+        "allCategories": "Semua",
+        "noResults": "Tidak ada hasil",
+        "noResultsDesc": "Coba ubah kata kunci pencarian atau filter kategori."
     },
     "TeamPage": {
         "editDesc": "Perubahan akan langsung tersimpan.",

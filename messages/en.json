@@ -690,7 +690,11 @@
         "minuteShort": "min",
         "descPlaceholder": "Brief description of the service...",
         "editDesc": "Changes will be saved immediately.",
-        "deleteConfirm": "Delete this service? Connected bookings will lose the service reference."
+        "deleteConfirm": "Delete this service? Connected bookings will lose the service reference.",
+        "searchPlaceholder": "Search service name or description...",
+        "allCategories": "All",
+        "noResults": "No results found",
+        "noResultsDesc": "Try changing your search keyword or category filter."
     },
     "TeamPage": {
         "editDesc": "Changes will be saved immediately.",

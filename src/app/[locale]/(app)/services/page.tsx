@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Edit2, Trash2, Package, ToggleLeft, ToggleRight, Loader2, Clock } from "lucide-react";
+import { Plus, Edit2, Trash2, Package, ToggleLeft, ToggleRight, Loader2, Clock, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -34,6 +34,8 @@ export default function ServicesPage() {
     const [isEditOpen, setIsEditOpen] = React.useState(false);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
+    const [searchQuery, setSearchQuery] = React.useState("");
+    const [selectedEventFilter, setSelectedEventFilter] = React.useState("");
 
     React.useEffect(() => { fetchServices(); }, []);
 
@@ -112,6 +114,36 @@ export default function ServicesPage() {
     const formatCurrency = (n: number) =>
         new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
 
+    // ── Filter & search logic ──
+    const filteredServices = React.useMemo(() => {
+        let result = services;
+        // Filter by event type category
+        if (selectedEventFilter) {
+            result = result.filter(s =>
+                s.event_types && s.event_types.includes(selectedEventFilter)
+            );
+        }
+        // Filter by search query
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            result = result.filter(s =>
+                s.name.toLowerCase().includes(q) ||
+                (s.description && s.description.toLowerCase().includes(q))
+            );
+        }
+        return result;
+    }, [services, searchQuery, selectedEventFilter]);
+
+    // Reset to page 1 when filters change
+    React.useEffect(() => { setCurrentPage(1); }, [searchQuery, selectedEventFilter]);
+
+    // Collect unique event types that actually exist in services
+    const usedEventTypes = React.useMemo(() => {
+        const set = new Set<string>();
+        services.forEach(s => s.event_types?.forEach(et => set.add(et)));
+        return EVENT_TYPES.filter(et => set.has(et));
+    }, [services]);
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -182,6 +214,45 @@ export default function ServicesPage() {
                 </Dialog>
             </div>
 
+            {/* Search + Filter */}
+            {!loading && services.length > 0 && (
+                <div className="space-y-3">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <input
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder={ts("searchPlaceholder")}
+                            className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent pl-9 pr-8 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                        />
+                        {searchQuery && (
+                            <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                    {usedEventTypes.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                            <button
+                                onClick={() => setSelectedEventFilter("")}
+                                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer ${!selectedEventFilter ? "bg-foreground text-background border-foreground" : "bg-transparent text-muted-foreground border-input hover:bg-muted/50"}`}
+                            >
+                                {ts("allCategories")}
+                            </button>
+                            {usedEventTypes.map(et => (
+                                <button
+                                    key={et}
+                                    onClick={() => setSelectedEventFilter(selectedEventFilter === et ? "" : et)}
+                                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer ${selectedEventFilter === et ? "bg-foreground text-background border-foreground" : "bg-transparent text-muted-foreground border-input hover:bg-muted/50"}`}
+                                >
+                                    {et}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {loading ? (
                 <div className="flex items-center justify-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -192,10 +263,16 @@ export default function ServicesPage() {
                     <h3 className="font-semibold text-lg mb-1">{t("belumAda")}</h3>
                     <p className="text-muted-foreground text-sm">{t("belumAdaDesc")}</p>
                 </div>
+            ) : filteredServices.length === 0 ? (
+                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-12 text-center">
+                    <Search className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+                    <h3 className="font-semibold text-lg mb-1">{ts("noResults")}</h3>
+                    <p className="text-muted-foreground text-sm">{ts("noResultsDesc")}</p>
+                </div>
             ) : (
                 <>
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        {paginateArray(services, currentPage, itemsPerPage).map((service) => (
+                        {paginateArray(filteredServices, currentPage, itemsPerPage).map((service) => (
                             <div key={service.id} className="rounded-xl border bg-card text-card-foreground shadow-sm p-5 flex flex-col relative">
                                 {/* Active badge */}
                                 <div className="flex items-start justify-between">
@@ -270,7 +347,7 @@ export default function ServicesPage() {
                             </div>
                         ))}
                     </div>
-                    <TablePagination totalItems={services.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
+                    <TablePagination totalItems={filteredServices.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
                 </>
             )}
 
