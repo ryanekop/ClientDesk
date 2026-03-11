@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Edit2, Trash2, Users, MessageCircle, Loader2 } from "lucide-react";
+import { Plus, Edit2, Trash2, Users, MessageCircle, Loader2, X, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -16,6 +16,7 @@ type Freelancer = {
     whatsapp_number: string | null;
     google_email: string | null;
     status: string;
+    tags: string[];
     created_at: string;
 };
 
@@ -46,6 +47,12 @@ export default function TeamPage() {
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [addCountryCode, setAddCountryCode] = React.useState("+62");
     const [editCountryCode, setEditCountryCode] = React.useState("+62");
+    const [addTags, setAddTags] = React.useState<string[]>([]);
+    const [editTags, setEditTags] = React.useState<string[]>([]);
+    const [tagInput, setTagInput] = React.useState("");
+    const [editTagInput, setEditTagInput] = React.useState("");
+    const [searchQuery, setSearchQuery] = React.useState("");
+    const [tagFilter, setTagFilter] = React.useState("All");
 
     React.useEffect(() => { fetchMembers(); }, []);
 
@@ -60,7 +67,7 @@ export default function TeamPage() {
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
-        setMembers((data || []) as Freelancer[]);
+        setMembers((data || []).map((d: any) => ({ ...d, tags: d.tags || [] })) as Freelancer[]);
         setLoading(false);
     }
 
@@ -78,9 +85,10 @@ export default function TeamPage() {
             whatsapp_number: fullWa || null,
             google_email: formData.get("google_email") as string || null,
             status: "active",
+            tags: addTags,
         });
 
-        if (!error) { setIsAddOpen(false); fetchMembers(); }
+        if (!error) { setIsAddOpen(false); setAddTags([]); setTagInput(""); fetchMembers(); }
     }
 
     async function handleEdit(formData: FormData) {
@@ -96,10 +104,11 @@ export default function TeamPage() {
                 role: formData.get("role") as string,
                 whatsapp_number: fullWa || null,
                 google_email: formData.get("google_email") as string || null,
+                tags: editTags,
             })
             .eq("id", editingMember.id);
 
-        if (!error) { setIsEditOpen(false); setEditingMember(null); fetchMembers(); }
+        if (!error) { setIsEditOpen(false); setEditingMember(null); setEditTags([]); setEditTagInput(""); fetchMembers(); }
     }
 
     async function handleToggleStatus(member: Freelancer) {
@@ -116,13 +125,54 @@ export default function TeamPage() {
         fetchMembers();
     }
 
-    function sendWhatsApp(phone: string | null, name: string) {
+    function sendWhatsApp(phone: string | null) {
         if (!phone) return;
         const cleaned = phone.replace(/^0/, "62").replace(/[^0-9]/g, "");
-        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(`${tt("hello")} ${name}!`)}`, "_blank");
+        window.open(`https://api.whatsapp.com/send?phone=${cleaned}`, "_blank");
     }
 
+    const selectFilterClass = "h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer";
     const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
+
+    const allTags = React.useMemo(() => Array.from(new Set(members.flatMap(m => m.tags))).sort(), [members]);
+
+    const filteredMembers = React.useMemo(() => {
+        return members.filter(m => {
+            const q = searchQuery.toLowerCase();
+            const matchSearch = !searchQuery || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q);
+            const matchTag = tagFilter === "All" || m.tags.includes(tagFilter);
+            return matchSearch && matchTag;
+        });
+    }, [members, searchQuery, tagFilter]);
+
+    function TagInput({ tags, setTags, input, setInput }: { tags: string[]; setTags: (t: string[]) => void; input: string; setInput: (v: string) => void }) {
+        return (
+            <div className="space-y-2">
+                <label className="text-sm font-medium">Tag</label>
+                <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+                    {tags.map((tag, i) => (
+                        <span key={i} className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                            {tag}
+                            <button type="button" onClick={() => setTags(tags.filter((_, j) => j !== i))} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                        </span>
+                    ))}
+                </div>
+                <input
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => {
+                        if ((e.key === "Enter" || e.key === ",") && input.trim()) {
+                            e.preventDefault();
+                            if (!tags.includes(input.trim())) setTags([...tags, input.trim()]);
+                            setInput("");
+                        }
+                    }}
+                    placeholder="Ketik tag lalu Enter..."
+                    className={inputClass}
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -170,11 +220,38 @@ export default function TeamPage() {
                                 <label className="text-sm font-medium">Google Email</label>
                                 <input name="google_email" type="email" placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
                             </div>
+                            <TagInput tags={addTags} setTags={setAddTags} input={tagInput} setInput={setTagInput} />
                             <DialogFooter><Button type="submit">{t("simpan")}</Button></DialogFooter>
                         </form>
                     </DialogContent>
                 </Dialog>
             </div>
+
+            {/* Search + Filter */}
+            {!loading && members.length > 0 && (
+                <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <input
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="Cari nama atau peran..."
+                            className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-10 w-full min-w-0 rounded-lg border bg-transparent pl-9 pr-8 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                        />
+                        {searchQuery && (
+                            <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                    {allTags.length > 0 && (
+                        <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className={selectFilterClass}>
+                            <option value="All">Semua Tag</option>
+                            {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+                        </select>
+                    )}
+                </div>
+            )}
 
             {loading ? (
                 <div className="flex items-center justify-center py-12">
@@ -183,14 +260,20 @@ export default function TeamPage() {
             ) : members.length === 0 ? (
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-12 text-center">
                     <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <h3 className="font-semibold text-lg mb-1">{t("belumAda")}</h3>
-                    <p className="text-muted-foreground text-sm">{t("belumAdaDesc")}</p>
+                    <h3 className="font-semibold text-lg mb-1">{members.length === 0 ? t("belumAda") : "Tidak ada hasil"}</h3>
+                    <p className="text-muted-foreground text-sm">{members.length === 0 ? t("belumAdaDesc") : "Coba ubah kata kunci pencarian atau filter tag."}</p>
+                </div>
+            ) : filteredMembers.length === 0 ? (
+                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-12 text-center">
+                    <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+                    <h3 className="font-semibold text-lg mb-1">{members.length === 0 ? t("belumAda") : "Tidak ada hasil"}</h3>
+                    <p className="text-muted-foreground text-sm">{members.length === 0 ? t("belumAdaDesc") : "Coba ubah kata kunci pencarian atau filter tag."}</p>
                 </div>
             ) : (
                 <>
                     {/* Mobile Cards */}
                     <div className="md:hidden space-y-3">
-                        {paginateArray(members, currentPage, itemsPerPage).map((member) => (
+                        {paginateArray(filteredMembers, currentPage, itemsPerPage).map((member) => (
                             <div key={member.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium shrink-0">
@@ -207,13 +290,21 @@ export default function TeamPage() {
                                         {member.status === "active" ? t("aktif") : t("nonaktif")}
                                     </button>
                                 </div>
+                                {member.tags.length > 0 && (
+                                    <div className="flex flex-wrap gap-1">
+                                        {member.tags.map((tag, i) => (
+                                            <span key={i} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{tag}</span>
+                                        ))}
+                                    </div>
+                                )}
                                 {member.whatsapp_number && <p className="text-xs text-muted-foreground">{member.whatsapp_number}</p>}
                                 <div className="flex items-center gap-1 pt-1 border-t">
-                                    <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number, member.name)} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
+                                    <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
                                         <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                                     </button>
                                     <button title="Edit" onClick={() => {
                                         setEditingMember(member);
+                                        setEditTags(member.tags || []);
                                         const wa = member.whatsapp_number || "";
                                         const match = COUNTRY_CODES.find(c => wa.startsWith(c.code));
                                         setEditCountryCode(match ? match.code : "+62");
@@ -243,7 +334,7 @@ export default function TeamPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
-                                    {paginateArray(members, currentPage, itemsPerPage).map((member) => (
+                                    {paginateArray(filteredMembers, currentPage, itemsPerPage).map((member) => (
                                         <tr key={member.id} className="hover:bg-muted/50 transition-colors">
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center gap-3">
@@ -257,6 +348,13 @@ export default function TeamPage() {
                                                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                                                     {member.role}
                                                 </span>
+                                                {member.tags.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                        {member.tags.map((tag, i) => (
+                                                            <span key={i} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{tag}</span>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">{member.whatsapp_number || "-"}</td>
                                             <td className="px-6 py-4 whitespace-nowrap">
@@ -272,11 +370,12 @@ export default function TeamPage() {
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-right">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number, member.name)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
+                                                    <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
                                                         <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                                                     </button>
                                                     <button title="Edit" onClick={() => {
                                                         setEditingMember(member);
+                                                        setEditTags(member.tags || []);
                                                         const wa = member.whatsapp_number || "";
                                                         const match = COUNTRY_CODES.find(c => wa.startsWith(c.code));
                                                         setEditCountryCode(match ? match.code : "+62");
@@ -294,7 +393,7 @@ export default function TeamPage() {
                                 </tbody>
                             </table>
                         </div>
-                        <TablePagination totalItems={members.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
+                        <TablePagination totalItems={filteredMembers.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
                     </div>
                 </>
             )}
@@ -341,6 +440,7 @@ export default function TeamPage() {
                                 <label className="text-sm font-medium">Google Email</label>
                                 <input name="google_email" type="email" defaultValue={editingMember.google_email || ""} placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
                             </div>
+                            <TagInput tags={editTags} setTags={setEditTags} input={editTagInput} setInput={setEditTagInput} />
                             <DialogFooter><Button type="submit">{t("perbarui")}</Button></DialogFooter>
                         </form>
                     )}

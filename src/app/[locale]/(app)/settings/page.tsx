@@ -40,6 +40,7 @@ type Template = {
 
 const templateTypes = [
     { value: "whatsapp_client", label: "Whatsapp ke Klien" },
+    { value: "whatsapp_booking_confirm", label: "Whatsapp Konfirmasi Booking" },
     { value: "whatsapp_freelancer", label: "Whatsapp ke Freelance" },
     { value: "invoice", label: "Invoice" },
 ];
@@ -50,6 +51,11 @@ const variableHints: Record<string, string[]> = {
         "{{total_price}}", "{{dp_paid}}", "{{studio_name}}", "{{event_type}}",
         "{{location}}", "{{location_maps_url}}", "{{detail_location}}", "{{notes}}",
         "{{tracking_link}}", "{{invoice_url}}",
+    ],
+    whatsapp_booking_confirm: [
+        "{{client_name}}", "{{booking_code}}", "{{session_date}}", "{{service_name}}",
+        "{{total_price}}", "{{dp_paid}}", "{{studio_name}}", "{{event_type}}",
+        "{{location}}", "{{tracking_link}}",
     ],
     whatsapp_freelancer: [
         "{{freelancer_name}}", "{{client_name}}", "{{booking_code}}", "{{session_date}}",
@@ -153,8 +159,20 @@ export default function SettingsPage() {
     const [statusSaved, setStatusSaved] = React.useState(false);
     const [dragIdx, setDragIdx] = React.useState<number | null>(null);
 
+    // Custom client statuses (progress)
+    const [customClientStatuses, setCustomClientStatuses] = React.useState<string[]>(["Booking Confirmed","Sesi Foto / Acara","Antrian Edit","Proses Edit","Revisi","File Siap","Selesai"]);
+    const [newClientStatusName, setNewClientStatusName] = React.useState("");
+    const [editingClientStatusIdx, setEditingClientStatusIdx] = React.useState<number | null>(null);
+    const [editingClientStatusName, setEditingClientStatusName] = React.useState("");
+    const [clientStatusSaving, setClientStatusSaving] = React.useState(false);
+    const [clientStatusSaved, setClientStatusSaved] = React.useState(false);
+    const [dragClientIdx, setDragClientIdx] = React.useState<number | null>(null);
+
     // Default WA target
     const [defaultWaTarget, setDefaultWaTarget] = React.useState<"client" | "freelancer">("client");
+
+    // Calendar event format
+    const [calendarEventFormat, setCalendarEventFormat] = React.useState("📸 {{client_name}} — {{service_name}}");
 
     React.useEffect(() => { fetchAll(); }, []);
 
@@ -180,8 +198,14 @@ export default function SettingsPage() {
         setIsCalendarConnected(!!(prof as any)?.google_access_token);
         setIsDriveConnected(!!(prof as any)?.google_drive_access_token);
         setLogoUrl((prof as any)?.invoice_logo_url || null);
+        if ((prof as any)?.calendar_event_format) {
+            setCalendarEventFormat((prof as any).calendar_event_format);
+        }
         if ((prof as any)?.custom_statuses) {
             setCustomStatuses((prof as any).custom_statuses);
+        }
+        if ((prof as any)?.custom_client_statuses) {
+            setCustomClientStatuses((prof as any).custom_client_statuses);
         }
         if ((prof as any)?.default_wa_target) {
             setDefaultWaTarget((prof as any).default_wa_target);
@@ -235,6 +259,7 @@ export default function SettingsPage() {
             whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
             vendor_slug: slug || null,
             default_wa_target: defaultWaTarget,
+            calendar_event_format: calendarEventFormat || null,
         }).eq("id", profile.id);
 
         setVendorSlug(slug);
@@ -390,10 +415,11 @@ export default function SettingsPage() {
                 <div className="px-6 py-4 border-b">
                     <h3 className="font-semibold flex items-center gap-2">
                         <MessageSquare className="w-4 h-4" />
-                        {tt.value === "whatsapp_client" ? tp("templateWAClient") : tt.value === "whatsapp_freelancer" ? tp("templateWAFreelancer") : tp("templateInvoice")}
+                        {tt.value === "whatsapp_client" ? tp("templateWAClient") : tt.value === "whatsapp_booking_confirm" ? "Konfirmasi Booking" : tt.value === "whatsapp_freelancer" ? tp("templateWAFreelancer") : tp("templateInvoice")}
                     </h3>
                     <p className="text-sm text-muted-foreground">
                         {tt.value === "whatsapp_client" && tp("templateWAClientDesc")}
+                        {tt.value === "whatsapp_booking_confirm" && "Template pesan konfirmasi setelah klien mengisi form booking."}
                         {tt.value === "whatsapp_freelancer" && tp("templateWAFreelancerDesc")}
                         {tt.value === "invoice" && tp("templateInvoiceDesc")}
                     </p>
@@ -711,6 +737,28 @@ export default function SettingsPage() {
                                     </div>
                                 </div>
 
+                                {/* Calendar Event Name Format */}
+                                {isCalendarConnected && (
+                                    <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
+                                        <div>
+                                            <p className="text-sm font-medium">Format Nama Event Calendar</p>
+                                            <p className="text-xs text-muted-foreground">Kustomisasi nama event di Google Calendar. Gunakan variabel di bawah.</p>
+                                        </div>
+                                        <input
+                                            value={calendarEventFormat}
+                                            onChange={e => setCalendarEventFormat(e.target.value)}
+                                            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                            placeholder="📸 {{client_name}} — {{service_name}}"
+                                        />
+                                        <div className="flex flex-wrap gap-1">
+                                            {["{{client_name}}", "{{service_name}}", "{{event_type}}", "{{booking_code}}", "{{studio_name}}"].map(v => (
+                                                <button key={v} type="button" onClick={() => setCalendarEventFormat(prev => prev + " " + v)}
+                                                    className="text-[10px] px-1.5 py-0.5 rounded border bg-muted hover:bg-muted/80 text-muted-foreground cursor-pointer">{v}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Google Drive */}
                                 <div className="p-4 rounded-lg border bg-muted/30">
                                     <div className="flex items-center gap-3">
@@ -759,6 +807,7 @@ export default function SettingsPage() {
 
                 {/* ═══ TAB: Status Booking ═══ */}
                 {activeTab === "status" && (
+                    <>
                     <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
                         <div className="px-6 py-4 border-b">
                             <h3 className="font-semibold">Status Booking</h3>
@@ -899,6 +948,146 @@ export default function SettingsPage() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Client Status (Progress) */}
+                    <div className="rounded-xl border bg-card text-card-foreground shadow-sm mt-4">
+                        <div className="px-6 py-4 border-b">
+                            <h3 className="font-semibold">Status Klien (Progress)</h3>
+                            <p className="text-sm text-muted-foreground">Atur langkah-langkah progress yang ditampilkan ke klien di halaman tracking. Drag untuk urutan.</p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="space-y-1">
+                                {customClientStatuses.map((s, idx) => (
+                                    <div
+                                        key={idx}
+                                        draggable
+                                        onDragStart={() => setDragClientIdx(idx)}
+                                        onDragOver={(e) => { e.preventDefault(); }}
+                                        onDrop={() => {
+                                            if (dragClientIdx === null || dragClientIdx === idx) return;
+                                            const arr = [...customClientStatuses];
+                                            const [moved] = arr.splice(dragClientIdx, 1);
+                                            arr.splice(idx, 0, moved);
+                                            setCustomClientStatuses(arr);
+                                            setDragClientIdx(null);
+                                        }}
+                                        onDragEnd={() => setDragClientIdx(null)}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border bg-background transition-all ${
+                                            dragClientIdx === idx ? "opacity-50 border-dashed" : "hover:bg-muted/50"
+                                        }`}
+                                    >
+                                        <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab shrink-0" />
+                                        {editingClientStatusIdx === idx ? (
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <input
+                                                    autoFocus
+                                                    value={editingClientStatusName}
+                                                    onChange={e => setEditingClientStatusName(e.target.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === "Enter" && editingClientStatusName.trim()) {
+                                                            const arr = [...customClientStatuses];
+                                                            arr[idx] = editingClientStatusName.trim();
+                                                            setCustomClientStatuses(arr);
+                                                            setEditingClientStatusIdx(null);
+                                                        }
+                                                        if (e.key === "Escape") setEditingClientStatusIdx(null);
+                                                    }}
+                                                    className="h-7 flex-1 rounded border border-input px-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                />
+                                                <button
+                                                    onClick={() => {
+                                                        if (editingClientStatusName.trim()) {
+                                                            const arr = [...customClientStatuses];
+                                                            arr[idx] = editingClientStatusName.trim();
+                                                            setCustomClientStatuses(arr);
+                                                        }
+                                                        setEditingClientStatusIdx(null);
+                                                    }}
+                                                    className="text-green-600 hover:text-green-700 cursor-pointer"
+                                                >
+                                                    <CheckCircle className="w-4 h-4" />
+                                                </button>
+                                                <button onClick={() => setEditingClientStatusIdx(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <span className="flex-1 text-sm">{s}</span>
+                                                <button
+                                                    onClick={() => { setEditingClientStatusIdx(idx); setEditingClientStatusName(s); }}
+                                                    className="text-muted-foreground hover:text-foreground cursor-pointer p-1 rounded hover:bg-muted"
+                                                    title="Rename"
+                                                >
+                                                    <Pencil className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        if (customClientStatuses.length <= 2) { alert("Minimal 2 status harus ada."); return; }
+                                                        setCustomClientStatuses(customClientStatuses.filter((_, i) => i !== idx));
+                                                    }}
+                                                    className="text-muted-foreground hover:text-red-600 cursor-pointer p-1 rounded hover:bg-muted"
+                                                    title="Hapus"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <input
+                                    value={newClientStatusName}
+                                    onChange={e => setNewClientStatusName(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === "Enter" && newClientStatusName.trim()) {
+                                            setCustomClientStatuses([...customClientStatuses, newClientStatusName.trim()]);
+                                            setNewClientStatusName("");
+                                        }
+                                    }}
+                                    placeholder="Nama status klien baru..."
+                                    className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                />
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!newClientStatusName.trim()}
+                                    onClick={() => {
+                                        if (newClientStatusName.trim()) {
+                                            setCustomClientStatuses([...customClientStatuses, newClientStatusName.trim()]);
+                                            setNewClientStatusName("");
+                                        }
+                                    }}
+                                    className="gap-1"
+                                >
+                                    <Plus className="w-4 h-4" /> Tambah
+                                </Button>
+                            </div>
+
+                            <div className="flex items-center gap-3 pt-2">
+                                <Button
+                                    size="sm"
+                                    disabled={clientStatusSaving}
+                                    onClick={async () => {
+                                        if (!profile) return;
+                                        setClientStatusSaving(true);
+                                        await supabase.from("profiles").update({ custom_client_statuses: customClientStatuses }).eq("id", profile.id);
+                                        setClientStatusSaving(false);
+                                        setClientStatusSaved(true);
+                                        setTimeout(() => setClientStatusSaved(false), 2000);
+                                    }}
+                                    className="gap-1.5"
+                                >
+                                    {clientStatusSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    Simpan Status Klien
+                                </Button>
+                                {clientStatusSaved && <span className="text-xs text-green-600 dark:text-green-400">Tersimpan!</span>}
+                            </div>
+                        </div>
+                    </div>
+                    </>
                 )}
 
                 {/* ═══ TAB: Bot Telegram ═══ */}

@@ -13,6 +13,7 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
 import { cn } from "@/lib/utils";
+import { getSessionDateUTC, formatSessionDate } from "@/utils/format-date";
 
 const locales = { "id-ID": id };
 
@@ -192,7 +193,7 @@ export default function CalendarPage() {
 
         if (data) {
             const bookingEvents: CalendarEvent[] = data.map((booking: any) => {
-                const sessionDate = new Date(booking.session_date);
+                const sessionDate = getSessionDateUTC(booking.session_date);
                 const endDate = new Date(sessionDate.getTime() + 2 * 60 * 60 * 1000);
                 return {
                     title: `${booking.client_name} - ${booking.services?.name || "Booking"}`,

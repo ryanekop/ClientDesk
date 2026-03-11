@@ -4,6 +4,7 @@ import * as React from "react";
 import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, AlertTriangle, X, Download, ExternalLink, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { formatSessionDate } from "@/utils/format-date";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -52,7 +53,7 @@ type SavedTemplate = {
 };
 
 function generateWATemplate(booking: Booking, locale: string, savedTemplates: SavedTemplate[], studioName: string, freelancerName?: string) {
-    const sessionStr = booking.session_date ? new Date(booking.session_date).toLocaleDateString(locale === "en" ? "en-US" : "id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
+    const sessionStr = booking.session_date ? formatSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-";
     const serviceName = booking.services?.name || "-";
 
     // Build replacement map
@@ -225,7 +226,7 @@ export default function BookingsPage() {
 
     const formatDate = (d: string | null) => {
         if (!d) return "-";
-        return new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+        return formatSessionDate(d, { locale: locale === "en" ? "en" : "id", withDay: false });
     };
 
     const formatCurrency = (n: number) =>
@@ -244,7 +245,7 @@ export default function BookingsPage() {
         const matchesMonth = monthFilter === "All" || (() => {
             if (!b.session_date) return false;
             const d = new Date(b.session_date);
-            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` === monthFilter;
+            return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}` === monthFilter;
         })();
         return matchesSearch && matchesStatus && matchesPackage && matchesFreelance && matchesMonth;
     });
@@ -263,7 +264,7 @@ export default function BookingsPage() {
                             [tb("exportBookingCode")]: b.booking_code,
                             [tb("exportClientName")]: b.client_name,
                             [tb("exportWhatsApp")]: b.client_whatsapp || "",
-                            [tb("exportSessionDate")]: b.session_date ? new Date(b.session_date).toLocaleDateString("id-ID") : "",
+                            [tb("exportSessionDate")]: b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "",
                             [tb("exportLocation")]: b.location || "",
                             [tb("exportPackage")]: b.services?.name || "",
                             [tb("exportTotalPrice")]: b.total_price || 0,

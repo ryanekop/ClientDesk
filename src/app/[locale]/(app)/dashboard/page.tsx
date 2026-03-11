@@ -1,5 +1,6 @@
 import * as React from "react";
 import { createClient } from "@/utils/supabase/server";
+import { formatSessionDate } from "@/utils/format-date";
 import type { UpcomingBooking } from "@/components/dashboard/dashboard-widgets";
 import {
   Users,
@@ -208,11 +209,7 @@ export default async function DashboardPage() {
 
   const formatDate = (d: string | null) => {
     if (!d) return "-";
-    return new Date(d).toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
+    return formatSessionDate(d, { locale: locale === "en" ? "en" : "id", withDay: false, dateOnly: true });
   };
 
   const statusColors: Record<string, string> = {

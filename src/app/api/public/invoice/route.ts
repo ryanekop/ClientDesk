@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { formatSessionDate } from "@/utils/format-date";
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
     const remaining = booking.total_price - booking.dp_paid;
     const dateLocale = lang === "en" ? "en-US" : "id-ID";
     const sessionDate = booking.session_date
-        ? new Date(booking.session_date).toLocaleDateString(dateLocale, { day: "numeric", month: "long", year: "numeric" })
+        ? formatSessionDate(booking.session_date, { locale: lang === "en" ? "en" : "id", dateOnly: true })
         : "-";
     const now = new Date().toLocaleDateString(dateLocale, { day: "numeric", month: "long", year: "numeric" });
     const serviceName = (booking.services as any)?.name || t.defaultServiceName;

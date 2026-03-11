@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { TrendingUp, Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle } from "lucide-react";
+import { TrendingUp, Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, Copy, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
+import { formatSessionDate } from "@/utils/format-date";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 type BookingFinance = {
     id: string;
@@ -33,6 +34,7 @@ export default function FinancePage() {
     const [invoiceLogoUrl, setInvoiceLogoUrl] = React.useState<string | null>(null);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
+    const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
     React.useEffect(() => { fetchBookings(); }, []);
 
@@ -88,13 +90,28 @@ export default function FinancePage() {
     function sendInvoiceWhatsApp(b: BookingFinance) {
         if (!b.client_whatsapp) { alert(tf("waNotAvailable")); return; }
         const remaining = b.total_price - b.dp_paid;
-        const date = b.session_date ? new Date(b.session_date).toLocaleDateString(locale === "en" ? "en-US" : "id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-";
+        const date = b.session_date ? formatSessionDate(b.session_date, { locale: locale === "en" ? "en" : "id", dateOnly: true }) : "-";
         const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
         const trackLink = b.tracking_uuid ? `${siteUrl}/${locale}/track/${b.tracking_uuid}` : "";
         const invoiceLink = `${siteUrl}/api/public/invoice?code=${encodeURIComponent(b.booking_code)}&lang=${locale}`;
         const msg = `📄 *${tf("waInvoiceTitle")} - ${b.booking_code}*\n\n${tf("waInvoiceHello", { name: b.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${b.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(b.total_price)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(b.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${trackLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
         const cleaned = b.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
         window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(msg)}`, "_blank");
+    }
+
+    function getInvoiceMessage(b: BookingFinance) {
+        const remaining = b.total_price - b.dp_paid;
+        const date = b.session_date ? formatSessionDate(b.session_date, { locale: locale === "en" ? "en" : "id", dateOnly: true }) : "-";
+        const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
+        const trackLink = b.tracking_uuid ? `${siteUrl}/${locale}/track/${b.tracking_uuid}` : "";
+        const invoiceLink = `${siteUrl}/api/public/invoice?code=${encodeURIComponent(b.booking_code)}&lang=${locale}`;
+        return `📄 *${tf("waInvoiceTitle")} - ${b.booking_code}*\n\n${tf("waInvoiceHello", { name: b.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${b.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(b.total_price)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(b.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${trackLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
+    }
+
+    function copyInvoiceTemplate(b: BookingFinance) {
+        navigator.clipboard.writeText(getInvoiceMessage(b));
+        setCopiedId(b.id);
+        setTimeout(() => setCopiedId(null), 2000);
     }
 
     const totalRevenue = bookings.filter(b => b.is_fully_paid).reduce((s, b) => s + b.total_price, 0);
@@ -179,6 +196,9 @@ export default function FinancePage() {
                                 <div className="flex justify-between"><span className="text-muted-foreground">{t("sisa")}</span><span className={remaining > 0 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-green-600 dark:text-green-400"}>{formatCurrency(remaining)}</span></div>
                             </div>
                             <div className="flex items-center gap-1 pt-1 border-t">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500" title="Salin Template" onClick={() => copyInvoiceTemplate(b)}>
+                                    {copiedId === b.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                </Button>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500" title={tf("sendInvoiceWA")} disabled={!b.client_whatsapp} onClick={() => sendInvoiceWhatsApp(b)}>
                                     <MessageCircle className="w-4 h-4" />
                                 </Button>
@@ -244,6 +264,10 @@ export default function FinancePage() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
                                             <div className="flex items-center justify-end gap-1">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500 hover:text-violet-600" title="Salin Template"
+                                                    onClick={() => copyInvoiceTemplate(b)}>
+                                                    {copiedId === b.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                                </Button>
                                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600" title={tf("sendInvoiceWA")}
                                                     disabled={!b.client_whatsapp}
                                                     onClick={() => sendInvoiceWhatsApp(b)}>

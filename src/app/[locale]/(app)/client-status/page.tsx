@@ -21,26 +21,22 @@ type BookingStatus = {
     services: { name: string } | null;
 };
 
-const CLIENT_STATUSES = [
-    { value: "", label: "Semua" },
-    { value: "Booking Confirmed", label: "Booking Confirmed" },
-    { value: "Sesi Foto / Acara", label: "Sesi Foto / Acara" },
-    { value: "Antrian Edit", label: "Antrian Edit" },
-    { value: "Proses Edit", label: "Proses Edit" },
-    { value: "Revisi", label: "Revisi" },
-    { value: "File Siap", label: "File Siap" },
-    { value: "Selesai", label: "Selesai" },
+const DEFAULT_CLIENT_STATUSES = [
+    "Booking Confirmed", "Sesi Foto / Acara", "Antrian Edit", "Proses Edit", "Revisi", "File Siap", "Selesai",
 ];
 
-const statusColors: Record<string, string> = {
-    "Booking Confirmed": "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-    "Sesi Foto / Acara": "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400",
-    "Antrian Edit": "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-    "Proses Edit": "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400",
-    "Revisi": "bg-pink-100 text-pink-700 dark:bg-pink-500/10 dark:text-pink-400",
-    "File Siap": "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
-    "Selesai": "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
-};
+const STATUS_COLOR_PALETTE = [
+    "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+    "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400",
+    "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
+    "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400",
+    "bg-pink-100 text-pink-700 dark:bg-pink-500/10 dark:text-pink-400",
+    "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
+    "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-400",
+    "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400",
+    "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400",
+];
 
 export default function ClientStatusPage() {
     const supabase = createClient();
@@ -53,11 +49,24 @@ export default function ClientStatusPage() {
     const [savingId, setSavingId] = React.useState<string | null>(null);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
+    const [clientStatuses, setClientStatuses] = React.useState<string[]>(DEFAULT_CLIENT_STATUSES);
+
+    const statusColors = React.useMemo(() => {
+        const map: Record<string, string> = {};
+        clientStatuses.forEach((s, i) => { map[s] = STATUS_COLOR_PALETTE[i % STATUS_COLOR_PALETTE.length]; });
+        return map;
+    }, [clientStatuses]);
 
     React.useEffect(() => {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
+
+            // Load custom client statuses from profile
+            const { data: profile } = await supabase.from("profiles").select("custom_client_statuses").eq("id", user.id).single();
+            if (profile?.custom_client_statuses) {
+                setClientStatuses(profile.custom_client_statuses as string[]);
+            }
 
             const { data } = await supabase
                 .from("bookings")
@@ -74,8 +83,38 @@ export default function ClientStatusPage() {
 
     async function updateStatus(id: string, clientStatus: string) {
         setSavingId(id);
-        await supabase.from("bookings").update({ client_status: clientStatus || null }).eq("id", id);
-        setBookings(prev => prev.map(b => b.id === id ? { ...b, client_status: clientStatus || null } : b));
+        const oldBooking = bookings.find(b => b.id === id);
+        const wasQueue = oldBooking?.client_status === "Antrian Edit";
+        const isQueue = clientStatus === "Antrian Edit";
+
+        if (isQueue && !wasQueue) {
+            // Auto-assign: get max queue_position for current "Antrian Edit" bookings
+            const maxPos = bookings
+                .filter(b => b.client_status === "Antrian Edit" && b.queue_position != null)
+                .reduce((max, b) => Math.max(max, b.queue_position!), 0);
+            const newPos = maxPos + 1;
+            await supabase.from("bookings").update({ client_status: clientStatus, queue_position: newPos }).eq("id", id);
+            setBookings(prev => prev.map(b => b.id === id ? { ...b, client_status: clientStatus, queue_position: newPos } : b));
+        } else if (wasQueue && !isQueue) {
+            // Auto-clear: remove position and re-number remaining
+            await supabase.from("bookings").update({ client_status: clientStatus || null, queue_position: null }).eq("id", id);
+            const remaining = bookings
+                .filter(b => b.client_status === "Antrian Edit" && b.id !== id && b.queue_position != null)
+                .sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0));
+            for (let i = 0; i < remaining.length; i++) {
+                await supabase.from("bookings").update({ queue_position: i + 1 }).eq("id", remaining[i].id);
+            }
+            setBookings(prev => {
+                let updated = prev.map(b => b.id === id ? { ...b, client_status: clientStatus || null, queue_position: null } : b);
+                remaining.forEach((r, i) => {
+                    updated = updated.map(b => b.id === r.id ? { ...b, queue_position: i + 1 } : b);
+                });
+                return updated;
+            });
+        } else {
+            await supabase.from("bookings").update({ client_status: clientStatus || null }).eq("id", id);
+            setBookings(prev => prev.map(b => b.id === id ? { ...b, client_status: clientStatus || null } : b));
+        }
         setSavingId(null);
     }
 
@@ -133,8 +172,9 @@ export default function ClientStatusPage() {
                     onChange={e => setFilter(e.target.value)}
                     className="h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer"
                 >
-                    {CLIENT_STATUSES.map(s => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
+                    <option value="">Semua</option>
+                    {clientStatuses.map(s => (
+                        <option key={s} value={s}>{s}</option>
                     ))}
                 </select>
             </div>
@@ -161,7 +201,7 @@ export default function ClientStatusPage() {
                                 <label className="text-xs text-muted-foreground shrink-0 w-14">Status</label>
                                 <select value={b.client_status || ""} onChange={e => updateStatus(b.id, e.target.value)} disabled={savingId === b.id} className={`${selectClass} flex-1`}>
                                     <option value="">{t("belumDiset")}</option>
-                                    {CLIENT_STATUSES.filter(s => s.value).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                    {clientStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
                             </div>
                             <div className="flex items-center gap-3">
@@ -225,8 +265,8 @@ export default function ClientStatusPage() {
                                                 className={selectClass}
                                             >
                                                 <option value="">{t("belumDiset")}</option>
-                                                {CLIENT_STATUSES.filter(s => s.value).map(s => (
-                                                    <option key={s.value} value={s.value}>{s.label}</option>
+                                                {clientStatuses.map(s => (
+                                                    <option key={s} value={s}>{s}</option>
                                                 ))}
                                             </select>
                                             {b.client_status && (

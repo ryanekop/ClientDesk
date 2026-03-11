@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocale, useTranslations } from "next-intl";
+import { formatSessionDate } from "@/utils/format-date";
 
 export type UpcomingBooking = {
   id: string;
@@ -49,24 +50,17 @@ export function UpcomingBookingCard({ booking }: UpcomingBookingCardProps) {
     );
   }
 
-  const dateLocale = locale === "en" ? "en-US" : "id-ID";
-  const sessionDate = new Date(booking.session_date);
-  const dateStr = sessionDate.toLocaleDateString(dateLocale, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-  const timeStr = sessionDate.toLocaleTimeString(dateLocale, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const dateLocale = locale === "en" ? "en" : "id";
+  const dateStr = formatSessionDate(booking.session_date, { locale: dateLocale as "id" | "en", withTime: false });
+  const d = new Date(booking.session_date);
+  const timeStr = `${String(d.getUTCHours()).padStart(2, "0")}.${String(d.getUTCMinutes()).padStart(2, "0")}`;
 
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const sessionStart = new Date(
-    sessionDate.getFullYear(),
-    sessionDate.getMonth(),
-    sessionDate.getDate(),
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
   );
   const diffDays = Math.round(
     (sessionStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24),

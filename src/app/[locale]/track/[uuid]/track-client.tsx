@@ -3,6 +3,7 @@
 import * as React from "react";
 import { CheckCircle2, Clock, PlayCircle, HardDrive, Edit3, Camera, Loader2, ExternalLink, Users, Download } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { formatSessionDate } from "@/utils/format-date";
 
 type BookingData = {
     bookingCode: string;
@@ -21,7 +22,7 @@ type BookingData = {
     location: string | null;
 };
 
-const STATUS_STEPS_KEYS = [
+const DEFAULT_STEPS = [
     { key: "Booking Confirmed", labelKey: "stepConfirmed", icon: CheckCircle2 },
     { key: "Sesi Foto / Acara", labelKey: "stepSession", icon: Camera },
     { key: "Antrian Edit", labelKey: "stepEditQueue", icon: Users },
@@ -31,22 +32,33 @@ const STATUS_STEPS_KEYS = [
     { key: "Selesai", labelKey: "stepDone", icon: CheckCircle2 },
 ];
 
-function getStepIndex(status: string | null): number {
-    if (!status) return -1;
-    return STATUS_STEPS_KEYS.findIndex(s => s.key === status);
-}
+const ICON_PALETTE = [CheckCircle2, Camera, Users, Edit3, PlayCircle, HardDrive, CheckCircle2, Clock, Edit3, Loader2];
 
 interface TrackingClientProps {
     booking: BookingData;
     vendorName: string;
+    customStatuses?: string[] | null;
 }
 
-export default function TrackingClient({ booking, vendorName }: TrackingClientProps) {
+export default function TrackingClient({ booking, vendorName, customStatuses }: TrackingClientProps) {
     const t = useTranslations("Track");
 
-    const currentIdx = getStepIndex(booking.clientStatus);
+    // Build steps from custom statuses or fallback to defaults
+    const steps = React.useMemo(() => {
+        if (!customStatuses || customStatuses.length === 0) return DEFAULT_STEPS;
+        return customStatuses.map((key, i) => {
+            const defaultMatch = DEFAULT_STEPS.find(d => d.key === key);
+            return {
+                key,
+                labelKey: defaultMatch?.labelKey || key,
+                icon: defaultMatch?.icon || ICON_PALETTE[i % ICON_PALETTE.length],
+            };
+        });
+    }, [customStatuses]);
+
+    const currentIdx = booking.clientStatus ? steps.findIndex(s => s.key === booking.clientStatus) : -1;
     const sessionDate = booking.sessionDate
-        ? new Date(booking.sessionDate).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
+        ? formatSessionDate(booking.sessionDate)
         : "-";
 
     return (
@@ -71,7 +83,7 @@ export default function TrackingClient({ booking, vendorName }: TrackingClientPr
                                     {t("queue")} #{booking.queuePosition}
                                 </span>
                             )}
-                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${currentIdx >= STATUS_STEPS_KEYS.length - 1
+                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${currentIdx >= steps.length - 1
                                 ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
                                 : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
                                 }`}>
@@ -108,10 +120,10 @@ export default function TrackingClient({ booking, vendorName }: TrackingClientPr
                 <div className="bg-background rounded-2xl shadow-lg border p-6">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-6">{t("progress")}</h3>
                     <div className="space-y-0">
-                        {STATUS_STEPS_KEYS.map((step, idx) => {
+                        {steps.map((step, idx) => {
                             const isDone = idx <= currentIdx;
                             const isCurrent = idx === currentIdx;
-                            const isLast = idx === STATUS_STEPS_KEYS.length - 1;
+                            const isLast = idx === steps.length - 1;
                             const Icon = step.icon;
 
                             return (
@@ -132,7 +144,7 @@ export default function TrackingClient({ booking, vendorName }: TrackingClientPr
 
                                     <div className={`flex flex-col pb-8 pt-2 ${!isDone && !isCurrent ? "opacity-40" : ""}`}>
                                         <p className={`font-semibold text-sm ${isCurrent ? "text-primary" : ""}`}>
-                                            {t(step.labelKey as any)}
+                                            {DEFAULT_STEPS.find(d => d.key === step.key) ? t(step.labelKey as any) : step.key}
                                             {isCurrent && booking.queuePosition && booking.queuePosition > 0 && step.key === "Antrian Edit" && (
                                                 <span className="text-xs font-normal text-muted-foreground ml-2">({t("position")} #{booking.queuePosition})</span>
                                             )}

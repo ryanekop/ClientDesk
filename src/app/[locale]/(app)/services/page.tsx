@@ -231,18 +231,16 @@ export default function ServicesPage() {
                             </button>
                         )}
                     </div>
-                    {usedEventTypes.length > 0 && (
-                        <select
-                            value={selectedEventFilter}
-                            onChange={(e) => setSelectedEventFilter(e.target.value)}
-                            className="h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer"
-                        >
-                            <option value="">{ts("allCategories")}</option>
-                            {usedEventTypes.map(et => (
-                                <option key={et} value={et}>{et}</option>
-                            ))}
-                        </select>
-                    )}
+                    <select
+                        value={selectedEventFilter}
+                        onChange={(e) => setSelectedEventFilter(e.target.value)}
+                        className="h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer"
+                    >
+                        <option value="">{ts("allCategories")}</option>
+                        {EVENT_TYPES.map(et => (
+                            <option key={et} value={et}>{et}</option>
+                        ))}
+                    </select>
                 </div>
             )}
 

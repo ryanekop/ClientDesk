@@ -41,12 +41,14 @@ async function getBookingData(uuid: string) {
     if (!booking) return null;
 
     let vendorName = "";
+    let customClientStatuses: string[] | null = null;
     if (booking.user_id) {
-        const { data: v } = await supabaseAdmin.from("profiles").select("studio_name").eq("id", booking.user_id).single();
+        const { data: v } = await supabaseAdmin.from("profiles").select("studio_name, custom_client_statuses").eq("id", booking.user_id).single();
         vendorName = v?.studio_name || "";
+        customClientStatuses = (v as any)?.custom_client_statuses || null;
     }
 
-    return { booking, vendorName };
+    return { booking, vendorName, customClientStatuses };
 }
 
 // ── Dynamic metadata for SEO & WhatsApp link previews ──────────────────────
@@ -91,7 +93,7 @@ export default async function TrackingPage({ params }: PageProps) {
         );
     }
 
-    const { booking, vendorName } = result;
+    const { booking, vendorName, customClientStatuses } = result;
 
     const bookingData = {
         bookingCode: booking.booking_code,
@@ -110,5 +112,5 @@ export default async function TrackingPage({ params }: PageProps) {
         location: booking.location || null,
     };
 
-    return <TrackingClient booking={bookingData} vendorName={vendorName} />;
+    return <TrackingClient booking={bookingData} vendorName={vendorName} customStatuses={customClientStatuses} />;
 }
