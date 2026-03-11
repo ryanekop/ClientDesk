@@ -50,6 +50,7 @@ export default function ClientStatusPage() {
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [clientStatuses, setClientStatuses] = React.useState<string[]>(DEFAULT_CLIENT_STATUSES);
+    const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
 
     const statusColors = React.useMemo(() => {
         const map: Record<string, string> = {};
@@ -63,9 +64,12 @@ export default function ClientStatusPage() {
             if (!user) return;
 
             // Load custom client statuses from profile
-            const { data: profile } = await supabase.from("profiles").select("custom_client_statuses").eq("id", user.id).single();
+            const { data: profile } = await supabase.from("profiles").select("custom_client_statuses, queue_trigger_status").eq("id", user.id).single();
             if (profile?.custom_client_statuses) {
                 setClientStatuses(profile.custom_client_statuses as string[]);
+            }
+            if ((profile as any)?.queue_trigger_status) {
+                setQueueTriggerStatus((profile as any).queue_trigger_status);
             }
 
             const { data } = await supabase
@@ -84,13 +88,13 @@ export default function ClientStatusPage() {
     async function updateStatus(id: string, clientStatus: string) {
         setSavingId(id);
         const oldBooking = bookings.find(b => b.id === id);
-        const wasQueue = oldBooking?.client_status === "Antrian Edit";
-        const isQueue = clientStatus === "Antrian Edit";
+        const wasQueue = queueTriggerStatus && oldBooking?.client_status === queueTriggerStatus;
+        const isQueue = queueTriggerStatus && clientStatus === queueTriggerStatus;
 
         if (isQueue && !wasQueue) {
-            // Auto-assign: get max queue_position for current "Antrian Edit" bookings
+            // Auto-assign: get max queue_position for current queue bookings
             const maxPos = bookings
-                .filter(b => b.client_status === "Antrian Edit" && b.queue_position != null)
+                .filter(b => b.client_status === queueTriggerStatus && b.queue_position != null)
                 .reduce((max, b) => Math.max(max, b.queue_position!), 0);
             const newPos = maxPos + 1;
             await supabase.from("bookings").update({ client_status: clientStatus, queue_position: newPos }).eq("id", id);
@@ -99,7 +103,7 @@ export default function ClientStatusPage() {
             // Auto-clear: remove position and re-number remaining
             await supabase.from("bookings").update({ client_status: clientStatus || null, queue_position: null }).eq("id", id);
             const remaining = bookings
-                .filter(b => b.client_status === "Antrian Edit" && b.id !== id && b.queue_position != null)
+                .filter(b => b.client_status === queueTriggerStatus && b.id !== id && b.queue_position != null)
                 .sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0));
             for (let i = 0; i < remaining.length; i++) {
                 await supabase.from("bookings").update({ queue_position: i + 1 }).eq("id", remaining[i].id);

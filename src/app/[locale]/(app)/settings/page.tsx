@@ -167,6 +167,7 @@ export default function SettingsPage() {
     const [clientStatusSaving, setClientStatusSaving] = React.useState(false);
     const [clientStatusSaved, setClientStatusSaved] = React.useState(false);
     const [dragClientIdx, setDragClientIdx] = React.useState<number | null>(null);
+    const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
 
     // Default WA target
     const [defaultWaTarget, setDefaultWaTarget] = React.useState<"client" | "freelancer">("client");
@@ -206,6 +207,9 @@ export default function SettingsPage() {
         }
         if ((prof as any)?.custom_client_statuses) {
             setCustomClientStatuses((prof as any).custom_client_statuses);
+        }
+        if ((prof as any)?.queue_trigger_status) {
+            setQueueTriggerStatus((prof as any).queue_trigger_status);
         }
         if ((prof as any)?.default_wa_target) {
             setDefaultWaTarget((prof as any).default_wa_target);
@@ -1073,7 +1077,7 @@ export default function SettingsPage() {
                                     onClick={async () => {
                                         if (!profile) return;
                                         setClientStatusSaving(true);
-                                        await supabase.from("profiles").update({ custom_client_statuses: customClientStatuses }).eq("id", profile.id);
+                                        await supabase.from("profiles").update({ custom_client_statuses: customClientStatuses, queue_trigger_status: queueTriggerStatus }).eq("id", profile.id);
                                         setClientStatusSaving(false);
                                         setClientStatusSaved(true);
                                         setTimeout(() => setClientStatusSaved(false), 2000);
@@ -1084,6 +1088,22 @@ export default function SettingsPage() {
                                     Simpan Status Klien
                                 </Button>
                                 {clientStatusSaved && <span className="text-xs text-green-600 dark:text-green-400">Tersimpan!</span>}
+                            </div>
+
+                            {/* Queue trigger setting */}
+                            <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
+                                <p className="text-sm font-medium">Trigger Auto-Queue</p>
+                                <p className="text-xs text-muted-foreground">Pilih status klien yang akan otomatis men-trigger antrian (posisi antrian otomatis terisi saat klien masuk ke status ini).</p>
+                                <select
+                                    value={queueTriggerStatus}
+                                    onChange={e => setQueueTriggerStatus(e.target.value)}
+                                    className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                >
+                                    <option value="">(Tidak ada trigger)</option>
+                                    {customClientStatuses.map(s => (
+                                        <option key={s} value={s}>{s}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
                     </div>
