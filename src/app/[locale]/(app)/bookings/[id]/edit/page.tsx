@@ -369,12 +369,6 @@ export default function EditBookingPage() {
                             <label className="text-xs font-medium text-muted-foreground">Instagram</label>
                             <input value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@username" className={inputClass} />
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
-                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); }} className={selectClass} required>
-                                {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                        </div>
                     </div>
                     {currentExtraFields.length > 0 && (
                         <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 pt-3 border-t border-dashed">
@@ -397,9 +391,25 @@ export default function EditBookingPage() {
                         <CalendarClock className="w-4 h-4" /> Detail Sesi
                     </h3>
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                        <div className="col-span-full space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
+                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); }} className={selectClass} required>
+                                {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                        </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Jadwal Sesi{reqMark}</label>
-                            <input required type="datetime-local" value={sessionDate} onChange={e => setSessionDate(e.target.value)} className={cn(inputClass, "block")} />
+                            <label className="text-xs font-medium text-muted-foreground">Tanggal{reqMark}</label>
+                            <input type="date" value={sessionDate ? sessionDate.split("T")[0] : ""} onChange={e => {
+                                const timePart = sessionDate?.split("T")[1] || "10:00";
+                                setSessionDate(e.target.value ? `${e.target.value}T${timePart}` : "");
+                            }} required className={cn(inputClass, "block")} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Jam{reqMark}</label>
+                            <input type="time" value={sessionDate ? sessionDate.split("T")[1] || "10:00" : ""} onChange={e => {
+                                const datePart = sessionDate?.split("T")[0] || "";
+                                if (datePart) setSessionDate(`${datePart}T${e.target.value}`);
+                            }} className={cn(inputClass, "block")} />
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Status{reqMark}</label>

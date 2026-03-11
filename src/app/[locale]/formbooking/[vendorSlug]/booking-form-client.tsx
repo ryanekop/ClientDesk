@@ -588,7 +588,7 @@ export function BookingFormClient({
             </h3>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
+              <div className="col-span-full space-y-1.5">
                 <label className="text-sm font-medium">
                   {t("tipeAcara")} <span className="text-red-500">*</span>
                 </label>
@@ -634,6 +634,11 @@ export function BookingFormClient({
                   className={inputClass}
                   required
                 />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">
+                  {t("jam") || "Jam"} <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="time"
                   value={sessionDate ? sessionDate.split("T")[1] || "10:00" : ""}
@@ -641,7 +646,7 @@ export function BookingFormClient({
                     const datePart = sessionDate?.split("T")[0] || "";
                     if (datePart) setSessionDate(`${datePart}T${e.target.value}`);
                   }}
-                  className={inputClass + " mt-2"}
+                  className={inputClass}
                 />
               </div>
             </div>
