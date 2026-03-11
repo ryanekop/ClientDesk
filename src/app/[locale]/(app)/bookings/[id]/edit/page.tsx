@@ -39,16 +39,19 @@ const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: st
     ],
     Wedding: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
+        { key: "instagram_pasangan", label: "Instagram Pasangan", labelEn: "Partner's Instagram", fullWidth: true },
         { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true, isNumeric: true },
         { key: "tempat_akad", label: "Lokasi Akad", labelEn: "Akad Venue", isLocation: true, required: true },
         { key: "tempat_resepsi", label: "Lokasi Resepsi", labelEn: "Reception Venue", isLocation: true, required: true },
     ],
     Akad: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
+        { key: "instagram_pasangan", label: "Instagram Pasangan", labelEn: "Partner's Instagram", fullWidth: true },
         { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true, isNumeric: true },
     ],
     Resepsi: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
+        { key: "instagram_pasangan", label: "Instagram Pasangan", labelEn: "Partner's Instagram", fullWidth: true },
         { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true, isNumeric: true },
     ],
     Maternity: [
@@ -66,10 +69,12 @@ const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: st
     Family: [{ key: "jumlah_anggota", label: "Jumlah Anggota", labelEn: "Members" }],
     Lamaran: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
+        { key: "instagram_pasangan", label: "Instagram Pasangan", labelEn: "Partner's Instagram", fullWidth: true },
         { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true, isNumeric: true },
     ],
     Prewedding: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
+        { key: "instagram_pasangan", label: "Instagram Pasangan", labelEn: "Partner's Instagram", fullWidth: true },
     ],
 };
 
@@ -132,6 +137,9 @@ export default function EditBookingPage() {
     const [notes, setNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
+    const [splitDates, setSplitDates] = React.useState(false);
+    const [akadDate, setAkadDate] = React.useState("");
+    const [resepsiDate, setResepsiDate] = React.useState("");
 
     const [showCustomServicePopup, setShowCustomServicePopup] = React.useState(false);
     const [customServiceName, setCustomServiceName] = React.useState("");
@@ -179,6 +187,12 @@ export default function EditBookingPage() {
                 setNotes(booking.notes || "");
                 setDriveFolderUrl(booking.drive_folder_url || "");
                 setExtraFields(booking.extra_fields || {});
+                // Pre-populate splitDates from extra_fields
+                if (booking.event_type === "Wedding" && booking.extra_fields?.tanggal_akad) {
+                    setSplitDates(true);
+                    setAkadDate(booking.extra_fields.tanggal_akad || "");
+                    setResepsiDate(booking.extra_fields.tanggal_resepsi || "");
+                }
             }
             setServices((svcs || []) as Service[]);
             setFreelancers((frees || []) as Freelance[]);
@@ -255,12 +269,30 @@ export default function EditBookingPage() {
         const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
         const tPrice = parseFloat(totalPrice.toString()) || 0;
         const dPaid = parseFloat(dpPaid.toString()) || 0;
+
+        // Determine session_date: if split, use earliest; merge extra_fields with dates
+        let finalSessionDate = sessionDate || null;
+        const mergedExtra = { ...extraFields };
+        if (eventType === "Wedding" && splitDates) {
+            mergedExtra.tanggal_akad = akadDate || "";
+            mergedExtra.tanggal_resepsi = resepsiDate || "";
+            if (akadDate && resepsiDate) {
+                finalSessionDate = akadDate < resepsiDate ? akadDate : resepsiDate;
+            } else {
+                finalSessionDate = akadDate || resepsiDate || null;
+            }
+        } else if (eventType === "Wedding" && !splitDates) {
+            // Toggled off: remove split date fields
+            delete mergedExtra.tanggal_akad;
+            delete mergedExtra.tanggal_resepsi;
+        }
+
         const { error } = await supabase.from("bookings").update({
             client_name: clientName,
             client_whatsapp: fullPhone,
             instagram: instagram || null,
             event_type: eventType,
-            session_date: sessionDate || null,
+            session_date: finalSessionDate,
             location: (eventType === "Wedding" ? (extraFields.tempat_akad || extraFields.tempat_resepsi || location) : location) || null,
             location_detail: locationDetail || null,
             service_id: serviceId || null,
@@ -271,7 +303,7 @@ export default function EditBookingPage() {
             status,
             notes: notes || null,
             drive_folder_url: driveFolderUrl || null,
-            extra_fields: Object.keys(extraFields).length > 0 ? extraFields : null,
+            extra_fields: Object.keys(mergedExtra).length > 0 ? mergedExtra : null,
             updated_at: new Date().toISOString(),
         }).eq("id", id);
         setSaving(false);
@@ -410,20 +442,69 @@ export default function EditBookingPage() {
                                 {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Tanggal{reqMark}</label>
-                            <input type="date" value={sessionDate ? sessionDate.split("T")[0] : ""} onChange={e => {
-                                const timePart = sessionDate?.split("T")[1] || "10:00";
-                                setSessionDate(e.target.value ? `${e.target.value}T${timePart}` : "");
-                            }} required className={cn(inputClass, "block")} />
-                        </div>
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Jam{reqMark}</label>
-                            <input type="time" value={sessionDate ? sessionDate.split("T")[1] || "10:00" : ""} onChange={e => {
-                                const datePart = sessionDate?.split("T")[0] || "";
-                                if (datePart) setSessionDate(`${datePart}T${e.target.value}`);
-                            }} className={cn(inputClass, "block")} />
-                        </div>
+
+                        {/* Wedding split dates toggle */}
+                        {eventType === "Wedding" && (
+                            <div className="col-span-full flex items-center gap-3">
+                                <button type="button" onClick={() => setSplitDates(!splitDates)}
+                                    className={cn("relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors", splitDates ? "bg-primary" : "bg-muted-foreground/30")}
+                                >
+                                    <span className={cn("pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform", splitDates ? "translate-x-4" : "translate-x-0")} />
+                                </button>
+                                <span className="text-xs font-medium text-muted-foreground">Akad &amp; Resepsi beda hari</span>
+                            </div>
+                        )}
+
+                        {eventType === "Wedding" && splitDates ? (
+                            <>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Tanggal Akad{reqMark}</label>
+                                    <input type="date" value={akadDate ? akadDate.split("T")[0] : ""} onChange={e => {
+                                        const timePart = akadDate?.split("T")[1] || "10:00";
+                                        setAkadDate(e.target.value ? `${e.target.value}T${timePart}` : "");
+                                    }} required className={cn(inputClass, "block")} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Jam Akad{reqMark}</label>
+                                    <input type="time" value={akadDate ? akadDate.split("T")[1] || "10:00" : ""} onChange={e => {
+                                        const datePart = akadDate?.split("T")[0] || "";
+                                        if (datePart) setAkadDate(`${datePart}T${e.target.value}`);
+                                    }} className={cn(inputClass, "block")} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Tanggal Resepsi{reqMark}</label>
+                                    <input type="date" value={resepsiDate ? resepsiDate.split("T")[0] : ""} onChange={e => {
+                                        const timePart = resepsiDate?.split("T")[1] || "10:00";
+                                        setResepsiDate(e.target.value ? `${e.target.value}T${timePart}` : "");
+                                    }} required className={cn(inputClass, "block")} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Jam Resepsi{reqMark}</label>
+                                    <input type="time" value={resepsiDate ? resepsiDate.split("T")[1] || "10:00" : ""} onChange={e => {
+                                        const datePart = resepsiDate?.split("T")[0] || "";
+                                        if (datePart) setResepsiDate(`${datePart}T${e.target.value}`);
+                                    }} className={cn(inputClass, "block")} />
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Tanggal{reqMark}</label>
+                                    <input type="date" value={sessionDate ? sessionDate.split("T")[0] : ""} onChange={e => {
+                                        const timePart = sessionDate?.split("T")[1] || "10:00";
+                                        setSessionDate(e.target.value ? `${e.target.value}T${timePart}` : "");
+                                    }} required className={cn(inputClass, "block")} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Jam{reqMark}</label>
+                                    <input type="time" value={sessionDate ? sessionDate.split("T")[1] || "10:00" : ""} onChange={e => {
+                                        const datePart = sessionDate?.split("T")[0] || "";
+                                        if (datePart) setSessionDate(`${datePart}T${e.target.value}`);
+                                    }} className={cn(inputClass, "block")} />
+                                </div>
+                            </>
+                        )}
+
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Status{reqMark}</label>
                             <select value={status} onChange={e => setStatus(e.target.value)} className={selectClass} required>

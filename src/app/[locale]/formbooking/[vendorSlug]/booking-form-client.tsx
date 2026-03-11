@@ -88,6 +88,7 @@ const EXTRA_FIELDS: Record<
       fullWidth: true,
       required: true,
     },
+    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
     { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true, isNumeric: true },
     {
       key: "tempat_akad",
@@ -109,6 +110,7 @@ const EXTRA_FIELDS: Record<
       fullWidth: true,
       required: true,
     },
+    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
     { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true, isNumeric: true },
   ],
   Resepsi: [
@@ -118,6 +120,7 @@ const EXTRA_FIELDS: Record<
       fullWidth: true,
       required: true,
     },
+    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
     { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true, isNumeric: true },
   ],
   Lamaran: [
@@ -127,6 +130,7 @@ const EXTRA_FIELDS: Record<
       fullWidth: true,
       required: true,
     },
+    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
     { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true, isNumeric: true },
   ],
   Prewedding: [
@@ -136,6 +140,7 @@ const EXTRA_FIELDS: Record<
       fullWidth: true,
       required: true,
     },
+    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
   ],
   Maternity: [
     { key: "usia_kehamilan", label: "Usia Kehamilan" },
@@ -227,6 +232,9 @@ export function BookingFormClient({
   const [notes, setNotes] = React.useState("");
   const [instagram, setInstagram] = React.useState("");
   const [extraData, setExtraData] = React.useState<Record<string, string>>({});
+  const [splitDates, setSplitDates] = React.useState(false);
+  const [akadDate, setAkadDate] = React.useState("");
+  const [resepsiDate, setResepsiDate] = React.useState("");
   const [proofFile, setProofFile] = React.useState<File | null>(null);
   const [proofPreview, setProofPreview] = React.useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = React.useState(false);
@@ -357,6 +365,18 @@ export function BookingFormClient({
     }
 
     try {
+      const mergedExtra = { ...extraData };
+      let finalSessionDate = sessionDate;
+      if (eventType === "Wedding" && splitDates) {
+          mergedExtra.tanggal_akad = akadDate || "";
+          mergedExtra.tanggal_resepsi = resepsiDate || "";
+          if (akadDate && resepsiDate) {
+              finalSessionDate = akadDate < resepsiDate ? akadDate : resepsiDate;
+          } else {
+              finalSessionDate = akadDate || resepsiDate || sessionDate;
+          }
+      }
+
       const res = await fetch("/api/public/booking", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -365,14 +385,14 @@ export function BookingFormClient({
           clientName,
           clientWhatsapp: fullPhone,
           eventType: eventType || null,
-          sessionDate,
+          sessionDate: finalSessionDate,
           serviceId,
           totalPrice: selectedService?.price || 0,
           dpPaid: dpValue,
           location: finalLocation || null,
           locationDetail: locationDetail || null,
           notes: notes || null,
-          extraData: Object.keys(extraData).length > 0 ? extraData : null,
+          extraData: Object.keys(mergedExtra).length > 0 ? mergedExtra : null,
           paymentProofUrl,
           instagram: instagram || null,
         }),
@@ -630,35 +650,72 @@ export function BookingFormClient({
                   ))}
                 </select>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">
-                  {t("jadwalSesi")} <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={sessionDate ? sessionDate.split("T")[0] : ""}
-                  onChange={(e) => {
-                    const timePart = sessionDate?.split("T")[1] || "10:00";
-                    setSessionDate(e.target.value ? `${e.target.value}T${timePart}` : "");
-                  }}
-                  className={inputClass}
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">
-                  {t("jam") || "Jam"} <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="time"
-                  value={sessionDate ? sessionDate.split("T")[1] || "10:00" : ""}
-                  onChange={(e) => {
-                    const datePart = sessionDate?.split("T")[0] || "";
-                    if (datePart) setSessionDate(`${datePart}T${e.target.value}`);
-                  }}
-                  className={inputClass}
-                />
-              </div>
+
+              {/* Wedding split dates toggle */}
+              {eventType === "Wedding" && (
+                <div className="col-span-full flex items-center gap-3">
+                  <button type="button" onClick={() => setSplitDates(!splitDates)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${splitDates ? "bg-primary" : "bg-gray-300"}`}
+                  >
+                    <span className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${splitDates ? "translate-x-4" : "translate-x-0"}`} />
+                  </button>
+                  <span className="text-sm font-medium">Akad &amp; Resepsi beda hari</span>
+                </div>
+              )}
+
+              {eventType === "Wedding" && splitDates ? (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Tanggal Akad <span className="text-red-500">*</span></label>
+                    <input type="date" value={akadDate ? akadDate.split("T")[0] : ""} onChange={e => {
+                      const timePart = akadDate?.split("T")[1] || "10:00";
+                      setAkadDate(e.target.value ? `${e.target.value}T${timePart}` : "");
+                    }} className={inputClass} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Jam Akad <span className="text-red-500">*</span></label>
+                    <input type="time" value={akadDate ? akadDate.split("T")[1] || "10:00" : ""} onChange={e => {
+                      const datePart = akadDate?.split("T")[0] || "";
+                      if (datePart) setAkadDate(`${datePart}T${e.target.value}`);
+                    }} className={inputClass} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Tanggal Resepsi <span className="text-red-500">*</span></label>
+                    <input type="date" value={resepsiDate ? resepsiDate.split("T")[0] : ""} onChange={e => {
+                      const timePart = resepsiDate?.split("T")[1] || "10:00";
+                      setResepsiDate(e.target.value ? `${e.target.value}T${timePart}` : "");
+                    }} className={inputClass} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Jam Resepsi <span className="text-red-500">*</span></label>
+                    <input type="time" value={resepsiDate ? resepsiDate.split("T")[1] || "10:00" : ""} onChange={e => {
+                      const datePart = resepsiDate?.split("T")[0] || "";
+                      if (datePart) setResepsiDate(`${datePart}T${e.target.value}`);
+                    }} className={inputClass} />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">
+                      {t("jadwalSesi")} <span className="text-red-500">*</span>
+                    </label>
+                    <input type="date" value={sessionDate ? sessionDate.split("T")[0] : ""} onChange={e => {
+                      const timePart = sessionDate?.split("T")[1] || "10:00";
+                      setSessionDate(e.target.value ? `${e.target.value}T${timePart}` : "");
+                    }} className={inputClass} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">
+                      {t("jam") || "Jam"} <span className="text-red-500">*</span>
+                    </label>
+                    <input type="time" value={sessionDate ? sessionDate.split("T")[1] || "10:00" : ""} onChange={e => {
+                      const datePart = sessionDate?.split("T")[0] || "";
+                      if (datePart) setSessionDate(`${datePart}T${e.target.value}`);
+                    }} className={inputClass} />
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Extra event fields */}

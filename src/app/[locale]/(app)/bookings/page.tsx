@@ -122,6 +122,7 @@ export default function BookingsPage() {
     const [packageFilter, setPackageFilter] = React.useState("All");
     const [freelanceFilter, setFreelanceFilter] = React.useState("All");
     const [monthFilter, setMonthFilter] = React.useState("All");
+    const [sortOrder, setSortOrder] = React.useState<"newest" | "oldest">("newest");
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
 
@@ -248,6 +249,11 @@ export default function BookingsPage() {
             return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}` === monthFilter;
         })();
         return matchesSearch && matchesStatus && matchesPackage && matchesFreelance && matchesMonth;
+    }).sort((a, b) => {
+        if (sortOrder === "newest") {
+            return (b.session_date || "").localeCompare(a.session_date || "");
+        }
+        return (a.session_date || "").localeCompare(b.session_date || "");
     });
 
     return (
@@ -310,6 +316,10 @@ export default function BookingsPage() {
                             const label = new Date(parseInt(y), parseInt(mo) - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
                             return <option key={m} value={m}>{label}</option>;
                         })}
+                    </select>
+                    <select value={sortOrder} onChange={e => setSortOrder(e.target.value as "newest" | "oldest")} className={selectFilterClass}>
+                        <option value="newest">Jadwal Terbaru</option>
+                        <option value="oldest">Jadwal Terlama</option>
                     </select>
                 </div>
                 <div className="relative">
