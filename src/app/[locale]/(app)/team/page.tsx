@@ -19,7 +19,7 @@ type Freelancer = {
     created_at: string;
 };
 
-const roleOptions = ["Photographer", "Videographer", "MUA", "Editor", "Asisten", "Lainnya"];
+const roleOptions = ["Photographer", "Videographer", "MUA", "WCC", "Editor", "Asisten", "Lainnya"];
 
 export default function TeamPage() {
     const supabase = createClient();

@@ -23,6 +23,7 @@ export type Service = {
   id: string;
   name: string;
   price: number;
+  original_price: number | null;
   description: string | null;
   event_types: string[] | null;
 };
@@ -60,6 +61,8 @@ const EVENT_TYPES = [
   "Newborn",
   "Family",
   "Komersil",
+  "Lamaran",
+  "Prewedding",
   "Lainnya",
 ];
 
@@ -105,6 +108,7 @@ const EXTRA_FIELDS: Record<
       fullWidth: true,
       required: true,
     },
+    { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true },
   ],
   Resepsi: [
     {
@@ -114,6 +118,23 @@ const EXTRA_FIELDS: Record<
       required: true,
     },
     { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true },
+  ],
+  Lamaran: [
+    {
+      key: "nama_pasangan",
+      label: "Nama Pasangan",
+      fullWidth: true,
+      required: true,
+    },
+    { key: "jumlah_tamu", label: "Estimasi Tamu", fullWidth: true },
+  ],
+  Prewedding: [
+    {
+      key: "nama_pasangan",
+      label: "Nama Pasangan",
+      fullWidth: true,
+      required: true,
+    },
   ],
   Maternity: [{ key: "usia_kandungan", label: "Usia Kandungan (bulan)" }],
   Newborn: [{ key: "nama_bayi", label: "Nama Bayi" }],
@@ -602,11 +623,23 @@ export function BookingFormClient({
                   {t("jadwalSesi")} <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="datetime-local"
-                  value={sessionDate}
-                  onChange={(e) => setSessionDate(e.target.value)}
+                  type="date"
+                  value={sessionDate ? sessionDate.split("T")[0] : ""}
+                  onChange={(e) => {
+                    const timePart = sessionDate?.split("T")[1] || "10:00";
+                    setSessionDate(e.target.value ? `${e.target.value}T${timePart}` : "");
+                  }}
                   className={inputClass}
                   required
+                />
+                <input
+                  type="time"
+                  value={sessionDate ? sessionDate.split("T")[1] || "10:00" : ""}
+                  onChange={(e) => {
+                    const datePart = sessionDate?.split("T")[0] || "";
+                    if (datePart) setSessionDate(`${datePart}T${e.target.value}`);
+                  }}
+                  className={inputClass + " mt-2"}
                 />
               </div>
             </div>
@@ -686,7 +719,7 @@ export function BookingFormClient({
                 <option value="">{t("pilihPaket")}</option>
                 {filteredServices.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name} — {formatCurrency(s.price)}
+                    {s.name} — {formatCurrency(s.price)}{s.original_price && s.original_price > s.price ? ` (was ${formatCurrency(s.original_price)})` : ""}
                   </option>
                 ))}
               </select>
@@ -701,6 +734,11 @@ export function BookingFormClient({
                   <span className="text-lg font-bold text-primary">
                     {formatCurrency(selectedService.price)}
                   </span>
+                  {selectedService.original_price && selectedService.original_price > selectedService.price && (
+                    <span className="text-sm text-muted-foreground line-through ml-2">
+                      {formatCurrency(selectedService.original_price)}
+                    </span>
+                  )}
                 </div>
                 {selectedService.description && (
                   <p className="text-xs text-muted-foreground">

@@ -14,13 +14,14 @@ type Service = {
     name: string;
     description: string | null;
     price: number;
+    original_price: number | null;
     duration_minutes: number | null;
     is_active: boolean;
     created_at: string;
     event_types: string[] | null;
 };
 
-const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
+const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Lamaran", "Prewedding", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
 export default function ServicesPage() {
     const supabase = createClient();
@@ -60,6 +61,7 @@ export default function ServicesPage() {
             name: formData.get("name") as string,
             description: formData.get("description") as string || null,
             price: parseFloat(formData.get("price") as string) || 0,
+            original_price: parseFloat(formData.get("original_price") as string) || null,
             duration_minutes: parseInt(formData.get("duration_hours") as string || "0") * 60 + parseInt(formData.get("duration_mins") as string || "0"),
             is_active: true,
             event_types: formData.getAll("event_types").length > 0 ? formData.getAll("event_types") as string[] : null,
@@ -80,6 +82,7 @@ export default function ServicesPage() {
                 name: formData.get("name") as string,
                 description: formData.get("description") as string || null,
                 price: parseFloat(formData.get("price") as string) || 0,
+                original_price: parseFloat(formData.get("original_price") as string) || null,
                 duration_minutes: parseInt(formData.get("duration_hours") as string || "0") * 60 + parseInt(formData.get("duration_mins") as string || "0"),
                 event_types: formData.getAll("event_types").length > 0 ? formData.getAll("event_types") as string[] : null,
             })
@@ -141,6 +144,11 @@ export default function ServicesPage() {
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">{t("harga")}</label>
                                 <input name="price" type="number" min="0" step="1000" required placeholder="2500000"
+                                    className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Harga Coret <span className="text-xs text-muted-foreground font-normal">(opsional)</span></label>
+                                <input name="original_price" type="number" min="0" step="1000" placeholder="3500000"
                                     className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
                             </div>
                             <div className="space-y-2">
@@ -215,6 +223,9 @@ export default function ServicesPage() {
 
                                 <div className="flex items-center gap-3 mt-3">
                                     <div className="text-xl font-bold">{formatCurrency(service.price)}</div>
+                                    {service.original_price && service.original_price > service.price && (
+                                        <div className="text-sm text-muted-foreground line-through">{formatCurrency(service.original_price)}</div>
+                                    )}
                                     {service.duration_minutes && (
                                         <span className="text-xs text-muted-foreground flex items-center gap-1">
                                             <Clock className="w-3 h-3" />
@@ -285,6 +296,11 @@ export default function ServicesPage() {
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">{t("harga")}</label>
                                 <input name="price" type="number" min="0" step="1000" required defaultValue={editingService.price}
+                                    className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Harga Coret <span className="text-xs text-muted-foreground font-normal">(opsional)</span></label>
+                                <input name="original_price" type="number" min="0" step="1000" defaultValue={editingService.original_price || ""}
                                     className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
                             </div>
                             <div className="space-y-2">

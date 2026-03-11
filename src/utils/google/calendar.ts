@@ -36,12 +36,18 @@ export async function pushEventToCalendar(
         description?: string;
         start: Date;
         end: Date;
+        attendees?: string[]; // email addresses to invite
     }
 ) {
     const calendar = await getCalendarClient(accessToken, refreshToken);
 
+    const attendeesList = (event.attendees || [])
+        .filter(email => email && email.includes("@"))
+        .map(email => ({ email }));
+
     const res = await calendar.events.insert({
         calendarId: "primary",
+        sendUpdates: attendeesList.length > 0 ? "all" : "none",
         requestBody: {
             summary: event.summary,
             description: event.description || "",
@@ -53,6 +59,7 @@ export async function pushEventToCalendar(
                 dateTime: event.end.toISOString(),
                 timeZone: "Asia/Jakarta",
             },
+            ...(attendeesList.length > 0 ? { attendees: attendeesList } : {}),
         },
     });
 

@@ -93,7 +93,7 @@ export default function TrackingPage() {
                 {/* Header */}
                 <div className="text-center space-y-2">
                     <h1 className="text-xl font-bold tracking-tight">{vendorName || "Studio"}</h1>
-                    <p className="text-muted-foreground text-sm">{t("trackingTitle")}</p>
+                    <p className="text-muted-foreground text-sm">{t("trackingTitle")} - {booking.clientName}</p>
                 </div>
 
                 {/* Booking Info Card */}

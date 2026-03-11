@@ -18,7 +18,7 @@ const COUNTRY_CODES = [
     { code: "+84", flag: "🇻🇳", name: "Vietnam" },
 ];
 
-const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
+const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Lamaran", "Prewedding", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
 type Profile = {
     id: string;
@@ -336,6 +336,7 @@ export default function SettingsPage() {
         freelancer_name: "Andi",
         event_type: selectedEventType,
         location: "Jakarta Convention Center",
+        invoice_url: "https://clientdesk.ryanekoapp.web.id/api/public/invoice?code=INV-100120250001",
     };
 
     function renderPreview(content: string) {
@@ -390,10 +391,28 @@ export default function SettingsPage() {
                                     key={v}
                                     type="button"
                                     onClick={() => {
-                                        if (currentLang === "id") {
-                                            setTemplateContents(prev => ({ ...prev, [contentKey]: (prev[contentKey] || "") + v }));
+                                        const textarea = document.querySelector(`textarea[data-template-key="${contentKey}"]`) as HTMLTextAreaElement | null;
+                                        if (textarea) {
+                                            const start = textarea.selectionStart || 0;
+                                            const end = textarea.selectionEnd || 0;
+                                            const currentContent = currentLang === "id" ? (templateContents[contentKey] || "") : (templateContentsEn[contentKey] || "");
+                                            const newContent = currentContent.substring(0, start) + v + currentContent.substring(end);
+                                            if (currentLang === "id") {
+                                                setTemplateContents(prev => ({ ...prev, [contentKey]: newContent }));
+                                            } else {
+                                                setTemplateContentsEn(prev => ({ ...prev, [contentKey]: newContent }));
+                                            }
+                                            // Restore cursor position after React re-render
+                                            setTimeout(() => {
+                                                textarea.focus();
+                                                textarea.selectionStart = textarea.selectionEnd = start + v.length;
+                                            }, 0);
                                         } else {
-                                            setTemplateContentsEn(prev => ({ ...prev, [contentKey]: (prev[contentKey] || "") + v }));
+                                            if (currentLang === "id") {
+                                                setTemplateContents(prev => ({ ...prev, [contentKey]: (prev[contentKey] || "") + v }));
+                                            } else {
+                                                setTemplateContentsEn(prev => ({ ...prev, [contentKey]: (prev[contentKey] || "") + v }));
+                                            }
                                         }
                                     }}
                                     className="text-[11px] px-2 py-1 rounded-md border bg-muted/50 text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
@@ -428,8 +447,8 @@ export default function SettingsPage() {
                         </button>
                     </div>
 
-                    {/* Textarea */}
                     <textarea
+                        data-template-key={contentKey}
                         value={content}
                         onChange={e => {
                             if (currentLang === "id") {

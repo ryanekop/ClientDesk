@@ -165,6 +165,22 @@ export async function POST(request: NextRequest) {
                         .from("bookings")
                         .update({ payment_proof_url: uploaded.fileUrl })
                         .eq("id", booking.id);
+
+                    // Delete from Supabase Storage to save quota
+                    if (paymentProofUrl && !paymentProofUrl.startsWith("data:")) {
+                        try {
+                            // Extract path from Supabase URL: .../storage/v1/object/public/payment-proofs/path/file.jpg
+                            const urlObj = new URL(paymentProofUrl);
+                            const pathMatch = urlObj.pathname.match(/\/storage\/v1\/object\/public\/payment-proofs\/(.+)/);
+                            if (pathMatch) {
+                                await supabaseAdmin.storage
+                                    .from("payment-proofs")
+                                    .remove([pathMatch[1]]);
+                            }
+                        } catch {
+                            // Cleanup is best-effort
+                        }
+                    }
                 }
             } catch {
                 // Silently ignore — Drive upload is best-effort

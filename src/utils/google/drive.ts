@@ -135,6 +135,21 @@ export async function uploadFileToDrive(
         fields: "id, webViewLink, webContentLink",
     });
 
+    // Make file publicly viewable (anyone with link)
+    if (res.data.id) {
+        try {
+            await drive.permissions.create({
+                fileId: res.data.id,
+                requestBody: {
+                    role: "reader",
+                    type: "anyone",
+                },
+            });
+        } catch {
+            // Permission setting is best-effort
+        }
+    }
+
     return {
         fileId: res.data.id,
         fileUrl: res.data.webViewLink,

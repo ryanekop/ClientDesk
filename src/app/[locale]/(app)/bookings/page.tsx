@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, AlertTriangle, X, Download, ExternalLink } from "lucide-react";
+import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, AlertTriangle, X, Download, ExternalLink, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -31,8 +31,10 @@ type Booking = {
     location: string | null;
     notes: string | null;
     services: { name: string } | null;
+    event_type: string | null;
     freelancers: FreelancerInfo | null; // old single FK (backward compat)
     booking_freelancers: FreelancerInfo[]; // new junction data
+    payment_proof_url: string | null;
 };
 
 const STATUS_OPTS = ["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"];
@@ -47,7 +49,7 @@ type SavedTemplate = {
     event_type: string | null;
 };
 
-function generateWATemplate(booking: Booking, locale: string, savedTemplates: SavedTemplate[], freelancerName?: string) {
+function generateWATemplate(booking: Booking, locale: string, savedTemplates: SavedTemplate[], studioName: string, freelancerName?: string) {
     const sessionStr = booking.session_date ? new Date(booking.session_date).toLocaleDateString(locale === "en" ? "en-US" : "id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
     const serviceName = booking.services?.name || "-";
 
@@ -60,9 +62,9 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
         service_name: serviceName,
         total_price: new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(booking.total_price || 0),
         dp_paid: new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(booking.dp_paid || 0),
-        studio_name: "",
+        studio_name: studioName || "",
         freelancer_name: freelancerName || "",
-        event_type: serviceName,
+        event_type: booking.event_type || "-",
         location: booking.location || "-",
         invoice_url: `${siteUrl}/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}`,
     };
@@ -103,6 +105,7 @@ export default function BookingsPage() {
     const [freelancerNames, setFreelancerNames] = React.useState<string[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
+    const [studioName, setStudioName] = React.useState("");
 
     // Filters & Search
     const [searchQuery, setSearchQuery] = React.useState("");
@@ -153,9 +156,13 @@ export default function BookingsPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
+        // Fetch studio name for WA templates
+        const { data: profile } = await supabase.from("profiles").select("studio_name").eq("id", user.id).single();
+        if (profile?.studio_name) setStudioName(profile.studio_name);
+
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, notes, services(name), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, notes, payment_proof_url, event_type, services(name), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
@@ -195,12 +202,12 @@ export default function BookingsPage() {
     function sendWhatsAppClient(booking: Booking) {
         if (!booking.client_whatsapp) { alert(tb("waNotAvailable")); return; }
         const cleaned = booking.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
-        const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates));
+        const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName));
         window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
     }
 
     function copyTemplate(booking: Booking) {
-        const template = generateWATemplate(booking, locale, savedTemplates);
+        const template = generateWATemplate(booking, locale, savedTemplates, studioName);
         navigator.clipboard.writeText(template);
         setCopiedId(booking.id);
         setTimeout(() => setCopiedId(null), 2000);
@@ -339,12 +346,17 @@ export default function BookingsPage() {
                                         else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
                                             const f = booking.booking_freelancers[0];
                                             const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                            const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, f.name));
+                                            const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName, f.name));
                                             window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
                                         } else { sendWhatsAppClient(booking); }
                                     }}>
                                     <MessageCircle className="w-4 h-4" />
                                 </Button>
+                                {booking.payment_proof_url && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-500" title="Bukti Transfer" onClick={() => window.open(booking.payment_proof_url!, "_blank")}>
+                                        <Receipt className="w-4 h-4" />
+                                    </Button>
+                                )}
                                 <Link href={`/bookings/${booking.id}`}><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500"><Info className="w-4 h-4" /></Button></Link>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-500" onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
                                     <RefreshCcw className="w-4 h-4" />
@@ -432,7 +444,7 @@ export default function BookingsPage() {
                                                         } else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
                                                             const f = booking.booking_freelancers[0];
                                                             const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                                            const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, f.name));
+                                                            const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName, f.name));
                                                             window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
                                                         } else {
                                                             sendWhatsAppClient(booking);
@@ -440,6 +452,12 @@ export default function BookingsPage() {
                                                     }}>
                                                     <MessageCircle className="w-4 h-4" />
                                                 </Button>
+                                                {/* Bukti Transfer */}
+                                                {booking.payment_proof_url && (
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-500 hover:text-amber-600" title="Bukti Transfer" onClick={() => window.open(booking.payment_proof_url!, "_blank")}>
+                                                        <Receipt className="w-4 h-4" />
+                                                    </Button>
+                                                )}
                                                 {/* 3. Drive Folder */}
                                                 {booking.drive_folder_url ? (
                                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" title={tb("openDrive")} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
@@ -550,7 +568,7 @@ export default function BookingsPage() {
                                 onClick={() => {
                                     if (!f.whatsapp_number) return;
                                     const cleaned = f.whatsapp_number.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                    const msg = waPopup.booking ? encodeURIComponent(generateWATemplate(waPopup.booking, locale, savedTemplates, f.name)) : encodeURIComponent(`Halo ${f.name}!`);
+                                    const msg = waPopup.booking ? encodeURIComponent(generateWATemplate(waPopup.booking, locale, savedTemplates, studioName, f.name)) : encodeURIComponent(`Halo ${f.name}!`);
                                     window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
                                     setWaPopup({ open: false, freelancers: [], booking: null });
                                 }}

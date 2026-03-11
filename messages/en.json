@@ -654,6 +654,8 @@
         "eventWedding": "Wedding",
         "eventAkad": "Ceremony",
         "eventResepsi": "Reception",
+        "eventLamaran": "Engagement",
+        "eventPrewedding": "Prewedding",
         "eventWisuda": "Graduation",
         "eventMaternity": "Maternity",
         "eventNewborn": "Newborn",

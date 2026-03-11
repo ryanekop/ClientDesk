@@ -15,7 +15,7 @@ const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-in
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
 const selectClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat pr-8";
 
-const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
+const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Lamaran", "Prewedding", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
 const COUNTRY_CODES = [
     { code: "+62", flag: "🇮🇩", name: "Indonesia" },
@@ -42,7 +42,10 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string
         { key: "tempat_akad", label: "Lokasi Akad", labelEn: "Akad Venue", isLocation: true, required: true },
         { key: "tempat_resepsi", label: "Lokasi Resepsi", labelEn: "Reception Venue", isLocation: true, required: true },
     ],
-    Akad: [{ key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true }],
+    Akad: [
+        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
+        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true },
+    ],
     Resepsi: [
         { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
         { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true },
@@ -60,6 +63,13 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string
         { key: "tipe_konten", label: "Tipe Konten", labelEn: "Content Type" },
     ],
     Family: [{ key: "jumlah_anggota", label: "Jumlah Anggota", labelEn: "Number of Members" }],
+    Lamaran: [
+        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
+        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true },
+    ],
+    Prewedding: [
+        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
+    ],
 };
 
 type Service = { id: string; name: string; price: number };
@@ -98,6 +108,7 @@ export default function NewBookingPage() {
     const locale = useLocale();
     const supabase = createClient();
     const [saving, setSaving] = React.useState(false);
+    const [calendarWarning, setCalendarWarning] = React.useState<string | null>(null);
     const [services, setServices] = React.useState<Service[]>([]);
     const [freelancers, setFreelancers] = React.useState<Freelance[]>([]);
 
@@ -136,7 +147,7 @@ export default function NewBookingPage() {
             if (!user) return;
             const [{ data: svcs }, { data: frees }] = await Promise.all([
                 supabase.from("services").select("id, name, price").eq("user_id", user.id).eq("is_active", true),
-                supabase.from("freelance").select("id, name").eq("user_id", user.id).eq("status", "active"),
+                supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
             ]);
             setServices((svcs || []) as Service[]);
             setFreelancers((frees || []) as Freelance[]);
@@ -239,6 +250,43 @@ export default function NewBookingPage() {
                 await supabase.from("booking_freelance").insert(
                     selectedFreelancerIds.map(fid => ({ booking_id: booking.id, freelance_id: fid }))
                 );
+
+                // Send calendar invites to assigned freelancers
+                try {
+                    const selectedFreelancerEmails = freelancers
+                        .filter(f => selectedFreelancerIds.includes(f.id))
+                        .map(f => (f as any).google_email)
+                        .filter(Boolean);
+                    if (!sessionDate) {
+                        setCalendarWarning("⚠️ Calendar invite tidak terkirim: jadwal sesi belum diisi");
+                        setTimeout(() => setCalendarWarning(null), 5000);
+                    } else if (selectedFreelancerEmails.length === 0) {
+                        const noEmailNames = freelancers
+                            .filter(f => selectedFreelancerIds.includes(f.id) && !(f as any).google_email)
+                            .map(f => f.name);
+                        if (noEmailNames.length > 0) {
+                            setCalendarWarning(`⚠️ Calendar invite tidak terkirim: ${noEmailNames.join(", ")} belum punya Google Email`);
+                            setTimeout(() => setCalendarWarning(null), 5000);
+                        }
+                    } else {
+                        const res = await fetch("/api/google/calendar-invite", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                bookingId: booking.id,
+                                attendeeEmails: selectedFreelancerEmails,
+                            }),
+                        });
+                        if (!res.ok) {
+                            const err = await res.json().catch(() => ({}));
+                            setCalendarWarning(`⚠️ Calendar invite gagal: ${err.error || "Google Calendar belum terkoneksi"}`);
+                            setTimeout(() => setCalendarWarning(null), 5000);
+                        }
+                    }
+                } catch {
+                    setCalendarWarning("⚠️ Calendar invite gagal terkirim");
+                    setTimeout(() => setCalendarWarning(null), 5000);
+                }
             }
 
             // Auto-sync to Google Calendar (fire-and-forget)
@@ -268,6 +316,15 @@ export default function NewBookingPage() {
     const reqMark = <span className="text-red-500 ml-0.5">*</span>;
 
     return (
+        <>
+            {calendarWarning && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="flex items-center gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 px-4 py-3 shadow-lg text-sm text-amber-800 dark:text-amber-200 max-w-md">
+                        <span>{calendarWarning}</span>
+                        <button onClick={() => setCalendarWarning(null)} className="ml-2 text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 shrink-0 cursor-pointer">✕</button>
+                    </div>
+                </div>
+            )}
         <div className="max-w-4xl mx-auto space-y-6 pb-20">
             <div className="flex items-center gap-3">
                 <Link href="/bookings">
@@ -357,7 +414,7 @@ export default function NewBookingPage() {
                                 <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi sesi foto..." />
                             </div>
                         )}
-                        <div className="space-y-1.5">
+                        <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Paket / Layanan{reqMark}</label>
                             <select value={selectedServiceId} onChange={handleServiceChange} className={selectClass} required>
                                 <option value="">-- Pilih Paket --</option>
@@ -524,5 +581,6 @@ export default function NewBookingPage() {
                 </DialogContent>
             </Dialog>
         </div>
+        </>
     );
 }
