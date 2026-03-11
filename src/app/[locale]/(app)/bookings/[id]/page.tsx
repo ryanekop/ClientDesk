@@ -107,6 +107,7 @@ export default function BookingDetailPage() {
     const [savingStatus, setSavingStatus] = React.useState(false);
     const [statusSaved, setStatusSaved] = React.useState(false);
     const [copiedTrack, setCopiedTrack] = React.useState(false);
+    const [studioName, setStudioName] = React.useState("");
     const [savedTemplates, setSavedTemplates] = React.useState<{ id: string; type: string; content: string; content_en: string; event_type: string | null }[]>([]);
 
     React.useEffect(() => {
@@ -118,7 +119,7 @@ export default function BookingDetailPage() {
                 supabase.from("bookings")
                     .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
-                supabase.from("profiles").select("google_drive_access_token").eq("id", user.id).single(),
+                supabase.from("profiles").select("google_drive_access_token, studio_name").eq("id", user.id).single(),
             ]);
             // Normalize freelancers from junction table
             const normalized = data ? {
@@ -140,6 +141,7 @@ export default function BookingDetailPage() {
                 }
             }
             if (profile?.google_drive_access_token) setIsDriveConnected(true);
+            if (profile?.studio_name) setStudioName(profile.studio_name);
             setLoading(false);
         }
 
@@ -197,9 +199,10 @@ export default function BookingDetailPage() {
                     service_name: booking?.services?.name || "-",
                     total_price: formatCurrency(booking?.total_price || 0),
                     dp_paid: formatCurrency(booking?.dp_paid || 0),
-                    studio_name: "",
+                    studio_name: studioName || "",
                     event_type: booking?.event_type || "-",
                     location: booking?.location || "-",
+                    invoice_url: `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking?.booking_code || "")}`,
                 };
                 msg = content.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || `{{${key}}}`);
             } else {
@@ -227,7 +230,7 @@ export default function BookingDetailPage() {
                     booking_code: booking?.booking_code || "",
                     session_date: sessionStr,
                     service_name: booking?.services?.name || "-",
-                    studio_name: "",
+                    studio_name: studioName || "",
                     event_type: booking?.event_type || "-",
                     location: booking?.location || "-",
                 };
