@@ -11,11 +11,13 @@ import {
   Crown,
   Settings,
   LogOut,
+  Megaphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, usePathname } from "@/i18n/routing";
 import { createClient } from "@/utils/supabase/client";
 import { signOut } from "@/app/actions/auth";
+import { ChangelogModal, useChangelogUnread } from "@/components/changelog-modal";
 
 function TopbarClock() {
   const [now, setNow] = React.useState(new Date());
@@ -58,6 +60,8 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   const ref = React.useRef<HTMLDivElement>(null);
   const t = useTranslations("Topbar");
   const pathname = usePathname();
+  const [changelogOpen, setChangelogOpen] = React.useState(false);
+  const { hasUnread, checkUnread } = useChangelogUnread();
 
   const pageTitle = React.useMemo(() => {
     if (pathname.startsWith("/bookings/new")) return "Buat Booking";
@@ -147,6 +151,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   ];
 
   return (
+    <>
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between shadow-[0_1px_5px_rgba(0,0,0,0.02)] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
       <div className="flex items-center gap-4">
         <Button
@@ -222,8 +227,21 @@ export function Topbar({ onMenuClick }: TopbarProps) {
               ))}
             </div>
 
-            {/* Logout */}
+            {/* Changelog + Logout */}
             <div className="border-t py-1">
+              <button
+                onClick={() => {
+                  setProfileOpen(false);
+                  setChangelogOpen(true);
+                }}
+                className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted/50 transition-colors w-full cursor-pointer"
+              >
+                <Megaphone className="w-4 h-4 text-muted-foreground" />
+                Log Perubahan
+                {hasUnread && (
+                  <span className="ml-auto w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                )}
+              </button>
               <button
                 onClick={() => signOut()}
                 className="flex items-center gap-3 px-4 py-2 text-sm text-red-500 hover:bg-muted/50 transition-colors w-full cursor-pointer"
@@ -236,5 +254,15 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         </div>
       </div>
     </header>
+
+    {/* Changelog Modal */}
+    <ChangelogModal
+      open={changelogOpen}
+      onClose={() => {
+        setChangelogOpen(false);
+        checkUnread();
+      }}
+    />
+    </>
   );
 }
