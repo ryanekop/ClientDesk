@@ -25,7 +25,19 @@ export async function getDriveClient(accessToken: string, refreshToken: string) 
         access_token: accessToken,
         refresh_token: refreshToken,
     });
-    return google.drive({ version: "v3", auth: oauth2Client });
+
+    // Force refresh to ensure we always have a valid token
+    try {
+        const { credentials } = await oauth2Client.refreshAccessToken();
+        oauth2Client.setCredentials(credentials);
+    } catch {
+        // If refresh fails, try with existing token (it may still be valid)
+    }
+
+    return {
+        drive: google.drive({ version: "v3", auth: oauth2Client }),
+        newAccessToken: oauth2Client.credentials.access_token || accessToken,
+    };
 }
 
 /**
@@ -37,7 +49,7 @@ export async function listDriveFolder(
     refreshToken: string,
     parentId: string = "root"
 ) {
-    const drive = await getDriveClient(accessToken, refreshToken);
+    const { drive } = await getDriveClient(accessToken, refreshToken);
     const res = await drive.files.list({
         q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
         fields: "files(id, name, webViewLink, createdTime)",
@@ -57,7 +69,7 @@ export async function createBookingFolder(
     folderName: string,
     parentFolderId?: string
 ) {
-    const drive = await getDriveClient(accessToken, refreshToken);
+    const { drive } = await getDriveClient(accessToken, refreshToken);
 
     const fileMetadata: any = {
         name: folderName,
@@ -88,7 +100,7 @@ export async function findOrCreateFolder(
     folderName: string,
     parentId: string = "root"
 ) {
-    const drive = await getDriveClient(accessToken, refreshToken);
+    const { drive } = await getDriveClient(accessToken, refreshToken);
 
     // Search for existing folder
     const search = await drive.files.list({
@@ -120,7 +132,7 @@ export async function uploadFileToDrive(
     fileBuffer: Buffer,
     parentFolderId: string
 ) {
-    const drive = await getDriveClient(accessToken, refreshToken);
+    const { drive } = await getDriveClient(accessToken, refreshToken);
     const { Readable } = require("stream");
 
     const res = await drive.files.create({
@@ -155,4 +167,56 @@ export async function uploadFileToDrive(
         fileUrl: res.data.webViewLink,
         downloadUrl: res.data.webContentLink,
     };
+}
+
+/**
+ * Creates a chain of nested folders.
+ * e.g. pathParts = ["Data Booking Client Desk", "Client A", "File Client"]
+ * Returns the last (deepest) folder's id and url.
+ */
+export async function findOrCreateNestedPath(
+    accessToken: string,
+    refreshToken: string,
+    pathParts: string[]
+) {
+    let parentId = "root";
+    let folderUrl: string | null = null;
+    let folderId = "";
+
+    for (const part of pathParts) {
+        const result = await findOrCreateFolder(accessToken, refreshToken, part, parentId);
+        parentId = result.folderId ?? "";
+        folderId = result.folderId ?? "";
+        folderUrl = result.folderUrl ?? null;
+    }
+
+    return { folderId, folderUrl };
+}
+
+/**
+ * Applies template variables to a folder name format string.
+ * Supported variables: {client_name}, {booking_code}, {event_type}
+ */
+export function applyFolderTemplate(
+    template: string,
+    vars: { client_name?: string; booking_code?: string; event_type?: string }
+): string {
+    let result = template;
+    result = result.replace(/\{client_name\}/gi, vars.client_name || "Client");
+    result = result.replace(/\{booking_code\}/gi, vars.booking_code || "");
+    result = result.replace(/\{event_type\}/gi, vars.event_type || "");
+    return result.trim() || vars.client_name || "Client";
+}
+
+/**
+ * Deletes a file from Google Drive by file ID.
+ */
+export async function deleteFileFromDrive(
+    accessToken: string,
+    refreshToken: string,
+    fileId: string
+) {
+    const { drive } = await getDriveClient(accessToken, refreshToken);
+    await drive.files.delete({ fileId });
+    return { success: true };
 }

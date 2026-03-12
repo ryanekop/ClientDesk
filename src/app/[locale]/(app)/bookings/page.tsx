@@ -122,6 +122,7 @@ export default function BookingsPage() {
     const [packageFilter, setPackageFilter] = React.useState("All");
     const [freelanceFilter, setFreelanceFilter] = React.useState("All");
     const [monthFilter, setMonthFilter] = React.useState("All");
+    const [eventTypeFilter, setEventTypeFilter] = React.useState("All");
     const [sortOrder, setSortOrder] = React.useState<"newest" | "oldest">("newest");
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
@@ -248,7 +249,8 @@ export default function BookingsPage() {
             const d = new Date(b.session_date);
             return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}` === monthFilter;
         })();
-        return matchesSearch && matchesStatus && matchesPackage && matchesFreelance && matchesMonth;
+        const matchesEventType = eventTypeFilter === "All" || b.event_type === eventTypeFilter;
+        return matchesSearch && matchesStatus && matchesPackage && matchesFreelance && matchesMonth && matchesEventType;
     }).sort((a, b) => {
         if (sortOrder === "newest") {
             return (b.session_date || "").localeCompare(a.session_date || "");
@@ -321,6 +323,20 @@ export default function BookingsPage() {
                         <option value="newest">Jadwal Terbaru</option>
                         <option value="oldest">Jadwal Terlama</option>
                     </select>
+                    <select value={eventTypeFilter} onChange={e => setEventTypeFilter(e.target.value)} className={selectFilterClass}>
+                        <option value="All">Semua Acara</option>
+                        {Array.from(new Set(bookings.map(b => b.event_type).filter(Boolean))).sort().map(t => (
+                            <option key={t} value={t!}>{t}</option>
+                        ))}
+                    </select>
+                    {(statusFilter !== "All" || packageFilter !== "All" || freelanceFilter !== "All" || monthFilter !== "All" || eventTypeFilter !== "All" || searchQuery) && (
+                        <button
+                            onClick={() => { setStatusFilter("All"); setPackageFilter("All"); setFreelanceFilter("All"); setMonthFilter("All"); setEventTypeFilter("All"); setSearchQuery(""); setSortOrder("newest"); }}
+                            className="h-9 px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                            <X className="w-3.5 h-3.5" /> Reset
+                        </button>
+                    )}
                 </div>
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

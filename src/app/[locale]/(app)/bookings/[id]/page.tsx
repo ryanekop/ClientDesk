@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink } from "lucide-react";
+import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink, Upload, FileText, Trash2, AlertCircle, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
 import { useLocale } from "next-intl";
@@ -115,6 +116,14 @@ export default function BookingDetailPage() {
     const [studioName, setStudioName] = React.useState("");
     const [savedTemplates, setSavedTemplates] = React.useState<{ id: string; type: string; content: string; content_en: string; event_type: string | null }[]>([]);
 
+    // File upload states
+    const [uploadingFile, setUploadingFile] = React.useState(false);
+    const [uploadedFiles, setUploadedFiles] = React.useState<{ name: string; url: string; fileId?: string }[]>([]);
+    const [deletingFileIdx, setDeletingFileIdx] = React.useState<number | null>(null);
+    const [deleteFileModal, setDeleteFileModal] = React.useState<{ open: boolean; idx: number | null }>({ open: false, idx: null });
+    const [waFreelancePopup, setWaFreelancePopup] = React.useState(false);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
     React.useEffect(() => {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
@@ -122,7 +131,7 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token, studio_name").eq("id", user.id).single(),
             ]);
@@ -236,6 +245,7 @@ export default function BookingDetailPage() {
                 const vars: Record<string, string> = {
                     freelancer_name: fname,
                     client_name: booking?.client_name || "",
+                    client_whatsapp: booking?.client_whatsapp || "",
                     booking_code: booking?.booking_code || "",
                     session_date: sessionStr,
                     service_name: booking?.services?.name || "-",
@@ -274,6 +284,61 @@ export default function BookingDetailPage() {
         setCreatingFolder(false);
     }
 
+    async function handleUploadClientFile(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file || !booking) return;
+        setUploadingFile(true);
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("bookingId", booking.id);
+            formData.append("clientName", booking.client_name);
+            formData.append("bookingCode", booking.booking_code);
+            formData.append("eventType", booking.event_type || "");
+            const res = await fetch("/api/google/drive/upload-client-file", {
+                method: "POST",
+                body: formData,
+            });
+            const result = await res.json();
+            if (result.success && result.fileUrl) {
+                setUploadedFiles(prev => [...prev, { name: result.fileName, url: result.fileUrl, fileId: result.fileId }]);
+                // Update drive_folder_url if it was set by the API
+                if (!booking.drive_folder_url && result.folderUrl) {
+                    setBooking(prev => prev ? { ...prev, drive_folder_url: result.folderUrl } : prev);
+                }
+            } else {
+                alert(result.error || "Gagal upload file.");
+            }
+        } catch {
+            alert("Gagal upload file.");
+        }
+        setUploadingFile(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+
+    async function handleDeleteClientFile(idx: number) {
+        const file = uploadedFiles[idx];
+        if (!file?.fileId) return;
+        setDeletingFileIdx(idx);
+        setDeleteFileModal({ open: false, idx: null });
+        try {
+            const res = await fetch("/api/google/drive/delete-file", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ fileId: file.fileId }),
+            });
+            const result = await res.json();
+            if (result.success) {
+                setUploadedFiles(prev => prev.filter((_, i) => i !== idx));
+            } else {
+                alert(result.error || "Gagal hapus file.");
+            }
+        } catch {
+            alert("Gagal hapus file.");
+        }
+        setDeletingFileIdx(null);
+    }
+
     if (loading) return (
         <div className="flex items-center justify-center py-24">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -292,6 +357,7 @@ export default function BookingDetailPage() {
     const otherExtraEntries = extraEntries.filter(([key]) => key !== "nama_pasangan");
 
     return (
+        <>
         <div className="max-w-4xl mx-auto space-y-6">
             {/* Header */}
             <div className="flex items-start justify-between gap-3">
@@ -324,11 +390,17 @@ export default function BookingDetailPage() {
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => sendWA(booking.client_whatsapp, booking.client_name)}>
                     <MessageSquare className="w-4 h-4 text-green-600" /> Whatsapp Klien
                 </Button>
-                {booking.booking_freelancers.length > 0 && booking.booking_freelancers.map(f => (
-                    <Button key={f.id} variant="outline" size="sm" className="gap-1.5" onClick={() => sendWAFreelance(f.whatsapp_number, f.name)}>
-                        <Phone className="w-4 h-4 text-blue-600" /> Whatsapp {f.name}
+                {booking.booking_freelancers.length > 0 && (
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+                        if (booking.booking_freelancers.length === 1) {
+                            sendWAFreelance(booking.booking_freelancers[0].whatsapp_number, booking.booking_freelancers[0].name);
+                        } else {
+                            setWaFreelancePopup(true);
+                        }
+                    }}>
+                        <Phone className="w-4 h-4 text-blue-600" /> Whatsapp Freelance
                     </Button>
-                ))}
+                )}
                 {booking.drive_folder_url ? (
                     <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
                         <Folder className="w-4 h-4 text-yellow-600" /> Buka Drive Folder
@@ -397,6 +469,28 @@ export default function BookingDetailPage() {
                 } />
             </div>
 
+            {/* Bukti Pembayaran */}
+            {(booking as any).payment_proof_url && (
+                <div className="rounded-xl border bg-card p-6 space-y-3">
+                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                        <ImageIcon className="w-4 h-4" /> Bukti Pembayaran
+                    </h3>
+                    {(booking as any).payment_proof_url.startsWith("http") ? (
+                        <a href={(booking as any).payment_proof_url} target="_blank" rel="noopener noreferrer" className="block">
+                            <img
+                                src={(booking as any).payment_proof_url}
+                                alt="Bukti Pembayaran"
+                                className="max-w-sm w-full rounded-lg border shadow-sm"
+                            />
+                        </a>
+                    ) : (
+                        <a href={(booking as any).payment_proof_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1.5">
+                            <ExternalLink className="w-3.5 h-3.5" /> Lihat Bukti Pembayaran
+                        </a>
+                    )}
+                </div>
+            )}
+
             {/* Catatan */}
             {booking.notes && (
                 <div className="rounded-xl border bg-card p-6 space-y-2">
@@ -436,6 +530,59 @@ export default function BookingDetailPage() {
                             <ExternalLink className="w-3.5 h-3.5" />
                         </button>
                     </div>
+                </div>
+            )}
+
+            {/* File Klien — Upload ke Google Drive */}
+            {isDriveConnected && (
+                <div className="rounded-xl border bg-card p-6 space-y-4">
+                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                        <FileText className="w-4 h-4" /> File Klien
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                        📁 Data Booking Client Desk &gt; {booking.client_name} &gt; File Client
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            onChange={handleUploadClientFile}
+                            className="hidden"
+                            id="client-file-upload"
+                        />
+                        <Button
+                            variant="outline" size="sm" className="gap-1.5"
+                            disabled={uploadingFile}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            {uploadingFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                            {uploadingFile ? "Mengupload..." : "Upload File"}
+                        </Button>
+                        <span className="text-[10px] text-muted-foreground">Moodboard, referensi, dll.</span>
+                    </div>
+                    {uploadedFiles.length > 0 && (
+                        <div className="space-y-1">
+                            {uploadedFiles.map((f, i) => (
+                                <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border text-xs">
+                                    <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                    <a href={f.url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate text-primary hover:underline">{f.name}</a>
+                                    <button onClick={() => window.open(f.url, "_blank")} className="p-1 rounded hover:bg-muted cursor-pointer" title="Buka">
+                                        <ExternalLink className="w-3 h-3" />
+                                    </button>
+                                    {f.fileId && (
+                                        <button
+                                            onClick={() => setDeleteFileModal({ open: true, idx: i })}
+                                            disabled={deletingFileIdx === i}
+                                            className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 cursor-pointer disabled:opacity-50"
+                                            title="Hapus file"
+                                        >
+                                            {deletingFileIdx === i ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -497,5 +644,58 @@ export default function BookingDetailPage() {
                 )}
             </div>
         </div>
+
+            {/* Delete File Confirmation Modal */}
+            <Dialog open={deleteFileModal.open} onOpenChange={(o) => !o && setDeleteFileModal({ open: false, idx: null })}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader className="items-center text-center">
+                        <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mb-2">
+                            <AlertCircle className="w-6 h-6 text-red-600" />
+                        </div>
+                        <DialogTitle className="text-xl">Hapus File</DialogTitle>
+                        <DialogDescription>
+                            Yakin ingin menghapus file <strong>&quot;{deleteFileModal.idx != null ? uploadedFiles[deleteFileModal.idx!]?.name : ""}&quot;</strong> dari Google Drive? Tindakan ini tidak dapat dibatalkan.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="sm:justify-center gap-2 pt-2">
+                        <Button variant="outline" className="flex-1" onClick={() => setDeleteFileModal({ open: false, idx: null })}>Batal</Button>
+                        <Button variant="destructive" className="flex-1" onClick={() => { if (deleteFileModal.idx !== null) handleDeleteClientFile(deleteFileModal.idx); }}>
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Ya, Hapus
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* WA Freelance Popup */}
+            <Dialog open={waFreelancePopup} onOpenChange={setWaFreelancePopup}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Pilih Freelance</DialogTitle>
+                        <DialogDescription>
+                            Pilih freelance untuk dikirim pesan WhatsApp.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2 py-2">
+                        {booking.booking_freelancers.map(f => (
+                            <button
+                                key={f.id}
+                                onClick={() => {
+                                    setWaFreelancePopup(false);
+                                    sendWAFreelance(f.whatsapp_number, f.name);
+                                }}
+                                className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left cursor-pointer"
+                            >
+                                <Phone className="w-4 h-4 text-blue-600 shrink-0" />
+                                <div className="flex-1">
+                                    <p className="text-sm font-medium">{f.name}</p>
+                                    <p className="text-xs text-muted-foreground">{f.whatsapp_number || "No WA"}</p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }

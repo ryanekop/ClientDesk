@@ -29,6 +29,8 @@ const ALL_EVENT_TYPES = [
   "Wedding",
   "Akad",
   "Resepsi",
+  "Lamaran",
+  "Prewedding",
   "Wisuda",
   "Maternity",
   "Newborn",

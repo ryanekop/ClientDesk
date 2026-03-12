@@ -58,7 +58,7 @@ const variableHints: Record<string, string[]> = {
         "{{location}}", "{{tracking_link}}",
     ],
     whatsapp_freelancer: [
-        "{{freelancer_name}}", "{{client_name}}", "{{booking_code}}", "{{session_date}}",
+        "{{freelancer_name}}", "{{client_name}}", "{{client_whatsapp}}", "{{booking_code}}", "{{session_date}}",
         "{{service_name}}", "{{studio_name}}", "{{event_type}}",
         "{{location}}", "{{location_maps_url}}", "{{detail_location}}", "{{notes}}",
     ],
@@ -175,6 +175,9 @@ export default function SettingsPage() {
     // Calendar event format
     const [calendarEventFormat, setCalendarEventFormat] = React.useState("📸 {{client_name}} — {{service_name}}");
 
+    // Drive folder format
+    const [driveFolderFormat, setDriveFolderFormat] = React.useState("{client_name}");
+
     React.useEffect(() => { fetchAll(); }, []);
 
     // Listen for Google auth popup callbacks
@@ -192,7 +195,7 @@ export default function SettingsPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const { data: p } = await supabase.from("profiles").select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, invoice_logo_url").eq("id", user.id).single();
+        const { data: p } = await supabase.from("profiles").select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, drive_folder_format, invoice_logo_url").eq("id", user.id).single();
         const prof = p as Profile;
         setProfile(prof);
         setStudioName(prof?.studio_name || "");
@@ -201,6 +204,9 @@ export default function SettingsPage() {
         setLogoUrl((prof as any)?.invoice_logo_url || null);
         if ((prof as any)?.calendar_event_format) {
             setCalendarEventFormat((prof as any).calendar_event_format);
+        }
+        if ((prof as any)?.drive_folder_format) {
+            setDriveFolderFormat((prof as any).drive_folder_format);
         }
         if ((prof as any)?.custom_statuses) {
             setCustomStatuses((prof as any).custom_statuses);
@@ -264,6 +270,7 @@ export default function SettingsPage() {
             vendor_slug: slug || null,
             default_wa_target: defaultWaTarget,
             calendar_event_format: calendarEventFormat || null,
+            drive_folder_format: driveFolderFormat || null,
         }).eq("id", profile.id);
 
         setVendorSlug(slug);
@@ -796,6 +803,19 @@ export default function SettingsPage() {
                                             </>
                                         )}
                                     </div>
+                                    {isDriveConnected && (
+                                        <div className="border-t mt-3 pt-3 space-y-2">
+                                            <label className="text-xs font-medium text-muted-foreground">Format Nama Folder Klien</label>
+                                            <input
+                                                value={driveFolderFormat}
+                                                onChange={e => setDriveFolderFormat(e.target.value)}
+                                                placeholder="{client_name}"
+                                                className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-8 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                            />
+                                            <p className="text-[10px] text-muted-foreground">Variabel: <code className="bg-muted px-1 py-0.5 rounded">{'{client_name}'}</code> <code className="bg-muted px-1 py-0.5 rounded">{'{booking_code}'}</code> <code className="bg-muted px-1 py-0.5 rounded">{'{event_type}'}</code></p>
+                                            <p className="text-[10px] text-muted-foreground">📁 Struktur: Data Booking Client Desk &gt; <strong>{driveFolderFormat || '{client_name}'}</strong> &gt; File Client / Invoice</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

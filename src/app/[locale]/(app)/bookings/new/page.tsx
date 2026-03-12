@@ -99,13 +99,18 @@ function sanitizePhone(raw: string): string {
     return cleaned;
 }
 
-function generateBookingCode(): string {
+async function generateBookingCode(supabase: any, userId: string): Promise<string> {
     const now = new Date();
     const dd = String(now.getDate()).padStart(2, "0");
     const mm = String(now.getMonth() + 1).padStart(2, "0");
     const yyyy = now.getFullYear();
-    const rand = String(Math.floor(Math.random() * 900) + 100);
-    return `${dd}${mm}${yyyy}${rand}`;
+    // Get sequential number from existing booking count
+    const { count } = await supabase
+        .from("bookings")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId);
+    const seq = String((count || 0) + 1).padStart(3, "0");
+    return `${dd}${mm}${yyyy}${seq}`;
 }
 
 export default function NewBookingPage() {
@@ -114,6 +119,8 @@ export default function NewBookingPage() {
     const supabase = createClient();
     const [saving, setSaving] = React.useState(false);
     const [calendarWarning, setCalendarWarning] = React.useState<string | null>(null);
+    const [calendarEventFormat, setCalendarEventFormat] = React.useState("📸 {{client_name}} — {{service_name}}");
+    const [studioName, setStudioName] = React.useState("");
     const [services, setServices] = React.useState<Service[]>([]);
     const [freelancers, setFreelancers] = React.useState<Freelance[]>([]);
 
@@ -160,11 +167,13 @@ export default function NewBookingPage() {
             const [{ data: svcs }, { data: frees }, { data: prof }] = await Promise.all([
                 supabase.from("services").select("id, name, price").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
-                supabase.from("profiles").select("custom_statuses").eq("id", user.id).single(),
+                supabase.from("profiles").select("custom_statuses, calendar_event_format, studio_name").eq("id", user.id).single(),
             ]);
             setServices((svcs || []) as Service[]);
             setFreelancers((frees || []) as Freelance[]);
             if (prof?.custom_statuses) setCustomStatuses(prof.custom_statuses as string[]);
+            if ((prof as any)?.calendar_event_format) setCalendarEventFormat((prof as any).calendar_event_format);
+            if ((prof as any)?.studio_name) setStudioName((prof as any).studio_name);
         }
         load();
     }, []);
@@ -240,7 +249,7 @@ export default function NewBookingPage() {
             return;
         }
 
-        const bookingCode = generateBookingCode();
+        const bookingCode = await generateBookingCode(supabase, user.id);
         const invoiceCode = `INV-${bookingCode}`;
         const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
 
@@ -330,12 +339,22 @@ export default function NewBookingPage() {
                 const start = new Date(sessionDate);
                 const end = new Date(start.getTime() + 2 * 60 * 60 * 1000); // 2 hours default
                 const svc = services.find(s => s.id === selectedServiceId);
+                // Build summary from calendar_event_format template
+                const templateVars: Record<string, string> = {
+                    client_name: clientName,
+                    service_name: svc?.name || eventType || "Sesi Foto",
+                    event_type: eventType || "-",
+                    booking_code: invoiceCode,
+                    studio_name: studioName || "Client Desk",
+                };
+                const summary = calendarEventFormat.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => templateVars[key] || `{{${key}}}`);
+
                 fetch("/api/google/sync", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         events: [{
-                            summary: `📸 ${clientName} — ${svc?.name || eventType || "Sesi Foto"}`,
+                            summary,
                             description: `Kode: ${invoiceCode}\nKlien: ${clientName}\nLokasi: ${location || "-"}\nTipe: ${eventType || "-"}`,
                             start: start.toISOString(),
                             end: end.toISOString(),

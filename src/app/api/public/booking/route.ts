@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { pushEventToCalendar } from "@/utils/google/calendar";
-import { findOrCreateFolder, uploadFileToDrive } from "@/utils/google/drive";
+import { findOrCreateNestedPath, uploadFileToDrive, applyFolderTemplate } from "@/utils/google/drive";
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
         // Find vendor by slug
         const { data: vendor } = await supabaseAdmin
             .from("profiles")
-            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token")
+            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, calendar_event_format")
             .eq("vendor_slug", vendorSlug)
             .single();
 
@@ -61,13 +61,19 @@ export async function POST(request: NextRequest) {
             .eq("id", serviceId)
             .single();
 
-        // Generate booking code
+        // Generate booking code with sequential number
         const now = new Date();
         const dd = String(now.getDate()).padStart(2, "0");
         const mm = String(now.getMonth() + 1).padStart(2, "0");
         const yyyy = now.getFullYear();
-        const rand = String(Math.floor(Math.random() * 900) + 100);
-        const bookingCode = `INV-${dd}${mm}${yyyy}${rand}`;
+
+        // Count existing bookings for this vendor to get sequential number
+        const { count: bookingCount } = await supabaseAdmin
+            .from("bookings")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", vendor.id);
+        const seq = String((bookingCount || 0) + 1).padStart(3, "0");
+        const bookingCode = `INV-${dd}${mm}${yyyy}${seq}`;
 
         const { data: booking, error } = await supabaseAdmin
             .from("bookings")
@@ -103,11 +109,22 @@ export async function POST(request: NextRequest) {
                 const start = new Date(sessionDate);
                 const durationMs = ((service?.duration_minutes || 120) * 60 * 1000);
                 const end = new Date(start.getTime() + durationMs);
+                // Build event summary from template
+                const eventFormat = (vendor as any).calendar_event_format || "📸 {{client_name}} — {{service_name}}";
+                const templateVars: Record<string, string> = {
+                    client_name: clientName,
+                    service_name: service?.name || eventType || "Sesi Foto",
+                    event_type: eventType || "-",
+                    booking_code: bookingCode,
+                    studio_name: vendor.studio_name || "Client Desk",
+                };
+                const summary = eventFormat.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => templateVars[key] || `{{${key}}}`);
+
                 await pushEventToCalendar(
                     vendor.google_access_token,
                     vendor.google_refresh_token,
                     {
-                        summary: `📸 ${clientName} — ${service?.name || eventType || "Sesi Foto"}`,
+                        summary,
                         description: `Kode: ${bookingCode}\nKlien: ${clientName}\nLokasi: ${location || "-"}\nTipe: ${eventType || "-"}`,
                         start,
                         end,
@@ -142,11 +159,18 @@ export async function POST(request: NextRequest) {
                 const ext = mimeType.includes("png") ? "png" : mimeType.includes("webp") ? "webp" : mimeType.includes("pdf") ? "pdf" : "jpg";
                 const fileName = `${bookingCode}_${clientName.replace(/[^a-zA-Z0-9]/g, "_")}.${ext}`;
 
-                // Find or create the parent folder
-                const folder = await findOrCreateFolder(
+                // Build nested folder path: Data Booking Client Desk > Client Name > Booking Code
+                const folderFormat = (vendor as any).drive_folder_format || "{client_name}";
+                const clientFolderName = applyFolderTemplate(folderFormat, {
+                    client_name: clientName,
+                    booking_code: bookingCode,
+                    event_type: eventType || "",
+                });
+
+                const folder = await findOrCreateNestedPath(
                     vendor.google_drive_access_token,
                     vendor.google_drive_refresh_token,
-                    "Bukti Pembayaran Client Desk"
+                    ["Data Booking Client Desk", clientFolderName, bookingCode]
                 );
 
                 if (!folder.folderId) throw new Error("Folder creation failed");
