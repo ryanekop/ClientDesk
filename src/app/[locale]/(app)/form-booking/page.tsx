@@ -130,7 +130,11 @@ export default function FormBookingPage() {
         setGreeting(p.form_greeting || DEFAULTS.greeting);
         setSelectedEventTypes(
           p.form_event_types?.length > 0
-            ? p.form_event_types
+            ? [
+                // Maintain ALL_EVENT_TYPES order, keep saved selections + add new types
+                ...ALL_EVENT_TYPES.filter(t => p.form_event_types.includes(t)),
+                ...ALL_EVENT_TYPES.filter(t => !p.form_event_types.includes(t)),
+              ]
             : DEFAULTS.eventTypes,
         );
         setShowNotes(p.form_show_notes ?? DEFAULTS.showNotes);
@@ -616,8 +620,8 @@ export default function FormBookingPage() {
                   )}
                   {item.label === "Upload Bukti Pembayaran" && !item.disabled && (
                     <p className="text-[11px] text-muted-foreground mt-1">
-                      📁 File tersimpan di Google Drive pada folder{" "}
-                      <span className="font-semibold">"Bukti Pembayaran Client Desk"</span>
+                      📁 File tersimpan di Google Drive pada folder klien
+                      <span className="font-semibold"> "Nama Klien / Nama Invoice"</span>
                     </p>
                   )}
                 </div>
