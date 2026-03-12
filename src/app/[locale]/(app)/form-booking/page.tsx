@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
+import CustomFormBuilder, { type FormSection } from "@/components/form-builder/custom-form-builder";
 
 const ALL_EVENT_TYPES = [
   "Umum",
@@ -58,7 +59,7 @@ const DEFAULTS = {
   showNotes: true,
   showProof: true,
   minDpPercent: 50,
-  minDpMap: {} as Record<string, number>,
+  minDpMap: {} as Record<string, { mode: "percent" | "fixed"; value: number }>,
   bankAccounts: [] as BankAccount[],
 };
 
@@ -70,7 +71,7 @@ export default function FormBookingPage() {
   const [vendorSlug, setVendorSlug] = React.useState("");
   const [studioName, setStudioName] = React.useState("");
   const [minDpPercent, setMinDpPercent] = React.useState(DEFAULTS.minDpPercent);
-  const [minDpMap, setMinDpMap] = React.useState<Record<string, number>>(
+  const [minDpMap, setMinDpMap] = React.useState<Record<string, { mode: "percent" | "fixed"; value: number }>>(
     DEFAULTS.minDpMap,
   );
   const [selectedDpEventType, setSelectedDpEventType] = React.useState("Umum");
@@ -85,9 +86,17 @@ export default function FormBookingPage() {
   const [selectedEventTypes, setSelectedEventTypes] = React.useState<string[]>(
     DEFAULTS.eventTypes,
   );
+  const [customEventTypes, setCustomEventTypes] = React.useState<string[]>([]);
+  const [newCustomType, setNewCustomType] = React.useState("");
   const [showNotes, setShowNotes] = React.useState(DEFAULTS.showNotes);
   const [showProof, setShowProof] = React.useState(DEFAULTS.showProof);
   const [formLang, setFormLang] = React.useState("id");
+
+  // Merged event types: built-in + custom
+  const allEventTypes = [...ALL_EVENT_TYPES, ...customEventTypes];
+
+  // Custom Form Builder
+  const [formSections, setFormSections] = React.useState<FormSection[]>([]);
 
   // Bank accounts (max 5)
   const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
@@ -121,9 +130,16 @@ export default function FormBookingPage() {
         setStudioName(p.studio_name || "");
         setMinDpPercent(p.min_dp_percent ?? DEFAULTS.minDpPercent);
         // Load per-event-type DP map
-        const savedMap =
+        const savedMap: Record<string, { mode: "percent" | "fixed"; value: number }> =
           typeof p.min_dp_map === "object" && p.min_dp_map !== null
-            ? (p.min_dp_map as Record<string, number>)
+            ? Object.fromEntries(
+                Object.entries(p.min_dp_map as Record<string, any>).map(([k, v]) => [
+                  k,
+                  typeof v === "number"
+                    ? { mode: "percent" as const, value: v } // backward compat
+                    : { mode: v.mode || "percent", value: v.value ?? 50 },
+                ]),
+              )
             : {};
         setMinDpMap(savedMap);
         setBrandColor(p.form_brand_color || DEFAULTS.brandColor);
@@ -131,12 +147,16 @@ export default function FormBookingPage() {
         setSelectedEventTypes(
           p.form_event_types?.length > 0
             ? [
-                // Maintain ALL_EVENT_TYPES order, keep saved selections + add new types
+                // Maintain order, keep saved selections + add new built-in types
                 ...ALL_EVENT_TYPES.filter(t => p.form_event_types.includes(t)),
                 ...ALL_EVENT_TYPES.filter(t => !p.form_event_types.includes(t)),
+                ...(p.custom_event_types || []).filter((t: string) => p.form_event_types.includes(t)),
+                ...(p.custom_event_types || []).filter((t: string) => !p.form_event_types.includes(t)),
               ]
-            : DEFAULTS.eventTypes,
+            : [...ALL_EVENT_TYPES, ...(p.custom_event_types || [])],
         );
+        setCustomEventTypes(p.custom_event_types || []);
+        setFormSections(p.form_sections || []);
         setShowNotes(p.form_show_notes ?? DEFAULTS.showNotes);
         setShowProof(p.form_show_proof ?? DEFAULTS.showProof);
         setBankAccounts(
@@ -161,13 +181,13 @@ export default function FormBookingPage() {
     load();
   }, []);
 
-  // Get DP% for currently selected event type
-  function getDpForEventType(eventType: string): number {
-    return minDpMap[eventType] ?? minDpPercent;
+  // Get DP config for currently selected event type
+  function getDpForEventType(eventType: string): { mode: "percent" | "fixed"; value: number } {
+    return minDpMap[eventType] ?? { mode: "percent", value: minDpPercent };
   }
 
-  function setDpForEventType(eventType: string, value: number) {
-    setMinDpMap((prev) => ({ ...prev, [eventType]: value }));
+  function setDpForEventType(eventType: string, mode: "percent" | "fixed", value: number) {
+    setMinDpMap((prev) => ({ ...prev, [eventType]: { mode, value } }));
   }
 
   async function handleSave() {
@@ -198,6 +218,8 @@ export default function FormBookingPage() {
         form_brand_color: brandColor,
         form_greeting: greeting || null,
         form_event_types: selectedEventTypes,
+        custom_event_types: customEventTypes,
+        form_sections: formSections,
         form_show_notes: showNotes,
         form_show_proof: showProof,
         bank_accounts: validBanks,
@@ -321,31 +343,71 @@ export default function FormBookingPage() {
                 </select>
               </div>
 
-              {/* DP Slider for selected event type */}
-              <div className="space-y-2">
+              {/* DP Mode Toggle + Value */}
+              <div className="space-y-3">
                 <label className="text-sm font-medium">
                   Minimum DP —{" "}
                   <span className="text-primary">{selectedDpEventType}</span>
                 </label>
-                <div className="flex items-center gap-4">
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={getDpForEventType(selectedDpEventType)}
-                    onChange={(e) =>
-                      setDpForEventType(
-                        selectedDpEventType,
-                        Number(e.target.value),
-                      )
-                    }
-                    className="flex-1 accent-primary h-2 cursor-pointer"
-                  />
-                  <span className="text-sm font-bold w-12 text-right tabular-nums">
-                    {getDpForEventType(selectedDpEventType)}%
-                  </span>
+                {/* Mode Toggle */}
+                <div className="flex rounded-lg border overflow-hidden w-fit">
+                  <button
+                    type="button"
+                    onClick={() => setDpForEventType(selectedDpEventType, "percent", getDpForEventType(selectedDpEventType).value)}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${getDpForEventType(selectedDpEventType).mode === "percent" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50"}`}
+                  >
+                    Persentase (%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDpForEventType(selectedDpEventType, "fixed", getDpForEventType(selectedDpEventType).value)}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${getDpForEventType(selectedDpEventType).mode === "fixed" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50"}`}
+                  >
+                    Nominal (Rp)
+                  </button>
                 </div>
+                {/* Value Input */}
+                {getDpForEventType(selectedDpEventType).mode === "percent" ? (
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={getDpForEventType(selectedDpEventType).value}
+                      onChange={(e) =>
+                        setDpForEventType(
+                          selectedDpEventType,
+                          "percent",
+                          Number(e.target.value),
+                        )
+                      }
+                      className="flex-1 accent-primary h-2 cursor-pointer"
+                    />
+                    <span className="text-sm font-bold w-12 text-right tabular-nums">
+                      {getDpForEventType(selectedDpEventType).value}%
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Rp</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={50000}
+                      value={getDpForEventType(selectedDpEventType).value}
+                      onChange={(e) =>
+                        setDpForEventType(
+                          selectedDpEventType,
+                          "fixed",
+                          Number(e.target.value),
+                        )
+                      }
+                      className={inputClass + " flex-1"}
+                      placeholder="500000"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Summary of all DP values */}
@@ -356,13 +418,16 @@ export default function FormBookingPage() {
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {selectedEventTypes.map((et) => {
-                      const dp = minDpMap[et] ?? minDpPercent;
+                      const dp = minDpMap[et] ?? { mode: "percent" as const, value: minDpPercent };
+                      const label = dp.mode === "fixed"
+                        ? `Rp ${dp.value.toLocaleString("id-ID")}`
+                        : `${dp.value}%`;
                       return (
                         <span
                           key={et}
                           className="text-[11px] px-2 py-1 rounded-md border bg-muted/50 text-muted-foreground"
                         >
-                          {et}: <strong>{dp}%</strong>
+                          {et}: <strong>{label}</strong>
                         </span>
                       );
                     })}
@@ -553,10 +618,11 @@ export default function FormBookingPage() {
                 Pilih tipe acara yang tersedia di form booking.
               </p>
             </div>
-            <div className="p-6">
+            <div className="p-6 space-y-4">
               <div className="flex flex-wrap gap-2">
-                {ALL_EVENT_TYPES.map((t) => {
+                {allEventTypes.map((t) => {
                   const isActive = selectedEventTypes.includes(t);
+                  const isCustom = customEventTypes.includes(t);
                   return (
                     <button
                       key={t}
@@ -565,9 +631,56 @@ export default function FormBookingPage() {
                       className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer ${isActive ? "bg-primary text-primary-foreground border-primary" : "border-input text-muted-foreground hover:bg-muted/50"}`}
                     >
                       {t}
+                      {isCustom && (
+                        <span
+                          className="ml-1.5 text-[10px] opacity-70 hover:opacity-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCustomEventTypes(prev => prev.filter(c => c !== t));
+                            setSelectedEventTypes(prev => prev.filter(c => c !== t));
+                          }}
+                        >
+                          ×
+                        </span>
+                      )}
                     </button>
                   );
                 })}
+              </div>
+              {/* Add custom event type */}
+              <div className="flex items-center gap-2 pt-2 border-t">
+                <input
+                  type="text"
+                  value={newCustomType}
+                  onChange={(e) => setNewCustomType(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const val = newCustomType.trim();
+                      if (val && !allEventTypes.includes(val)) {
+                        setCustomEventTypes(prev => [...prev, val]);
+                        setSelectedEventTypes(prev => [...prev, val]);
+                        setNewCustomType("");
+                      }
+                    }
+                  }}
+                  placeholder="Tambah tipe acara custom..."
+                  className={inputClass + " flex-1 !h-8 text-xs"}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const val = newCustomType.trim();
+                    if (val && !allEventTypes.includes(val)) {
+                      setCustomEventTypes(prev => [...prev, val]);
+                      setSelectedEventTypes(prev => [...prev, val]);
+                      setNewCustomType("");
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg border text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
+                >
+                  Tambah
+                </button>
               </div>
             </div>
           </div>
@@ -626,6 +739,21 @@ export default function FormBookingPage() {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Custom Form Builder */}
+          <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+            <div className="px-6 py-4 border-b">
+              <h3 className="font-semibold flex items-center gap-2">
+                <List className="w-4 h-4" /> Custom Form
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Tambahkan section dan field khusus di form booking. Mirip Google Form.
+              </p>
+            </div>
+            <div className="p-6">
+              <CustomFormBuilder sections={formSections} onChange={setFormSections} />
             </div>
           </div>
 

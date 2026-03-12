@@ -26,6 +26,7 @@ export type Service = {
   original_price: number | null;
   description: string | null;
   event_types: string[] | null;
+  is_addon: boolean;
 };
 
 export type Vendor = {
@@ -33,15 +34,28 @@ export type Vendor = {
   studio_name: string | null;
   whatsapp_number: string | null;
   min_dp_percent: number | null;
-  min_dp_map: Record<string, number> | null;
+  min_dp_map: Record<string, number | { mode: string; value: number }> | null;
   avatar_url: string | null;
   invoice_logo_url: string | null;
   form_brand_color: string;
   form_greeting: string | null;
   form_event_types: string[] | null;
+  custom_event_types: string[];
   form_show_location: boolean;
   form_show_notes: boolean;
   form_show_proof: boolean;
+  form_sections: {
+    id: string;
+    title: string;
+    fields: {
+      id: string;
+      label: string;
+      type: "text" | "textarea" | "number" | "select" | "checkbox";
+      required: boolean;
+      placeholder: string;
+      options?: string[];
+    }[];
+  }[];
   bank_accounts: {
     bank_name: string;
     account_number: string;
@@ -226,11 +240,13 @@ export function BookingFormClient({
   const [selectedService, setSelectedService] = React.useState<Service | null>(
     null,
   );
+  const [selectedAddons, setSelectedAddons] = React.useState<Set<string>>(new Set());
   const [dpDisplay, setDpDisplay] = React.useState("");
   const [location, setLocation] = React.useState("");
   const [locationDetail, setLocationDetail] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [instagram, setInstagram] = React.useState("");
+  const [customFields, setCustomFields] = React.useState<Record<string, string>>({});
   const [extraData, setExtraData] = React.useState<Record<string, string>>({});
   const [splitDates, setSplitDates] = React.useState(false);
   const [akadDate, setAkadDate] = React.useState("");
@@ -244,16 +260,21 @@ export function BookingFormClient({
 
   // ── Helpers ──
 
-  function getMinDpForEvent(et?: string): number {
+  function getMinDpForEvent(et?: string): { mode: "percent" | "fixed"; value: number } {
     const eventKey = et ?? eventType;
-    if (
-      eventKey &&
-      vendor.min_dp_map &&
-      vendor.min_dp_map[eventKey] !== undefined
-    ) {
-      return vendor.min_dp_map[eventKey];
+    const fallbackPercent = vendor.min_dp_percent ?? 50;
+    if (eventKey && vendor.min_dp_map && vendor.min_dp_map[eventKey] !== undefined) {
+      const entry = vendor.min_dp_map[eventKey];
+      if (typeof entry === "number") return { mode: "percent", value: entry }; // backward compat
+      return { mode: (entry.mode as "percent" | "fixed") || "percent", value: entry.value ?? fallbackPercent };
     }
-    return vendor.min_dp_percent ?? 50;
+    return { mode: "percent", value: fallbackPercent };
+  }
+
+  /** Calculate minimum DP amount given a service price */
+  function calcMinDpAmount(price: number, dpConfig?: { mode: string; value: number }): number {
+    const cfg = dpConfig ?? getMinDpForEvent();
+    return cfg.mode === "fixed" ? cfg.value : Math.ceil((price * cfg.value) / 100);
   }
 
   function handleServiceChange(id: string) {
@@ -262,7 +283,7 @@ export function BookingFormClient({
     setSelectedService(svc);
     if (svc) {
       const minDP = getMinDpForEvent();
-      const minAmount = Math.ceil((svc.price * minDP) / 100);
+      const minAmount = calcMinDpAmount(svc.price, minDP);
       setDpDisplay(formatNumber(minAmount));
     } else {
       setDpDisplay("");
@@ -310,13 +331,15 @@ export function BookingFormClient({
 
     const minDP = getMinDpForEvent();
     if (selectedService) {
-      const minAmount = Math.ceil((selectedService.price * minDP) / 100);
+      const minAmount = calcMinDpAmount(selectedService.price, minDP);
       if (dpValue < minAmount) {
         setError(
-          t("errorDPMin", {
-            percent: String(minDP),
-            amount: formatCurrency(minAmount),
-          }),
+          minDP.mode === "fixed"
+            ? t("errorDPMinFixed", { amount: formatCurrency(minAmount) })
+            : t("errorDPMin", {
+                percent: String(minDP.value),
+                amount: formatCurrency(minAmount),
+              }),
         );
         return;
       }
@@ -387,12 +410,16 @@ export function BookingFormClient({
           eventType: eventType || null,
           sessionDate: finalSessionDate,
           serviceId,
-          totalPrice: selectedService?.price || 0,
+          totalPrice: (selectedService?.price || 0) + services.filter(s => selectedAddons.has(s.id)).reduce((sum, s) => sum + s.price, 0),
           dpPaid: dpValue,
           location: finalLocation || null,
           locationDetail: locationDetail || null,
           notes: notes || null,
-          extraData: Object.keys(mergedExtra).length > 0 ? mergedExtra : null,
+          extraData: {
+            ...(Object.keys(mergedExtra).length > 0 ? mergedExtra : {}),
+            ...(selectedAddons.size > 0 ? { addon_ids: Array.from(selectedAddons), addon_names: services.filter(s => selectedAddons.has(s.id)).map(s => s.name) } : {}),
+            ...(Object.keys(customFields).length > 0 ? { custom_fields: customFields } : {}),
+          },
           paymentProofUrl,
           instagram: instagram || null,
         }),
@@ -461,13 +488,16 @@ export function BookingFormClient({
   const currentExtraFields = EXTRA_FIELDS[eventType] || [];
   const brandColor = vendor.form_brand_color || "#000000";
   const availableEventTypes = vendor.form_event_types?.length
-    ? vendor.form_event_types
-    : EVENT_TYPES;
+    ? [...vendor.form_event_types, ...(vendor.custom_event_types || []).filter(t => vendor.form_event_types!.includes(t))]
+    : [...EVENT_TYPES, ...(vendor.custom_event_types || [])];
 
-  // Filter services by selected event type
+  // Filter services by selected event type, split main vs addon
   const filteredServices = eventType
-    ? services.filter(s => !s.event_types || s.event_types.length === 0 || s.event_types.includes(eventType))
-    : services;
+    ? services.filter(s => !s.is_addon && (!s.event_types || s.event_types.length === 0 || s.event_types.includes(eventType)))
+    : services.filter(s => !s.is_addon);
+  const addonServices = eventType
+    ? services.filter(s => s.is_addon && (!s.event_types || s.event_types.length === 0 || s.event_types.includes(eventType)))
+    : services.filter(s => s.is_addon);
 
   // ── Success screen ──
 
@@ -633,9 +663,7 @@ export function BookingFormClient({
                     setDpDisplay("");
                     if (selectedService) {
                       const newMinDP = getMinDpForEvent(e.target.value);
-                      const minAmount = Math.ceil(
-                        (selectedService.price * newMinDP) / 100,
-                      );
+                      const minAmount = calcMinDpAmount(selectedService.price, newMinDP);
                       setDpDisplay(formatNumber(minAmount));
                     }
                   }}
@@ -851,9 +879,67 @@ export function BookingFormClient({
               </div>
             )}
 
+            {/* Add-on Packages */}
+            {addonServices.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 pt-1">
+                  <div className="flex-1 border-t" />
+                  <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Paket Tambahan</span>
+                  <div className="flex-1 border-t" />
+                </div>
+                {addonServices.map((addon) => (
+                  <label
+                    key={addon.id}
+                    className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-all ${selectedAddons.has(addon.id) ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedAddons.has(addon.id)}
+                      onChange={() => {
+                        setSelectedAddons(prev => {
+                          const next = new Set(prev);
+                          if (next.has(addon.id)) next.delete(addon.id);
+                          else next.add(addon.id);
+                          return next;
+                        });
+                      }}
+                      className="accent-primary w-4 h-4 cursor-pointer"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium">{addon.name}</span>
+                      {addon.description && (
+                        <p className="text-[11px] text-muted-foreground truncate">{addon.description}</p>
+                      )}
+                    </div>
+                    <span className="text-sm font-semibold text-primary whitespace-nowrap">
+                      +{formatCurrency(addon.price)}
+                    </span>
+                  </label>
+                ))}
+                {selectedAddons.size > 0 && selectedService && (
+                  <div className="rounded-lg bg-muted/50 p-3 text-sm">
+                    <div className="flex justify-between">
+                      <span>Paket utama</span>
+                      <span>{formatCurrency(selectedService.price)}</span>
+                    </div>
+                    {services.filter(s => selectedAddons.has(s.id)).map(s => (
+                      <div key={s.id} className="flex justify-between text-muted-foreground">
+                        <span>+ {s.name}</span>
+                        <span>{formatCurrency(s.price)}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between font-bold border-t pt-1 mt-1">
+                      <span>Total</span>
+                      <span>{formatCurrency(selectedService.price + services.filter(s => selectedAddons.has(s.id)).reduce((sum, s) => sum + s.price, 0))}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <label className="text-sm font-medium">
-                {t("dpMinimal", { percent: String(minDP) })}{" "}
+                {minDP.mode === "fixed" ? `DP (Minimal ${formatCurrency(minDP.value)})` : t("dpMinimal", { percent: String(minDP.value) })}{" "}
                 <span className="text-red-500">*</span>
               </label>
               <div className="flex items-center gap-2">
@@ -869,7 +955,7 @@ export function BookingFormClient({
                   placeholder={
                     selectedService
                       ? formatNumber(
-                          Math.ceil((selectedService.price * minDP) / 100),
+                          calcMinDpAmount(selectedService.price, minDP),
                         )
                       : "0"
                   }
@@ -877,7 +963,7 @@ export function BookingFormClient({
                     selectedService &&
                     dpDisplay &&
                     Number(parseFormatted(dpDisplay)) <
-                      Math.ceil((selectedService.price * minDP) / 100)
+                      calcMinDpAmount(selectedService.price, minDP)
                       ? "!border-red-500 focus-visible:!border-red-500 focus-visible:!ring-red-500/30"
                       : ""
                   }`}
@@ -887,20 +973,26 @@ export function BookingFormClient({
               {selectedService &&
               dpDisplay &&
               Number(parseFormatted(dpDisplay)) <
-                Math.ceil((selectedService.price * minDP) / 100) ? (
+                calcMinDpAmount(selectedService.price, minDP) ? (
                 <p className="text-xs text-red-500 font-medium">
-                  {t("dpMinWarning", {
-                    percent: String(minDP),
-                    amount: formatCurrency(
-                      Math.ceil((selectedService.price * minDP) / 100),
-                    ),
-                  })}
+                  {minDP.mode === "fixed"
+                    ? t("dpMinWarningFixed", {
+                        amount: formatCurrency(
+                          calcMinDpAmount(selectedService.price, minDP),
+                        ),
+                      })
+                    : t("dpMinWarning", {
+                        percent: String(minDP.value),
+                        amount: formatCurrency(
+                          calcMinDpAmount(selectedService.price, minDP),
+                        ),
+                      })}
                 </p>
               ) : selectedService ? (
                 <p className="text-xs text-muted-foreground">
                   Minimum:{" "}
                   {formatCurrency(
-                    Math.ceil((selectedService.price * minDP) / 100),
+                    calcMinDpAmount(selectedService.price, minDP),
                   )}
                 </p>
               ) : null}
@@ -993,6 +1085,62 @@ export function BookingFormClient({
               />
             </div>
           )}
+
+          {/* Custom Form Sections */}
+          {vendor.form_sections && vendor.form_sections.length > 0 && vendor.form_sections.map((section) => (
+            <div key={section.id} className="space-y-4 pt-2">
+              <h3 className="text-base font-semibold" style={{ color: brandColor }}>{section.title}</h3>
+              {section.fields.map((field) => (
+                <div key={field.id} className="space-y-1.5">
+                  <label className="text-sm font-medium">
+                    {field.label}
+                    {field.required && <span className="text-red-500"> *</span>}
+                  </label>
+                  {field.type === "textarea" ? (
+                    <textarea
+                      value={customFields[field.id] || ""}
+                      onChange={(e) => setCustomFields(prev => ({ ...prev, [field.id]: e.target.value }))}
+                      placeholder={field.placeholder}
+                      required={field.required}
+                      rows={3}
+                      className="placeholder:text-muted-foreground w-full min-w-0 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none transition-all"
+                    />
+                  ) : field.type === "select" ? (
+                    <select
+                      value={customFields[field.id] || ""}
+                      onChange={(e) => setCustomFields(prev => ({ ...prev, [field.id]: e.target.value }))}
+                      required={field.required}
+                      className={selectClass}
+                    >
+                      <option value="">{field.placeholder || "Pilih..."}</option>
+                      {(field.options || []).map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : field.type === "checkbox" ? (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={customFields[field.id] === "true"}
+                        onChange={(e) => setCustomFields(prev => ({ ...prev, [field.id]: e.target.checked ? "true" : "false" }))}
+                        className="accent-primary w-4 h-4"
+                      />
+                      <span className="text-sm">{field.placeholder || "Ya"}</span>
+                    </label>
+                  ) : (
+                    <input
+                      type={field.type === "number" ? "number" : "text"}
+                      value={customFields[field.id] || ""}
+                      onChange={(e) => setCustomFields(prev => ({ ...prev, [field.id]: e.target.value }))}
+                      placeholder={field.placeholder}
+                      required={field.required}
+                      className={inputClass}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
 
           {/* Error */}
           {error && (

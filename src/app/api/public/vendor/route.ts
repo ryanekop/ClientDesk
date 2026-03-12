@@ -6,15 +6,17 @@ interface VendorProfile {
   studio_name: string;
   whatsapp_number: string;
   min_dp_percent: number;
-  min_dp_map: Record<string, number> | null;
+  min_dp_map: Record<string, number | { mode: string; value: number }> | null;
   avatar_url: string | null;
   invoice_logo_url: string | null;
   form_brand_color: string | null;
   form_greeting: string | null;
   form_event_types: string[] | null;
+  custom_event_types: string[] | null;
   form_show_location: boolean | null;
   form_show_notes: boolean | null;
   form_show_proof: boolean | null;
+  form_sections: unknown[] | null;
   bank_accounts: unknown[] | null;
 }
 
@@ -38,8 +40,8 @@ export async function GET(request: NextRequest) {
     .select(
       "id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, " +
         "avatar_url, invoice_logo_url, form_brand_color, form_greeting, " +
-        "form_event_types, form_show_location, form_show_notes, form_show_proof, " +
-        "bank_accounts",
+        "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_proof, " +
+        "form_sections, bank_accounts",
     )
     .eq("vendor_slug", slug)
     .single();
@@ -56,8 +58,10 @@ export async function GET(request: NextRequest) {
   // Fetch services in parallel now that we have vendor.id
   const { data: services } = await supabaseAdmin
     .from("services")
-    .select("id, name, price, description")
+    .select("id, name, price, original_price, description, is_addon, sort_order")
     .eq("user_id", vendor.id)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
     .order("name");
 
   return NextResponse.json(
@@ -73,9 +77,11 @@ export async function GET(request: NextRequest) {
         form_brand_color: vendor.form_brand_color || "#000000",
         form_greeting: vendor.form_greeting || null,
         form_event_types: vendor.form_event_types || null,
+        custom_event_types: vendor.custom_event_types || [],
         form_show_location: vendor.form_show_location ?? true,
         form_show_notes: vendor.form_show_notes ?? true,
         form_show_proof: vendor.form_show_proof ?? true,
+        form_sections: vendor.form_sections || [],
         bank_accounts: vendor.bank_accounts || [],
       },
       services: services || [],

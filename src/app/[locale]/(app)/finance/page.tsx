@@ -115,7 +115,7 @@ export default function FinancePage() {
         setTimeout(() => setCopiedId(null), 2000);
     }
 
-    const totalRevenue = bookings.filter(b => b.is_fully_paid).reduce((s, b) => s + b.total_price, 0);
+    const totalRevenue = bookings.reduce((s, b) => s + b.dp_paid, 0);
     const totalPending = bookings.filter(b => !b.is_fully_paid).reduce((s, b) => s + (b.total_price - b.dp_paid), 0);
     const totalDP = bookings.reduce((s, b) => s + b.dp_paid, 0);
 
@@ -126,7 +126,7 @@ export default function FinancePage() {
         const summaryData = [
             ["Ringkasan Keuangan", "", ""],
             ["", "", ""],
-            ["Total Pemasukan (Lunas)", totalRevenue, ""],
+            ["Total Pemasukan", totalRevenue, ""],
             ["Sisa Tagihan (Belum Lunas)", totalPending, ""],
             ["Total DP Diterima", totalDP, ""],
             ["Jumlah Booking Lunas", bookings.filter(b => b.is_fully_paid).length, ""],
@@ -192,7 +192,7 @@ export default function FinancePage() {
                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("totalPemasukan")}</span>
                     </div>
                     <div className="text-2xl font-bold">{formatCurrency(totalRevenue)}</div>
-                    <p className="text-xs text-muted-foreground mt-1">{t("dariBookingLunas", { count: bookings.filter(b => b.is_fully_paid).length })}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{t("dariSemuaBooking", { count: bookings.length })}</p>
                 </div>
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
                     <div className="flex items-center gap-3 mb-2">

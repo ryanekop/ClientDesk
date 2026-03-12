@@ -81,9 +81,8 @@ export default async function DashboardPage() {
       .neq("status", "Batal"),
     supabase
       .from("bookings")
-      .select("total_price")
-      .eq("user_id", user!.id)
-      .eq("is_fully_paid", true),
+      .select("total_price, dp_paid")
+      .eq("user_id", user!.id),
     supabase
       .from("bookings")
       .select("*", { count: "exact", head: true })
@@ -138,7 +137,7 @@ export default async function DashboardPage() {
     0,
   );
   const totalRevenue = (paidBookings || []).reduce(
-    (sum, b) => sum + (b.total_price || 0),
+    (sum, b) => sum + (b.dp_paid || 0),
     0,
   );
   const displayName = profile?.full_name || user?.email || "Admin";

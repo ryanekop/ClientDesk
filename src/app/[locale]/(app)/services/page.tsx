@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Edit2, Trash2, Package, ToggleLeft, ToggleRight, Loader2, Clock, Search, X } from "lucide-react";
+import { Plus, Edit2, Trash2, Package, ToggleLeft, ToggleRight, Loader2, Clock, Search, X, ArrowUp, ArrowDown, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -17,6 +17,8 @@ type Service = {
     original_price: number | null;
     duration_minutes: number | null;
     is_active: boolean;
+    is_addon: boolean;
+    sort_order: number;
     created_at: string;
     event_types: string[] | null;
 };
@@ -48,6 +50,7 @@ export default function ServicesPage() {
             .from("services")
             .select("*")
             .eq("user_id", user.id)
+            .order("sort_order", { ascending: true })
             .order("created_at", { ascending: false });
 
         setServices((data || []) as Service[]);
@@ -66,6 +69,8 @@ export default function ServicesPage() {
             original_price: parseFloat(formData.get("original_price") as string) || null,
             duration_minutes: parseInt(formData.get("duration_hours") as string || "0") * 60 + parseInt(formData.get("duration_mins") as string || "0"),
             is_active: true,
+            is_addon: formData.get("is_addon") === "on",
+            sort_order: services.length,
             event_types: formData.getAll("event_types").length > 0 ? formData.getAll("event_types") as string[] : null,
         });
 
@@ -86,6 +91,7 @@ export default function ServicesPage() {
                 price: parseFloat(formData.get("price") as string) || 0,
                 original_price: parseFloat(formData.get("original_price") as string) || null,
                 duration_minutes: parseInt(formData.get("duration_hours") as string || "0") * 60 + parseInt(formData.get("duration_mins") as string || "0"),
+                is_addon: formData.get("is_addon") === "on",
                 event_types: formData.getAll("event_types").length > 0 ? formData.getAll("event_types") as string[] : null,
             })
             .eq("id", editingService.id);
@@ -108,6 +114,30 @@ export default function ServicesPage() {
     async function handleDelete(id: string) {
         if (!confirm(ts("deleteConfirm"))) return;
         await supabase.from("services").delete().eq("id", id);
+        fetchServices();
+    }
+
+    async function handleMoveUp(service: Service) {
+        const sorted = [...services].sort((a, b) => a.sort_order - b.sort_order);
+        const idx = sorted.findIndex(s => s.id === service.id);
+        if (idx <= 0) return;
+        const prev = sorted[idx - 1];
+        await Promise.all([
+            supabase.from("services").update({ sort_order: prev.sort_order }).eq("id", service.id),
+            supabase.from("services").update({ sort_order: service.sort_order }).eq("id", prev.id),
+        ]);
+        fetchServices();
+    }
+
+    async function handleMoveDown(service: Service) {
+        const sorted = [...services].sort((a, b) => a.sort_order - b.sort_order);
+        const idx = sorted.findIndex(s => s.id === service.id);
+        if (idx < 0 || idx >= sorted.length - 1) return;
+        const next = sorted[idx + 1];
+        await Promise.all([
+            supabase.from("services").update({ sort_order: next.sort_order }).eq("id", service.id),
+            supabase.from("services").update({ sort_order: service.sort_order }).eq("id", next.id),
+        ]);
         fetchServices();
     }
 
@@ -206,6 +236,11 @@ export default function ServicesPage() {
                                     ))}
                                 </div>
                             </div>
+                            <div className="flex items-center gap-2">
+                                <input type="checkbox" name="is_addon" id="add_is_addon" className="accent-primary w-4 h-4" />
+                                <label htmlFor="add_is_addon" className="text-sm font-medium cursor-pointer">Paket Add-on</label>
+                                <span className="text-xs text-muted-foreground">(tambahan, bukan paket utama)</span>
+                            </div>
                             <DialogFooter>
                                 <Button type="submit">{t("simpan")}</Button>
                             </DialogFooter>
@@ -279,6 +314,11 @@ export default function ServicesPage() {
                                         }`}>
                                         {service.is_active ? t("aktif") : t("nonaktif")}
                                     </span>
+                                    {service.is_addon && (
+                                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ml-1 bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400 flex items-center gap-0.5">
+                                            <Layers className="w-2.5 h-2.5" /> Add-on
+                                        </span>
+                                    )}
                                 </div>
 
                                 {service.event_types && service.event_types.length > 0 && (
@@ -334,6 +374,14 @@ export default function ServicesPage() {
                                     >
                                         <Trash2 className="w-3.5 h-3.5 text-red-500" />
                                     </Button>
+                                    <div className="flex gap-0.5 ml-auto">
+                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleMoveUp(service)} title="Move up">
+                                            <ArrowUp className="w-3.5 h-3.5" />
+                                        </Button>
+                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleMoveDown(service)} title="Move down">
+                                            <ArrowDown className="w-3.5 h-3.5" />
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -393,6 +441,11 @@ export default function ServicesPage() {
                                         </label>
                                     ))}
                                 </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <input type="checkbox" name="is_addon" id="edit_is_addon" defaultChecked={editingService.is_addon} className="accent-primary w-4 h-4" />
+                                <label htmlFor="edit_is_addon" className="text-sm font-medium cursor-pointer">Paket Add-on</label>
+                                <span className="text-xs text-muted-foreground">(tambahan, bukan paket utama)</span>
                             </div>
                             <DialogFooter>
                                 <Button type="submit">{t("perbarui")}</Button>

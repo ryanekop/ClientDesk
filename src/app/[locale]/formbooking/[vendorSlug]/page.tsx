@@ -11,15 +11,17 @@ type RawVendor = {
   studio_name: string | null;
   whatsapp_number: string | null;
   min_dp_percent: number | null;
-  min_dp_map: Record<string, number> | null;
+  min_dp_map: Record<string, number | { mode: string; value: number }> | null;
   avatar_url: string | null;
   invoice_logo_url: string | null;
   form_brand_color: string | null;
   form_greeting: string | null;
   form_event_types: string[] | null;
+  custom_event_types: string[] | null;
   form_show_location: boolean | null;
   form_show_notes: boolean | null;
   form_show_proof: boolean | null;
+  form_sections: unknown[] | null;
   bank_accounts: Vendor["bank_accounts"] | null;
 };
 
@@ -98,9 +100,10 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
   // Fetch services — bisa paralel karena kita sudah punya vendor.id dari query di atas
   const { data: services } = (await supabaseAdmin
     .from("services")
-    .select("id, name, price, original_price, description, event_types")
+    .select("id, name, price, original_price, description, event_types, is_addon, sort_order")
     .eq("user_id", vendor.id)
     .eq("is_active", true)
+    .order("sort_order", { ascending: true })
     .order("name")) as { data: Service[] | null; error: unknown };
 
   // Normalise tipe agar cocok dengan Vendor type di client component
@@ -115,9 +118,11 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
     form_brand_color: vendor.form_brand_color ?? "#000000",
     form_greeting: vendor.form_greeting ?? null,
     form_event_types: (vendor.form_event_types as string[] | null) ?? null,
+    custom_event_types: (vendor.custom_event_types as string[]) ?? [],
     form_show_location: vendor.form_show_location ?? true,
     form_show_notes: vendor.form_show_notes ?? true,
     form_show_proof: vendor.form_show_proof ?? true,
+    form_sections: (vendor.form_sections as Vendor["form_sections"]) ?? [],
     bank_accounts: (vendor.bank_accounts as Vendor["bank_accounts"]) ?? [],
   };
 
