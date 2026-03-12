@@ -42,6 +42,7 @@ type Booking = {
     total_price: number;
     dp_paid: number;
     drive_folder_url: string | null;
+    portfolio_url: string | null;
     location: string | null;
     location_detail: string | null;
     instagram: string | null;
@@ -121,7 +122,7 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token, studio_name").eq("id", user.id).single(),
             ]);
@@ -415,6 +416,23 @@ export default function BookingDetailPage() {
                             <Copy className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={() => window.open(booking.drive_folder_url!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">
+                            <ExternalLink className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Link Portofolio IG */}
+            {booking.portfolio_url && (
+                <div className="rounded-xl border bg-card p-6 space-y-3">
+                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Portofolio Instagram</h3>
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
+                        <Link2 className="w-4 h-4 text-pink-500 shrink-0" />
+                        <a href={booking.portfolio_url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate text-xs text-primary hover:underline">{booking.portfolio_url}</a>
+                        <button onClick={() => { navigator.clipboard.writeText(booking.portfolio_url!); }} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
+                            <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => window.open(booking.portfolio_url!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">
                             <ExternalLink className="w-3.5 h-3.5" />
                         </button>
                     </div>

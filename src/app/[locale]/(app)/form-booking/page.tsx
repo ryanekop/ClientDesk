@@ -268,6 +268,20 @@ export default function FormBookingPage() {
         </p>
       </div>
 
+      {/* Guidance banner when studio name is not set */}
+      {!studioName && !loading && (
+        <div className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 flex items-start gap-3">
+          <span className="text-2xl">⚠️</span>
+          <div>
+            <p className="font-semibold text-amber-800 dark:text-amber-200 text-sm">Nama Studio belum diatur</p>
+            <p className="text-amber-700 dark:text-amber-300 text-xs mt-1">
+              Form booking memerlukan Nama Studio untuk membuat URL. Silakan atur Nama Studio di{" "}
+              <a href={`/${locale}/settings`} className="underline font-medium">halaman Pengaturan</a> terlebih dahulu, lalu kembali ke sini.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Main Content: Settings + Preview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start pb-20 lg:pb-0">
         {/* LEFT: Settings — hidden on mobile when viewing preview */}
@@ -748,9 +762,15 @@ export default function FormBookingPage() {
               </div>
             ) : (
               <div className="flex items-center justify-center h-64 rounded-2xl border bg-muted/20">
-                <p className="text-sm text-muted-foreground text-center px-6">
-                  Simpan pengaturan terlebih dahulu untuk melihat preview.
-                </p>
+                <div className="text-center px-6 space-y-2">
+                  <p className="text-3xl">📋</p>
+                  <p className="text-sm font-medium">Form belum aktif</p>
+                  <p className="text-xs text-muted-foreground">
+                    {!studioName
+                      ? "Atur Nama Studio di Pengaturan terlebih dahulu."
+                      : "Klik \"Simpan Pengaturan\" untuk mengaktifkan form booking."}
+                  </p>
+                </div>
               </div>
             )}
           </div>

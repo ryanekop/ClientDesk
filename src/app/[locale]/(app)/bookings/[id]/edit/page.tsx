@@ -136,6 +136,7 @@ export default function EditBookingPage() {
     const [status, setStatus] = React.useState("Pending");
     const [notes, setNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
+    const [portfolioUrl, setPortfolioUrl] = React.useState("");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
     const [splitDates, setSplitDates] = React.useState(false);
     const [akadDate, setAkadDate] = React.useState("");
@@ -186,6 +187,7 @@ export default function EditBookingPage() {
                 setStatus(booking.status || "Pending");
                 setNotes(booking.notes || "");
                 setDriveFolderUrl(booking.drive_folder_url || "");
+                setPortfolioUrl(booking.portfolio_url || "");
                 setExtraFields(booking.extra_fields || {});
                 // Pre-populate splitDates from extra_fields
                 if (booking.event_type === "Wedding" && booking.extra_fields?.tanggal_akad) {
@@ -303,6 +305,7 @@ export default function EditBookingPage() {
             status,
             notes: notes || null,
             drive_folder_url: driveFolderUrl || null,
+            portfolio_url: portfolioUrl || null,
             extra_fields: Object.keys(mergedExtra).length > 0 ? mergedExtra : null,
             updated_at: new Date().toISOString(),
         }).eq("id", id);
@@ -598,6 +601,15 @@ export default function EditBookingPage() {
                     </h3>
                     <input type="url" value={driveFolderUrl} onChange={e => setDriveFolderUrl(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." className={inputClass} />
                     <p className="text-[11px] text-muted-foreground">Tempelkan link folder Google Drive klien di sini (opsional).</p>
+                </div>
+
+                {/* Link Portofolio IG */}
+                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-3">
+                    <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                        <Link2 className="w-4 h-4" /> Link Portofolio Instagram
+                    </h3>
+                    <input type="url" value={portfolioUrl} onChange={e => setPortfolioUrl(e.target.value)} placeholder="https://www.instagram.com/p/..." className={inputClass} />
+                    <p className="text-[11px] text-muted-foreground">Link postingan IG hasil foto (opsional).</p>
                 </div>
 
                 <div className="flex gap-3 justify-end pt-4">

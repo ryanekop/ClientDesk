@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
+import * as XLSX from "xlsx";
 type BookingFinance = {
     id: string;
     booking_code: string;
@@ -118,6 +119,58 @@ export default function FinancePage() {
     const totalPending = bookings.filter(b => !b.is_fully_paid).reduce((s, b) => s + (b.total_price - b.dp_paid), 0);
     const totalDP = bookings.reduce((s, b) => s + b.dp_paid, 0);
 
+    function exportFinance() {
+        const wb = XLSX.utils.book_new();
+
+        // Sheet 1: Summary
+        const summaryData = [
+            ["Ringkasan Keuangan", "", ""],
+            ["", "", ""],
+            ["Total Pemasukan (Lunas)", totalRevenue, ""],
+            ["Sisa Tagihan (Belum Lunas)", totalPending, ""],
+            ["Total DP Diterima", totalDP, ""],
+            ["Jumlah Booking Lunas", bookings.filter(b => b.is_fully_paid).length, ""],
+            ["Jumlah Booking Belum Lunas", bookings.filter(b => !b.is_fully_paid).length, ""],
+            ["", "", ""],
+            ["Ringkasan per Bulan", "", ""],
+            ["Bulan", "Total Harga", "DP Diterima"],
+        ];
+        // Group by month
+        const monthMap: Record<string, { total: number; dp: number }> = {};
+        bookings.forEach(b => {
+            const d = b.session_date ? new Date(b.session_date) : new Date();
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            if (!monthMap[key]) monthMap[key] = { total: 0, dp: 0 };
+            monthMap[key].total += b.total_price;
+            monthMap[key].dp += b.dp_paid;
+        });
+        Object.keys(monthMap).sort().reverse().forEach(key => {
+            const [y, m] = key.split("-");
+            const label = new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+            summaryData.push([label, monthMap[key].total as any, monthMap[key].dp as any]);
+        });
+        const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+        wsSummary["!cols"] = [{ wch: 30 }, { wch: 20 }, { wch: 20 }];
+        XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
+
+        // Sheet 2: Detail
+        const detailData = bookings.map(b => ({
+            "Kode Booking": b.booking_code,
+            "Nama Klien": b.client_name,
+            "Paket": b.services?.name || "-",
+            "Jadwal": b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "-",
+            "Total Harga": b.total_price,
+            "DP Dibayar": b.dp_paid,
+            "Sisa": b.total_price - b.dp_paid,
+            "Status": b.is_fully_paid ? "Lunas" : "Belum Lunas",
+        }));
+        const wsDetail = XLSX.utils.json_to_sheet(detailData);
+        wsDetail["!cols"] = [{ wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+        XLSX.utils.book_append_sheet(wb, wsDetail, "Detail Booking");
+
+        XLSX.writeFile(wb, `keuangan_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }
+
     const filtered = filter === "all" ? bookings
         : filter === "paid" ? bookings.filter(b => b.is_fully_paid)
             : bookings.filter(b => !b.is_fully_paid);
@@ -164,6 +217,13 @@ export default function FinancePage() {
                         {f === "all" ? t("semua") : f === "paid" ? t("lunas") : t("belumLunas")}
                     </button>
                 ))}
+                <div className="flex-1" />
+                <button
+                    onClick={exportFinance}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+                >
+                    <Download className="w-4 h-4" /> Export Excel
+                </button>
             </div>
 
             {/* Mobile Cards */}

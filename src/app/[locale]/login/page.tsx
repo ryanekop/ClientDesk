@@ -37,6 +37,8 @@ export default function LoginPage() {
             if (error) {
                 if (error.message.toLowerCase().includes('invalid login credentials')) {
                     setError(t("invalidCredentials"))
+                } else if (error.message.toLowerCase().includes('email not confirmed')) {
+                    setError("Email belum diverifikasi. Silakan cek inbox email Anda dan klik link verifikasi yang telah dikirim saat pendaftaran. Periksa juga folder spam/junk.")
                 } else {
                     setError(error.message)
                 }
