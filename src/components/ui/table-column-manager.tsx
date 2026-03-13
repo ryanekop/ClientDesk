@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import {
   Eye,
   EyeOff,
@@ -134,6 +135,12 @@ export function TableColumnManager({
   triggerLabel = "Kelola Kolom",
 }: TableColumnManagerProps) {
   const [activeColumnId, setActiveColumnId] = React.useState<string | null>(null);
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -224,25 +231,30 @@ export function TableColumnManager({
               </div>
             </SortableContext>
 
-            <DragOverlay>
-              {activeColumn ? (
-                <div className="rounded-xl border border-primary bg-card px-4 py-3 shadow-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground">
-                      <GripVertical className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{activeColumn.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {activeColumn.visible
-                          ? "Tampil di tabel"
-                          : "Disembunyikan dari tabel"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </DragOverlay>
+            {mounted
+              ? createPortal(
+                  <DragOverlay>
+                    {activeColumn ? (
+                      <div className="z-[9999] rounded-xl border border-primary bg-card px-4 py-3 shadow-2xl ring-1 ring-primary/10">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground">
+                            <GripVertical className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{activeColumn.label}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {activeColumn.visible
+                                ? "Tampil di tabel"
+                                : "Disembunyikan dari tabel"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </DragOverlay>,
+                  document.body,
+                )
+              : null}
           </DndContext>
 
           <DialogFooter>
