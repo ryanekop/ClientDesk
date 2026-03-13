@@ -719,7 +719,18 @@
         "searchPlaceholder": "Cari nama atau deskripsi layanan...",
         "allCategories": "Semua",
         "noResults": "Tidak ada hasil",
-        "noResultsDesc": "Coba ubah kata kunci pencarian atau filter kategori."
+        "noResultsDesc": "Coba ubah kata kunci pencarian atau filter kategori.",
+        "reorderPackages": "Atur Urutan",
+        "finishReorder": "Selesai Atur Urutan",
+        "reorderHint": "Mode atur urutan aktif. Seret paket di dalam section yang sama untuk mengubah posisi. Pencarian, filter, dan pagination disembunyikan sementara agar urutan tetap aman.",
+        "mainPackages": "Paket Utama",
+        "mainPackagesDesc": "Paket utama tampil sebagai pilihan inti di form booking publik.",
+        "addonPackages": "Paket Add-on",
+        "addonPackagesDesc": "Paket tambahan tampil terpisah agar klien bisa menambah opsi ekstra saat booking.",
+        "emptyMainTitle": "Belum ada paket utama",
+        "emptyMainDesc": "Tambahkan layanan utama agar klien punya pilihan paket inti di form booking.",
+        "emptyAddonTitle": "Belum ada paket add-on",
+        "emptyAddonDesc": "Tambahkan add-on jika Anda ingin menawarkan paket tambahan terpisah."
     },
     "TeamPage": {
         "editDesc": "Perubahan akan langsung tersimpan.",

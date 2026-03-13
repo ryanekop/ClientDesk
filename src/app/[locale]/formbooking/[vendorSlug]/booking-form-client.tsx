@@ -54,6 +54,8 @@ export type Service = {
   description: string | null;
   event_types: string[] | null;
   is_addon: boolean;
+  sort_order?: number;
+  created_at?: string;
 };
 
 export type Vendor = {

@@ -719,7 +719,18 @@
         "searchPlaceholder": "Search service name or description...",
         "allCategories": "All",
         "noResults": "No results found",
-        "noResultsDesc": "Try changing your search keyword or category filter."
+        "noResultsDesc": "Try changing your search keyword or category filter.",
+        "reorderPackages": "Reorder Packages",
+        "finishReorder": "Finish Reordering",
+        "reorderHint": "Reorder mode is active. Drag packages within the same section to change their position. Search, filter, and pagination are hidden temporarily to keep ordering safe.",
+        "mainPackages": "Main Packages",
+        "mainPackagesDesc": "Main packages appear as the primary options in the public booking form.",
+        "addonPackages": "Add-on Packages",
+        "addonPackagesDesc": "Add-ons are shown separately so clients can choose extra options during booking.",
+        "emptyMainTitle": "No main packages yet",
+        "emptyMainDesc": "Add a main service so clients have a core package option in the booking form.",
+        "emptyAddonTitle": "No add-on packages yet",
+        "emptyAddonDesc": "Add add-ons if you want to offer separate extra packages."
     },
     "TeamPage": {
         "editDesc": "Changes will be saved immediately.",
