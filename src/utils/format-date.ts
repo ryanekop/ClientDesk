@@ -65,6 +65,22 @@ export function formatSessionDate(
     return result;
 }
 
+export function formatSessionTime(
+    dateStr: string | null | undefined,
+    options: { separator?: "." | ":" } = {},
+): string {
+    if (!dateStr) return "-";
+
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "-";
+
+    const separator = options.separator || ".";
+    const hours = String(d.getUTCHours()).padStart(2, "0");
+    const minutes = String(d.getUTCMinutes()).padStart(2, "0");
+
+    return `${hours}${separator}${minutes}`;
+}
+
 /**
  * Get a Date object representing the UTC values of a session date
  * (for calendar/comparison purposes — treats stored UTC as local).

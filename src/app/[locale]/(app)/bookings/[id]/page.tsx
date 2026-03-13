@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
 import { useLocale } from "next-intl";
-import { formatSessionDate } from "@/utils/format-date";
+import { formatSessionDate, formatSessionTime } from "@/utils/format-date";
 import {
     extractBuiltInExtraFieldValues,
     extractCustomFieldSnapshots,
@@ -283,8 +283,13 @@ export default function BookingDetailPage() {
         if (!phone) { alert("Nomor Whatsapp freelance tidak tersedia."); return; }
         const cleaned = phone.replace(/^0/, "62").replace(/[^0-9]/g, "");
         const sessionStr = booking?.session_date ? formatDate(booking.session_date) : "-";
+        const sessionTime = booking?.session_date ? formatSessionTime(booking.session_date) : "-";
         // Use freelancer template if available
-        const template = savedTemplates.find(t => t.type === "whatsapp_freelancer");
+        const template = savedTemplates.find(
+            (t) => t.type === "whatsapp_freelancer" && t.event_type === booking?.event_type,
+        ) || savedTemplates.find(
+            (t) => t.type === "whatsapp_freelancer" && (!t.event_type || t.event_type === "Umum"),
+        );
         let msg: string;
         if (template) {
             const content = locale === "en" ? (template.content_en || template.content) : template.content;
@@ -295,6 +300,7 @@ export default function BookingDetailPage() {
                     client_whatsapp: booking?.client_whatsapp || "",
                     booking_code: booking?.booking_code || "",
                     session_date: sessionStr,
+                    session_time: sessionTime,
                     service_name: booking?.services?.name || "-",
                     studio_name: studioName || "",
                     event_type: booking?.event_type || "-",

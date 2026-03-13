@@ -68,7 +68,7 @@ const variableHints: Record<string, string[]> = {
     ],
     whatsapp_freelancer: [
         "{{freelancer_name}}", "{{client_name}}", "{{client_whatsapp}}", "{{booking_code}}", "{{session_date}}",
-        "{{service_name}}", "{{studio_name}}", "{{event_type}}",
+        "{{session_time}}", "{{service_name}}", "{{studio_name}}", "{{event_type}}",
         "{{location}}", "{{location_maps_url}}", "{{detail_location}}", "{{notes}}",
     ],
     invoice: ["{{client_name}}", "{{booking_code}}", "{{service_name}}", "{{total_price}}", "{{dp_paid}}", "{{session_date}}", "{{invoice_url}}"],

@@ -4,7 +4,7 @@ import * as React from "react";
 import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, AlertTriangle, X, Download, ExternalLink, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatSessionDate } from "@/utils/format-date";
+import { formatSessionDate, formatSessionTime } from "@/utils/format-date";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -54,6 +54,7 @@ type SavedTemplate = {
 
 function generateWATemplate(booking: Booking, locale: string, savedTemplates: SavedTemplate[], studioName: string, freelancerName?: string) {
     const sessionStr = booking.session_date ? formatSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-";
+    const sessionTime = booking.session_date ? formatSessionTime(booking.session_date) : "-";
     const serviceName = booking.services?.name || "-";
 
     // Build replacement map
@@ -62,6 +63,7 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
         client_name: booking.client_name,
         booking_code: booking.booking_code,
         session_date: sessionStr,
+        session_time: sessionTime,
         service_name: serviceName,
         total_price: new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(booking.total_price || 0),
         dp_paid: new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(booking.dp_paid || 0),
@@ -82,7 +84,11 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
 
     if (freelancerName) {
         // Look for whatsapp_freelancer template
-        const template = savedTemplates.find(t => t.type === "whatsapp_freelancer");
+        const template = savedTemplates.find(
+            (t) => t.type === "whatsapp_freelancer" && t.event_type === booking.event_type,
+        ) || savedTemplates.find(
+            (t) => t.type === "whatsapp_freelancer" && (!t.event_type || t.event_type === "Umum"),
+        );
         if (template) {
             const content = locale === "en" ? (template.content_en || template.content) : template.content;
             if (content.trim()) return applyVars(content);
