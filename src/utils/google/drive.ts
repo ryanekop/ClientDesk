@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { Readable } from "node:stream";
+import { applyDriveTemplate } from "@/utils/google/template";
 
 export function getDriveOAuth2Client() {
     return new google.auth.OAuth2(
@@ -207,13 +208,17 @@ export async function findOrCreateNestedPath(
  */
 export function applyFolderTemplate(
     template: string,
-    vars: { client_name?: string; booking_code?: string; event_type?: string }
+    vars: {
+        client_name?: string;
+        booking_code?: string;
+        event_type?: string;
+        studio_name?: string;
+        session_date?: string;
+        session_time?: string;
+        day_name?: string;
+    }
 ): string {
-    let result = template;
-    result = result.replace(/\{client_name\}/gi, vars.client_name || "Client");
-    result = result.replace(/\{booking_code\}/gi, vars.booking_code || "");
-    result = result.replace(/\{event_type\}/gi, vars.event_type || "");
-    return result.trim() || vars.client_name || "Client";
+    return applyDriveTemplate(template, vars);
 }
 
 /**

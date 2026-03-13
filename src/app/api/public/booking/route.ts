@@ -3,6 +3,13 @@ import { createClient } from "@supabase/supabase-js";
 import { pushEventToCalendar } from "@/utils/google/calendar";
 import { findOrCreateNestedPath, uploadFileToDrive, applyFolderTemplate } from "@/utils/google/drive";
 import {
+    DEFAULT_CALENDAR_EVENT_FORMAT,
+    DEFAULT_DRIVE_FOLDER_FORMAT,
+    buildCalendarRangeFromLocalInput,
+    resolveTemplateByEventType,
+    applyCalendarTemplate,
+} from "@/utils/google/template";
+import {
     createPaymentSourceFromBank,
     getEnabledBankAccounts,
     normalizeBankAccounts,
@@ -22,7 +29,9 @@ type VendorRecord = {
     google_drive_access_token: string | null;
     google_drive_refresh_token: string | null;
     drive_folder_format: string | null;
+    drive_folder_format_map: Record<string, string> | null;
     calendar_event_format: string | null;
+    calendar_event_format_map: Record<string, string> | null;
     form_payment_methods: PaymentMethod[] | null;
     qris_image_url: string | null;
     bank_accounts: unknown[] | null;
@@ -61,7 +70,7 @@ export async function POST(request: NextRequest) {
         // Find vendor by slug
         const { data: vendorData } = await supabaseAdmin
             .from("profiles")
-            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, calendar_event_format, form_payment_methods, qris_image_url, bank_accounts")
+            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, calendar_event_format, calendar_event_format_map, form_payment_methods, qris_image_url, bank_accounts")
             .eq("vendor_slug", vendorSlug)
             .single();
         const vendor = vendorData as VendorRecord | null;
@@ -209,19 +218,26 @@ export async function POST(request: NextRequest) {
         // Auto-sync to Google Calendar (fire-and-forget)
         if (vendor.google_access_token && vendor.google_refresh_token && sessionDate) {
             try {
-                const start = new Date(sessionDate);
-                const durationMs = ((mainService.duration_minutes || 120) * 60 * 1000);
-                const end = new Date(start.getTime() + durationMs);
+                const range = buildCalendarRangeFromLocalInput(
+                    sessionDate,
+                    mainService.duration_minutes || 120,
+                );
                 // Build event summary from template
-                const eventFormat = vendor.calendar_event_format || "📸 {{client_name}} — {{service_name}}";
+                const eventFormat = resolveTemplateByEventType(
+                    vendor.calendar_event_format_map,
+                    eventType,
+                    vendor.calendar_event_format || DEFAULT_CALENDAR_EVENT_FORMAT,
+                );
                 const templateVars: Record<string, string> = {
                     client_name: clientName,
                     service_name: mainService.name || eventType || "Sesi Foto",
                     event_type: eventType || "-",
                     booking_code: bookingCode,
                     studio_name: vendor.studio_name || "Client Desk",
+                    location: location || "-",
+                    ...range.templateVars,
                 };
-                const summary = eventFormat.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => templateVars[key] || `{{${key}}}`);
+                const summary = applyCalendarTemplate(eventFormat, templateVars);
 
                 await pushEventToCalendar(
                     vendor.google_access_token,
@@ -229,8 +245,8 @@ export async function POST(request: NextRequest) {
                     {
                         summary,
                         description: `Kode: ${bookingCode}\nKlien: ${clientName}\nLokasi: ${location || "-"}\nTipe: ${eventType || "-"}`,
-                        start,
-                        end,
+                        start: range.start,
+                        end: range.end,
                     }
                 );
             } catch {
@@ -263,11 +279,20 @@ export async function POST(request: NextRequest) {
                 const fileName = `${bookingCode}_${clientName.replace(/[^a-zA-Z0-9]/g, "_")}.${ext}`;
 
                 // Build nested folder path: Data Booking Client Desk > Client Name > Booking Code
-                const folderFormat = vendor.drive_folder_format || "{client_name}";
-                const clientFolderName = applyFolderTemplate(folderFormat, {
+                const folderFormat = resolveTemplateByEventType(
+                    vendor.drive_folder_format_map,
+                    eventType,
+                    vendor.drive_folder_format || DEFAULT_DRIVE_FOLDER_FORMAT,
+                );
+                const folderTemplateVars = {
                     client_name: clientName,
                     booking_code: bookingCode,
                     event_type: eventType || "",
+                    studio_name: vendor.studio_name || "Client Desk",
+                    ...buildCalendarRangeFromLocalInput(sessionDate, 0).templateVars,
+                };
+                const clientFolderName = applyFolderTemplate(folderFormat, {
+                    ...folderTemplateVars,
                 });
 
                 const folder = await findOrCreateNestedPath(

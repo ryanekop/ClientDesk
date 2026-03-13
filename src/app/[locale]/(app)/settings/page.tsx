@@ -8,6 +8,17 @@ import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
+import {
+    GOOGLE_EVENT_TYPES,
+    CALENDAR_TEMPLATE_VARIABLES,
+    DRIVE_TEMPLATE_VARIABLES,
+    DEFAULT_CALENDAR_EVENT_FORMAT,
+    DEFAULT_DRIVE_FOLDER_FORMAT,
+    normalizeTemplateFormatMap,
+    resolveTemplateByEventType,
+    applyCalendarTemplate,
+    applyDriveTemplate,
+} from "@/utils/google/template";
 
 const COUNTRY_CODES = [
     { code: "+62", flag: "🇮🇩", name: "Indonesia" },
@@ -17,8 +28,6 @@ const COUNTRY_CODES = [
     { code: "+63", flag: "🇵🇭", name: "Philippines" },
     { code: "+84", flag: "🇻🇳", name: "Vietnam" },
 ];
-
-const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Lamaran", "Prewedding", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
 
 type Profile = {
     id: string;
@@ -173,10 +182,18 @@ export default function SettingsPage() {
     const [defaultWaTarget, setDefaultWaTarget] = React.useState<"client" | "freelancer">("client");
 
     // Calendar event format
-    const [calendarEventFormat, setCalendarEventFormat] = React.useState("📸 {{client_name}} — {{service_name}}");
+    const [calendarEventFormats, setCalendarEventFormats] = React.useState<Record<string, string>>(
+        () => normalizeTemplateFormatMap(null, DEFAULT_CALENDAR_EVENT_FORMAT),
+    );
+    const [selectedCalendarEventType, setSelectedCalendarEventType] = React.useState("Umum");
 
     // Drive folder format
-    const [driveFolderFormat, setDriveFolderFormat] = React.useState("{client_name}");
+    const [driveFolderFormats, setDriveFolderFormats] = React.useState<Record<string, string>>(
+        () => normalizeTemplateFormatMap(null, DEFAULT_DRIVE_FOLDER_FORMAT),
+    );
+    const [selectedDriveEventType, setSelectedDriveEventType] = React.useState("Umum");
+    const calendarFormatInputRef = React.useRef<HTMLInputElement>(null);
+    const driveFormatInputRef = React.useRef<HTMLInputElement>(null);
 
     React.useEffect(() => { fetchAll(); }, []);
 
@@ -195,19 +212,29 @@ export default function SettingsPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const { data: p } = await supabase.from("profiles").select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, drive_folder_format, invoice_logo_url").eq("id", user.id).single();
+        const { data: p } = await supabase
+            .from("profiles")
+            .select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, calendar_event_format, calendar_event_format_map, drive_folder_format, drive_folder_format_map, invoice_logo_url, custom_statuses, custom_client_statuses, queue_trigger_status, default_wa_target")
+            .eq("id", user.id)
+            .single();
         const prof = p as Profile;
         setProfile(prof);
         setStudioName(prof?.studio_name || "");
         setIsCalendarConnected(!!(prof as any)?.google_access_token);
         setIsDriveConnected(!!(prof as any)?.google_drive_access_token);
         setLogoUrl((prof as any)?.invoice_logo_url || null);
-        if ((prof as any)?.calendar_event_format) {
-            setCalendarEventFormat((prof as any).calendar_event_format);
-        }
-        if ((prof as any)?.drive_folder_format) {
-            setDriveFolderFormat((prof as any).drive_folder_format);
-        }
+        setCalendarEventFormats(
+            normalizeTemplateFormatMap(
+                (prof as any)?.calendar_event_format_map,
+                (prof as any)?.calendar_event_format || DEFAULT_CALENDAR_EVENT_FORMAT,
+            ),
+        );
+        setDriveFolderFormats(
+            normalizeTemplateFormatMap(
+                (prof as any)?.drive_folder_format_map,
+                (prof as any)?.drive_folder_format || DEFAULT_DRIVE_FOLDER_FORMAT,
+            ),
+        );
         if ((prof as any)?.custom_statuses) {
             setCustomStatuses((prof as any).custom_statuses);
         }
@@ -240,7 +267,7 @@ export default function SettingsPage() {
         templateTypes.forEach(tt => {
             if (tt.value === "whatsapp_freelancer") {
                 // Initialize per event type
-                EVENT_TYPES.forEach(et => {
+                GOOGLE_EVENT_TYPES.forEach(et => {
                     const key = `${tt.value}__${et}`;
                     const existing = allTemplates.find((tmpl: any) => tmpl.type === tt.value && (tmpl.event_type || "Umum") === et);
                     contents[key] = existing?.content || "";
@@ -269,8 +296,10 @@ export default function SettingsPage() {
             whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
             vendor_slug: slug || null,
             default_wa_target: defaultWaTarget,
-            calendar_event_format: calendarEventFormat || null,
-            drive_folder_format: driveFolderFormat || null,
+            calendar_event_format: calendarEventFormats.Umum || DEFAULT_CALENDAR_EVENT_FORMAT,
+            calendar_event_format_map: calendarEventFormats,
+            drive_folder_format: driveFolderFormats.Umum || DEFAULT_DRIVE_FOLDER_FORMAT,
+            drive_folder_format_map: driveFolderFormats,
         }).eq("id", profile.id);
 
         setVendorSlug(slug);
@@ -328,6 +357,37 @@ export default function SettingsPage() {
     }
 
     const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
+
+    function insertIntoInput(
+        ref: React.RefObject<HTMLInputElement | null>,
+        token: string,
+        currentValue: string,
+        onChange: (value: string) => void,
+    ) {
+        const input = ref.current;
+        if (!input) {
+            onChange(`${currentValue}${currentValue ? " " : ""}${token}`);
+            return;
+        }
+
+        const start = input.selectionStart ?? currentValue.length;
+        const end = input.selectionEnd ?? currentValue.length;
+        const newValue = `${currentValue.slice(0, start)}${token}${currentValue.slice(end)}`;
+        onChange(newValue);
+
+        setTimeout(() => {
+            input.focus();
+            input.setSelectionRange(start + token.length, start + token.length);
+        }, 0);
+    }
+
+    function updateCalendarFormat(eventType: string, value: string) {
+        setCalendarEventFormats((prev) => ({ ...prev, [eventType]: value }));
+    }
+
+    function updateDriveFormat(eventType: string, value: string) {
+        setDriveFolderFormats((prev) => ({ ...prev, [eventType]: value }));
+    }
 
     // Logo handlers
     function handleLogoFileSelected(file: File) {
@@ -394,12 +454,15 @@ export default function SettingsPage() {
         client_name: "Budi",
         booking_code: "INV-100120250001",
         session_date: "15 April 2026",
+        session_time: "17.00",
+        end_time: "18.00",
         service_name: "Paket Wedding",
         total_price: "Rp 5.000.000",
         dp_paid: "Rp 2.500.000",
         studio_name: studioName || "Memori Studio",
         freelancer_name: "Andi",
         event_type: selectedEventType,
+        day_name: "Rabu",
         location: "Jakarta Convention Center",
         location_maps_url: "https://maps.google.com/maps?q=Jakarta+Convention+Center",
         detail_location: "Gedung Utama, Lt. 3, Ruang Ballroom A",
@@ -412,6 +475,33 @@ export default function SettingsPage() {
         if (!content) return tp("emptyMessage");
         return content.replace(/\{\{(\w+)\}\}/g, (_, key) => previewData[key] || `{{${key}}}`);
     }
+
+    const calendarPreviewVars = {
+        ...previewData,
+        event_type: selectedCalendarEventType,
+    };
+    const drivePreviewVars = {
+        ...previewData,
+        event_type: selectedDriveEventType,
+    };
+    const currentCalendarFormat = calendarEventFormats[selectedCalendarEventType] || "";
+    const currentDriveFormat = driveFolderFormats[selectedDriveEventType] || "";
+    const calendarEventPreview = applyCalendarTemplate(
+        resolveTemplateByEventType(
+            calendarEventFormats,
+            selectedCalendarEventType,
+            DEFAULT_CALENDAR_EVENT_FORMAT,
+        ),
+        calendarPreviewVars,
+    );
+    const driveFolderPreview = applyDriveTemplate(
+        resolveTemplateByEventType(
+            driveFolderFormats,
+            selectedDriveEventType,
+            DEFAULT_DRIVE_FOLDER_FORMAT,
+        ),
+        drivePreviewVars,
+    );
 
     function renderTemplateCard(tt: typeof templateTypes[0]) {
         const isFreelancer = tt.value === "whatsapp_freelancer";
@@ -445,7 +535,7 @@ export default function SettingsPage() {
                                 onChange={e => setSelectedEventType(e.target.value)}
                                 className={inputClass + " cursor-pointer"}
                             >
-                                {EVENT_TYPES.map(et => (
+                                {GOOGLE_EVENT_TYPES.map(et => (
                                     <option key={et} value={et}>{tp(`event${et}` as any)}</option>
                                 ))}
                             </select>
@@ -563,19 +653,21 @@ export default function SettingsPage() {
 
                 {/* Tab Navigation */}
                 <div className="border-b">
-                    <div className="flex gap-0">
+                    <div className="-mx-1 overflow-x-auto px-1">
+                        <div className="flex min-w-max gap-0">
                         {tabs.map(tab => (
                             <button
                                 key={tab.key}
                                 onClick={() => setActiveTab(tab.key)}
-                                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === tab.key
+                                className={`shrink-0 whitespace-nowrap px-3 sm:px-4 pt-3 pb-2 text-sm font-medium border-b-[3px] transition-colors cursor-pointer ${activeTab === tab.key
                                     ? "border-foreground text-foreground"
-                                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
+                                    : "border-transparent text-muted-foreground hover:text-foreground/80 hover:border-muted-foreground/30"
                                     }`}
                             >
                                 {tab.label}
                             </button>
                         ))}
+                        </div>
                     </div>
                 </div>
 
@@ -748,24 +840,51 @@ export default function SettingsPage() {
                                     </div>
                                 </div>
 
-                                {/* Calendar Event Name Format */}
                                 {isCalendarConnected && (
-                                    <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
+                                    <div className="p-4 rounded-lg border bg-muted/30 space-y-4">
                                         <div>
                                             <p className="text-sm font-medium">Format Nama Event Calendar</p>
-                                            <p className="text-xs text-muted-foreground">Kustomisasi nama event di Google Calendar. Gunakan variabel di bawah.</p>
+                                            <p className="text-xs text-muted-foreground">Bisa dibedakan per jenis acara. Jika format jenis acara kosong, sistem akan pakai format Umum.</p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Jenis Acara</label>
+                                            <select
+                                                value={selectedCalendarEventType}
+                                                onChange={e => setSelectedCalendarEventType(e.target.value)}
+                                                className={inputClass + " cursor-pointer"}
+                                            >
+                                                {GOOGLE_EVENT_TYPES.map(et => (
+                                                    <option key={et} value={et}>{tp(`event${et}` as any)}</option>
+                                                ))}
+                                            </select>
                                         </div>
                                         <input
-                                            value={calendarEventFormat}
-                                            onChange={e => setCalendarEventFormat(e.target.value)}
+                                            ref={calendarFormatInputRef}
+                                            value={currentCalendarFormat}
+                                            onChange={e => updateCalendarFormat(selectedCalendarEventType, e.target.value)}
                                             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                            placeholder="📸 {{client_name}} — {{service_name}}"
+                                            placeholder={DEFAULT_CALENDAR_EVENT_FORMAT}
                                         />
-                                        <div className="flex flex-wrap gap-1">
-                                            {["{{client_name}}", "{{service_name}}", "{{event_type}}", "{{booking_code}}", "{{studio_name}}"].map(v => (
-                                                <button key={v} type="button" onClick={() => setCalendarEventFormat(prev => prev + " " + v)}
-                                                    className="text-[10px] px-1.5 py-0.5 rounded border bg-muted hover:bg-muted/80 text-muted-foreground cursor-pointer">{v}</button>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {CALENDAR_TEMPLATE_VARIABLES.map((token) => (
+                                                <button
+                                                    key={token}
+                                                    type="button"
+                                                    onClick={() => insertIntoInput(
+                                                        calendarFormatInputRef,
+                                                        token,
+                                                        currentCalendarFormat,
+                                                        (value) => updateCalendarFormat(selectedCalendarEventType, value),
+                                                    )}
+                                                    className="text-[11px] px-2 py-1 rounded-md border bg-muted/50 text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+                                                >
+                                                    {token.replace(/\{\{|\}\}/g, "")}
+                                                </button>
                                             ))}
+                                        </div>
+                                        <div className="rounded-md border bg-background/80 px-4 py-3">
+                                            <p className="text-xs font-medium text-muted-foreground mb-1">Preview Event Calendar</p>
+                                            <p className="text-sm text-foreground/90">{calendarEventPreview}</p>
                                         </div>
                                     </div>
                                 )}
@@ -803,20 +922,56 @@ export default function SettingsPage() {
                                             </>
                                         )}
                                     </div>
-                                    {isDriveConnected && (
-                                        <div className="border-t mt-3 pt-3 space-y-2">
-                                            <label className="text-xs font-medium text-muted-foreground">Format Nama Folder Klien</label>
-                                            <input
-                                                value={driveFolderFormat}
-                                                onChange={e => setDriveFolderFormat(e.target.value)}
-                                                placeholder="{client_name}"
-                                                className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-8 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                                            />
-                                            <p className="text-[10px] text-muted-foreground">Variabel: <code className="bg-muted px-1 py-0.5 rounded">{'{client_name}'}</code> <code className="bg-muted px-1 py-0.5 rounded">{'{booking_code}'}</code> <code className="bg-muted px-1 py-0.5 rounded">{'{event_type}'}</code></p>
-                                            <p className="text-[10px] text-muted-foreground">📁 Struktur: Data Booking Client Desk &gt; <strong>{driveFolderFormat || '{client_name}'}</strong> &gt; File Client / Invoice</p>
-                                        </div>
-                                    )}
                                 </div>
+                                {isDriveConnected && (
+                                    <div className="p-4 rounded-lg border bg-muted/30 space-y-4">
+                                        <div>
+                                            <p className="text-sm font-medium">Format Nama Folder Klien</p>
+                                            <p className="text-xs text-muted-foreground">Pisahkan format folder dari koneksi Google Drive, dan atur sendiri per jenis acara.</p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Jenis Acara</label>
+                                            <select
+                                                value={selectedDriveEventType}
+                                                onChange={e => setSelectedDriveEventType(e.target.value)}
+                                                className={inputClass + " cursor-pointer"}
+                                            >
+                                                {GOOGLE_EVENT_TYPES.map(et => (
+                                                    <option key={et} value={et}>{tp(`event${et}` as any)}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <input
+                                            ref={driveFormatInputRef}
+                                            value={currentDriveFormat}
+                                            onChange={e => updateDriveFormat(selectedDriveEventType, e.target.value)}
+                                            placeholder={DEFAULT_DRIVE_FOLDER_FORMAT}
+                                            className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                        />
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {DRIVE_TEMPLATE_VARIABLES.map((token) => (
+                                                <button
+                                                    key={token}
+                                                    type="button"
+                                                    onClick={() => insertIntoInput(
+                                                        driveFormatInputRef,
+                                                        token,
+                                                        currentDriveFormat,
+                                                        (value) => updateDriveFormat(selectedDriveEventType, value),
+                                                    )}
+                                                    className="text-[11px] px-2 py-1 rounded-md border bg-muted/50 text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+                                                >
+                                                    {token.replace(/\{|\}/g, "")}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="rounded-md border bg-background/80 px-4 py-3 space-y-1">
+                                            <p className="text-xs font-medium text-muted-foreground">Preview Folder Klien</p>
+                                            <p className="text-sm text-foreground/90">{driveFolderPreview}</p>
+                                            <p className="text-[11px] text-muted-foreground">📁 Struktur: Data Booking Client Desk &gt; <strong>{driveFolderPreview}</strong> &gt; File Client / Invoice</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

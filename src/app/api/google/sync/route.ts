@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { pushEventToCalendar } from "@/utils/google/calendar";
+import {
+    buildCalendarRangeFromInstants,
+    buildCalendarRangeFromLocalInput,
+} from "@/utils/google/template";
 
 export async function POST(request: NextRequest) {
     try {
@@ -33,14 +37,21 @@ export async function POST(request: NextRequest) {
 
         for (const event of events) {
             try {
+                const range = typeof event.startLocal === "string" && typeof event.endLocal === "string"
+                    ? {
+                        start: buildCalendarRangeFromLocalInput(event.startLocal, 0).start,
+                        end: buildCalendarRangeFromLocalInput(event.endLocal, 0).start,
+                    }
+                    : buildCalendarRangeFromInstants(new Date(event.start), new Date(event.end));
+
                 await pushEventToCalendar(
                     profile.google_access_token,
                     profile.google_refresh_token,
                     {
                         summary: event.summary,
                         description: event.description,
-                        start: new Date(event.start),
-                        end: new Date(event.end),
+                        start: range.start,
+                        end: range.end,
                     }
                 );
                 successCount++;

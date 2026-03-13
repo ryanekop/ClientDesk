@@ -1,4 +1,6 @@
 import { google } from "googleapis";
+import type { GoogleCalendarDateTime } from "@/utils/google/template";
+import { GOOGLE_TEMPLATE_TIMEZONE } from "@/utils/google/template";
 
 export function getOAuth2Client() {
     return new google.auth.OAuth2(
@@ -34,8 +36,8 @@ export async function pushEventToCalendar(
     event: {
         summary: string;
         description?: string;
-        start: Date;
-        end: Date;
+        start: GoogleCalendarDateTime;
+        end: GoogleCalendarDateTime;
         attendees?: string[]; // email addresses to invite
     }
 ) {
@@ -52,12 +54,12 @@ export async function pushEventToCalendar(
             summary: event.summary,
             description: event.description || "",
             start: {
-                dateTime: event.start.toISOString(),
-                timeZone: "Asia/Jakarta",
+                dateTime: event.start.dateTime,
+                timeZone: event.start.timeZone || GOOGLE_TEMPLATE_TIMEZONE,
             },
             end: {
-                dateTime: event.end.toISOString(),
-                timeZone: "Asia/Jakarta",
+                dateTime: event.end.dateTime,
+                timeZone: event.end.timeZone || GOOGLE_TEMPLATE_TIMEZONE,
             },
             ...(attendeesList.length > 0 ? { attendees: attendeesList } : {}),
         },

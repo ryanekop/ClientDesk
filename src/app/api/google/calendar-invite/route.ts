@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { pushEventToCalendar } from "@/utils/google/calendar";
-import { getSessionDateUTC } from "@/utils/format-date";
+import {
+    DEFAULT_CALENDAR_EVENT_FORMAT,
+    buildCalendarRangeFromStoredSession,
+    resolveTemplateByEventType,
+    applyCalendarTemplate,
+} from "@/utils/google/template";
 
 export async function POST(req: NextRequest) {
     try {
@@ -18,7 +23,7 @@ export async function POST(req: NextRequest) {
         // Get vendor's Google Calendar tokens + event name format
         const { data: profile } = await supabase
             .from("profiles")
-            .select("google_access_token, google_refresh_token, studio_name, calendar_event_format")
+            .select("google_access_token, google_refresh_token, studio_name, calendar_event_format, calendar_event_format_map")
             .eq("id", user.id)
             .single();
 
@@ -41,19 +46,24 @@ export async function POST(req: NextRequest) {
         const serviceName = (booking.services as any)?.name || booking.event_type || "Sesi Foto";
         const durationMinutes = (booking.services as any)?.duration_minutes || 120; // fallback 2 hours
 
-        const start = getSessionDateUTC(booking.session_date);
-        const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+        const range = buildCalendarRangeFromStoredSession(booking.session_date, durationMinutes);
 
         // Build custom event name from format template
-        const eventFormat = (profile as any).calendar_event_format || "📸 {{client_name}} — {{service_name}}";
+        const eventFormat = resolveTemplateByEventType(
+            (profile as any).calendar_event_format_map,
+            booking.event_type,
+            (profile as any).calendar_event_format || DEFAULT_CALENDAR_EVENT_FORMAT,
+        );
         const vars: Record<string, string> = {
             client_name: booking.client_name,
             service_name: serviceName,
             event_type: booking.event_type || "-",
             booking_code: (booking as any).booking_code || "",
             studio_name: profile.studio_name || "Client Desk",
+            location: booking.location || "-",
+            ...range.templateVars,
         };
-        const summary = eventFormat.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => vars[key] || `{{${key}}}`);
+        const summary = applyCalendarTemplate(eventFormat, vars);
 
         await pushEventToCalendar(
             profile.google_access_token,
@@ -61,8 +71,8 @@ export async function POST(req: NextRequest) {
             {
                 summary,
                 description: `Klien: ${booking.client_name}\nLokasi: ${booking.location || "-"}\nTipe: ${booking.event_type || "-"}\n\nDikirim oleh ${profile.studio_name || "Client Desk"}`,
-                start,
-                end,
+                start: range.start,
+                end: range.end,
                 attendees: attendeeEmails,
             }
         );
