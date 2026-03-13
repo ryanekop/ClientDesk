@@ -213,8 +213,8 @@ export default function TeamPage() {
         });
     }, [members, searchQuery, tagFilter]);
 
-    const visibleColumns = React.useMemo(
-        () => new Set(columns.filter((column) => column.visible).map((column) => column.id)),
+    const orderedVisibleColumns = React.useMemo(
+        () => columns.filter((column) => column.visible),
         [columns],
     );
 
@@ -239,6 +239,95 @@ export default function TeamPage() {
         setColumns(nextColumns);
         setSavingColumns(false);
         setColumnManagerOpen(false);
+    }
+
+    function renderDesktopHeader(column: TableColumnPreference) {
+        switch (column.id) {
+            case "name":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("nama")}</th>;
+            case "role":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("peran")}</th>;
+            case "whatsapp":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("whatsapp")}</th>;
+            case "status":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>;
+            case "actions":
+                return <th key={column.id} className="min-w-[120px] px-4 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>;
+            default:
+                return null;
+        }
+    }
+
+    function renderDesktopCell(member: Freelancer, column: TableColumnPreference) {
+        switch (column.id) {
+            case "name":
+                return (
+                    <td key={column.id} className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-sm shrink-0">
+                                {member.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="font-medium">{member.name}</span>
+                        </div>
+                    </td>
+                );
+            case "role":
+                return (
+                    <td key={column.id} className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                            {member.role}
+                        </span>
+                        {member.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                                {member.tags.map((tag, i) => (
+                                    <span key={i} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{tag}</span>
+                                ))}
+                            </div>
+                        )}
+                    </td>
+                );
+            case "whatsapp":
+                return <td key={column.id} className="px-6 py-4 whitespace-nowrap">{member.whatsapp_number || "-"}</td>;
+            case "status":
+                return (
+                    <td key={column.id} className="px-6 py-4 whitespace-nowrap">
+                        <button
+                            onClick={() => handleToggleStatus(member)}
+                            className={`text-xs font-medium px-2 py-0.5 rounded-full cursor-pointer transition-colors ${member.status === "active"
+                                ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-500/20"
+                                : "bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-500/20"
+                                }`}
+                        >
+                            {member.status === "active" ? t("aktif") : t("nonaktif")}
+                        </button>
+                    </td>
+                );
+            case "actions":
+                return (
+                    <td key={column.id} className="min-w-[120px] px-4 py-4 whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end gap-1.5 pr-1">
+                            <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)} className="p-0 text-green-600 transition-colors hover:text-green-700 cursor-pointer dark:text-green-400 dark:hover:text-green-300">
+                                <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                            </button>
+                            <button title="Edit" onClick={() => {
+                                setEditingMember(member);
+                                setEditTags(member.tags || []);
+                                const wa = member.whatsapp_number || "";
+                                const match = COUNTRY_CODES.find(c => wa.startsWith(c.code));
+                                setEditCountryCode(match ? match.code : "+62");
+                                setIsEditOpen(true);
+                            }} className="p-0 transition-colors hover:text-foreground cursor-pointer">
+                                <Edit2 className="w-4 h-4 text-muted-foreground" />
+                            </button>
+                            <button title="Hapus" onClick={() => handleDelete(member.id)} className="p-0 transition-colors hover:text-red-600 cursor-pointer">
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                            </button>
+                        </div>
+                    </td>
+                );
+            default:
+                return null;
+        }
     }
 
     return (
@@ -403,68 +492,13 @@ export default function TeamPage() {
                             <table className="min-w-[860px] w-full text-sm text-left">
                                 <thead className="text-xs uppercase bg-card border-b">
                                     <tr>
-                                        {visibleColumns.has("name") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("nama")}</th>}
-                                        {visibleColumns.has("role") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("peran")}</th>}
-                                        {visibleColumns.has("whatsapp") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("whatsapp")}</th>}
-                                        {visibleColumns.has("status") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>}
-                                        {visibleColumns.has("actions") && <th className="min-w-[120px] px-4 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>}
+                                        {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
                                     {paginateArray(filteredMembers, currentPage, itemsPerPage).map((member) => (
                                         <tr key={member.id} className="group hover:bg-muted/50 transition-colors">
-                                            {visibleColumns.has("name") && <td className="px-4 py-3">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-sm shrink-0">
-                                                        {member.name.charAt(0).toUpperCase()}
-                                                    </div>
-                                                    <span className="font-medium">{member.name}</span>
-                                                </div>
-                                            </td>}
-                                            {visibleColumns.has("role") && <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                                                    {member.role}
-                                                </span>
-                                                {member.tags.length > 0 && (
-                                                    <div className="flex flex-wrap gap-1 mt-1">
-                                                        {member.tags.map((tag, i) => (
-                                                            <span key={i} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{tag}</span>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </td>}
-                                            {visibleColumns.has("whatsapp") && <td className="px-6 py-4 whitespace-nowrap">{member.whatsapp_number || "-"}</td>}
-                                            {visibleColumns.has("status") && <td className="px-6 py-4 whitespace-nowrap">
-                                                <button
-                                                    onClick={() => handleToggleStatus(member)}
-                                                    className={`text-xs font-medium px-2 py-0.5 rounded-full cursor-pointer transition-colors ${member.status === "active"
-                                                        ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-500/20"
-                                                        : "bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-500/20"
-                                                        }`}
-                                                >
-                                                    {member.status === "active" ? t("aktif") : t("nonaktif")}
-                                                </button>
-                                            </td>}
-                                            {visibleColumns.has("actions") && <td className="min-w-[120px] px-4 py-4 whitespace-nowrap text-right">
-                                                <div className="flex items-center justify-end gap-1.5 pr-1">
-                                                    <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)} className="p-0 text-green-600 transition-colors hover:text-green-700 cursor-pointer dark:text-green-400 dark:hover:text-green-300">
-                                                        <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-                                                    </button>
-                                                    <button title="Edit" onClick={() => {
-                                                        setEditingMember(member);
-                                                        setEditTags(member.tags || []);
-                                                        const wa = member.whatsapp_number || "";
-                                                        const match = COUNTRY_CODES.find(c => wa.startsWith(c.code));
-                                                        setEditCountryCode(match ? match.code : "+62");
-                                                        setIsEditOpen(true);
-                                                    }} className="p-0 transition-colors hover:text-foreground cursor-pointer">
-                                                        <Edit2 className="w-4 h-4 text-muted-foreground" />
-                                                    </button>
-                                                    <button title="Hapus" onClick={() => handleDelete(member.id)} className="p-0 transition-colors hover:text-red-600 cursor-pointer">
-                                                        <Trash2 className="w-4 h-4 text-red-500" />
-                                                    </button>
-                                                </div>
-                                            </td>}
+                                            {orderedVisibleColumns.map((column) => renderDesktopCell(member, column))}
                                         </tr>
                                     ))}
                                 </tbody>

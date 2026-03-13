@@ -34,6 +34,10 @@ import {
     updateTableColumnPreferenceMap,
     type TableColumnPreference,
 } from "@/lib/table-column-prefs";
+import {
+    buildBookingMetadataColumns,
+    getBookingMetadataValue,
+} from "@/lib/booking-table-columns";
 import * as XLSX from "xlsx";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
@@ -73,7 +77,7 @@ type BookingFilterField = {
 };
 
 const DEFAULT_STATUS_OPTS = ["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"];
-const BOOKING_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
+const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
     { id: "name", label: "Nama", visible: true, locked: true },
     { id: "invoice", label: "Invoice", visible: true },
     { id: "package", label: "Paket", visible: true },
@@ -83,7 +87,7 @@ const BOOKING_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
     { id: "freelancer", label: "Freelance", visible: true },
     { id: "price", label: "Harga", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true },
-]);
+];
 
 type SavedTemplate = {
     id: string;
@@ -165,7 +169,7 @@ export default function BookingsPage() {
     const [studioName, setStudioName] = React.useState("");
     const [statusOpts, setStatusOpts] = React.useState<string[]>(DEFAULT_STATUS_OPTS);
     const [defaultWaTarget, setDefaultWaTarget] = React.useState<"client" | "freelancer">("client");
-    const [columns, setColumns] = React.useState<TableColumnPreference[]>(BOOKING_COLUMN_DEFAULTS);
+    const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_BOOKING_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
 
@@ -199,6 +203,19 @@ export default function BookingsPage() {
     // WA Freelancer popup
     const [waPopup, setWaPopup] = React.useState<{ open: boolean; freelancers: FreelancerInfo[]; booking: Booking | null }>({ open: false, freelancers: [], booking: null });
 
+    const metadataColumns = React.useMemo(
+        () => buildBookingMetadataColumns(bookings, formSectionsByEventType),
+        [bookings, formSectionsByEventType],
+    );
+    const bookingColumnDefaults = React.useMemo(
+        () => lockBoundaryColumns([
+            ...BASE_BOOKING_COLUMNS.slice(0, -1),
+            ...metadataColumns,
+            BASE_BOOKING_COLUMNS[BASE_BOOKING_COLUMNS.length - 1],
+        ]),
+        [metadataColumns],
+    );
+
     const fetchTemplates = React.useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
@@ -228,7 +245,7 @@ export default function BookingsPage() {
         if (profileData?.default_wa_target) setDefaultWaTarget(profileData.default_wa_target);
         setColumns(
             mergeTableColumnPreferences(
-                BOOKING_COLUMN_DEFAULTS,
+                bookingColumnDefaults,
                 profileData?.table_column_preferences?.bookings,
             ),
         );
@@ -269,7 +286,7 @@ export default function BookingsPage() {
         setPackages(Array.from(new Set(bgs.flatMap(b => getBookingServiceNames(b.service_selections || [], "main")).filter(Boolean))) as string[]);
         setFreelancerNames(Array.from(new Set(bgs.flatMap(b => b.booking_freelancers.map(f => f.name)).filter(Boolean))) as string[]);
         setLoading(false);
-    }, [supabase]);
+    }, [bookingColumnDefaults, supabase]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -343,6 +360,155 @@ export default function BookingsPage() {
     const formatCurrency = (n: number) =>
         n ? new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n) : "-";
 
+    function renderDesktopHeader(column: TableColumnPreference) {
+        switch (column.id) {
+            case "name":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("namaKlien")}</th>;
+            case "invoice":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("invoice")}</th>;
+            case "package":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("paket")}</th>;
+            case "schedule":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("jadwal")}</th>;
+            case "location":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("location")}</th>;
+            case "status":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("status")}</th>;
+            case "freelancer":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("freelancer")}</th>;
+            case "price":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("harga")}</th>;
+            case "actions":
+                return <th key={column.id} className="min-w-[220px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">{t("aksi")}</th>;
+            default:
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{column.label}</th>;
+        }
+    }
+
+    function renderDesktopCell(booking: Booking, column: TableColumnPreference) {
+        switch (column.id) {
+            case "name":
+                return (
+                    <td key={column.id} className="px-4 py-3 max-w-[140px]">
+                        <div className="font-medium text-foreground truncate">{booking.client_name}</div>
+                        {booking.client_whatsapp && (
+                            <div className="text-[11px] text-muted-foreground truncate">{booking.client_whatsapp}</div>
+                        )}
+                    </td>
+                );
+            case "invoice":
+                return (
+                    <td key={column.id} className="px-4 py-3 whitespace-nowrap">
+                        <span className="text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded border border-border/50">
+                            {booking.booking_code}
+                        </span>
+                    </td>
+                );
+            case "package":
+                return <td key={column.id} className="px-4 py-3 max-w-[150px] truncate text-muted-foreground" title={booking.service_label || booking.services?.name || "-"}>{booking.service_label || booking.services?.name || "-"}</td>;
+            case "schedule":
+                return <td key={column.id} className="px-4 py-3 whitespace-nowrap text-muted-foreground font-light">{formatDate(booking.session_date)}</td>;
+            case "location":
+                return (
+                    <td key={column.id} className="px-4 py-3 max-w-[180px]">
+                        {booking.location ? (
+                            <div className="flex items-center gap-1">
+                                <span className="truncate text-xs text-muted-foreground" title={booking.location}>{booking.location}</span>
+                                <button type="button" onClick={() => window.open(`https://maps.google.com/maps?q=${encodeURIComponent(booking.location!)}`, "_blank")}
+                                    className="text-blue-500 hover:text-blue-600 transition-colors shrink-0">
+                                    <MapPin className="w-3 h-3" />
+                                </button>
+                            </div>
+                        ) : <span className="text-muted-foreground">-</span>}
+                    </td>
+                );
+            case "status":
+                return <td key={column.id} className="px-4 py-3 whitespace-nowrap"><StatusBadge status={booking.status} /></td>;
+            case "freelancer":
+                return (
+                    <td key={column.id} className="px-4 py-3 max-w-[130px] truncate text-muted-foreground" title={booking.booking_freelancers.length > 0 ? booking.booking_freelancers.map(f => f.name).join(", ") : "-"}>
+                        {booking.booking_freelancers.length > 0
+                            ? booking.booking_freelancers.map(f => f.name).join(", ")
+                            : "-"}
+                    </td>
+                );
+            case "price":
+                return <td key={column.id} className="px-4 py-3 whitespace-nowrap font-medium text-foreground">{formatCurrency(booking.total_price)}</td>;
+            case "actions":
+                return (
+                    <td key={column.id} className="min-w-[220px] px-4 py-3 whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-violet-500 hover:bg-transparent hover:text-violet-600" title={tb("copyTemplate")}
+                                onClick={() => copyTemplate(booking)}>
+                                {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-green-500 hover:bg-transparent hover:text-green-600"
+                                title={booking.booking_freelancers.length > 0 ? `${tb("waFreelance")} (${booking.booking_freelancers.length})` : tb("whatsapp")}
+                                disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
+                                onClick={() => {
+                                    if (defaultWaTarget === "client" || booking.booking_freelancers.length === 0) {
+                                        if (booking.client_whatsapp) sendWhatsAppClient(booking);
+                                        else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
+                                            const f = booking.booking_freelancers[0];
+                                            const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
+                                            const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName, f.name));
+                                            window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
+                                        }
+                                    } else {
+                                        if (booking.booking_freelancers.length > 1) {
+                                            setWaPopup({ open: true, freelancers: booking.booking_freelancers, booking });
+                                        } else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
+                                            const f = booking.booking_freelancers[0];
+                                            const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
+                                            const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName, f.name));
+                                            window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
+                                        } else {
+                                            sendWhatsAppClient(booking);
+                                        }
+                                    }
+                                }}>
+                                <MessageCircle className="w-4 h-4" />
+                            </Button>
+                            {booking.drive_folder_url ? (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-blue-500 hover:bg-transparent hover:text-blue-600" title={tb("openDrive")} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
+                                    <Folder className="w-4 h-4" />
+                                </Button>
+                            ) : (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-blue-400 hover:bg-transparent hover:text-blue-500" title="Set Link Drive"
+                                    onClick={() => { setDriveLinkInput(""); setDriveLinkPopup({ open: true, booking }); }}>
+                                    <Link2 className="w-4 h-4" />
+                                </Button>
+                            )}
+                            <Link href={`/bookings/${booking.id}`}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tb("detail")}>
+                                    <Info className="w-4 h-4" />
+                                </Button>
+                            </Link>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-orange-500 hover:bg-transparent hover:text-orange-600" title={tb("changeStatusBtn")}
+                                onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
+                                <RefreshCcw className="w-4 h-4" />
+                            </Button>
+                            <Link href={`/bookings/${booking.id}/edit`}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-blue-500 hover:bg-transparent hover:text-blue-600" title={tb("editBtn")}>
+                                    <Edit2 className="w-4 h-4" />
+                                </Button>
+                            </Link>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-red-500 hover:bg-transparent hover:text-red-600" title={tb("deleteBtn")}
+                                onClick={() => setDeleteModal({ open: true, booking })}>
+                                <Trash2 className="w-4 h-4" />
+                            </Button>
+                        </div>
+                    </td>
+                );
+            default:
+                return (
+                    <td key={column.id} className="px-4 py-3 max-w-[180px] truncate text-muted-foreground" title={getBookingMetadataValue(booking.extra_fields, column.id)}>
+                        {getBookingMetadataValue(booking.extra_fields, column.id)}
+                    </td>
+                );
+        }
+    }
+
     const activeExtraFilterFields = React.useMemo<BookingFilterField[]>(() => {
         if (eventTypeFilter === "All") return [];
 
@@ -394,10 +560,14 @@ export default function BookingsPage() {
         setCurrentPage(1);
     }, [searchQuery, statusFilter, packageFilter, freelanceFilter, eventTypeFilter, dateFromFilter, dateToFilter, extraFieldFilters, sortOrder]);
 
-    const visibleColumns = React.useMemo(
-        () => new Set(columns.filter((column) => column.visible).map((column) => column.id)),
+    const orderedVisibleColumns = React.useMemo(
+        () => columns.filter((column) => column.visible),
         [columns],
     );
+
+    React.useEffect(() => {
+        setColumns((current) => mergeTableColumnPreferences(bookingColumnDefaults, current));
+    }, [bookingColumnDefaults]);
 
     const filteredBookings = bookings.filter(b => {
         const q = searchQuery.toLowerCase();
@@ -675,15 +845,7 @@ export default function BookingsPage() {
                     <table className="min-w-[1320px] w-full text-sm text-left border-collapse">
                         <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
-                                {visibleColumns.has("name") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("namaKlien")}</th>}
-                                {visibleColumns.has("invoice") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("invoice")}</th>}
-                                {visibleColumns.has("package") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("paket")}</th>}
-                                {visibleColumns.has("schedule") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("jadwal")}</th>}
-                                {visibleColumns.has("location") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("location")}</th>}
-                                {visibleColumns.has("status") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("status")}</th>}
-                                {visibleColumns.has("freelancer") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("freelancer")}</th>}
-                                {visibleColumns.has("price") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("harga")}</th>}
-                                {visibleColumns.has("actions") && <th className="min-w-[220px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">{t("aksi")}</th>}
+                                {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border/50">
@@ -694,107 +856,7 @@ export default function BookingsPage() {
                             ) : (
                                 paginateArray(filteredBookings, currentPage, itemsPerPage).map((booking) => (
                                     <tr key={booking.id} className="hover:bg-muted/30 transition-colors group">
-                                        {visibleColumns.has("name") && <td className="px-4 py-3 max-w-[140px]">
-                                            <div className="font-medium text-foreground truncate">{booking.client_name}</div>
-                                            {booking.client_whatsapp && (
-                                                <div className="text-[11px] text-muted-foreground truncate">{booking.client_whatsapp}</div>
-                                            )}
-                                        </td>}
-                                        {visibleColumns.has("invoice") && <td className="px-4 py-3 whitespace-nowrap">
-                                            <span className="text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded border border-border/50">
-                                                {booking.booking_code}
-                                            </span>
-                                        </td>}
-                                        {visibleColumns.has("package") && <td className="px-4 py-3 max-w-[150px] truncate text-muted-foreground" title={booking.service_label || booking.services?.name || "-"}>{booking.service_label || booking.services?.name || "-"}</td>}
-                                        {visibleColumns.has("schedule") && <td className="px-4 py-3 whitespace-nowrap text-muted-foreground font-light">{formatDate(booking.session_date)}</td>}
-                                        {visibleColumns.has("location") && <td className="px-4 py-3 max-w-[180px]">
-                                            {booking.location ? (
-                                                <div className="flex items-center gap-1">
-                                                    <span className="truncate text-xs text-muted-foreground" title={booking.location}>{booking.location}</span>
-                                                    <button type="button" onClick={() => window.open(`https://maps.google.com/maps?q=${encodeURIComponent(booking.location!)}`, "_blank")}
-                                                        className="text-blue-500 hover:text-blue-600 transition-colors shrink-0">
-                                                    <MapPin className="w-3 h-3" />
-                                                    </button>
-                                                </div>
-                                            ) : <span className="text-muted-foreground">-</span>}
-                                        </td>}
-                                        {visibleColumns.has("status") && <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={booking.status} /></td>}
-                                        {visibleColumns.has("freelancer") && <td className="px-4 py-3 max-w-[130px] truncate text-muted-foreground" title={booking.booking_freelancers.length > 0 ? booking.booking_freelancers.map(f => f.name).join(", ") : "-"}>
-                                            {booking.booking_freelancers.length > 0
-                                                ? booking.booking_freelancers.map(f => f.name).join(", ")
-                                                : "-"}
-                                        </td>}
-                                        {visibleColumns.has("price") && <td className="px-4 py-3 whitespace-nowrap font-medium text-foreground">{formatCurrency(booking.total_price)}</td>}
-                                        {visibleColumns.has("actions") && <td className="min-w-[220px] px-4 py-3 whitespace-nowrap text-right">
-                                            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-                                                {/* 1. Copy Template */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-violet-500 hover:bg-transparent hover:text-violet-600" title={tb("copyTemplate")}
-                                                    onClick={() => copyTemplate(booking)}>
-                                                    {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                                </Button>
-                                                {/* 2. WA Freelancer (default) / Client fallback */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-green-500 hover:bg-transparent hover:text-green-600"
-                                                    title={booking.booking_freelancers.length > 0 ? `${tb("waFreelance")} (${booking.booking_freelancers.length})` : tb("whatsapp")}
-                                                    disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
-                                                    onClick={() => {
-                                                        if (defaultWaTarget === "client" || booking.booking_freelancers.length === 0) {
-                                                            if (booking.client_whatsapp) sendWhatsAppClient(booking);
-                                                            else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
-                                                                const f = booking.booking_freelancers[0];
-                                                                const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                                                const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName, f.name));
-                                                                window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
-                                                            }
-                                                        } else {
-                                                            if (booking.booking_freelancers.length > 1) {
-                                                                setWaPopup({ open: true, freelancers: booking.booking_freelancers, booking });
-                                                            } else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
-                                                                const f = booking.booking_freelancers[0];
-                                                                const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                                                const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName, f.name));
-                                                                window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
-                                                            } else {
-                                                                sendWhatsAppClient(booking);
-                                                            }
-                                                        }
-                                                    }}>
-                                                    <MessageCircle className="w-4 h-4" />
-                                                </Button>
-                                                {/* 3. Drive Folder */}
-                                                {booking.drive_folder_url ? (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-blue-500 hover:bg-transparent hover:text-blue-600" title={tb("openDrive")} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
-                                                        <Folder className="w-4 h-4" />
-                                                    </Button>
-                                                ) : (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-blue-400 hover:bg-transparent hover:text-blue-500" title="Set Link Drive"
-                                                        onClick={() => { setDriveLinkInput(""); setDriveLinkPopup({ open: true, booking }); }}>
-                                                        <Link2 className="w-4 h-4" />
-                                                    </Button>
-                                                )}
-                                                {/* 4. Detail */}
-                                                <Link href={`/bookings/${booking.id}`}>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tb("detail")}>
-                                                        <Info className="w-4 h-4" />
-                                                    </Button>
-                                                </Link>
-                                                {/* 5. Status */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-orange-500 hover:bg-transparent hover:text-orange-600" title={tb("changeStatusBtn")}
-                                                    onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
-                                                    <RefreshCcw className="w-4 h-4" />
-                                                </Button>
-                                                {/* 6. Edit */}
-                                                <Link href={`/bookings/${booking.id}/edit`}>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-blue-500 hover:bg-transparent hover:text-blue-600" title={tb("editBtn")}>
-                                                        <Edit2 className="w-4 h-4" />
-                                                    </Button>
-                                                </Link>
-                                                {/* 7. Hapus */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-red-500 hover:bg-transparent hover:text-red-600" title={tb("deleteBtn")}
-                                                    onClick={() => setDeleteModal({ open: true, booking })}>
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
-                                            </div>
-                                        </td>}
+                                        {orderedVisibleColumns.map((column) => renderDesktopCell(booking, column))}
                                     </tr>
                                 ))
                             )}

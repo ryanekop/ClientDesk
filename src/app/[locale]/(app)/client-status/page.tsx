@@ -14,6 +14,16 @@ import {
     updateTableColumnPreferenceMap,
     type TableColumnPreference,
 } from "@/lib/table-column-prefs";
+import {
+    buildBookingMetadataColumns,
+    getBookingMetadataValue,
+} from "@/lib/booking-table-columns";
+import {
+    normalizeBookingServiceSelections,
+    getBookingServiceLabel,
+    type BookingServiceSelection,
+} from "@/lib/booking-services";
+import type { FormLayoutItem } from "@/components/form-builder/booking-form-layout";
 
 type BookingStatus = {
     id: string;
@@ -25,7 +35,12 @@ type BookingStatus = {
     client_status: string | null;
     queue_position: number | null;
     tracking_uuid: string | null;
-    services: { name: string } | null;
+    services: { id?: string; name: string; price?: number; is_addon?: boolean | null } | null;
+    booking_services?: unknown[];
+    service_selections?: BookingServiceSelection[];
+    service_label?: string;
+    event_type?: string | null;
+    extra_fields?: Record<string, unknown> | null;
 };
 
 const DEFAULT_CLIENT_STATUSES = [
@@ -45,13 +60,13 @@ const STATUS_COLOR_PALETTE = [
     "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400",
 ];
 
-const CLIENT_STATUS_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
+const BASE_CLIENT_STATUS_COLUMNS: TableColumnPreference[] = [
     { id: "name", label: "Nama", visible: true, locked: true },
     { id: "package", label: "Paket", visible: true },
     { id: "status", label: "Status", visible: true },
     { id: "queue", label: "Antrian", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true },
-]);
+];
 
 export default function ClientStatusPage() {
     const supabase = createClient();
@@ -66,15 +81,28 @@ export default function ClientStatusPage() {
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [clientStatuses, setClientStatuses] = React.useState<string[]>(DEFAULT_CLIENT_STATUSES);
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
-    const [columns, setColumns] = React.useState<TableColumnPreference[]>(CLIENT_STATUS_COLUMN_DEFAULTS);
+    const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_CLIENT_STATUS_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
+    const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
 
     const statusColors = React.useMemo(() => {
         const map: Record<string, string> = {};
         clientStatuses.forEach((s, i) => { map[s] = STATUS_COLOR_PALETTE[i % STATUS_COLOR_PALETTE.length]; });
         return map;
     }, [clientStatuses]);
+    const metadataColumns = React.useMemo(
+        () => buildBookingMetadataColumns(bookings, formSectionsByEventType),
+        [bookings, formSectionsByEventType],
+    );
+    const clientStatusColumnDefaults = React.useMemo(
+        () => lockBoundaryColumns([
+            ...BASE_CLIENT_STATUS_COLUMNS.slice(0, -1),
+            ...metadataColumns,
+            BASE_CLIENT_STATUS_COLUMNS[BASE_CLIENT_STATUS_COLUMNS.length - 1],
+        ]),
+        [metadataColumns],
+    );
 
     React.useEffect(() => {
         async function load() {
@@ -82,11 +110,12 @@ export default function ClientStatusPage() {
             if (!user) return;
 
             // Load custom client statuses from profile
-            const { data: profile } = await supabase.from("profiles").select("custom_client_statuses, queue_trigger_status, table_column_preferences").eq("id", user.id).single();
+            const { data: profile } = await supabase.from("profiles").select("custom_client_statuses, queue_trigger_status, table_column_preferences, form_sections").eq("id", user.id).single();
             const profileData = profile as {
                 custom_client_statuses?: string[] | null;
                 queue_trigger_status?: string | null;
                 table_column_preferences?: { client_status?: TableColumnPreference[] } | null;
+                form_sections?: Record<string, FormLayoutItem[]> | null;
             } | null;
             if (profile?.custom_client_statuses) {
                 setClientStatuses(profile.custom_client_statuses as string[]);
@@ -96,23 +125,39 @@ export default function ClientStatusPage() {
             }
             setColumns(
                 mergeTableColumnPreferences(
-                    CLIENT_STATUS_COLUMN_DEFAULTS,
+                    clientStatusColumnDefaults,
                     profileData?.table_column_preferences?.client_status,
                 ),
             );
+            setFormSectionsByEventType(profileData?.form_sections || {});
 
             const { data } = await supabase
                 .from("bookings")
-                .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, tracking_uuid, services(name)")
+                .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, tracking_uuid, event_type, extra_fields, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
                 .eq("user_id", user.id)
                 .neq("status", "Batal")
                 .order("created_at", { ascending: false });
 
-            setBookings((data || []) as unknown as BookingStatus[]);
+            setBookings(
+                ((data || []) as BookingStatus[]).map((booking) => {
+                    const serviceSelections = normalizeBookingServiceSelections(
+                        booking.booking_services,
+                        booking.services,
+                    );
+                    return {
+                        ...booking,
+                        service_selections: serviceSelections,
+                        service_label: getBookingServiceLabel(serviceSelections, {
+                            kind: "main",
+                            fallback: booking.services?.name || "-",
+                        }),
+                    };
+                }),
+            );
             setLoading(false);
         }
         load();
-    }, []);
+    }, [clientStatusColumnDefaults, supabase]);
 
     async function updateStatus(id: string, clientStatus: string) {
         setSavingId(id);
@@ -168,10 +213,13 @@ export default function ClientStatusPage() {
         if (search && !b.client_name.toLowerCase().includes(search.toLowerCase()) && !b.booking_code.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
     });
-    const visibleColumns = React.useMemo(
-        () => new Set(columns.filter((column) => column.visible).map((column) => column.id)),
+    const orderedVisibleColumns = React.useMemo(
+        () => columns.filter((column) => column.visible),
         [columns],
     );
+    React.useEffect(() => {
+        setColumns((current) => mergeTableColumnPreferences(clientStatusColumnDefaults, current));
+    }, [clientStatusColumnDefaults]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -194,6 +242,109 @@ export default function ClientStatusPage() {
         setColumns(nextColumns);
         setSavingColumns(false);
         setColumnManagerOpen(false);
+    }
+
+    function renderDesktopHeader(column: TableColumnPreference) {
+        switch (column.id) {
+            case "name":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{locale === "en" ? "Client" : "Klien"}</th>;
+            case "package":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap hidden sm:table-cell">{locale === "en" ? "Package" : "Paket"}</th>;
+            case "status":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{locale === "en" ? "Status" : "Status"}</th>;
+            case "queue":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-center hidden sm:table-cell">{t("antrian")}</th>;
+            case "actions":
+                return <th key={column.id} className="min-w-[96px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">{t("aksi")}</th>;
+            default:
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{column.label}</th>;
+        }
+    }
+
+    function renderDesktopCell(booking: BookingStatus, column: TableColumnPreference) {
+        switch (column.id) {
+            case "name":
+                return (
+                    <td key={column.id} className="px-4 py-3">
+                        <Link href={`/bookings/${booking.id}`} className="hover:underline">
+                            <p className="text-sm font-medium leading-tight">{booking.client_name}</p>
+                            <p className="text-[11px] text-muted-foreground">{booking.booking_code}</p>
+                        </Link>
+                    </td>
+                );
+            case "package":
+                return <td key={column.id} className="px-4 py-3 text-sm hidden sm:table-cell text-muted-foreground">{booking.service_label || booking.services?.name || "-"}</td>;
+            case "status":
+                return (
+                    <td key={column.id} className="px-4 py-3">
+                        <select
+                            value={booking.client_status || ""}
+                            onChange={e => updateStatus(booking.id, e.target.value)}
+                            disabled={savingId === booking.id}
+                            className={selectClass}
+                        >
+                            <option value="">{t("belumDiset")}</option>
+                            {clientStatuses.map(s => (
+                                <option key={s} value={s}>{s}</option>
+                            ))}
+                        </select>
+                        {booking.client_status && (
+                            <span className={`ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusColors[booking.client_status] || "bg-muted text-muted-foreground"}`}>
+                                {booking.client_status}
+                            </span>
+                        )}
+                    </td>
+                );
+            case "queue":
+                return (
+                    <td key={column.id} className="px-4 py-3 text-center hidden sm:table-cell">
+                        <input
+                            type="number"
+                            min={0}
+                            value={booking.queue_position ?? ""}
+                            onChange={e => {
+                                const val = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                                updateQueue(booking.id, val);
+                            }}
+                            placeholder="-"
+                            className={inputClass}
+                        />
+                    </td>
+                );
+            case "actions":
+                return (
+                    <td key={column.id} className="min-w-[96px] px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                            {booking.tracking_uuid && (
+                                <>
+                                    <Button
+                                        variant="ghost" size="icon"
+                                        className={`h-8 w-8 p-0 hover:bg-transparent ${copiedId === booking.id ? "text-green-500" : "text-slate-500 hover:text-slate-700"}`}
+                                        title={t("salinLinkTracking")}
+                                        onClick={() => copyTrackLink(booking.tracking_uuid!, booking.id)}
+                                    >
+                                        {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                    </Button>
+                                    <Button
+                                        variant="ghost" size="icon"
+                                        className="h-8 w-8 p-0 text-blue-500 hover:bg-transparent hover:text-blue-600"
+                                        title={t("bukaTracking")}
+                                        onClick={() => window.open(`/${locale}/track/${booking.tracking_uuid}`, "_blank")}
+                                    >
+                                        <ExternalLink className="w-4 h-4" />
+                                    </Button>
+                                </>
+                            )}
+                        </div>
+                    </td>
+                );
+            default:
+                return (
+                    <td key={column.id} className="px-4 py-3 max-w-[180px] truncate text-muted-foreground" title={getBookingMetadataValue(booking.extra_fields, column.id)}>
+                        {getBookingMetadataValue(booking.extra_fields, column.id)}
+                    </td>
+                );
+        }
     }
 
     const selectClass = "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] cursor-pointer";
@@ -301,11 +452,7 @@ export default function ClientStatusPage() {
                     <table className="min-w-[900px] w-full text-sm text-left border-collapse">
                         <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
-                                {visibleColumns.has("name") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{locale === "en" ? "Client" : "Klien"}</th>}
-                                {visibleColumns.has("package") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap hidden sm:table-cell">{locale === "en" ? "Package" : "Paket"}</th>}
-                                {visibleColumns.has("status") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{locale === "en" ? "Status" : "Status"}</th>}
-                                {visibleColumns.has("queue") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-center hidden sm:table-cell">{t("antrian")}</th>}
-                                {visibleColumns.has("actions") && <th className="min-w-[96px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">{t("aksi")}</th>}
+                                {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border/50">
@@ -318,70 +465,7 @@ export default function ClientStatusPage() {
                             ) : (
                                 paginateArray(filtered, currentPage, itemsPerPage).map(b => (
                                     <tr key={b.id} className="group hover:bg-muted/30 transition-colors">
-                                        {visibleColumns.has("name") && <td className="px-4 py-3">
-                                            <Link href={`/bookings/${b.id}`} className="hover:underline">
-                                                <p className="text-sm font-medium leading-tight">{b.client_name}</p>
-                                                <p className="text-[11px] text-muted-foreground">{b.booking_code}</p>
-                                            </Link>
-                                        </td>}
-                                        {visibleColumns.has("package") && <td className="px-4 py-3 text-sm hidden sm:table-cell text-muted-foreground">
-                                            {b.services?.name || "-"}
-                                        </td>}
-                                        {visibleColumns.has("status") && <td className="px-4 py-3">
-                                            <select
-                                                value={b.client_status || ""}
-                                                onChange={e => updateStatus(b.id, e.target.value)}
-                                                disabled={savingId === b.id}
-                                                className={selectClass}
-                                            >
-                                                <option value="">{t("belumDiset")}</option>
-                                                {clientStatuses.map(s => (
-                                                    <option key={s} value={s}>{s}</option>
-                                                ))}
-                                            </select>
-                                            {b.client_status && (
-                                                <span className={`ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusColors[b.client_status] || "bg-muted text-muted-foreground"}`}>
-                                                    {b.client_status}
-                                                </span>
-                                            )}
-                                        </td>}
-                                        {visibleColumns.has("queue") && <td className="px-4 py-3 text-center hidden sm:table-cell">
-                                            <input
-                                                type="number"
-                                                min={0}
-                                                value={b.queue_position ?? ""}
-                                                onChange={e => {
-                                                    const val = e.target.value === "" ? null : parseInt(e.target.value, 10);
-                                                    updateQueue(b.id, val);
-                                                }}
-                                                placeholder="-"
-                                                className={inputClass}
-                                            />
-                                        </td>}
-                                        {visibleColumns.has("actions") && <td className="min-w-[96px] px-4 py-3 text-right">
-                                            <div className="flex items-center justify-end gap-1.5">
-                                                {b.tracking_uuid && (
-                                                    <>
-                                                        <Button
-                                                            variant="ghost" size="icon"
-                                                            className={`h-8 w-8 p-0 hover:bg-transparent ${copiedId === b.id ? "text-green-500" : "text-slate-500 hover:text-slate-700"}`}
-                                                            title={t("salinLinkTracking")}
-                                                            onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}
-                                                        >
-                                                            {copiedId === b.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost" size="icon"
-                                                            className="h-8 w-8 p-0 text-blue-500 hover:bg-transparent hover:text-blue-600"
-                                                            title={t("bukaTracking")}
-                                                            onClick={() => window.open(`/${locale}/track/${b.tracking_uuid}`, "_blank")}
-                                                        >
-                                                            <ExternalLink className="w-4 h-4" />
-                                                        </Button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </td>}
+                                        {orderedVisibleColumns.map((column) => renderDesktopCell(b, column))}
                                     </tr>
                                 ))
                             )}

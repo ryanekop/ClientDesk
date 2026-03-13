@@ -23,6 +23,11 @@ import {
     type TableColumnPreference,
 } from "@/lib/table-column-prefs";
 import {
+    buildBookingMetadataColumns,
+    getBookingMetadataValue,
+} from "@/lib/booking-table-columns";
+import type { FormLayoutItem } from "@/components/form-builder/booking-form-layout";
+import {
     getFinalInvoiceTotal,
     getRemainingFinalPayment,
     getTotalPaidAmount,
@@ -55,13 +60,14 @@ type BookingFinance = {
     payment_proof_drive_file_id: string | null;
     final_payment_proof_url: string | null;
     final_payment_proof_drive_file_id: string | null;
+    extra_fields?: Record<string, unknown> | null;
     services: { id?: string; name: string; price: number; is_addon?: boolean | null } | null;
     booking_services?: unknown[];
     service_selections?: BookingServiceSelection[];
     service_label?: string;
 };
 
-const FINANCE_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
+const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
     { id: "name", label: "Nama", visible: true, locked: true },
     { id: "total_price", label: "Harga Total", visible: true },
     { id: "addon", label: "Add-on", visible: true },
@@ -69,7 +75,7 @@ const FINANCE_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
     { id: "remaining", label: "Sisa", visible: true },
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true },
-]);
+];
 
 export default function FinancePage() {
     const supabase = createClient();
@@ -85,9 +91,22 @@ export default function FinancePage() {
     const [savedTemplates, setSavedTemplates] = React.useState<
         { id: string; type: string; content: string; content_en: string; event_type: string | null }[]
     >([]);
-    const [columns, setColumns] = React.useState<TableColumnPreference[]>(FINANCE_COLUMN_DEFAULTS);
+    const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_FINANCE_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
+    const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
+    const metadataColumns = React.useMemo(
+        () => buildBookingMetadataColumns(bookings, formSectionsByEventType),
+        [bookings, formSectionsByEventType],
+    );
+    const financeColumnDefaults = React.useMemo(
+        () => lockBoundaryColumns([
+            ...BASE_FINANCE_COLUMNS.slice(0, -1),
+            ...metadataColumns,
+            BASE_FINANCE_COLUMNS[BASE_FINANCE_COLUMNS.length - 1],
+        ]),
+        [metadataColumns],
+    );
 
     const fetchBookings = React.useCallback(async () => {
         setLoading(true);
@@ -97,7 +116,7 @@ export default function FinancePage() {
         const [{ data }, { data: templates }, { data: profile }] = await Promise.all([
             supabase
                 .from("bookings")
-                .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, event_type, location, tracking_uuid, client_status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, payment_proof_url, payment_proof_drive_file_id, final_payment_proof_url, final_payment_proof_drive_file_id, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
+                .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, event_type, location, tracking_uuid, client_status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, payment_proof_url, payment_proof_drive_file_id, final_payment_proof_url, final_payment_proof_drive_file_id, extra_fields, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
                 .eq("user_id", user.id)
                 .neq("status", "Batal")
                 .order("created_at", { ascending: false }),
@@ -105,7 +124,7 @@ export default function FinancePage() {
                 .from("templates")
                 .select("id, type, content, content_en, event_type")
                 .eq("user_id", user.id),
-            supabase.from("profiles").select("studio_name, table_column_preferences").eq("id", user.id).single(),
+            supabase.from("profiles").select("studio_name, table_column_preferences, form_sections").eq("id", user.id).single(),
         ]);
 
         const normalizedBookings = ((data || []) as Array<BookingFinance & { booking_services?: unknown[] }>).map((booking) => {
@@ -123,26 +142,36 @@ export default function FinancePage() {
             };
         }) as BookingFinance[];
         const profilePrefs = (profile as { table_column_preferences?: { finance?: TableColumnPreference[] } | null } | null)?.table_column_preferences?.finance;
+        const rawSections = (profile as { form_sections?: Record<string, FormLayoutItem[]> | null } | null)?.form_sections;
+        if (rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)) {
+            setFormSectionsByEventType(rawSections);
+        } else {
+            setFormSectionsByEventType({});
+        }
         setBookings(normalizedBookings);
         setSavedTemplates((templates || []) as { id: string; type: string; content: string; content_en: string; event_type: string | null }[]);
         setStudioName(profile?.studio_name || "");
         setColumns(
             mergeTableColumnPreferences(
-                FINANCE_COLUMN_DEFAULTS,
+                financeColumnDefaults,
                 profilePrefs,
             ),
         );
         setLoading(false);
-    }, [supabase]);
+    }, [financeColumnDefaults, supabase]);
 
     React.useEffect(() => {
         void fetchBookings();
     }, [fetchBookings]);
 
-    const visibleColumns = React.useMemo(
-        () => new Set(columns.filter((column) => column.visible).map((column) => column.id)),
+    const orderedVisibleColumns = React.useMemo(
+        () => columns.filter((column) => column.visible),
         [columns],
     );
+
+    React.useEffect(() => {
+        setColumns((current) => mergeTableColumnPreferences(financeColumnDefaults, current));
+    }, [financeColumnDefaults]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -382,6 +411,122 @@ export default function FinancePage() {
         const cleaned = normalizeWhatsAppNumber(openedBooking.client_whatsapp);
         const message = buildFinalInvoiceMessage(openedBooking);
         window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(message)}`, "_blank");
+    }
+
+    function renderDesktopHeader(column: TableColumnPreference) {
+        switch (column.id) {
+            case "name":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("klien")}</th>;
+            case "total_price":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("hargaTotal")}</th>;
+            case "addon":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("addOn")}</th>;
+            case "dp_paid":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("dpDibayar")}</th>;
+            case "remaining":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("sisa")}</th>;
+            case "status":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>;
+            case "actions":
+                return <th key={column.id} className="min-w-[300px] px-4 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>;
+            default:
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{column.label}</th>;
+        }
+    }
+
+    function renderDesktopCell(
+        booking: BookingFinance,
+        column: TableColumnPreference,
+        remaining: number,
+        finalTotal: number,
+        addonTotal: number,
+    ) {
+        switch (column.id) {
+            case "name":
+                return (
+                    <td key={column.id} className="px-4 py-3 max-w-[180px]">
+                        <div className="font-medium truncate">{booking.client_name}</div>
+                        <div className="text-xs text-muted-foreground truncate">{booking.booking_code} · {booking.service_label || booking.services?.name || "-"}</div>
+                    </td>
+                );
+            case "total_price":
+                return <td key={column.id} className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(finalTotal)}</td>;
+            case "addon":
+                return <td key={column.id} className="px-6 py-4 whitespace-nowrap">{formatCurrency(addonTotal)}</td>;
+            case "dp_paid":
+                return <td key={column.id} className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(booking.dp_paid)}</td>;
+            case "remaining":
+                return (
+                    <td key={column.id} className="px-6 py-4 whitespace-nowrap font-medium">
+                        <span className={remaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}>
+                            {formatCurrency(remaining)}
+                        </span>
+                    </td>
+                );
+            case "status":
+                return (
+                    <td key={column.id} className="px-6 py-4 whitespace-nowrap">
+                        <button
+                            onClick={() => booking.is_fully_paid ? handleMarkUnpaid(booking.id) : handleMarkPaid(booking.id)}
+                            className={`text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer transition-colors ${booking.is_fully_paid
+                                ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400 hover:bg-green-200"
+                                : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 hover:bg-amber-200"
+                                }`}
+                        >
+                            {booking.is_fully_paid ? "✓ " + t("lunas") : t("belumLunas")}
+                        </button>
+                    </td>
+                );
+            case "actions":
+                return (
+                    <td key={column.id} className="min-w-[300px] px-4 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap pr-1">
+                            <Link href={`/bookings/${booking.id}`}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tf("detailBooking")}>
+                                    <Info className="w-4 h-4" />
+                                </Button>
+                            </Link>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tf("openInitialInvoice")} onClick={() => openInvoice(booking, "initial")}>
+                                <FileText className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-indigo-500 hover:bg-transparent hover:text-indigo-600" title={tf("openFinalInvoice")} onClick={() => openInvoice(booking, "final")}>
+                                <Download className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-emerald-600 hover:bg-transparent hover:text-emerald-700 dark:text-emerald-400" title={tf("sendInitialInvoiceWA")}
+                                disabled={!booking.client_whatsapp}
+                                onClick={() => sendInitialInvoiceWhatsApp(booking)}>
+                                <MessageCircle className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-orange-500 hover:bg-transparent hover:text-orange-600 dark:text-orange-400" title={tf("sendFinalInvoiceWA")}
+                                disabled={!booking.client_whatsapp || !booking.tracking_uuid}
+                                onClick={() => { void sendFinalInvoiceWhatsApp(booking); }}>
+                                <MessageCircle className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-sky-500 hover:bg-transparent hover:text-sky-600" title={tf("openSettlementLink")}
+                                disabled={!booking.tracking_uuid}
+                                onClick={() => window.open(getSettlementLink(booking), "_blank")}>
+                                <ExternalLink className="w-4 h-4" />
+                            </Button>
+                            {booking.payment_proof_url ? (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-amber-500 hover:bg-transparent hover:text-amber-600" title={tf("openInitialProof")} onClick={() => openProof(booking.payment_proof_url)}>
+                                    <Receipt className="w-4 h-4" />
+                                </Button>
+                            ) : <span className="h-8 w-8" />}
+                            {booking.final_payment_proof_url ? (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-cyan-500 hover:bg-transparent hover:text-cyan-600" title={tf("openFinalProof")} onClick={() => openProof(booking.final_payment_proof_url)}>
+                                    <Receipt className="w-4 h-4" />
+                                </Button>
+                            ) : <span className="h-8 w-8" />}
+                        </div>
+                    </td>
+                );
+            default:
+                return (
+                    <td key={column.id} className="px-6 py-4 max-w-[180px] truncate text-muted-foreground" title={getBookingMetadataValue(booking.extra_fields, column.id)}>
+                        {getBookingMetadataValue(booking.extra_fields, column.id)}
+                    </td>
+                );
+        }
     }
 
     const totalRevenue = bookings.reduce((sum, booking) => sum + getTotalPaidAmount({
@@ -626,13 +771,7 @@ export default function FinancePage() {
                     <table className="min-w-[1180px] w-full text-sm text-left">
                         <thead className="text-xs uppercase bg-card border-b">
                             <tr>
-                                {visibleColumns.has("name") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("klien")}</th>}
-                                {visibleColumns.has("total_price") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("hargaTotal")}</th>}
-                                {visibleColumns.has("addon") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("addOn")}</th>}
-                                {visibleColumns.has("dp_paid") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("dpDibayar")}</th>}
-                                {visibleColumns.has("remaining") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("sisa")}</th>}
-                                {visibleColumns.has("status") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>}
-                                {visibleColumns.has("actions") && <th className="min-w-[300px] px-4 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>}
+                                {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
@@ -658,69 +797,9 @@ export default function FinancePage() {
                                 const addonTotal = getAddonTotal(b);
                                 return (
                                     <tr key={b.id} className="group hover:bg-muted/50 transition-colors">
-                                        {visibleColumns.has("name") && <td className="px-4 py-3 max-w-[180px]">
-                                            <div className="font-medium truncate">{b.client_name}</div>
-                                            <div className="text-xs text-muted-foreground truncate">{b.booking_code} · {b.service_label || b.services?.name || "-"}</div>
-                                        </td>}
-                                        {visibleColumns.has("total_price") && <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(finalTotal)}</td>}
-                                        {visibleColumns.has("addon") && <td className="px-6 py-4 whitespace-nowrap">{formatCurrency(addonTotal)}</td>}
-                                        {visibleColumns.has("dp_paid") && <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(b.dp_paid)}</td>}
-                                        {visibleColumns.has("remaining") && <td className="px-6 py-4 whitespace-nowrap font-medium">
-                                            <span className={remaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}>
-                                                {formatCurrency(remaining)}
-                                            </span>
-                                        </td>}
-                                        {visibleColumns.has("status") && <td className="px-6 py-4 whitespace-nowrap">
-                                            <button
-                                                onClick={() => b.is_fully_paid ? handleMarkUnpaid(b.id) : handleMarkPaid(b.id)}
-                                                className={`text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer transition-colors ${b.is_fully_paid
-                                                    ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400 hover:bg-green-200"
-                                                    : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 hover:bg-amber-200"
-                                                    }`}
-                                            >
-                                                {b.is_fully_paid ? "✓ " + t("lunas") : t("belumLunas")}
-                                            </button>
-                                        </td>}
-                                        {visibleColumns.has("actions") && <td className="min-w-[300px] px-4 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap pr-1">
-                                                <Link href={`/bookings/${b.id}`}>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tf("detailBooking")}>
-                                                        <Info className="w-4 h-4" />
-                                                    </Button>
-                                                </Link>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tf("openInitialInvoice")} onClick={() => openInvoice(b, "initial")}>
-                                                    <FileText className="w-4 h-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-indigo-500 hover:bg-transparent hover:text-indigo-600" title={tf("openFinalInvoice")} onClick={() => openInvoice(b, "final")}>
-                                                    <Download className="w-4 h-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-emerald-600 hover:bg-transparent hover:text-emerald-700 dark:text-emerald-400" title={tf("sendInitialInvoiceWA")}
-                                                    disabled={!b.client_whatsapp}
-                                                    onClick={() => sendInitialInvoiceWhatsApp(b)}>
-                                                    <MessageCircle className="w-4 h-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-orange-500 hover:bg-transparent hover:text-orange-600 dark:text-orange-400" title={tf("sendFinalInvoiceWA")}
-                                                    disabled={!b.client_whatsapp || !b.tracking_uuid}
-                                                    onClick={() => { void sendFinalInvoiceWhatsApp(b); }}>
-                                                    <MessageCircle className="w-4 h-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-sky-500 hover:bg-transparent hover:text-sky-600" title={tf("openSettlementLink")}
-                                                    disabled={!b.tracking_uuid}
-                                                    onClick={() => window.open(getSettlementLink(b), "_blank")}>
-                                                    <ExternalLink className="w-4 h-4" />
-                                                </Button>
-                                                {b.payment_proof_url ? (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-amber-500 hover:bg-transparent hover:text-amber-600" title={tf("openInitialProof")} onClick={() => openProof(b.payment_proof_url)}>
-                                                        <Receipt className="w-4 h-4" />
-                                                    </Button>
-                                                ) : <span className="h-8 w-8" />}
-                                                {b.final_payment_proof_url ? (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-cyan-500 hover:bg-transparent hover:text-cyan-600" title={tf("openFinalProof")} onClick={() => openProof(b.final_payment_proof_url)}>
-                                                        <Receipt className="w-4 h-4" />
-                                                    </Button>
-                                                ) : <span className="h-8 w-8" />}
-                                            </div>
-                                        </td>}
+                                        {orderedVisibleColumns.map((column) =>
+                                            renderDesktopCell(b, column, remaining, finalTotal, addonTotal),
+                                        )}
                                     </tr>
                                 );
                             })}
