@@ -266,6 +266,7 @@ export function BookingFormClient({
   const [error, setError] = React.useState("");
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const autoDpAmountRef = React.useRef<number | null>(null);
 
   // ── Helpers ──
 
@@ -292,9 +293,14 @@ export function BookingFormClient({
     setSelectedService(svc);
     if (svc) {
       const minDP = getMinDpForEvent();
-      const minAmount = calcMinDpAmount(svc.price, minDP);
+      const selectedAddonTotal = services
+        .filter((service) => selectedAddons.has(service.id))
+        .reduce((sum, service) => sum + service.price, 0);
+      const minAmount = calcMinDpAmount(svc.price + selectedAddonTotal, minDP);
+      autoDpAmountRef.current = minAmount;
       setDpDisplay(formatNumber(minAmount));
     } else {
+      autoDpAmountRef.current = null;
       setDpDisplay("");
     }
   }
@@ -340,7 +346,7 @@ export function BookingFormClient({
 
     const minDP = getMinDpForEvent();
     if (selectedService) {
-      const minAmount = calcMinDpAmount(selectedService.price, minDP);
+      const minAmount = calcMinDpAmount(selectedBookingTotal, minDP);
       if (dpValue < minAmount) {
         setError(
           minDP.mode === "fixed"
@@ -424,14 +430,19 @@ export function BookingFormClient({
           eventType: eventType || null,
           sessionDate: finalSessionDate,
           serviceId,
-          totalPrice: (selectedService?.price || 0) + services.filter(s => selectedAddons.has(s.id)).reduce((sum, s) => sum + s.price, 0),
+          totalPrice: selectedBookingTotal,
           dpPaid: dpValue,
           location: finalLocation || null,
           locationDetail: locationDetail || null,
           notes: notes || null,
           extraData: {
             ...(Object.keys(mergedExtra).length > 0 ? mergedExtra : {}),
-            ...(selectedAddons.size > 0 ? { addon_ids: Array.from(selectedAddons), addon_names: services.filter(s => selectedAddons.has(s.id)).map(s => s.name) } : {}),
+            ...(selectedAddons.size > 0
+              ? {
+                  addon_ids: Array.from(selectedAddons),
+                  addon_names: selectedAddonServices.map((service) => service.name),
+                }
+              : {}),
             ...(customFieldSnapshots.length > 0 ? { custom_fields: customFieldSnapshots } : {}),
           },
           paymentProofUrl,
@@ -478,7 +489,7 @@ export function BookingFormClient({
       `Paket: ${svcName}\n` +
       `Jadwal: ${dateStr}\n` +
       (location ? `Lokasi: ${location}\n` : "") +
-      `\n💰 Total: ${formatCurrency(selectedService?.price || 0)}\n` +
+      `\n💰 Total: ${formatCurrency(selectedBookingTotal)}\n` +
       `✅ DP: ${formatCurrency(dpVal)}\n` +
       (proofFile ? "📎 Bukti transfer sudah diupload.\n" : "") +
       (instagram ? `📸 Instagram: ${instagram}\n` : "") +
@@ -499,6 +510,17 @@ export function BookingFormClient({
     " cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat pr-8";
 
   const minDP = getMinDpForEvent();
+  const selectedAddonServices = services.filter((service) =>
+    selectedAddons.has(service.id),
+  );
+  const selectedAddonTotal = selectedAddonServices.reduce(
+    (sum, service) => sum + service.price,
+    0,
+  );
+  const selectedBookingTotal = (selectedService?.price || 0) + selectedAddonTotal;
+  const currentMinDpAmount = selectedService
+    ? calcMinDpAmount(selectedBookingTotal, minDP)
+    : 0;
   const currentExtraFields = EVENT_EXTRA_FIELDS[eventType] || [];
   const brandColor = effectiveVendor.form_brand_color || "#000000";
   const formSectionsByEventType = React.useMemo(() => {
@@ -533,11 +555,24 @@ export function BookingFormClient({
     : [...EVENT_TYPES, ...(effectiveVendor.custom_event_types || [])];
 
   React.useEffect(() => {
-    if (!previewMode || !selectedService) return;
+    if (!selectedService) {
+      autoDpAmountRef.current = null;
+      return;
+    }
 
-    const nextMinAmount = calcMinDpAmount(selectedService.price, minDP);
-    setDpDisplay(formatNumber(nextMinAmount));
-  }, [previewMode, selectedService, minDP.mode, minDP.value, eventType]);
+    const nextMinAmount = currentMinDpAmount;
+    setDpDisplay((current) => {
+      const parsed = parseFormatted(current);
+      const previousAutoAmount = autoDpAmountRef.current;
+      autoDpAmountRef.current = nextMinAmount;
+
+      if (current === "" || parsed === "" || parsed === previousAutoAmount) {
+        return formatNumber(nextMinAmount);
+      }
+
+      return current;
+    });
+  }, [currentMinDpAmount, selectedService]);
 
   // Filter services by selected event type, split main vs addon
   const filteredServices = eventType
@@ -768,6 +803,8 @@ export function BookingFormClient({
                 setCustomFields({});
                 setServiceId("");
                 setSelectedService(null);
+                setSelectedAddons(new Set());
+                autoDpAmountRef.current = null;
                 setDpDisplay("");
                 if (selectedService) {
                   const newMinDP = getMinDpForEvent(e.target.value);
@@ -1036,9 +1073,7 @@ export function BookingFormClient({
                   <span>Paket utama</span>
                   <span>{formatCurrency(selectedService.price)}</span>
                 </div>
-                {services
-                  .filter((service) => selectedAddons.has(service.id))
-                  .map((service) => (
+                {selectedAddonServices.map((service) => (
                     <div key={service.id} className="flex justify-between text-muted-foreground">
                       <span>+ {service.name}</span>
                       <span>{formatCurrency(service.price)}</span>
@@ -1046,14 +1081,7 @@ export function BookingFormClient({
                   ))}
                 <div className="flex justify-between font-bold border-t pt-1 mt-1">
                   <span>Total</span>
-                  <span>
-                    {formatCurrency(
-                      selectedService.price +
-                        services
-                          .filter((service) => selectedAddons.has(service.id))
-                          .reduce((sum, service) => sum + service.price, 0),
-                    )}
-                  </span>
+                  <span>{formatCurrency(selectedBookingTotal)}</span>
                 </div>
               </div>
             )}
@@ -1080,14 +1108,14 @@ export function BookingFormClient({
                 }}
                 placeholder={
                   selectedService
-                    ? formatNumber(calcMinDpAmount(selectedService.price, minDP))
+                    ? formatNumber(currentMinDpAmount)
                     : "0"
                 }
                 className={`${inputClass} ${
                   selectedService &&
                   dpDisplay &&
                   Number(parseFormatted(dpDisplay)) <
-                    calcMinDpAmount(selectedService.price, minDP)
+                    currentMinDpAmount
                     ? "!border-red-500 focus-visible:!border-red-500 focus-visible:!ring-red-500/30"
                     : ""
                 }`}
@@ -1095,24 +1123,20 @@ export function BookingFormClient({
               />
             </div>
             {selectedService && dpDisplay && Number(parseFormatted(dpDisplay)) <
-              calcMinDpAmount(selectedService.price, minDP) ? (
+              currentMinDpAmount ? (
               <p className="text-xs text-red-500 font-medium">
                 {minDP.mode === "fixed"
                   ? t("dpMinWarningFixed", {
-                      amount: formatCurrency(
-                        calcMinDpAmount(selectedService.price, minDP),
-                      ),
+                      amount: formatCurrency(currentMinDpAmount),
                     })
                   : t("dpMinWarning", {
                       percent: String(minDP.value),
-                      amount: formatCurrency(
-                        calcMinDpAmount(selectedService.price, minDP),
-                      ),
+                      amount: formatCurrency(currentMinDpAmount),
                     })}
               </p>
             ) : selectedService ? (
               <p className="text-xs text-muted-foreground">
-                Minimum: {formatCurrency(calcMinDpAmount(selectedService.price, minDP))}
+                Minimum: {formatCurrency(currentMinDpAmount)}
               </p>
             ) : null}
           </div>
