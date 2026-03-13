@@ -24,6 +24,7 @@ type VendorRecord = {
   google_drive_refresh_token: string | null;
   drive_folder_format: string | null;
   drive_folder_format_map: Record<string, string> | null;
+  drive_folder_structure_map: Record<string, string[] | string> | null;
   studio_name: string | null;
 };
 
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
 
     const { data: vendor } = await supabaseAdmin
       .from("profiles")
-      .select("qris_image_url, qris_drive_file_id, form_payment_methods, settlement_form_payment_methods, bank_accounts, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, studio_name")
+      .select("qris_image_url, qris_drive_file_id, form_payment_methods, settlement_form_payment_methods, bank_accounts, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, studio_name")
       .eq("id", booking.user_id)
       .single();
 
@@ -218,6 +219,7 @@ export async function POST(request: NextRequest) {
         refreshToken: vendorRecord.google_drive_refresh_token,
         driveFolderFormat: vendorRecord.drive_folder_format,
         driveFolderFormatMap: vendorRecord.drive_folder_format_map,
+        driveFolderStructureMap: vendorRecord.drive_folder_structure_map,
         studioName: vendorRecord.studio_name,
         bookingCode: booking.booking_code,
         clientName: booking.client_name,

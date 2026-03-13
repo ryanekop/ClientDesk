@@ -10,10 +10,12 @@ import { Link } from "@/i18n/routing";
 import { useLocale } from "next-intl";
 import { formatSessionDate, formatSessionTime } from "@/utils/format-date";
 import {
+    buildCustomFieldTemplateVars,
     extractBuiltInExtraFieldValues,
     extractCustomFieldSnapshots,
     type CustomFieldSnapshot,
 } from "@/components/form-builder/booking-form-layout";
+import { buildExtraFieldTemplateVars } from "@/utils/form-extra-fields";
 import { buildDriveImageUrl, type PaymentSource } from "@/lib/payment-config";
 import {
     getFinalAdjustmentsTotal,
@@ -31,6 +33,11 @@ import {
     getWhatsAppTemplateContent,
     normalizeWhatsAppNumber,
 } from "@/lib/whatsapp-template";
+import {
+    getBookingServiceLabel,
+    normalizeBookingServiceSelections,
+    type BookingServiceSelection,
+} from "@/lib/booking-services";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -58,6 +65,7 @@ type BookingRow = Booking & {
     payment_proof_url: string | null;
     freelance: FreelancerDetail | null;
     booking_freelance?: Array<{ freelance: FreelancerDetail | null }>;
+    booking_services?: unknown[];
 };
 
 type Booking = {
@@ -91,12 +99,14 @@ type Booking = {
     final_payment_source: PaymentSource | null;
     final_paid_at: string | null;
     final_invoice_sent_at: string | null;
-    services: { name: string; price: number } | null;
+    services: { id?: string; name: string; price: number; is_addon?: boolean | null } | null;
     freelancers: FreelancerDetail | null; // old single FK
     booking_freelancers: FreelancerDetail[]; // new junction
     tracking_uuid: string | null;
     client_status: string | null;
     queue_position: number | null;
+    service_selections?: BookingServiceSelection[];
+    service_label?: string;
 };
 
 type AddonService = {
@@ -334,7 +344,7 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }, { data: addonServiceRows }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token, studio_name").eq("id", user.id).single(),
                 supabase.from("services")
@@ -347,8 +357,17 @@ export default function BookingDetailPage() {
             ]);
             // Normalize freelancers from junction table
             const rawBooking = data as BookingRow | null;
+            const serviceSelections = normalizeBookingServiceSelections(
+                rawBooking?.booking_services,
+                rawBooking?.services || null,
+            );
             const normalized = rawBooking ? {
                 ...rawBooking,
+                service_selections: serviceSelections,
+                service_label: getBookingServiceLabel(serviceSelections, {
+                    kind: "main",
+                    fallback: rawBooking.services?.name || "-",
+                }),
                 booking_freelancers: (() => {
                     const junctionFreelancers =
                         rawBooking.booking_freelance
@@ -472,7 +491,7 @@ export default function BookingDetailPage() {
                 client_name: booking?.client_name || name,
                 booking_code: booking?.booking_code || "",
                 session_date: booking?.session_date ? formatDate(booking.session_date) : "-",
-                service_name: booking?.services?.name || "-",
+                service_name: booking?.service_label || booking?.services?.name || "-",
                 total_price: formatCurrency(finalInvoiceTotal || booking?.total_price || 0),
                 dp_paid: formatCurrency(booking?.dp_paid || 0),
                 studio_name: studioName || "",
@@ -512,13 +531,15 @@ export default function BookingDetailPage() {
                 booking_code: booking?.booking_code || "",
                 session_date: sessionStr,
                 session_time: sessionTime,
-                service_name: booking?.services?.name || "-",
+                service_name: booking?.service_label || booking?.services?.name || "-",
                 studio_name: studioName || "",
                 event_type: booking?.event_type || "-",
                 location: booking?.location || "-",
                 location_maps_url: booking?.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
                 detail_location: booking?.location_detail || "-",
                 notes: booking?.notes || "-",
+                ...buildExtraFieldTemplateVars(booking?.extra_fields),
+                ...buildCustomFieldTemplateVars(booking?.extra_fields),
             };
             msg = fillWhatsAppTemplate(content, vars);
         } else {
@@ -798,7 +819,7 @@ export default function BookingDetailPage() {
                 client_name: booking.client_name,
                 booking_code: booking.booking_code,
                 session_date: booking.session_date ? formatDate(booking.session_date) : "-",
-                service_name: booking.services?.name || "-",
+                service_name: booking.service_label || booking.services?.name || "-",
                 total_price: formatCurrency(booking.total_price),
                 dp_paid: formatCurrency(booking.dp_paid),
                 final_total: formatCurrency(finalTotal),
@@ -812,7 +833,7 @@ export default function BookingDetailPage() {
                 settlement_link: settlementUrl,
             })
             : `Halo ${booking.client_name}, invoice final untuk booking ${booking.booking_code} sudah kami siapkan.\n\n` +
-                `Paket: ${booking.services?.name || "-"}\n` +
+                `Paket: ${booking.service_label || booking.services?.name || "-"}\n` +
                 `Total awal: ${formatCurrency(booking.total_price)}\n` +
                 `Add-on akhir: ${formatCurrency(getFinalAdjustmentsTotal(normalizedAdjustments))}\n` +
                 `Total final: ${formatCurrency(finalTotal)}\n` +
@@ -1039,7 +1060,7 @@ export default function BookingDetailPage() {
                 {booking.location_detail && (
                     <InfoRow label="Detail Lokasi" value={booking.location_detail} />
                 )}
-                <InfoRow label="Paket" value={booking.services?.name || "-"} />
+                <InfoRow label="Paket" value={booking.service_label || booking.services?.name || "-"} />
                 <InfoRow label="Freelance" value={
                     booking.booking_freelancers.length > 0
                         ? booking.booking_freelancers.map(f => f.name).join(", ")

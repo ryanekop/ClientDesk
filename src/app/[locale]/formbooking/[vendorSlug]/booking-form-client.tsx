@@ -280,10 +280,7 @@ export function BookingFormClient({
   const [phone, setPhone] = React.useState("");
   const [eventType, setEventType] = React.useState("");
   const [sessionDate, setSessionDate] = React.useState("");
-  const [serviceId, setServiceId] = React.useState("");
-  const [selectedService, setSelectedService] = React.useState<Service | null>(
-    null,
-  );
+  const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
   const [selectedAddons, setSelectedAddons] = React.useState<Set<string>>(new Set());
   const [dpDisplay, setDpDisplay] = React.useState("");
   const [location, setLocation] = React.useState("");
@@ -332,21 +329,12 @@ export function BookingFormClient({
   }
 
   function handleServiceChange(id: string) {
-    setServiceId(id);
-    const svc = services.find((s) => s.id === id) ?? null;
-    setSelectedService(svc);
-    if (svc) {
-      const minDP = getMinDpForEvent();
-      const selectedAddonTotal = services
-        .filter((service) => selectedAddons.has(service.id))
-        .reduce((sum, service) => sum + service.price, 0);
-      const minAmount = calcMinDpAmount(svc.price + selectedAddonTotal, minDP);
-      autoDpAmountRef.current = minAmount;
-      setDpDisplay(formatNumber(minAmount));
-    } else {
-      autoDpAmountRef.current = null;
-      setDpDisplay("");
-    }
+    setSelectedServiceIds((prev) => {
+      const next = prev.includes(id)
+        ? prev.filter((serviceId) => serviceId !== id)
+        : [...prev, id];
+      return next;
+    });
   }
 
   function handleProofFile(file: File | null) {
@@ -381,7 +369,7 @@ export function BookingFormClient({
       !clientName ||
       !phone ||
       !sessionDate ||
-      !serviceId ||
+      selectedServiceIds.length === 0 ||
       (!location && eventType !== "Wedding")
     ) {
       setError(t("errorWajib"));
@@ -422,10 +410,27 @@ export function BookingFormClient({
       eventType === "Wedding"
         ? extraData.tempat_akad || extraData.tempat_resepsi || location
         : location;
+    const activeSelectedMainServices = (eventType
+      ? services.filter(
+          (service) =>
+            !service.is_addon &&
+            (!service.event_types ||
+              service.event_types.length === 0 ||
+              service.event_types.includes(eventType)),
+        )
+      : services.filter((service) => !service.is_addon)
+    ).filter((service) => selectedServiceIds.includes(service.id));
+    const activeSelectedService = activeSelectedMainServices[0] || null;
+    const activeSelectedAddonTotal = services
+      .filter((service) => selectedAddons.has(service.id))
+      .reduce((sum, service) => sum + service.price, 0);
+    const activeSelectedBookingTotal =
+      activeSelectedMainServices.reduce((sum, service) => sum + service.price, 0) +
+      activeSelectedAddonTotal;
 
     const minDP = getMinDpForEvent();
-    if (selectedService) {
-      const minAmount = calcMinDpAmount(selectedBookingTotal, minDP);
+    if (activeSelectedService) {
+      const minAmount = calcMinDpAmount(activeSelectedBookingTotal, minDP);
       if (dpValue < minAmount) {
         setError(
           minDP.mode === "fixed"
@@ -469,7 +474,8 @@ export function BookingFormClient({
       formData.append("clientWhatsapp", fullPhone);
       formData.append("eventType", eventType || "");
       formData.append("sessionDate", finalSessionDate);
-      formData.append("serviceId", serviceId);
+      formData.append("serviceId", selectedServiceIds[0] || "");
+      formData.append("serviceIds", JSON.stringify(selectedServiceIds));
       formData.append("dpPaid", String(dpValue));
       formData.append("location", finalLocation || "");
       formData.append("locationDetail", locationDetail || "");
@@ -526,7 +532,7 @@ export function BookingFormClient({
     const wa = resultData.vendorWhatsapp
       .replace(/^0/, "62")
       .replace(/[^0-9]/g, "");
-    const svcName = selectedService?.name || "-";
+    const svcName = selectedMainServices.map((service) => service.name).join(", ") || "-";
     const dateStr = sessionDate
       ? new Date(sessionDate).toLocaleDateString("id-ID", {
           weekday: "long",
@@ -569,17 +575,6 @@ export function BookingFormClient({
     " cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat pr-8";
 
   const minDP = getMinDpForEvent();
-  const selectedAddonServices = services.filter((service) =>
-    selectedAddons.has(service.id),
-  );
-  const selectedAddonTotal = selectedAddonServices.reduce(
-    (sum, service) => sum + service.price,
-    0,
-  );
-  const selectedBookingTotal = (selectedService?.price || 0) + selectedAddonTotal;
-  const currentMinDpAmount = selectedService
-    ? calcMinDpAmount(selectedBookingTotal, minDP)
-    : 0;
   const currentExtraFields = EVENT_EXTRA_FIELDS[eventType] || [];
   const brandColor = effectiveVendor.form_brand_color || "#000000";
   const formSectionsByEventType = React.useMemo(() => {
@@ -633,6 +628,30 @@ export function BookingFormClient({
     () => getEnabledBankAccounts(effectiveVendor.bank_accounts || []),
     [effectiveVendor.bank_accounts],
   );
+  const filteredServices = eventType
+    ? services.filter(s => !s.is_addon && (!s.event_types || s.event_types.length === 0 || s.event_types.includes(eventType)))
+    : services.filter(s => !s.is_addon);
+  const addonServices = eventType
+    ? services.filter(s => s.is_addon && (!s.event_types || s.event_types.length === 0 || s.event_types.includes(eventType)))
+    : services.filter(s => s.is_addon);
+  const selectedMainServices = filteredServices.filter((service) =>
+    selectedServiceIds.includes(service.id),
+  );
+  const selectedService = selectedMainServices[0] || null;
+  const selectedAddonServices = services.filter((service) =>
+    selectedAddons.has(service.id),
+  );
+  const selectedAddonTotal = selectedAddonServices.reduce(
+    (sum, service) => sum + service.price,
+    0,
+  );
+  const selectedBookingTotal = selectedMainServices.reduce(
+    (sum, service) => sum + service.price,
+    0,
+  ) + selectedAddonTotal;
+  const currentMinDpAmount = selectedService
+    ? calcMinDpAmount(selectedBookingTotal, minDP)
+    : 0;
 
   React.useEffect(() => {
     if (!selectedService) {
@@ -699,14 +718,6 @@ export function BookingFormClient({
     setProofFile(null);
     setProofPreview(null);
   }, [selectedPaymentMethod]);
-
-  // Filter services by selected event type, split main vs addon
-  const filteredServices = eventType
-    ? services.filter(s => !s.is_addon && (!s.event_types || s.event_types.length === 0 || s.event_types.includes(eventType)))
-    : services.filter(s => !s.is_addon);
-  const addonServices = eventType
-    ? services.filter(s => s.is_addon && (!s.event_types || s.event_types.length === 0 || s.event_types.includes(eventType)))
-    : services.filter(s => s.is_addon);
 
   function renderCustomField(field: Extract<FormLayoutItem, { kind: "custom_field" }>) {
     const choiceOptions =
@@ -927,16 +938,10 @@ export function BookingFormClient({
                 setEventType(e.target.value);
                 setExtraData({});
                 setCustomFields({});
-                setServiceId("");
-                setSelectedService(null);
+                setSelectedServiceIds([]);
                 setSelectedAddons(new Set());
                 autoDpAmountRef.current = null;
                 setDpDisplay("");
-                if (selectedService) {
-                  const newMinDP = getMinDpForEvent(e.target.value);
-                  const minAmount = calcMinDpAmount(selectedService.price, newMinDP);
-                  setDpDisplay(formatNumber(minAmount));
-                }
               }}
               className={selectClass}
               required
@@ -1115,42 +1120,54 @@ export function BookingFormClient({
               <label className="text-sm font-medium">
                 {t("paketLayanan")} <span className="text-red-500">*</span>
               </label>
-              <select
-                value={serviceId}
-                onChange={(e) => handleServiceChange(e.target.value)}
-                className={selectClass}
-                required
-              >
-                <option value="">{t("pilihPaket")}</option>
-                {filteredServices.map((service) => (
-                  <option key={service.id} value={service.id}>
-                    {service.name} — {formatCurrency(service.price)}
-                    {service.original_price && service.original_price > service.price
-                      ? ` (was ${formatCurrency(service.original_price)})`
-                      : ""}
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-2">
+                {filteredServices.map((service) => {
+                  const selected = selectedServiceIds.includes(service.id);
+                  return (
+                    <button
+                      key={service.id}
+                      type="button"
+                      onClick={() => handleServiceChange(service.id)}
+                      className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className={`mt-0.5 inline-flex h-4 w-4 shrink-0 rounded border ${selected ? "border-primary bg-primary" : "border-muted-foreground/30"}`} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{service.name}</p>
+                          {service.description ? (
+                            <p className="text-[11px] text-muted-foreground">{service.description}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold text-primary">{formatCurrency(service.price)}</p>
+                        {service.original_price && service.original_price > service.price ? (
+                          <p className="text-[11px] text-muted-foreground line-through">{formatCurrency(service.original_price)}</p>
+                        ) : null}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            {selectedService && (
+            {selectedMainServices.length > 0 && (
               <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">{selectedService.name}</span>
-                  <span className="text-lg font-bold text-primary">
-                    {formatCurrency(selectedService.price)}
-                  </span>
-                  {selectedService.original_price &&
-                    selectedService.original_price > selectedService.price && (
-                      <span className="text-sm text-muted-foreground line-through ml-2">
-                        {formatCurrency(selectedService.original_price)}
-                      </span>
-                    )}
-                </div>
-                {selectedService.description && (
-                  <p className="text-xs text-muted-foreground">
-                    {selectedService.description}
-                  </p>
-                )}
+                {selectedMainServices.map((service) => (
+                  <div key={service.id} className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{service.name}</p>
+                      {service.description ? (
+                        <p className="text-xs text-muted-foreground">{service.description}</p>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-lg font-bold text-primary">{formatCurrency(service.price)}</p>
+                      {service.original_price && service.original_price > service.price ? (
+                        <p className="text-[11px] text-muted-foreground line-through">{formatCurrency(service.original_price)}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -1193,12 +1210,14 @@ export function BookingFormClient({
                 </span>
               </label>
             ))}
-            {selectedAddons.size > 0 && selectedService && (
+            {selectedAddons.size > 0 && selectedMainServices.length > 0 && (
               <div className="rounded-lg bg-muted/50 p-3 text-sm">
-                <div className="flex justify-between">
-                  <span>Paket utama</span>
-                  <span>{formatCurrency(selectedService.price)}</span>
-                </div>
+                {selectedMainServices.map((service) => (
+                  <div key={service.id} className="flex justify-between">
+                    <span>{service.name}</span>
+                    <span>{formatCurrency(service.price)}</span>
+                  </div>
+                ))}
                 {selectedAddonServices.map((service) => (
                     <div key={service.id} className="flex justify-between text-muted-foreground">
                       <span>+ {service.name}</span>
@@ -1299,7 +1318,11 @@ export function BookingFormClient({
           </div>
         );
       case "payment_proof":
-        if (!selectedPaymentMethod || selectedPaymentMethod === "cash") return null;
+        if (
+          effectiveVendor.form_show_proof === false ||
+          !selectedPaymentMethod ||
+          selectedPaymentMethod === "cash"
+        ) return null;
         return (
           <div key={item.id} className="space-y-1.5">
             <FileDropzone

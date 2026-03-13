@@ -8,6 +8,7 @@ import {
     applyCalendarTemplate,
     buildCalendarTemplateVars,
 } from "@/utils/google/template";
+import { getBookingServiceLabel } from "@/lib/booking-services";
 import {
     createPaymentSourceFromBank,
     getEnabledBankAccounts,
@@ -30,9 +31,11 @@ type VendorRecord = {
     google_drive_refresh_token: string | null;
     drive_folder_format: string | null;
     drive_folder_format_map: Record<string, string> | null;
+    drive_folder_structure_map: Record<string, string[] | string> | null;
     calendar_event_format: string | null;
     calendar_event_format_map: Record<string, string> | null;
     form_payment_methods: PaymentMethod[] | null;
+    form_show_proof: boolean | null;
     qris_image_url: string | null;
     qris_drive_file_id: string | null;
     bank_accounts: unknown[] | null;
@@ -44,6 +47,7 @@ type BookingRequestBody = {
     clientWhatsapp: string;
     eventType: string | null;
     sessionDate: string;
+    serviceIds?: string[] | null;
     serviceId: string;
     dpPaid: number;
     location: string | null;
@@ -75,6 +79,9 @@ export async function POST(request: NextRequest) {
                 clientWhatsapp: String(formData.get("clientWhatsapp") || ""),
                 eventType: formData.get("eventType") ? String(formData.get("eventType")) : null,
                 sessionDate: String(formData.get("sessionDate") || ""),
+                serviceIds: formData.get("serviceIds")
+                    ? JSON.parse(String(formData.get("serviceIds")))
+                    : null,
                 serviceId: String(formData.get("serviceId") || ""),
                 dpPaid: Number(formData.get("dpPaid") || 0),
                 location: formData.get("location") ? String(formData.get("location")) : null,
@@ -106,6 +113,7 @@ export async function POST(request: NextRequest) {
             clientWhatsapp,
             eventType,
             sessionDate,
+            serviceIds,
             serviceId,
             dpPaid,
             location,
@@ -118,14 +126,14 @@ export async function POST(request: NextRequest) {
             instagram,
         } = body;
 
-        if (!vendorSlug || !clientName || !clientWhatsapp || !sessionDate || !serviceId) {
+        if (!vendorSlug || !clientName || !clientWhatsapp || !sessionDate || (!serviceId && (!serviceIds || serviceIds.length === 0))) {
             return NextResponse.json({ success: false, error: "Data tidak lengkap." }, { status: 400 });
         }
 
         // Find vendor by slug
         const { data: vendorData } = await supabaseAdmin
             .from("profiles")
-            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, calendar_event_format, calendar_event_format_map, form_payment_methods, qris_image_url, qris_drive_file_id, bank_accounts")
+            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, calendar_event_format, calendar_event_format_map, form_payment_methods, form_show_proof, qris_image_url, qris_drive_file_id, bank_accounts")
             .eq("vendor_slug", vendorSlug)
             .single();
         const vendor = vendorData as VendorRecord | null;
@@ -171,10 +179,12 @@ export async function POST(request: NextRequest) {
             };
         }
 
+        const proofEnabled = vendor.form_show_proof ?? true;
         const normalizedPaymentProofUrl =
-            selectedPaymentMethod === "cash" ? null : paymentProofUrl || null;
+            selectedPaymentMethod === "cash" || !proofEnabled ? null : paymentProofUrl || null;
 
         if (
+            proofEnabled &&
             selectedPaymentMethod !== "cash" &&
             (!vendor.google_drive_access_token || !vendor.google_drive_refresh_token)
         ) {
@@ -188,11 +198,17 @@ export async function POST(request: NextRequest) {
             typeof extraData === "object" && extraData !== null
                 ? extraData as Record<string, unknown>
                 : {};
+        const mainServiceIds = Array.isArray(serviceIds)
+            ? serviceIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+            : [];
+        const normalizedMainServiceIds = Array.from(
+            new Set(mainServiceIds.length > 0 ? mainServiceIds : (serviceId ? [serviceId] : [])),
+        );
         const addonIds = Array.isArray(rawExtraData.addon_ids)
             ? rawExtraData.addon_ids.filter((value): value is string => typeof value === "string")
             : [];
 
-        const requestedServiceIds = [serviceId, ...addonIds];
+        const requestedServiceIds = Array.from(new Set([...normalizedMainServiceIds, ...addonIds]));
         const { data: selectedServices } = await supabaseAdmin
             .from("services")
             .select("id, name, price, duration_minutes, is_addon")
@@ -200,15 +216,19 @@ export async function POST(request: NextRequest) {
             .eq("is_active", true)
             .in("id", requestedServiceIds);
 
-        const mainService = selectedServices?.find((service) => service.id === serviceId) ?? null;
-        if (!mainService) {
+        const mainServices = normalizedMainServiceIds
+            .map((id) => selectedServices?.find((service) => service.id === id && !service.is_addon) ?? null)
+            .filter((service): service is NonNullable<typeof selectedServices>[number] => Boolean(service));
+        if (mainServices.length === 0) {
             return NextResponse.json({ success: false, error: "Paket utama tidak ditemukan." }, { status: 400 });
         }
 
         const addonServices = selectedServices?.filter(
             (service) => addonIds.includes(service.id) && service.is_addon,
         ) ?? [];
-        const computedTotalPrice = mainService.price + addonServices.reduce((sum, service) => sum + service.price, 0);
+        const computedTotalPrice =
+            mainServices.reduce((sum, service) => sum + service.price, 0) +
+            addonServices.reduce((sum, service) => sum + service.price, 0);
 
         // Validate minimum DP (supports percent/fixed mode + backward compatibility)
         const dpMap =
@@ -262,7 +282,7 @@ export async function POST(request: NextRequest) {
                 client_whatsapp: clientWhatsapp,
                 event_type: eventType || null,
                 session_date: sessionDate,
-                service_id: serviceId,
+                service_id: mainServices[0]?.id || null,
                 total_price: computedTotalPrice,
                 dp_paid: dpPaid,
                 location: location || null,
@@ -283,7 +303,22 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: error.message }, { status: 500 });
         }
 
-        if (selectedPaymentMethod !== "cash" && paymentProofFile) {
+        await supabaseAdmin.from("booking_services").insert([
+            ...mainServices.map((service, index) => ({
+                booking_id: booking.id,
+                service_id: service.id,
+                kind: "main",
+                sort_order: index,
+            })),
+            ...addonServices.map((service, index) => ({
+                booking_id: booking.id,
+                service_id: service.id,
+                kind: "addon",
+                sort_order: index,
+            })),
+        ]);
+
+        if (proofEnabled && selectedPaymentMethod !== "cash" && paymentProofFile) {
             try {
                 if (!vendor.google_drive_access_token || !vendor.google_drive_refresh_token) {
                     throw new Error("Google Drive admin belum terhubung.");
@@ -295,6 +330,7 @@ export async function POST(request: NextRequest) {
                     refreshToken: vendor.google_drive_refresh_token,
                     driveFolderFormat: vendor.drive_folder_format,
                     driveFolderFormatMap: vendor.drive_folder_format_map,
+                    driveFolderStructureMap: vendor.drive_folder_structure_map,
                     studioName: vendor.studio_name,
                     bookingCode: booking.booking_code,
                     clientName,
@@ -324,7 +360,7 @@ export async function POST(request: NextRequest) {
             try {
                 const range = buildCalendarRangeFromLocalInput(
                     sessionDate,
-                    mainService.duration_minutes || 120,
+                    mainServices.reduce((sum, service) => sum + (service.duration_minutes || 0), 0) || 120,
                 );
                 // Build event summary from template
                 const eventFormat = resolveTemplateByEventType(
@@ -334,7 +370,15 @@ export async function POST(request: NextRequest) {
                 );
                 const templateVars = buildCalendarTemplateVars({
                     client_name: clientName,
-                    service_name: mainService.name || eventType || "Sesi Foto",
+                    service_name: getBookingServiceLabel(
+                        mainServices.map((service, index) => ({
+                            id: service.id,
+                            kind: "main" as const,
+                            sort_order: index,
+                            service,
+                        })),
+                        { fallback: eventType || "Sesi Foto" },
+                    ),
                     event_type: eventType || "-",
                     booking_code: bookingCode,
                     studio_name: vendor.studio_name || "Client Desk",

@@ -7,6 +7,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
+import { TableColumnManager } from "@/components/ui/table-column-manager";
+import {
+    lockBoundaryColumns,
+    mergeTableColumnPreferences,
+    updateTableColumnPreferenceMap,
+    type TableColumnPreference,
+} from "@/lib/table-column-prefs";
 
 
 type Freelancer = {
@@ -18,6 +25,14 @@ type Freelancer = {
     status: string;
     tags: string[];
     created_at: string;
+};
+
+type TagInputProps = {
+    tags: string[];
+    setTags: (tags: string[]) => void;
+    input: string;
+    setInput: (value: string) => void;
+    inputClass: string;
 };
 
 const roleOptions = ["Photographer", "Videographer", "MUA", "WCC", "Editor", "Asisten", "Lainnya"];
@@ -33,6 +48,43 @@ const COUNTRY_CODES = [
     { code: "+82", flag: "🇰🇷" },
     { code: "+61", flag: "🇦🇺" },
 ];
+
+const TEAM_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
+    { id: "name", label: "Nama", visible: true, locked: true },
+    { id: "role", label: "Peran", visible: true },
+    { id: "whatsapp", label: "Whatsapp", visible: true },
+    { id: "status", label: "Status", visible: true },
+    { id: "actions", label: "Aksi", visible: true, locked: true },
+]);
+
+function TagInput({ tags, setTags, input, setInput, inputClass }: TagInputProps) {
+    return (
+        <div className="space-y-2">
+            <label className="text-sm font-medium">Tag</label>
+            <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+                {tags.map((tag, i) => (
+                    <span key={i} className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                        {tag}
+                        <button type="button" onClick={() => setTags(tags.filter((_, j) => j !== i))} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                    </span>
+                ))}
+            </div>
+            <input
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => {
+                    if ((e.key === "Enter" || e.key === ",") && input.trim()) {
+                        e.preventDefault();
+                        if (!tags.includes(input.trim())) setTags([...tags, input.trim()]);
+                        setInput("");
+                    }
+                }}
+                placeholder="Ketik tag lalu Enter..."
+                className={inputClass}
+            />
+        </div>
+    );
+}
 
 export default function TeamPage() {
     const supabase = createClient();
@@ -53,10 +105,11 @@ export default function TeamPage() {
     const [editTagInput, setEditTagInput] = React.useState("");
     const [searchQuery, setSearchQuery] = React.useState("");
     const [tagFilter, setTagFilter] = React.useState("All");
+    const [columns, setColumns] = React.useState<TableColumnPreference[]>(TEAM_COLUMN_DEFAULTS);
+    const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
+    const [savingColumns, setSavingColumns] = React.useState(false);
 
-    React.useEffect(() => { fetchMembers(); }, []);
-
-    async function fetchMembers() {
+    const fetchMembers = React.useCallback(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
@@ -67,9 +120,24 @@ export default function TeamPage() {
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
-        setMembers((data || []).map((d: any) => ({ ...d, tags: d.tags || [] })) as Freelancer[]);
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("table_column_preferences")
+            .eq("id", user.id)
+            .single();
+        const profilePrefs = (profile as { table_column_preferences?: { team?: TableColumnPreference[] } | null } | null)?.table_column_preferences?.team;
+
+        setColumns(
+            mergeTableColumnPreferences(
+                TEAM_COLUMN_DEFAULTS,
+                profilePrefs,
+            ),
+        );
+        setMembers(((data || []) as Freelancer[]).map((d) => ({ ...d, tags: d.tags || [] })));
         setLoading(false);
-    }
+    }, [supabase]);
+
+    React.useEffect(() => { void fetchMembers(); }, [fetchMembers]);
 
     async function handleAdd(formData: FormData) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -145,33 +213,32 @@ export default function TeamPage() {
         });
     }, [members, searchQuery, tagFilter]);
 
-    function TagInput({ tags, setTags, input, setInput }: { tags: string[]; setTags: (t: string[]) => void; input: string; setInput: (v: string) => void }) {
-        return (
-            <div className="space-y-2">
-                <label className="text-sm font-medium">Tag</label>
-                <div className="flex flex-wrap gap-1.5 min-h-[28px]">
-                    {tags.map((tag, i) => (
-                        <span key={i} className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                            {tag}
-                            <button type="button" onClick={() => setTags(tags.filter((_, j) => j !== i))} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
-                        </span>
-                    ))}
-                </div>
-                <input
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => {
-                        if ((e.key === "Enter" || e.key === ",") && input.trim()) {
-                            e.preventDefault();
-                            if (!tags.includes(input.trim())) setTags([...tags, input.trim()]);
-                            setInput("");
-                        }
-                    }}
-                    placeholder="Ketik tag lalu Enter..."
-                    className={inputClass}
-                />
-            </div>
+    const visibleColumns = React.useMemo(
+        () => new Set(columns.filter((column) => column.visible).map((column) => column.id)),
+        [columns],
+    );
+
+    async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        setSavingColumns(true);
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("table_column_preferences")
+            .eq("id", user.id)
+            .single();
+        const payload = updateTableColumnPreferenceMap(
+            profile?.table_column_preferences,
+            "team",
+            nextColumns,
         );
+        await supabase
+            .from("profiles")
+            .update({ table_column_preferences: payload })
+            .eq("id", user.id);
+        setColumns(nextColumns);
+        setSavingColumns(false);
+        setColumnManagerOpen(false);
     }
 
     return (
@@ -220,7 +287,7 @@ export default function TeamPage() {
                                 <label className="text-sm font-medium">Google Email</label>
                                 <input name="google_email" type="email" placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
                             </div>
-                            <TagInput tags={addTags} setTags={setAddTags} input={tagInput} setInput={setTagInput} />
+                            <TagInput tags={addTags} setTags={setAddTags} input={tagInput} setInput={setTagInput} inputClass={inputClass} />
                             <DialogFooter><Button type="submit">{t("simpan")}</Button></DialogFooter>
                         </form>
                     </DialogContent>
@@ -250,6 +317,16 @@ export default function TeamPage() {
                             {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
                         </select>
                     )}
+                    <TableColumnManager
+                        title="Kelola Kolom Tim/Freelance"
+                        description="Atur kolom yang tampil di tabel tim atau freelance. Kolom Nama dan Aksi selalu terkunci."
+                        columns={columns}
+                        open={columnManagerOpen}
+                        onOpenChange={setColumnManagerOpen}
+                        onChange={setColumns}
+                        onSave={() => saveColumnPreferences(columns)}
+                        saving={savingColumns}
+                    />
                 </div>
             )}
 
@@ -326,25 +403,25 @@ export default function TeamPage() {
                             <table className="min-w-[860px] w-full text-sm text-left">
                                 <thead className="text-xs uppercase bg-card border-b">
                                     <tr>
-                                        <th className="px-6 py-4 font-medium text-muted-foreground">{t("nama")}</th>
-                                        <th className="px-6 py-4 font-medium text-muted-foreground">{t("peran")}</th>
-                                        <th className="px-6 py-4 font-medium text-muted-foreground">{t("whatsapp")}</th>
-                                        <th className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>
-                                        <th className="min-w-[120px] px-6 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>
+                                        {visibleColumns.has("name") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("nama")}</th>}
+                                        {visibleColumns.has("role") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("peran")}</th>}
+                                        {visibleColumns.has("whatsapp") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("whatsapp")}</th>}
+                                        {visibleColumns.has("status") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>}
+                                        {visibleColumns.has("actions") && <th className="min-w-[120px] px-4 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
                                     {paginateArray(filteredMembers, currentPage, itemsPerPage).map((member) => (
                                         <tr key={member.id} className="group hover:bg-muted/50 transition-colors">
-                                            <td className="px-4 py-3">
+                                            {visibleColumns.has("name") && <td className="px-4 py-3">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-sm shrink-0">
                                                         {member.name.charAt(0).toUpperCase()}
                                                     </div>
                                                     <span className="font-medium">{member.name}</span>
                                                 </div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            </td>}
+                                            {visibleColumns.has("role") && <td className="px-6 py-4 whitespace-nowrap">
                                                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                                                     {member.role}
                                                 </span>
@@ -355,9 +432,9 @@ export default function TeamPage() {
                                                         ))}
                                                     </div>
                                                 )}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">{member.whatsapp_number || "-"}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            </td>}
+                                            {visibleColumns.has("whatsapp") && <td className="px-6 py-4 whitespace-nowrap">{member.whatsapp_number || "-"}</td>}
+                                            {visibleColumns.has("status") && <td className="px-6 py-4 whitespace-nowrap">
                                                 <button
                                                     onClick={() => handleToggleStatus(member)}
                                                     className={`text-xs font-medium px-2 py-0.5 rounded-full cursor-pointer transition-colors ${member.status === "active"
@@ -367,9 +444,9 @@ export default function TeamPage() {
                                                 >
                                                     {member.status === "active" ? t("aktif") : t("nonaktif")}
                                                 </button>
-                                            </td>
-                                            <td className="min-w-[120px] px-6 py-4 whitespace-nowrap text-right">
-                                                <div className="flex items-center justify-end gap-1.5">
+                                            </td>}
+                                            {visibleColumns.has("actions") && <td className="min-w-[120px] px-4 py-4 whitespace-nowrap text-right">
+                                                <div className="flex items-center justify-end gap-1.5 pr-1">
                                                     <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)} className="p-0 text-green-600 transition-colors hover:text-green-700 cursor-pointer dark:text-green-400 dark:hover:text-green-300">
                                                         <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                                                     </button>
@@ -387,7 +464,7 @@ export default function TeamPage() {
                                                         <Trash2 className="w-4 h-4 text-red-500" />
                                                     </button>
                                                 </div>
-                                            </td>
+                                            </td>}
                                         </tr>
                                     ))}
                                 </tbody>
@@ -440,7 +517,7 @@ export default function TeamPage() {
                                 <label className="text-sm font-medium">Google Email</label>
                                 <input name="google_email" type="email" defaultValue={editingMember.google_email || ""} placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
                             </div>
-                            <TagInput tags={editTags} setTags={setEditTags} input={editTagInput} setInput={setEditTagInput} />
+                            <TagInput tags={editTags} setTags={setEditTags} input={editTagInput} setInput={setEditTagInput} inputClass={inputClass} />
                             <DialogFooter><Button type="submit">{t("perbarui")}</Button></DialogFooter>
                         </form>
                     )}

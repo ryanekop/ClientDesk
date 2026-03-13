@@ -92,7 +92,7 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string
     ],
 };
 
-type Service = { id: string; name: string; price: number };
+type Service = { id: string; name: string; price: number; is_addon?: boolean | null };
 type Freelance = { id: string; name: string };
 
 function formatNumber(n: number | ""): string {
@@ -147,7 +147,7 @@ export default function NewBookingPage() {
     const [locationDetail, setLocationDetail] = React.useState("");
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
-    const [selectedServiceId, setSelectedServiceId] = React.useState("");
+    const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
     const [selectedFreelancerIds, setSelectedFreelancerIds] = React.useState<string[]>([]);
     const [countryCode, setCountryCode] = React.useState("+62");
     const [phoneNumber, setPhoneNumber] = React.useState("");
@@ -183,7 +183,7 @@ export default function NewBookingPage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
             const [{ data: svcs }, { data: frees }, { data: prof }] = await Promise.all([
-                supabase.from("services").select("id, name, price").eq("user_id", user.id).eq("is_active", true),
+                supabase.from("services").select("id, name, price, is_addon").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("profiles").select("custom_statuses, calendar_event_format, calendar_event_format_map, studio_name, form_sections").eq("id", user.id).single(),
             ]);
@@ -212,13 +212,30 @@ export default function NewBookingPage() {
         load();
     }, []);
 
-    const handleServiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const val = e.target.value;
-        if (val === "__custom__") { e.target.value = selectedServiceId; setShowCustomServicePopup(true); return; }
-        setSelectedServiceId(val);
-        const selected = services.find(s => s.id === val);
-        if (selected) setTotalPrice(selected.price);
+    const mainServices = React.useMemo(
+        () => services.filter((service) => !service.is_addon),
+        [services],
+    );
+    const selectedMainServices = React.useMemo(
+        () => mainServices.filter((service) => selectedServiceIds.includes(service.id)),
+        [mainServices, selectedServiceIds],
+    );
+
+    const toggleService = (serviceId: string) => {
+        setSelectedServiceIds((prev) =>
+            prev.includes(serviceId)
+                ? prev.filter((item) => item !== serviceId)
+                : [...prev, serviceId],
+        );
     };
+
+    React.useEffect(() => {
+        if (selectedMainServices.length === 0) {
+            setTotalPrice("");
+            return;
+        }
+        setTotalPrice(selectedMainServices.reduce((sum, service) => sum + service.price, 0));
+    }, [selectedMainServices]);
 
     const activeCustomLayoutSections = React.useMemo(() => {
         const rawLayout =
@@ -253,8 +270,11 @@ export default function NewBookingPage() {
         if (!error && data) {
             const s = data as Service;
             setServices(prev => [...prev, s]);
-            setSelectedServiceId(s.id);
-            setTotalPrice(s.price);
+            setSelectedServiceIds(prev => (prev.includes(s.id) ? prev : [...prev, s.id]));
+            setTotalPrice(prev => {
+                const current = typeof prev === "number" ? prev : 0;
+                return current > 0 ? current + s.price : s.price;
+            });
             setCustomServiceName(""); setCustomServicePrice(""); setCustomServiceDesc("");
             setShowCustomServicePopup(false);
         } else { alert("Gagal menyimpan paket baru."); }
@@ -294,6 +314,11 @@ export default function NewBookingPage() {
             setSaving(false);
             return;
         }
+        if (selectedServiceIds.length === 0) {
+            alert("Pilih minimal satu paket utama.");
+            setSaving(false);
+            return;
+        }
 
         const bookingCode = await generateBookingCode(supabase, user.id);
         const invoiceCode = `INV-${bookingCode}`;
@@ -328,7 +353,7 @@ export default function NewBookingPage() {
             location_detail: locationDetail || null,
             instagram: instagram || null,
             event_type: eventType,
-            service_id: selectedServiceId || null,
+            service_id: selectedServiceIds[0] || null,
             freelance_id: selectedFreelancerIds[0] || null,
             total_price: parseFloat(totalPrice.toString()) || 0,
             dp_paid: parseFloat(dpPaid.toString()) || 0,
@@ -348,6 +373,17 @@ export default function NewBookingPage() {
         setSaving(false);
         if (!error && booking) {
             // Insert into junction table
+            if (selectedServiceIds.length > 0) {
+                await supabase.from("booking_services").insert(
+                    selectedServiceIds.map((serviceId, index) => ({
+                        booking_id: booking.id,
+                        service_id: serviceId,
+                        kind: "main",
+                        sort_order: index,
+                    }))
+                );
+            }
+
             if (selectedFreelancerIds.length > 0) {
                 await supabase.from("booking_freelance").insert(
                     selectedFreelancerIds.map(fid => ({ booking_id: booking.id, freelance_id: fid }))
@@ -393,7 +429,7 @@ export default function NewBookingPage() {
 
             // Auto-sync to Google Calendar (fire-and-forget)
             if (sessionDate) {
-                const svc = services.find(s => s.id === selectedServiceId);
+                const svc = selectedMainServices[0] || null;
                 const durationMinutes = 120;
                 const range = buildCalendarRangeFromLocalInput(sessionDate, durationMinutes);
                 // Build summary from calendar_event_format template
@@ -617,11 +653,39 @@ export default function NewBookingPage() {
                         </div>
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Paket / Layanan{reqMark}</label>
-                            <select value={selectedServiceId} onChange={handleServiceChange} className={selectClass} required>
-                                <option value="">-- Pilih Paket --</option>
-                                {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                <option value="__custom__">＋ Tambah Paket Baru...</option>
-                            </select>
+                            <div className="space-y-2">
+                                {mainServices.map((service) => {
+                                    const selected = selectedServiceIds.includes(service.id);
+                                    return (
+                                        <button
+                                            key={service.id}
+                                            type="button"
+                                            onClick={() => toggleService(service.id)}
+                                            className={cn(
+                                                "flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-all",
+                                                selected
+                                                    ? "border-foreground bg-foreground/5 dark:bg-foreground/10"
+                                                    : "border-input hover:bg-muted/50"
+                                            )}
+                                        >
+                                            <span>{service.name}</span>
+                                            <span className="font-medium">Rp {formatNumber(service.price)}</span>
+                                        </button>
+                                    );
+                                })}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCustomServicePopup(true)}
+                                    className="w-full rounded-lg border border-dashed border-input px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/50"
+                                >
+                                    ＋ Tambah Paket Baru...
+                                </button>
+                            </div>
+                            {selectedMainServices.length > 0 && (
+                                <p className="text-[11px] text-muted-foreground">
+                                    Dipilih: {selectedMainServices.map(service => service.name).join(", ")}
+                                </p>
+                            )}
                         </div>
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Freelance (max 5)</label>

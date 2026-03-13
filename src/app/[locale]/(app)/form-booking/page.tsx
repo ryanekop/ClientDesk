@@ -222,7 +222,6 @@ export default function FormBookingPage() {
     DEFAULTS.eventTypes,
   );
   const [customEventTypes, setCustomEventTypes] = React.useState<string[]>([]);
-  const [newCustomType, setNewCustomType] = React.useState("");
   const [showNotes, setShowNotes] = React.useState(DEFAULTS.showNotes);
   const [showAddons, setShowAddons] = React.useState(DEFAULTS.showAddons);
   const [showProof, setShowProof] = React.useState(DEFAULTS.showProof);
@@ -661,7 +660,6 @@ export default function FormBookingPage() {
         form_brand_color: brandColor,
         form_greeting: greeting || null,
         form_event_types: selectedEventTypes,
-        custom_event_types: customEventTypes,
         form_sections: formSectionsByEventType,
         form_show_notes: showNotes,
         form_show_addons: showAddons,
@@ -1478,7 +1476,6 @@ export default function FormBookingPage() {
                   <div className="flex flex-wrap gap-2">
                     {allEventTypes.map((t) => {
                       const isActive = selectedEventTypes.includes(t);
-                      const isCustom = customEventTypes.includes(t);
                       return (
                         <button
                           key={t}
@@ -1487,66 +1484,12 @@ export default function FormBookingPage() {
                           className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer ${isActive ? "bg-primary text-primary-foreground border-primary" : "border-input text-muted-foreground hover:bg-muted/50"}`}
                         >
                           {t}
-                          {isCustom && (
-                            <span
-                              className="ml-1.5 text-[10px] opacity-70 hover:opacity-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCustomEventTypes((prev) => prev.filter((c) => c !== t));
-                                setSelectedEventTypes((prev) => prev.filter((c) => c !== t));
-                                setMinDpMap((prev) => {
-                                  const next = { ...prev };
-                                  delete next[t];
-                                  return next;
-                                });
-                                setFormSectionsByEventType((prev) => {
-                                  const next = { ...prev };
-                                  delete next[t];
-                                  return next;
-                                });
-                              }}
-                            >
-                              ×
-                            </span>
-                          )}
                         </button>
                       );
                     })}
                   </div>
-                  {/* Add custom event type */}
-                  <div className="flex items-center gap-2 pt-2 border-t">
-                    <input
-                      type="text"
-                      value={newCustomType}
-                      onChange={(e) => setNewCustomType(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          const val = newCustomType.trim();
-                          if (val && !allEventTypes.includes(val)) {
-                            setCustomEventTypes((prev) => [...prev, val]);
-                            setSelectedEventTypes((prev) => [...prev, val]);
-                            setNewCustomType("");
-                          }
-                        }
-                      }}
-                      placeholder="Tambah tipe acara custom..."
-                      className={inputClass + " flex-1 !h-8 text-xs"}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const val = newCustomType.trim();
-                        if (val && !allEventTypes.includes(val)) {
-                          setCustomEventTypes((prev) => [...prev, val]);
-                          setSelectedEventTypes((prev) => [...prev, val]);
-                          setNewCustomType("");
-                        }
-                      }}
-                      className="px-3 py-1.5 rounded-lg border text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
-                    >
-                      Tambah
-                    </button>
+                  <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                    Custom jenis acara dikelola dari halaman Pengaturan Umum, lalu akan otomatis muncul di sini untuk dipilih tampil atau disembunyikan dari form publik.
                   </div>
                 </div>
               </div>
@@ -1572,6 +1515,12 @@ export default function FormBookingPage() {
                       setter: setShowAddons,
                       disabled: false,
                     },
+                    {
+                      label: "Bukti Pembayaran",
+                      value: showProof,
+                      setter: setShowProof,
+                      disabled: false,
+                    },
                   ].map((item) => (
                     <div key={item.label}>
                       <label
@@ -1594,7 +1543,7 @@ export default function FormBookingPage() {
                     </div>
                   ))}
                   <p className="text-[11px] text-muted-foreground">
-                    Upload bukti pembayaran di form publik akan mengikuti metode yang dipilih klien: aktif untuk bank/QRIS, nonaktif otomatis untuk cash.
+                    Jika dimatikan, field upload bukti pembayaran akan disembunyikan untuk transfer bank maupun QRIS. Untuk metode cash, field tetap nonaktif otomatis.
                   </p>
                 </div>
               </div>

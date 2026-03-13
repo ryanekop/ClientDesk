@@ -1,19 +1,15 @@
 import {
   findOrCreateNestedPath,
   uploadFileToDrive,
-  applyFolderTemplate,
 } from "@/utils/google/drive";
-import {
-  DEFAULT_DRIVE_FOLDER_FORMAT,
-  buildCalendarRangeFromLocalInput,
-  resolveTemplateByEventType,
-} from "@/utils/google/template";
+import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
 
 type UploadPaymentProofArgs = {
   accessToken: string;
   refreshToken: string;
   driveFolderFormat: string | null;
   driveFolderFormatMap: Record<string, string> | null;
+  driveFolderStructureMap?: unknown;
   studioName: string | null;
   bookingCode: string;
   clientName: string;
@@ -34,6 +30,7 @@ export async function uploadPaymentProofToDrive({
   refreshToken,
   driveFolderFormat,
   driveFolderFormatMap,
+  driveFolderStructureMap,
   studioName,
   bookingCode,
   clientName,
@@ -44,27 +41,21 @@ export async function uploadPaymentProofToDrive({
   fileBuffer,
   stage,
 }: UploadPaymentProofArgs) {
-  const folderFormat = resolveTemplateByEventType(
-    driveFolderFormatMap,
-    eventType,
-    driveFolderFormat || DEFAULT_DRIVE_FOLDER_FORMAT,
-  );
-  const templateVars = {
-    client_name: clientName,
-    booking_code: bookingCode,
-    event_type: eventType || "",
-    studio_name: studioName || "Client Desk",
-    ...(sessionDate
-      ? buildCalendarRangeFromLocalInput(sessionDate, 0).templateVars
-      : {}),
-  };
-  const clientFolderName = applyFolderTemplate(folderFormat, templateVars);
   const stageFolderName =
     stage === "final" ? "Bukti Pelunasan Final" : "Bukti Pembayaran Awal";
+  const clientPathSegments = buildDriveFolderPathSegments({
+    structureMap: driveFolderStructureMap,
+    legacyFormat: driveFolderFormat,
+    legacyFormatMap: driveFolderFormatMap,
+    studioName,
+    bookingCode,
+    clientName,
+    eventType,
+    sessionDate,
+  });
   const folder = await findOrCreateNestedPath(accessToken, refreshToken, [
     "Data Booking Client Desk",
-    clientFolderName,
-    bookingCode,
+    ...clientPathSegments,
     stageFolderName,
   ]);
 

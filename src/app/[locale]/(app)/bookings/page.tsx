@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, AlertTriangle, X, Download, ExternalLink } from "lucide-react";
+import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatSessionDate, formatSessionTime } from "@/utils/format-date";
@@ -13,6 +13,27 @@ import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { BatchImportButton } from "@/components/batch-import";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
+import { buildExtraFieldTemplateVars, getEventExtraFields } from "@/utils/form-extra-fields";
+import {
+    buildCustomFieldTemplateVars,
+    extractBuiltInExtraFieldValues,
+    extractCustomFieldSnapshots,
+    getGroupedCustomLayoutSections,
+    type FormLayoutItem,
+} from "@/components/form-builder/booking-form-layout";
+import {
+    getBookingServiceLabel,
+    getBookingServiceNames,
+    normalizeBookingServiceSelections,
+    type BookingServiceSelection,
+} from "@/lib/booking-services";
+import { TableColumnManager } from "@/components/ui/table-column-manager";
+import {
+    lockBoundaryColumns,
+    mergeTableColumnPreferences,
+    updateTableColumnPreferenceMap,
+    type TableColumnPreference,
+} from "@/lib/table-column-prefs";
 import * as XLSX from "xlsx";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
@@ -31,17 +52,38 @@ type Booking = {
     drive_folder_url: string | null;
     location: string | null;
     notes: string | null;
-    services: { name: string } | null;
+    services: { id?: string; name: string; price?: number; is_addon?: boolean | null } | null;
     event_type: string | null;
     freelancers: FreelancerInfo | null; // old single FK (backward compat)
     booking_freelancers: FreelancerInfo[]; // new junction data
     tracking_uuid: string | null;
     location_detail: string | null;
+    extra_fields?: Record<string, unknown> | null;
+    booking_services?: unknown[];
+    service_selections?: BookingServiceSelection[];
+    service_label?: string;
+    created_at?: string;
+};
+
+type BookingFilterField = {
+    key: string;
+    label: string;
+    mode: "contains" | "exact";
+    options?: string[];
 };
 
 const DEFAULT_STATUS_OPTS = ["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"];
-const TABLE_CELL = "px-4 py-3 whitespace-nowrap text-sm";
-const TRUNCATE_CELL = "px-4 py-3 text-sm max-w-[160px] truncate";
+const BOOKING_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
+    { id: "name", label: "Nama", visible: true, locked: true },
+    { id: "invoice", label: "Invoice", visible: true },
+    { id: "package", label: "Paket", visible: true },
+    { id: "schedule", label: "Jadwal", visible: true },
+    { id: "location", label: "Lokasi", visible: true },
+    { id: "status", label: "Status", visible: true },
+    { id: "freelancer", label: "Freelance", visible: true },
+    { id: "price", label: "Harga", visible: true },
+    { id: "actions", label: "Aksi", visible: true, locked: true },
+]);
 
 type SavedTemplate = {
     id: string;
@@ -54,7 +96,7 @@ type SavedTemplate = {
 function generateWATemplate(booking: Booking, locale: string, savedTemplates: SavedTemplate[], studioName: string, freelancerName?: string) {
     const sessionStr = booking.session_date ? formatSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-";
     const sessionTime = booking.session_date ? formatSessionTime(booking.session_date) : "-";
-    const serviceName = booking.services?.name || "-";
+    const serviceName = booking.service_label || booking.services?.name || "-";
 
     // Build replacement map
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
@@ -71,10 +113,12 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
         event_type: booking.event_type || "-",
         location: booking.location || "-",
         location_maps_url: booking.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
-        detail_location: (booking as any).location_detail || "-",
+        detail_location: booking.location_detail || "-",
         notes: booking.notes || "-",
-        tracking_link: (booking as any).tracking_uuid ? `${siteUrl}/id/track/${(booking as any).tracking_uuid}` : "-",
+        tracking_link: booking.tracking_uuid ? `${siteUrl}/id/track/${booking.tracking_uuid}` : "-",
         invoice_url: `${siteUrl}/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}`,
+        ...buildExtraFieldTemplateVars(booking.extra_fields),
+        ...buildCustomFieldTemplateVars(booking.extra_fields),
     };
 
     function applyVars(tpl: string) {
@@ -115,20 +159,27 @@ export default function BookingsPage() {
     const [savedTemplates, setSavedTemplates] = React.useState<SavedTemplate[]>([]);
     const [packages, setPackages] = React.useState<string[]>([]);
     const [freelancerNames, setFreelancerNames] = React.useState<string[]>([]);
+    const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
     const [loading, setLoading] = React.useState(true);
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
     const [studioName, setStudioName] = React.useState("");
     const [statusOpts, setStatusOpts] = React.useState<string[]>(DEFAULT_STATUS_OPTS);
     const [defaultWaTarget, setDefaultWaTarget] = React.useState<"client" | "freelancer">("client");
+    const [columns, setColumns] = React.useState<TableColumnPreference[]>(BOOKING_COLUMN_DEFAULTS);
+    const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
+    const [savingColumns, setSavingColumns] = React.useState(false);
 
     // Filters & Search
     const [searchQuery, setSearchQuery] = React.useState("");
     const [statusFilter, setStatusFilter] = React.useState("All");
     const [packageFilter, setPackageFilter] = React.useState("All");
     const [freelanceFilter, setFreelanceFilter] = React.useState("All");
-    const [monthFilter, setMonthFilter] = React.useState("All");
     const [eventTypeFilter, setEventTypeFilter] = React.useState("All");
-    const [sortOrder, setSortOrder] = React.useState<"newest" | "oldest">("newest");
+    const [dateFromFilter, setDateFromFilter] = React.useState("");
+    const [dateToFilter, setDateToFilter] = React.useState("");
+    const [extraFieldFilters, setExtraFieldFilters] = React.useState<Record<string, string>>({});
+    const [sortOrder, setSortOrder] = React.useState<"booking_newest" | "booking_oldest" | "session_newest" | "session_oldest">("booking_newest");
+    const [showFilterPanel, setShowFilterPanel] = React.useState(false);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
 
@@ -148,52 +199,105 @@ export default function BookingsPage() {
     // WA Freelancer popup
     const [waPopup, setWaPopup] = React.useState<{ open: boolean; freelancers: FreelancerInfo[]; booking: Booking | null }>({ open: false, freelancers: [], booking: null });
 
-    React.useEffect(() => {
-        fetchData();
-        fetchTemplates();
-        const handleMessage = (event: MessageEvent) => {
-        };
-        window.addEventListener("message", handleMessage);
-        return () => window.removeEventListener("message", handleMessage);
-    }, []);
-
-    async function fetchTemplates() {
+    const fetchTemplates = React.useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         const { data } = await supabase.from("templates").select("id, type, content, content_en, event_type").eq("user_id", user.id);
         setSavedTemplates((data || []) as SavedTemplate[]);
-    }
+    }, [supabase]);
 
 
 
 
-    async function fetchData() {
+    const fetchData = React.useCallback(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         // Fetch studio name for WA templates
-        const { data: profile } = await supabase.from("profiles").select("studio_name, custom_statuses, default_wa_target").eq("id", user.id).single();
+        const { data: profile } = await supabase.from("profiles").select("studio_name, custom_statuses, default_wa_target, form_sections, table_column_preferences").eq("id", user.id).single();
+        const profileData = profile as ({
+            studio_name?: string | null;
+            custom_statuses?: string[] | null;
+            default_wa_target?: "client" | "freelancer" | null;
+            form_sections?: unknown;
+            table_column_preferences?: { bookings?: TableColumnPreference[] } | null;
+        } & Record<string, unknown>) | null;
         if (profile?.studio_name) setStudioName(profile.studio_name);
         if (profile?.custom_statuses) setStatusOpts(profile.custom_statuses as string[]);
-        if ((profile as any)?.default_wa_target) setDefaultWaTarget((profile as any).default_wa_target);
+        if (profileData?.default_wa_target) setDefaultWaTarget(profileData.default_wa_target);
+        setColumns(
+            mergeTableColumnPreferences(
+                BOOKING_COLUMN_DEFAULTS,
+                profileData?.table_column_preferences?.bookings,
+            ),
+        );
+        const rawSections = (profile as Record<string, unknown> | null)?.form_sections;
+        if (rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)) {
+            setFormSectionsByEventType(rawSections as Record<string, FormLayoutItem[]>);
+        } else if (Array.isArray(rawSections)) {
+            setFormSectionsByEventType({ Umum: rawSections as FormLayoutItem[] });
+        } else {
+            setFormSectionsByEventType({});
+        }
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, location_detail, notes, event_type, tracking_uuid, services(name), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
         // Normalize: merge booking_freelancers into a flat array
-        const bgs = (data || []).map((b: any) => {
-            const junctionFreelancers = (b.booking_freelance || []).map((bf: any) => bf.freelance).filter(Boolean);
-            return { ...b, booking_freelancers: junctionFreelancers.length > 0 ? junctionFreelancers : b.freelance ? [b.freelance] : [] };
+        type BookingRow = Omit<Booking, "booking_freelancers" | "service_selections" | "service_label"> & {
+            freelance?: FreelancerInfo | null;
+            booking_freelance?: Array<{ freelance: FreelancerInfo | null }>;
+        };
+        const bgs = ((data || []) as BookingRow[]).map((b) => {
+            const junctionFreelancers = (b.booking_freelance || []).map((bf) => bf.freelance).filter((item): item is FreelancerInfo => Boolean(item));
+            const serviceSelections = normalizeBookingServiceSelections(
+                b.booking_services,
+                b.services,
+            );
+            return {
+                ...b,
+                booking_freelancers: junctionFreelancers.length > 0 ? junctionFreelancers : b.freelance ? [b.freelance] : [],
+                service_selections: serviceSelections,
+                service_label: getBookingServiceLabel(serviceSelections, { kind: "main", fallback: b.services?.name || "-" }),
+            };
         }) as unknown as Booking[];
         setBookings(bgs);
-        setPackages(Array.from(new Set(bgs.map(b => b.services?.name).filter(Boolean))) as string[]);
+        setPackages(Array.from(new Set(bgs.flatMap(b => getBookingServiceNames(b.service_selections || [], "main")).filter(Boolean))) as string[]);
         setFreelancerNames(Array.from(new Set(bgs.flatMap(b => b.booking_freelancers.map(f => f.name)).filter(Boolean))) as string[]);
         setLoading(false);
+    }, [supabase]);
+
+    async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        setSavingColumns(true);
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("table_column_preferences")
+            .eq("id", user.id)
+            .single();
+        const payload = updateTableColumnPreferenceMap(
+            profile?.table_column_preferences,
+            "bookings",
+            nextColumns,
+        );
+        await supabase
+            .from("profiles")
+            .update({ table_column_preferences: payload })
+            .eq("id", user.id);
+        setColumns(nextColumns);
+        setSavingColumns(false);
+        setColumnManagerOpen(false);
     }
+
+    React.useEffect(() => {
+        void fetchData();
+        void fetchTemplates();
+    }, [fetchData, fetchTemplates]);
 
     async function handleUpdateStatus() {
         if (!statusModal.booking || !newStatus) return;
@@ -239,6 +343,62 @@ export default function BookingsPage() {
     const formatCurrency = (n: number) =>
         n ? new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n) : "-";
 
+    const activeExtraFilterFields = React.useMemo<BookingFilterField[]>(() => {
+        if (eventTypeFilter === "All") return [];
+
+        const builtInFields: BookingFilterField[] = getEventExtraFields(eventTypeFilter).map((field) => ({
+            key: field.key,
+            label: field.label,
+            mode: "contains",
+        }));
+        const customFields = getGroupedCustomLayoutSections(
+            formSectionsByEventType[eventTypeFilter] || formSectionsByEventType.Umum || [],
+            eventTypeFilter,
+        )
+            .flatMap((section) => section.items)
+            .filter((item): item is Extract<FormLayoutItem, { kind: "custom_field" }> => item.kind === "custom_field")
+            .map((item) => ({
+                key: item.id,
+                label: item.label,
+                mode: item.type === "select" || item.type === "checkbox" ? "exact" as const : "contains" as const,
+                options: item.options,
+            }));
+
+        return [...builtInFields, ...customFields].map((field) => ({
+            ...field,
+            options: field.mode === "exact"
+                ? Array.from(new Set(
+                    (field.options && field.options.length > 0
+                        ? field.options
+                        : bookings.map((booking) => {
+                            const customSnapshot = extractCustomFieldSnapshots(booking.extra_fields).find((item) => item.id === field.key);
+                            return customSnapshot?.value || "";
+                        })
+                    ).filter((value): value is string => typeof value === "string" && value.trim().length > 0),
+                ))
+                : undefined,
+        }));
+    }, [bookings, eventTypeFilter, formSectionsByEventType]);
+
+    React.useEffect(() => {
+        setExtraFieldFilters((prev) =>
+            Object.fromEntries(
+                Object.entries(prev).filter(([key]) =>
+                    activeExtraFilterFields.some((field) => field.key === key),
+                ),
+            ),
+        );
+    }, [activeExtraFilterFields]);
+
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, statusFilter, packageFilter, freelanceFilter, eventTypeFilter, dateFromFilter, dateToFilter, extraFieldFilters, sortOrder]);
+
+    const visibleColumns = React.useMemo(
+        () => new Set(columns.filter((column) => column.visible).map((column) => column.id)),
+        [columns],
+    );
+
     const filteredBookings = bookings.filter(b => {
         const q = searchQuery.toLowerCase();
         const matchesSearch = !searchQuery || (
@@ -247,17 +407,34 @@ export default function BookingsPage() {
             (b.location && b.location.toLowerCase().includes(q))
         );
         const matchesStatus = statusFilter === "All" || b.status === statusFilter;
-        const matchesPackage = packageFilter === "All" || b.services?.name === packageFilter;
+        const matchesPackage = packageFilter === "All" || getBookingServiceNames(b.service_selections || [], "main").includes(packageFilter);
         const matchesFreelance = freelanceFilter === "All" || b.booking_freelancers.some(f => f.name === freelanceFilter);
-        const matchesMonth = monthFilter === "All" || (() => {
-            if (!b.session_date) return false;
-            const d = new Date(b.session_date);
-            return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}` === monthFilter;
-        })();
+        const sessionDateValue = b.session_date ? b.session_date.slice(0, 10) : "";
+        const matchesDateFrom = !dateFromFilter || (sessionDateValue && sessionDateValue >= dateFromFilter);
+        const matchesDateTo = !dateToFilter || (sessionDateValue && sessionDateValue <= dateToFilter);
         const matchesEventType = eventTypeFilter === "All" || b.event_type === eventTypeFilter;
-        return matchesSearch && matchesStatus && matchesPackage && matchesFreelance && matchesMonth && matchesEventType;
+        const builtInExtraFields = extractBuiltInExtraFieldValues(b.extra_fields);
+        const customFieldMap = Object.fromEntries(
+            extractCustomFieldSnapshots(b.extra_fields).map((item) => [item.id, item.value]),
+        ) as Record<string, string>;
+        const matchesExtraFields = activeExtraFilterFields.every((field) => {
+            const filterValue = extraFieldFilters[field.key]?.trim();
+            if (!filterValue) return true;
+            const sourceValue = (builtInExtraFields[field.key] || customFieldMap[field.key] || "").trim();
+            if (!sourceValue) return false;
+            return field.mode === "exact"
+                ? sourceValue === filterValue
+                : sourceValue.toLowerCase().includes(filterValue.toLowerCase());
+        });
+        return matchesSearch && matchesStatus && matchesPackage && matchesFreelance && matchesDateFrom && matchesDateTo && matchesEventType && matchesExtraFields;
     }).sort((a, b) => {
-        if (sortOrder === "newest") {
+        if (sortOrder === "booking_newest") {
+            return (b.created_at || "").localeCompare(a.created_at || "");
+        }
+        if (sortOrder === "booking_oldest") {
+            return (a.created_at || "").localeCompare(b.created_at || "");
+        }
+        if (sortOrder === "session_newest") {
             return (b.session_date || "").localeCompare(a.session_date || "");
         }
         return (a.session_date || "").localeCompare(b.session_date || "");
@@ -279,7 +456,7 @@ export default function BookingsPage() {
                             [tb("exportWhatsApp")]: b.client_whatsapp || "",
                             [tb("exportSessionDate")]: b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "",
                             [tb("exportLocation")]: b.location || "",
-                            [tb("exportPackage")]: b.services?.name || "",
+                            [tb("exportPackage")]: b.service_label || b.services?.name || "",
                             [tb("exportTotalPrice")]: b.total_price || 0,
                             [tb("exportDPPaid")]: b.dp_paid || 0,
                             [tb("exportStatus")]: b.status,
@@ -291,6 +468,16 @@ export default function BookingsPage() {
                     }}>
                         <Download className="w-4 h-4" /> {tb("export")}
                     </Button>
+                    <TableColumnManager
+                        title="Kelola Kolom Daftar Booking"
+                        description="Atur kolom yang ditampilkan dan ubah urutannya. Kolom Nama dan Aksi selalu terkunci."
+                        columns={columns}
+                        open={columnManagerOpen}
+                        onOpenChange={setColumnManagerOpen}
+                        onChange={setColumns}
+                        onSave={() => saveColumnPreferences(columns)}
+                        saving={savingColumns}
+                    />
                     <BatchImportButton onImported={() => fetchData()} />
                     <Link href="/bookings/new">
                         <Button className="gap-2 h-9 bg-foreground text-background hover:bg-foreground/90">
@@ -300,59 +487,123 @@ export default function BookingsPage() {
                 </div>
             </div>
 
-
-            {/* Filters Row (top) + Search Row (bottom) */}
+            {/* Search + Controls */}
             <div className="space-y-3">
-                <div className="flex flex-wrap gap-2 items-center">
-                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={selectFilterClass}>
-                        <option value="All">{tb("allStatus")}</option>
-                        {statusOpts.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <select value={packageFilter} onChange={e => setPackageFilter(e.target.value)} className={selectFilterClass}>
-                        <option value="All">{tb("allPackages")}</option>
-                        {packages.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                    <select value={freelanceFilter} onChange={e => setFreelanceFilter(e.target.value)} className={selectFilterClass}>
-                        <option value="All">{tb("allFreelance")}</option>
-                        {freelancerNames.map(f => <option key={f} value={f}>{f}</option>)}
-                    </select>
-                    <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className={selectFilterClass}>
-                        <option value="All">{tb("allMonths")}</option>
-                        {Array.from(new Set(bookings.filter(b => b.session_date).map(b => { const d = new Date(b.session_date!); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }))).sort().reverse().map(m => {
-                            const [y, mo] = m.split("-");
-                            const label = new Date(parseInt(y), parseInt(mo) - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
-                            return <option key={m} value={m}>{label}</option>;
-                        })}
-                    </select>
-                    <select value={sortOrder} onChange={e => setSortOrder(e.target.value as "newest" | "oldest")} className={selectFilterClass}>
-                        <option value="newest">Jadwal Terbaru</option>
-                        <option value="oldest">Jadwal Terlama</option>
-                    </select>
-                    <select value={eventTypeFilter} onChange={e => setEventTypeFilter(e.target.value)} className={selectFilterClass}>
-                        <option value="All">Semua Acara</option>
-                        {Array.from(new Set(bookings.map(b => b.event_type).filter(Boolean))).sort().map(t => (
-                            <option key={t} value={t!}>{t}</option>
-                        ))}
-                    </select>
-                    {(statusFilter !== "All" || packageFilter !== "All" || freelanceFilter !== "All" || monthFilter !== "All" || eventTypeFilter !== "All" || searchQuery) && (
-                        <button
-                            onClick={() => { setStatusFilter("All"); setPackageFilter("All"); setFreelanceFilter("All"); setMonthFilter("All"); setEventTypeFilter("All"); setSearchQuery(""); setSortOrder("newest"); }}
-                            className="h-9 px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center gap-1.5 cursor-pointer"
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder={tb("searchPlaceholder")}
+                            className="h-9 w-full rounded-md border border-input bg-background/50 pl-9 pr-3 text-sm focus-visible:ring-1 focus-visible:ring-ring outline-none transition-all"
+                        />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            variant="outline"
+                            className="h-9 gap-2"
+                            onClick={() => setShowFilterPanel(prev => !prev)}
                         >
-                            <X className="w-3.5 h-3.5" /> Reset
-                        </button>
-                    )}
+                            <ListOrdered className="w-4 h-4" />
+                            Filter
+                        </Button>
+                        <select value={sortOrder} onChange={e => setSortOrder(e.target.value as typeof sortOrder)} className={selectFilterClass}>
+                            <option value="booking_newest">Urutkan: Booking Terbaru</option>
+                            <option value="booking_oldest">Urutkan: Booking Terlama</option>
+                            <option value="session_newest">Urutkan: Jadwal Sesi Terbaru</option>
+                            <option value="session_oldest">Urutkan: Jadwal Sesi Terlama</option>
+                        </select>
+                        {(statusFilter !== "All" || packageFilter !== "All" || freelanceFilter !== "All" || eventTypeFilter !== "All" || dateFromFilter || dateToFilter || Object.values(extraFieldFilters).some(Boolean) || searchQuery || sortOrder !== "booking_newest") && (
+                            <button
+                                onClick={() => {
+                                    setStatusFilter("All");
+                                    setPackageFilter("All");
+                                    setFreelanceFilter("All");
+                                    setEventTypeFilter("All");
+                                    setDateFromFilter("");
+                                    setDateToFilter("");
+                                    setExtraFieldFilters({});
+                                    setSearchQuery("");
+                                    setSortOrder("booking_newest");
+                                }}
+                                className="h-9 px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                                <X className="w-3.5 h-3.5" /> Reset
+                            </button>
+                        )}
+                    </div>
                 </div>
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        placeholder={tb("searchPlaceholder")}
-                        className="h-9 w-full rounded-md border border-input bg-background/50 pl-9 pr-3 text-sm focus-visible:ring-1 focus-visible:ring-ring outline-none transition-all"
-                    />
-                </div>
+                {showFilterPanel && (
+                    <div className="rounded-xl border bg-card p-4 shadow-sm">
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Tanggal dari</label>
+                                <input type="date" value={dateFromFilter} onChange={e => setDateFromFilter(e.target.value)} className={selectFilterClass} />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Tanggal sampai</label>
+                                <input type="date" value={dateToFilter} onChange={e => setDateToFilter(e.target.value)} className={selectFilterClass} />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Jenis acara</label>
+                                <select value={eventTypeFilter} onChange={e => setEventTypeFilter(e.target.value)} className={selectFilterClass}>
+                                    <option value="All">Semua Acara</option>
+                                    {Array.from(new Set(bookings.map(b => b.event_type).filter(Boolean))).sort().map(t => (
+                                        <option key={t} value={t!}>{t}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Status</label>
+                                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={selectFilterClass}>
+                                    <option value="All">{tb("allStatus")}</option>
+                                    {statusOpts.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Paket</label>
+                                <select value={packageFilter} onChange={e => setPackageFilter(e.target.value)} className={selectFilterClass}>
+                                    <option value="All">{tb("allPackages")}</option>
+                                    {packages.map(p => <option key={p} value={p}>{p}</option>)}
+                                </select>
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Freelance</label>
+                                <select value={freelanceFilter} onChange={e => setFreelanceFilter(e.target.value)} className={selectFilterClass}>
+                                    <option value="All">{tb("allFreelance")}</option>
+                                    {freelancerNames.map(f => <option key={f} value={f}>{f}</option>)}
+                                </select>
+                            </div>
+                            {activeExtraFilterFields.map((field) => (
+                                <div key={field.key} className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">{field.label}</label>
+                                    {field.mode === "exact" ? (
+                                        <select
+                                            value={extraFieldFilters[field.key] || ""}
+                                            onChange={e => setExtraFieldFilters(prev => ({ ...prev, [field.key]: e.target.value }))}
+                                            className={selectFilterClass}
+                                        >
+                                            <option value="">Semua</option>
+                                            {(field.options || []).map((option) => (
+                                                <option key={option} value={option}>{option}</option>
+                                            ))}
+                                        </select>
+                                    ) : (
+                                        <input
+                                            type="text"
+                                            value={extraFieldFilters[field.key] || ""}
+                                            onChange={e => setExtraFieldFilters(prev => ({ ...prev, [field.key]: e.target.value }))}
+                                            placeholder={`Filter ${field.label.toLowerCase()}...`}
+                                            className={selectFilterClass}
+                                        />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Mobile Cards */}
@@ -372,7 +623,7 @@ export default function BookingsPage() {
                                 <StatusBadge status={booking.status} />
                             </div>
                             <div className="border-t pt-2 space-y-1 text-sm text-muted-foreground">
-                                <div className="flex justify-between"><span>{t("paket")}</span><span className="text-foreground font-medium">{booking.services?.name || "-"}</span></div>
+                                <div className="flex justify-between"><span>{t("paket")}</span><span className="text-foreground font-medium">{booking.service_label || booking.services?.name || "-"}</span></div>
                                 <div className="flex justify-between"><span>{t("jadwal")}</span><span>{formatDate(booking.session_date)}</span></div>
                                 {booking.location && <div className="flex justify-between"><span>{tb("location")}</span><span className="truncate max-w-[180px]">{booking.location}</span></div>}
                                 <div className="flex justify-between"><span>Total</span><span className="text-foreground font-semibold">{formatCurrency(booking.total_price)}</span></div>
@@ -424,57 +675,57 @@ export default function BookingsPage() {
                     <table className="min-w-[1320px] w-full text-sm text-left border-collapse">
                         <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("namaKlien")}</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("invoice")}</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("paket")}</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("jadwal")}</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("location")}</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("status")}</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("freelancer")}</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("harga")}</th>
-                                <th className="min-w-[220px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">{t("aksi")}</th>
+                                {visibleColumns.has("name") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("namaKlien")}</th>}
+                                {visibleColumns.has("invoice") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("invoice")}</th>}
+                                {visibleColumns.has("package") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("paket")}</th>}
+                                {visibleColumns.has("schedule") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("jadwal")}</th>}
+                                {visibleColumns.has("location") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("location")}</th>}
+                                {visibleColumns.has("status") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("status")}</th>}
+                                {visibleColumns.has("freelancer") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("freelancer")}</th>}
+                                {visibleColumns.has("price") && <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("harga")}</th>}
+                                {visibleColumns.has("actions") && <th className="min-w-[220px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">{t("aksi")}</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border/50">
                             {loading ? (
-                                <tr><td colSpan={9} className="px-6 py-12 text-center text-muted-foreground">{t("memuat")}</td></tr>
+                                <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground">{t("memuat")}</td></tr>
                             ) : filteredBookings.length === 0 ? (
-                                <tr><td colSpan={9} className="px-6 py-12 text-center text-muted-foreground text-xs italic">{tb("noDataFound")}</td></tr>
+                                <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground text-xs italic">{tb("noDataFound")}</td></tr>
                             ) : (
                                 paginateArray(filteredBookings, currentPage, itemsPerPage).map((booking) => (
                                     <tr key={booking.id} className="hover:bg-muted/30 transition-colors group">
-                                        <td className="px-4 py-3 max-w-[140px]">
+                                        {visibleColumns.has("name") && <td className="px-4 py-3 max-w-[140px]">
                                             <div className="font-medium text-foreground truncate">{booking.client_name}</div>
                                             {booking.client_whatsapp && (
                                                 <div className="text-[11px] text-muted-foreground truncate">{booking.client_whatsapp}</div>
                                             )}
-                                        </td>
-                                        <td className="px-4 py-3 whitespace-nowrap">
+                                        </td>}
+                                        {visibleColumns.has("invoice") && <td className="px-4 py-3 whitespace-nowrap">
                                             <span className="text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded border border-border/50">
                                                 {booking.booking_code}
                                             </span>
-                                        </td>
-                                        <td className="px-4 py-3 max-w-[150px] truncate text-muted-foreground" title={booking.services?.name || "-"}>{booking.services?.name || "-"}</td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground font-light">{formatDate(booking.session_date)}</td>
-                                        <td className="px-4 py-3 max-w-[180px]">
+                                        </td>}
+                                        {visibleColumns.has("package") && <td className="px-4 py-3 max-w-[150px] truncate text-muted-foreground" title={booking.service_label || booking.services?.name || "-"}>{booking.service_label || booking.services?.name || "-"}</td>}
+                                        {visibleColumns.has("schedule") && <td className="px-4 py-3 whitespace-nowrap text-muted-foreground font-light">{formatDate(booking.session_date)}</td>}
+                                        {visibleColumns.has("location") && <td className="px-4 py-3 max-w-[180px]">
                                             {booking.location ? (
                                                 <div className="flex items-center gap-1">
                                                     <span className="truncate text-xs text-muted-foreground" title={booking.location}>{booking.location}</span>
                                                     <button type="button" onClick={() => window.open(`https://maps.google.com/maps?q=${encodeURIComponent(booking.location!)}`, "_blank")}
                                                         className="text-blue-500 hover:text-blue-600 transition-colors shrink-0">
-                                                        <MapPin className="w-3 h-3" />
+                                                    <MapPin className="w-3 h-3" />
                                                     </button>
                                                 </div>
                                             ) : <span className="text-muted-foreground">-</span>}
-                                        </td>
-                                        <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={booking.status} /></td>
-                                        <td className="px-4 py-3 max-w-[130px] truncate text-muted-foreground" title={booking.booking_freelancers.length > 0 ? booking.booking_freelancers.map(f => f.name).join(", ") : "-"}>
+                                        </td>}
+                                        {visibleColumns.has("status") && <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={booking.status} /></td>}
+                                        {visibleColumns.has("freelancer") && <td className="px-4 py-3 max-w-[130px] truncate text-muted-foreground" title={booking.booking_freelancers.length > 0 ? booking.booking_freelancers.map(f => f.name).join(", ") : "-"}>
                                             {booking.booking_freelancers.length > 0
                                                 ? booking.booking_freelancers.map(f => f.name).join(", ")
                                                 : "-"}
-                                        </td>
-                                        <td className="px-4 py-3 whitespace-nowrap font-medium text-foreground">{formatCurrency(booking.total_price)}</td>
-                                        <td className="min-w-[220px] px-4 py-3 whitespace-nowrap text-right">
+                                        </td>}
+                                        {visibleColumns.has("price") && <td className="px-4 py-3 whitespace-nowrap font-medium text-foreground">{formatCurrency(booking.total_price)}</td>}
+                                        {visibleColumns.has("actions") && <td className="min-w-[220px] px-4 py-3 whitespace-nowrap text-right">
                                             <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                                                 {/* 1. Copy Template */}
                                                 <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-violet-500 hover:bg-transparent hover:text-violet-600" title={tb("copyTemplate")}
@@ -543,7 +794,7 @@ export default function BookingsPage() {
                                                     <Trash2 className="w-4 h-4" />
                                                 </Button>
                                             </div>
-                                        </td>
+                                        </td>}
                                     </tr>
                                 ))
                             )}

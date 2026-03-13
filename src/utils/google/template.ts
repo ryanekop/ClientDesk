@@ -55,6 +55,7 @@ const DAYS_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"]
 
 export const DEFAULT_CALENDAR_EVENT_FORMAT = "📸 {{client_name}} — {{service_name}}";
 export const DEFAULT_DRIVE_FOLDER_FORMAT = "{client_name}";
+export const DEFAULT_DRIVE_FOLDER_STRUCTURE = [DEFAULT_DRIVE_FOLDER_FORMAT];
 
 export const CALENDAR_TEMPLATE_VARIABLES = [
     "{{client_name}}",
@@ -77,7 +78,12 @@ export const DRIVE_TEMPLATE_VARIABLES = [
     "{session_date}",
     "{session_time}",
     "{day_name}",
+    "{year}",
+    "{month_number}",
+    "{month_name}",
 ] as const;
+
+export type DriveFolderStructureMap = Record<string, string[]>;
 
 export function normalizeTemplateFormatMap(value: unknown, fallback: string): TemplateFormatMap {
     const normalized: TemplateFormatMap = Object.fromEntries(
@@ -137,6 +143,43 @@ export function applyDriveTemplate(template: string, vars: Record<string, string
     return result || vars.client_name || "Client";
 }
 
+export function normalizeDriveFolderStructureMap(
+    value: unknown,
+    fallback: string[] = DEFAULT_DRIVE_FOLDER_STRUCTURE,
+): DriveFolderStructureMap {
+    const normalized: DriveFolderStructureMap = Object.fromEntries(
+        GOOGLE_EVENT_TYPES.map((eventType) => [eventType, eventType === "Umum" ? [...fallback] : []]),
+    );
+
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+        for (const [key, mapValue] of Object.entries(value)) {
+            if (Array.isArray(mapValue)) {
+                normalized[key] = mapValue.filter(
+                    (item): item is string => typeof item === "string" && item.trim().length > 0,
+                );
+            } else if (typeof mapValue === "string" && mapValue.trim()) {
+                normalized[key] = [mapValue.trim()];
+            }
+        }
+    }
+
+    if (!normalized.Umum || normalized.Umum.length === 0) {
+        normalized.Umum = [...fallback];
+    }
+
+    return normalized;
+}
+
+export function resolveDriveFolderStructureByEventType(
+    structureMap: unknown,
+    eventType: string | null | undefined,
+    fallback: string[] = DEFAULT_DRIVE_FOLDER_STRUCTURE,
+): string[] {
+    const normalized = normalizeDriveFolderStructureMap(structureMap, fallback);
+    const eventSpecific = eventType ? normalized[eventType] || [] : [];
+    return eventSpecific.length > 0 ? eventSpecific : normalized.Umum || [...fallback];
+}
+
 export function buildCalendarRangeFromStoredSession(sessionDate: string, durationMinutes: number) {
     const startParts = getStoredSessionParts(sessionDate);
     const endParts = addMinutes(startParts, durationMinutes);
@@ -170,6 +213,9 @@ function buildRange(startParts: DateParts, endParts: DateParts) {
             session_time: formatTimeLabel(startParts),
             end_time: formatTimeLabel(endParts),
             day_name: getDayName(startParts),
+            year: String(startParts.year),
+            month_number: String(startParts.month).padStart(2, "0"),
+            month_name: MONTHS_ID[startParts.month - 1] || "",
         },
     };
 }

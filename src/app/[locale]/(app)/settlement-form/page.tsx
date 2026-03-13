@@ -495,8 +495,8 @@ export default function SettlementFormPage() {
                       <div className="h-2.5 w-2.5 rounded-full bg-yellow-400/60" />
                       <div className="h-2.5 w-2.5 rounded-full bg-green-400/60" />
                     </div>
-                    <div className="flex-1 text-center">
-                      <span className="block truncate text-[11px] text-muted-foreground">
+                    <div className="min-w-0 flex-1 text-center">
+                      <span className="block w-full truncate overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-muted-foreground">
                         {settlementUrl.replace(/^https?:\/\//, "")}
                       </span>
                     </div>

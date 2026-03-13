@@ -9,6 +9,10 @@ import {
   getSettlementStatus,
   normalizeFinalAdjustments,
 } from "@/lib/final-settlement";
+import {
+  getBookingServiceLabel,
+  normalizeBookingServiceSelections,
+} from "@/lib/booking-services";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -83,7 +87,7 @@ export async function GET(request: NextRequest) {
   const { data: booking, error } = await supabaseAdmin
     .from("bookings")
     .select(
-      "id, booking_code, client_name, client_whatsapp, session_date, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, user_id, services(name)",
+      "id, booking_code, client_name, client_whatsapp, session_date, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, user_id, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))",
     )
     .eq("booking_code", code)
     .single();
@@ -129,7 +133,14 @@ export async function GET(request: NextRequest) {
     month: "long",
     year: "numeric",
   });
-  const serviceName = (booking.services as { name?: string } | null)?.name || t.defaultServiceName;
+  const serviceSelections = normalizeBookingServiceSelections(
+    (booking as { booking_services?: unknown[] }).booking_services,
+    booking.services as { id?: string; name: string; price?: number; is_addon?: boolean | null } | null,
+  );
+  const serviceName = getBookingServiceLabel(serviceSelections, {
+    kind: "main",
+    fallback: (booking.services as { name?: string } | null)?.name || t.defaultServiceName,
+  });
   const settlementStatus = getSettlementStatus(booking.settlement_status);
   const paymentStatus =
     isFinalStage && settlementStatus === "submitted"

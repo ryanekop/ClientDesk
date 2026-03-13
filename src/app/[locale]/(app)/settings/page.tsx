@@ -19,7 +19,17 @@ import {
     applyDriveTemplate,
     getCalendarTemplateVariables,
 } from "@/utils/google/template";
-import { getEventExtraFieldPreviewVars } from "@/utils/form-extra-fields";
+import {
+    getEventExtraFieldPreviewVars,
+    getEventExtraFieldTemplateTokens,
+} from "@/utils/form-extra-fields";
+import {
+    getCustomFieldPreviewVars,
+    getCustomFieldTemplateTokens,
+    normalizeStoredFormLayout,
+    type FormLayoutItem,
+} from "@/components/form-builder/booking-form-layout";
+import { normalizeDriveFolderStructureSettings } from "@/lib/drive-folder-structure";
 import {
     getDefaultFinalInvoiceVisibleFromStatus,
     resolveFinalInvoiceVisibleFromStatus,
@@ -41,6 +51,9 @@ type Profile = {
     whatsapp_number: string | null;
     vendor_slug: string | null;
     final_invoice_visible_from_status?: string | null;
+    custom_event_types?: string[] | null;
+    drive_folder_structure_map?: Record<string, string[]> | null;
+    form_sections?: Record<string, FormLayoutItem[]> | FormLayoutItem[] | null;
 };
 
 type Template = {
@@ -140,6 +153,9 @@ export default function SettingsPage() {
     const [loading, setLoading] = React.useState(true);
     const [saving, setSaving] = React.useState(false);
     const [savedMsg, setSavedMsg] = React.useState("");
+    const [customEventTypes, setCustomEventTypes] = React.useState<string[]>([]);
+    const [newCustomEventType, setNewCustomEventType] = React.useState("");
+    const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
 
     // Controlled fields for profile
     const [studioName, setStudioName] = React.useState("");
@@ -211,11 +227,17 @@ export default function SettingsPage() {
     const [driveFolderFormats, setDriveFolderFormats] = React.useState<Record<string, string>>(
         () => normalizeTemplateFormatMap(null, DEFAULT_DRIVE_FOLDER_FORMAT),
     );
+    const [driveFolderStructures, setDriveFolderStructures] = React.useState<Record<string, string[]>>(
+        () => normalizeDriveFolderStructureSettings(null),
+    );
     const [selectedDriveEventType, setSelectedDriveEventType] = React.useState("Umum");
+    const [newDriveSegment, setNewDriveSegment] = React.useState("");
     const calendarFormatInputRef = React.useRef<HTMLInputElement>(null);
     const driveFormatInputRef = React.useRef<HTMLInputElement>(null);
-
-    React.useEffect(() => { fetchAll(); }, []);
+    const availableEventTypes = React.useMemo(
+        () => Array.from(new Set(["Umum", ...GOOGLE_EVENT_TYPES, ...customEventTypes])),
+        [customEventTypes],
+    );
 
     // Listen for Google auth popup callbacks
     React.useEffect(() => {
@@ -227,18 +249,34 @@ export default function SettingsPage() {
         return () => window.removeEventListener("message", handleMessage);
     }, []);
 
-    async function fetchAll() {
+    React.useEffect(() => {
+        if (!availableEventTypes.includes(selectedEventType)) {
+            setSelectedEventType("Umum");
+        }
+        if (!availableEventTypes.includes(selectedCalendarEventType)) {
+            setSelectedCalendarEventType("Umum");
+        }
+        if (!availableEventTypes.includes(selectedDriveEventType)) {
+            setSelectedDriveEventType("Umum");
+        }
+    }, [availableEventTypes, selectedCalendarEventType, selectedDriveEventType, selectedEventType]);
+
+    const fetchAll = React.useEffectEvent(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const { data: p } = await supabase
             .from("profiles")
-            .select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, calendar_event_format, calendar_event_format_map, drive_folder_format, drive_folder_format_map, invoice_logo_url, custom_statuses, custom_client_statuses, queue_trigger_status, default_wa_target, final_invoice_visible_from_status")
+            .select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, calendar_event_format, calendar_event_format_map, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, invoice_logo_url, custom_statuses, custom_client_statuses, queue_trigger_status, default_wa_target, final_invoice_visible_from_status, custom_event_types, form_sections")
             .eq("id", user.id)
             .single();
         const prof = p as Profile;
         setProfile(prof);
+        const loadedCustomEventTypes = Array.isArray((prof as any)?.custom_event_types)
+            ? ((prof as any).custom_event_types as string[]).filter((item) => typeof item === "string" && item.trim().length > 0)
+            : [];
+        setCustomEventTypes(loadedCustomEventTypes);
         setStudioName(prof?.studio_name || "");
         setIsCalendarConnected(!!(prof as any)?.google_access_token);
         setIsDriveConnected(!!(prof as any)?.google_drive_access_token);
@@ -255,6 +293,28 @@ export default function SettingsPage() {
                 (prof as any)?.drive_folder_format || DEFAULT_DRIVE_FOLDER_FORMAT,
             ),
         );
+        setDriveFolderStructures(
+            normalizeDriveFolderStructureSettings(
+                (prof as any)?.drive_folder_structure_map,
+                (prof as any)?.drive_folder_format || DEFAULT_DRIVE_FOLDER_FORMAT,
+                (prof as any)?.drive_folder_format_map || null,
+            ),
+        );
+        const rawSections = (prof as any)?.form_sections;
+        if (Array.isArray(rawSections)) {
+            setFormSectionsByEventType({ Umum: normalizeStoredFormLayout(rawSections, "Umum") });
+        } else if (rawSections && typeof rawSections === "object") {
+            setFormSectionsByEventType(
+                Object.fromEntries(
+                    Object.entries(rawSections as Record<string, unknown>).map(([key, value]) => [
+                        key,
+                        normalizeStoredFormLayout(value, key),
+                    ]),
+                ) as Record<string, FormLayoutItem[]>,
+            );
+        } else {
+            setFormSectionsByEventType({});
+        }
         if ((prof as any)?.custom_statuses) {
             setCustomStatuses((prof as any).custom_statuses);
         }
@@ -291,10 +351,11 @@ export default function SettingsPage() {
         // Initialize template contents from existing templates
         const contents: Record<string, string> = {};
         const contentsEn: Record<string, string> = {};
+        const templateEventTypes = Array.from(new Set(["Umum", ...GOOGLE_EVENT_TYPES, ...loadedCustomEventTypes]));
         templateTypes.forEach(tt => {
             if (tt.value === "whatsapp_freelancer") {
                 // Initialize per event type
-                GOOGLE_EVENT_TYPES.forEach(et => {
+                templateEventTypes.forEach(et => {
                     const key = `${tt.value}__${et}`;
                     const existing = allTemplates.find((tmpl: any) => tmpl.type === tt.value && (tmpl.event_type || "Umum") === et);
                     contents[key] = existing?.content || "";
@@ -309,7 +370,9 @@ export default function SettingsPage() {
         setTemplateContents(contents);
         setTemplateContentsEn(contentsEn);
         setLoading(false);
-    }
+    });
+
+    React.useEffect(() => { void fetchAll(); }, []);
 
     async function handleSaveProfile(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
@@ -323,10 +386,12 @@ export default function SettingsPage() {
             whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
             vendor_slug: slug || null,
             default_wa_target: defaultWaTarget,
+            custom_event_types: customEventTypes,
             calendar_event_format: calendarEventFormats.Umum || DEFAULT_CALENDAR_EVENT_FORMAT,
             calendar_event_format_map: calendarEventFormats,
             drive_folder_format: driveFolderFormats.Umum || DEFAULT_DRIVE_FOLDER_FORMAT,
             drive_folder_format_map: driveFolderFormats,
+            drive_folder_structure_map: driveFolderStructures,
         }).eq("id", profile.id);
 
         setVendorSlug(slug);
@@ -416,6 +481,19 @@ export default function SettingsPage() {
         setDriveFolderFormats((prev) => ({ ...prev, [eventType]: value }));
     }
 
+    function getDriveSegments(eventType: string) {
+        const resolved = driveFolderStructures[eventType];
+        if (resolved && resolved.length > 0) return resolved;
+        return driveFolderStructures.Umum?.length ? driveFolderStructures.Umum : ["{client_name}"];
+    }
+
+    function updateDriveSegments(eventType: string, updater: (segments: string[]) => string[]) {
+        setDriveFolderStructures((prev) => ({
+            ...prev,
+            [eventType]: updater(getDriveSegments(eventType)),
+        }));
+    }
+
     // Logo handlers
     function handleLogoFileSelected(file: File) {
         if (file.size > 500 * 1024) {
@@ -492,6 +570,7 @@ export default function SettingsPage() {
         payment_method: "Transfer Bank",
         studio_name: studioName || "Memori Studio",
         freelancer_name: "Andi",
+        client_whatsapp: "+628123456789",
         event_type: selectedEventType,
         day_name: "Rabu",
         location: "Jakarta Convention Center",
@@ -503,9 +582,10 @@ export default function SettingsPage() {
         settlement_link: "https://clientdesk.ryanekoapp.web.id/id/settlement/abc123",
     };
 
-    function renderPreview(content: string) {
+    function renderPreview(content: string, extraVars?: Record<string, string>) {
         if (!content) return tp("emptyMessage");
-        return content.replace(/\{\{(\w+)\}\}/g, (_, key) => previewData[key] || `{{${key}}}`);
+        const mergedVars = { ...previewData, ...extraVars };
+        return content.replace(/\{\{(\w+)\}\}/g, (_, key) => mergedVars[key] || `{{${key}}}`);
     }
 
     const calendarPreviewVars = {
@@ -536,14 +616,39 @@ export default function SettingsPage() {
         ),
         drivePreviewVars,
     );
+    const driveFolderStructurePreview = getDriveSegments(selectedDriveEventType)
+        .map((segment) => applyDriveTemplate(segment, drivePreviewVars))
+        .filter((segment) => segment.trim().length > 0)
+        .join(" > ");
 
     function renderTemplateCard(tt: typeof templateTypes[0]) {
         const isFreelancer = tt.value === "whatsapp_freelancer";
         const contentKey = isFreelancer ? `${tt.value}__${selectedEventType}` : tt.value;
         const currentLang = templateLang[contentKey] || "id";
         const content = currentLang === "id" ? (templateContents[contentKey] || "") : (templateContentsEn[contentKey] || "");
-        const hints = variableHints[tt.value] || [];
-        const preview = renderPreview(content);
+        const hints = isFreelancer
+            ? Array.from(
+                new Set([
+                    ...(variableHints[tt.value] || []),
+                    ...getEventExtraFieldTemplateTokens(selectedEventType),
+                    ...getCustomFieldTemplateTokens(
+                        formSectionsByEventType[selectedEventType] || formSectionsByEventType.Umum || [],
+                        selectedEventType,
+                        "whatsapp",
+                    ),
+                ]),
+            )
+            : (variableHints[tt.value] || []);
+        const preview = renderPreview(content, isFreelancer
+            ? {
+                event_type: selectedEventType,
+                ...getEventExtraFieldPreviewVars(selectedEventType),
+                ...getCustomFieldPreviewVars(
+                    formSectionsByEventType[selectedEventType] || formSectionsByEventType.Umum || [],
+                    selectedEventType,
+                ),
+            }
+            : undefined);
 
         return (
             <div key={tt.value} className="rounded-xl border bg-card text-card-foreground shadow-sm">
@@ -581,8 +686,8 @@ export default function SettingsPage() {
                                 onChange={e => setSelectedEventType(e.target.value)}
                                 className={inputClass + " cursor-pointer"}
                             >
-                                {GOOGLE_EVENT_TYPES.map(et => (
-                                    <option key={et} value={et}>{tp(`event${et}` as any)}</option>
+                                {availableEventTypes.map(et => (
+                                    <option key={et} value={et}>{et === "Umum" ? tp(`event${et}` as any) : et}</option>
                                 ))}
                             </select>
                         </div>
@@ -831,6 +936,57 @@ export default function SettingsPage() {
                                     </div>
                                 </div>
 
+                                <div className="space-y-4 pt-2 border-t">
+                                    <div>
+                                        <label className="text-sm font-medium flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> Jenis Acara Global</label>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Custom jenis acara dikelola di sini dan dipakai lintas form booking, template, filter, serta integrasi.</p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {customEventTypes.length === 0 ? (
+                                            <span className="text-xs text-muted-foreground">Belum ada custom jenis acara.</span>
+                                        ) : customEventTypes.map((eventType) => (
+                                            <span key={eventType} className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1 text-xs font-medium">
+                                                {eventType}
+                                                <button
+                                                    type="button"
+                                                    className="text-muted-foreground hover:text-red-500"
+                                                    onClick={() => setCustomEventTypes((prev) => prev.filter((item) => item !== eventType))}
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            value={newCustomEventType}
+                                            onChange={e => setNewCustomEventType(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key !== "Enter") return;
+                                                e.preventDefault();
+                                                const value = newCustomEventType.trim();
+                                                if (!value || availableEventTypes.includes(value)) return;
+                                                setCustomEventTypes((prev) => [...prev, value]);
+                                                setNewCustomEventType("");
+                                            }}
+                                            placeholder="Tambah jenis acara custom..."
+                                            className={inputClass}
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => {
+                                                const value = newCustomEventType.trim();
+                                                if (!value || availableEventTypes.includes(value)) return;
+                                                setCustomEventTypes((prev) => [...prev, value]);
+                                                setNewCustomEventType("");
+                                            }}
+                                        >
+                                            Tambah
+                                        </Button>
+                                    </div>
+                                </div>
+
                                 <div className="flex items-center gap-3 pt-2">
                                     <Button type="submit" disabled={saving} className="gap-2">
                                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -899,8 +1055,8 @@ export default function SettingsPage() {
                                                 onChange={e => setSelectedCalendarEventType(e.target.value)}
                                                 className={inputClass + " cursor-pointer"}
                                             >
-                                                {GOOGLE_EVENT_TYPES.map(et => (
-                                                    <option key={et} value={et}>{tp(`event${et}` as any)}</option>
+                                                {availableEventTypes.map(et => (
+                                                    <option key={et} value={et}>{et === "Umum" ? tp(`event${et}` as any) : et}</option>
                                                 ))}
                                             </select>
                                         </div>
@@ -982,8 +1138,8 @@ export default function SettingsPage() {
                                                 onChange={e => setSelectedDriveEventType(e.target.value)}
                                                 className={inputClass + " cursor-pointer"}
                                             >
-                                                {GOOGLE_EVENT_TYPES.map(et => (
-                                                    <option key={et} value={et}>{tp(`event${et}` as any)}</option>
+                                                {availableEventTypes.map(et => (
+                                                    <option key={et} value={et}>{et === "Umum" ? tp(`event${et}` as any) : et}</option>
                                                 ))}
                                             </select>
                                         </div>
@@ -1014,7 +1170,100 @@ export default function SettingsPage() {
                                         <div className="rounded-md border bg-background/80 px-4 py-3 space-y-1">
                                             <p className="text-xs font-medium text-muted-foreground">Preview Folder Klien</p>
                                             <p className="text-sm text-foreground/90">{driveFolderPreview}</p>
-                                            <p className="text-[11px] text-muted-foreground">📁 Struktur: Data Booking Client Desk &gt; <strong>{driveFolderPreview}</strong> &gt; File Client / Invoice</p>
+                                            <p className="text-[11px] text-muted-foreground">Fallback lama: Data Booking Client Desk &gt; <strong>{driveFolderPreview}</strong></p>
+                                        </div>
+                                        <div className="rounded-lg border bg-background/80 p-4 space-y-3">
+                                            <div>
+                                                <p className="text-sm font-medium">Struktur Folder Bertingkat</p>
+                                                <p className="text-xs text-muted-foreground">Atur urutan folder sebelum masuk ke folder klien. Bisa dibuat beda per jenis acara.</p>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {getDriveSegments(selectedDriveEventType).map((segment, index, arr) => (
+                                                    <div key={`${selectedDriveEventType}-${index}`} className="flex items-center gap-2">
+                                                        <input
+                                                            value={segment}
+                                                            onChange={e => updateDriveSegments(selectedDriveEventType, (segments) =>
+                                                                segments.map((item, itemIndex) => itemIndex === index ? e.target.value : item),
+                                                            )}
+                                                            placeholder="{client_name}"
+                                                            className={inputClass}
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            disabled={index === 0}
+                                                            onClick={() => updateDriveSegments(selectedDriveEventType, (segments) => {
+                                                                const next = [...segments];
+                                                                [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                                                                return next;
+                                                            })}
+                                                        >
+                                                            ↑
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            disabled={index === arr.length - 1}
+                                                            onClick={() => updateDriveSegments(selectedDriveEventType, (segments) => {
+                                                                const next = [...segments];
+                                                                [next[index + 1], next[index]] = [next[index], next[index + 1]];
+                                                                return next;
+                                                            })}
+                                                        >
+                                                            ↓
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            disabled={arr.length <= 1}
+                                                            onClick={() => updateDriveSegments(selectedDriveEventType, (segments) =>
+                                                                segments.filter((_, itemIndex) => itemIndex !== index),
+                                                            )}
+                                                        >
+                                                            Hapus
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {DRIVE_TEMPLATE_VARIABLES.map((token) => (
+                                                    <button
+                                                        key={`segment-${token}`}
+                                                        type="button"
+                                                        onClick={() => setNewDriveSegment((prev) => `${prev}${token}`)}
+                                                        className="text-[11px] px-2 py-1 rounded-md border bg-muted/50 text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+                                                    >
+                                                        {token.replace(/\{|\}/g, "")}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    value={newDriveSegment}
+                                                    onChange={e => setNewDriveSegment(e.target.value)}
+                                                    placeholder="Contoh: {year}"
+                                                    className={inputClass}
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        const value = newDriveSegment.trim();
+                                                        if (!value) return;
+                                                        updateDriveSegments(selectedDriveEventType, (segments) => [...segments, value]);
+                                                        setNewDriveSegment("");
+                                                    }}
+                                                >
+                                                    Tambah
+                                                </Button>
+                                            </div>
+                                            <div className="rounded-md border bg-muted/20 px-4 py-3 space-y-1">
+                                                <p className="text-xs font-medium text-muted-foreground">Preview Folder Bertingkat</p>
+                                                <p className="text-sm text-foreground/90">Data Booking Client Desk &gt; {driveFolderStructurePreview || "{client_name}"}</p>
+                                            </div>
                                         </div>
                                     </div>
                                 )}

@@ -734,3 +734,42 @@ export function extractBuiltInExtraFieldValues(
     ),
   ) as Record<string, string>;
 }
+
+export function getCustomFieldTemplateTokens(
+  raw: unknown,
+  eventType: string,
+  format: "calendar" | "drive" | "whatsapp" = "calendar",
+): string[] {
+  const wrap =
+    format === "drive"
+      ? (key: string) => `{${key}}`
+      : (key: string) => `{{${key}}}`;
+
+  return getGroupedCustomLayoutSections(raw, eventType)
+    .flatMap((section) =>
+      section.items
+        .filter((item): item is CustomFieldItem => item.kind === "custom_field")
+        .map((item) => wrap(item.id)),
+    );
+}
+
+export function getCustomFieldPreviewVars(
+  raw: unknown,
+  eventType: string,
+): Record<string, string> {
+  return Object.fromEntries(
+    getGroupedCustomLayoutSections(raw, eventType).flatMap((section) =>
+      section.items
+        .filter((item): item is CustomFieldItem => item.kind === "custom_field")
+        .map((item) => [item.id, item.placeholder || item.label]),
+    ),
+  ) as Record<string, string>;
+}
+
+export function buildCustomFieldTemplateVars(raw: unknown): Record<string, string> {
+  return Object.fromEntries(
+    extractCustomFieldSnapshots(raw)
+      .filter((item) => item.value.trim().length > 0)
+      .map((item) => [item.id, item.value]),
+  ) as Record<string, string>;
+}

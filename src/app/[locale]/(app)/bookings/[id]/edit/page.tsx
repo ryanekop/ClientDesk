@@ -86,7 +86,7 @@ const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: st
     ],
 };
 
-type Service = { id: string; name: string; price: number };
+type Service = { id: string; name: string; price: number; is_addon?: boolean | null };
 type Freelance = { id: string; name: string };
 
 function formatNumber(n: number | ""): string {
@@ -137,7 +137,7 @@ export default function EditBookingPage() {
     const [sessionDate, setSessionDate] = React.useState("");
     const [location, setLocation] = React.useState("");
     const [locationDetail, setLocationDetail] = React.useState("");
-    const [serviceId, setServiceId] = React.useState("");
+    const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
     const [freelancerIds, setFreelancerIds] = React.useState<string[]>([]);
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
@@ -170,11 +170,12 @@ export default function EditBookingPage() {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
-            const [{ data: booking }, { data: svcs }, { data: frees }, { data: bfRows }, { data: prof }] = await Promise.all([
+            const [{ data: booking }, { data: svcs }, { data: frees }, { data: bfRows }, { data: bsRows }, { data: prof }] = await Promise.all([
                 supabase.from("bookings").select("*").eq("id", id).single(),
-                supabase.from("services").select("id, name, price").eq("user_id", user.id).eq("is_active", true),
+                supabase.from("services").select("id, name, price, is_addon").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
+                supabase.from("booking_services").select("service_id, kind, sort_order").eq("booking_id", id).order("sort_order", { ascending: true }),
                 supabase.from("profiles").select("custom_statuses, form_sections").eq("id", user.id).single(),
             ]);
             if (prof?.custom_statuses) setCustomStatuses(prof.custom_statuses as string[]);
@@ -201,7 +202,8 @@ export default function EditBookingPage() {
                 setSessionDate(booking.session_date ? booking.session_date.slice(0, 16) : "");
                 setLocation(booking.location || "");
                 setLocationDetail(booking.location_detail || "");
-                setServiceId(booking.service_id || "");
+                const selectedMainIds = ((bsRows || []) as Array<{ service_id: string; kind: string }>).filter((row) => row.kind === "main").map((row) => row.service_id);
+                setSelectedServiceIds(selectedMainIds.length > 0 ? selectedMainIds : booking.service_id ? [booking.service_id] : []);
                 // Load multi-freelancer from junction table, fallback to old column
                 const junctionIds = (bfRows || []).map((r: any) => r.freelance_id);
                 setFreelancerIds(junctionIds.length > 0 ? junctionIds : booking.freelance_id ? [booking.freelance_id] : []);
@@ -229,12 +231,28 @@ export default function EditBookingPage() {
         load();
     }, [id]);
 
-    const handleServiceChange = (val: string) => {
-        if (val === "__custom__") { setShowCustomServicePopup(true); return; }
-        setServiceId(val);
-        const selected = services.find(s => s.id === val);
-        if (selected) setTotalPrice(selected.price);
+    const mainServices = React.useMemo(
+        () => services.filter((service) => !service.is_addon),
+        [services],
+    );
+    const selectedMainServices = React.useMemo(
+        () => mainServices.filter((service) => selectedServiceIds.includes(service.id)),
+        [mainServices, selectedServiceIds],
+    );
+    const toggleService = (serviceId: string) => {
+        setSelectedServiceIds((prev) =>
+            prev.includes(serviceId)
+                ? prev.filter((item) => item !== serviceId)
+                : [...prev, serviceId],
+        );
     };
+    React.useEffect(() => {
+        if (selectedMainServices.length === 0) {
+            setTotalPrice("");
+            return;
+        }
+        setTotalPrice(selectedMainServices.reduce((sum, service) => sum + service.price, 0));
+    }, [selectedMainServices]);
     const toggleFreelancer = (fid: string) => {
         setFreelancerIds(prev => {
             if (prev.includes(fid)) return prev.filter(f => f !== fid);
@@ -268,8 +286,11 @@ export default function EditBookingPage() {
         if (!error && data) {
             const s = data as Service;
             setServices(prev => [...prev, s]);
-            setServiceId(s.id);
-            setTotalPrice(s.price);
+            setSelectedServiceIds(prev => (prev.includes(s.id) ? prev : [...prev, s.id]));
+            setTotalPrice(prev => {
+                const current = typeof prev === "number" ? prev : 0;
+                return current > 0 ? current + s.price : s.price;
+            });
             setCustomServiceName(""); setCustomServicePrice(""); setCustomServiceDesc("");
             setShowCustomServicePopup(false);
         } else { alert("Gagal menyimpan paket."); }
@@ -302,6 +323,11 @@ export default function EditBookingPage() {
 
         if (eventType === "Wedding" && (!extraFields.tempat_akad || !extraFields.tempat_resepsi)) {
             alert("Lokasi Akad dan Lokasi Resepsi wajib diisi untuk acara Wedding.");
+            setSaving(false);
+            return;
+        }
+        if (selectedServiceIds.length === 0) {
+            alert("Pilih minimal satu paket utama.");
             setSaving(false);
             return;
         }
@@ -340,7 +366,7 @@ export default function EditBookingPage() {
             session_date: finalSessionDate,
             location: (eventType === "Wedding" ? (extraFields.tempat_akad || extraFields.tempat_resepsi || location) : location) || null,
             location_detail: locationDetail || null,
-            service_id: serviceId || null,
+            service_id: selectedServiceIds[0] || null,
             freelance_id: freelancerIds[0] || null,
             total_price: tPrice,
             dp_paid: dPaid,
@@ -362,6 +388,17 @@ export default function EditBookingPage() {
         if (!error) {
             // Sync junction table
             await supabase.from("booking_freelance").delete().eq("booking_id", id);
+            await supabase.from("booking_services").delete().eq("booking_id", id);
+            if (selectedServiceIds.length > 0) {
+                await supabase.from("booking_services").insert(
+                    selectedServiceIds.map((serviceId, index) => ({
+                        booking_id: id,
+                        service_id: serviceId,
+                        kind: "main",
+                        sort_order: index,
+                    }))
+                );
+            }
             if (freelancerIds.length > 0) {
                 await supabase.from("booking_freelance").insert(
                     freelancerIds.map(fid => ({ booking_id: id, freelance_id: fid }))
@@ -587,11 +624,39 @@ export default function EditBookingPage() {
                         </div>
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Paket / Layanan{reqMark}</label>
-                            <select value={serviceId} onChange={e => handleServiceChange(e.target.value)} className={selectClass} required>
-                                <option value="">-- Pilih Paket --</option>
-                                {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                <option value="__custom__">＋ Tambah Paket Baru...</option>
-                            </select>
+                            <div className="space-y-2">
+                                {mainServices.map((service) => {
+                                    const selected = selectedServiceIds.includes(service.id);
+                                    return (
+                                        <button
+                                            key={service.id}
+                                            type="button"
+                                            onClick={() => toggleService(service.id)}
+                                            className={cn(
+                                                "flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-all",
+                                                selected
+                                                    ? "border-foreground bg-foreground/5 dark:bg-foreground/10"
+                                                    : "border-input hover:bg-muted/50"
+                                            )}
+                                        >
+                                            <span>{service.name}</span>
+                                            <span className="font-medium">Rp {formatNumber(service.price)}</span>
+                                        </button>
+                                    );
+                                })}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCustomServicePopup(true)}
+                                    className="w-full rounded-lg border border-dashed border-input px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/50"
+                                >
+                                    ＋ Tambah Paket Baru...
+                                </button>
+                            </div>
+                            {selectedMainServices.length > 0 && (
+                                <p className="text-[11px] text-muted-foreground">
+                                    Dipilih: {selectedMainServices.map(service => service.name).join(", ")}
+                                </p>
+                            )}
                         </div>
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Freelance (max 5)</label>

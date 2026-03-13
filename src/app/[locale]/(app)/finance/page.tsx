@@ -10,6 +10,18 @@ import { formatSessionDate } from "@/utils/format-date";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import { Link } from "@/i18n/routing";
 import * as XLSX from "xlsx";
+import { TableColumnManager } from "@/components/ui/table-column-manager";
+import {
+    getBookingServiceLabel,
+    normalizeBookingServiceSelections,
+    type BookingServiceSelection,
+} from "@/lib/booking-services";
+import {
+    lockBoundaryColumns,
+    mergeTableColumnPreferences,
+    updateTableColumnPreferenceMap,
+    type TableColumnPreference,
+} from "@/lib/table-column-prefs";
 import {
     getFinalInvoiceTotal,
     getRemainingFinalPayment,
@@ -43,8 +55,21 @@ type BookingFinance = {
     payment_proof_drive_file_id: string | null;
     final_payment_proof_url: string | null;
     final_payment_proof_drive_file_id: string | null;
-    services: { name: string; price: number } | null;
+    services: { id?: string; name: string; price: number; is_addon?: boolean | null } | null;
+    booking_services?: unknown[];
+    service_selections?: BookingServiceSelection[];
+    service_label?: string;
 };
+
+const FINANCE_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
+    { id: "name", label: "Nama", visible: true, locked: true },
+    { id: "total_price", label: "Harga Total", visible: true },
+    { id: "addon", label: "Add-on", visible: true },
+    { id: "dp_paid", label: "DP Dibayar", visible: true },
+    { id: "remaining", label: "Sisa", visible: true },
+    { id: "status", label: "Status", visible: true },
+    { id: "actions", label: "Aksi", visible: true, locked: true },
+]);
 
 export default function FinancePage() {
     const supabase = createClient();
@@ -60,6 +85,9 @@ export default function FinancePage() {
     const [savedTemplates, setSavedTemplates] = React.useState<
         { id: string; type: string; content: string; content_en: string; event_type: string | null }[]
     >([]);
+    const [columns, setColumns] = React.useState<TableColumnPreference[]>(FINANCE_COLUMN_DEFAULTS);
+    const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
+    const [savingColumns, setSavingColumns] = React.useState(false);
 
     const fetchBookings = React.useCallback(async () => {
         setLoading(true);
@@ -69,7 +97,7 @@ export default function FinancePage() {
         const [{ data }, { data: templates }, { data: profile }] = await Promise.all([
             supabase
                 .from("bookings")
-                .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, event_type, location, tracking_uuid, client_status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, payment_proof_url, payment_proof_drive_file_id, final_payment_proof_url, final_payment_proof_drive_file_id, services(name, price)")
+                .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, event_type, location, tracking_uuid, client_status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, payment_proof_url, payment_proof_drive_file_id, final_payment_proof_url, final_payment_proof_drive_file_id, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
                 .eq("user_id", user.id)
                 .neq("status", "Batal")
                 .order("created_at", { ascending: false }),
@@ -77,18 +105,67 @@ export default function FinancePage() {
                 .from("templates")
                 .select("id, type, content, content_en, event_type")
                 .eq("user_id", user.id),
-            supabase.from("profiles").select("studio_name").eq("id", user.id).single(),
+            supabase.from("profiles").select("studio_name, table_column_preferences").eq("id", user.id).single(),
         ]);
 
-        setBookings((data || []) as unknown as BookingFinance[]);
+        const normalizedBookings = ((data || []) as Array<BookingFinance & { booking_services?: unknown[] }>).map((booking) => {
+            const serviceSelections = normalizeBookingServiceSelections(
+                booking.booking_services,
+                booking.services,
+            );
+            return {
+                ...booking,
+                service_selections: serviceSelections,
+                service_label: getBookingServiceLabel(serviceSelections, {
+                    kind: "main",
+                    fallback: booking.services?.name || "-",
+                }),
+            };
+        }) as BookingFinance[];
+        const profilePrefs = (profile as { table_column_preferences?: { finance?: TableColumnPreference[] } | null } | null)?.table_column_preferences?.finance;
+        setBookings(normalizedBookings);
         setSavedTemplates((templates || []) as { id: string; type: string; content: string; content_en: string; event_type: string | null }[]);
         setStudioName(profile?.studio_name || "");
+        setColumns(
+            mergeTableColumnPreferences(
+                FINANCE_COLUMN_DEFAULTS,
+                profilePrefs,
+            ),
+        );
         setLoading(false);
     }, [supabase]);
 
     React.useEffect(() => {
         void fetchBookings();
     }, [fetchBookings]);
+
+    const visibleColumns = React.useMemo(
+        () => new Set(columns.filter((column) => column.visible).map((column) => column.id)),
+        [columns],
+    );
+
+    async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        setSavingColumns(true);
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("table_column_preferences")
+            .eq("id", user.id)
+            .single();
+        const payload = updateTableColumnPreferenceMap(
+            profile?.table_column_preferences,
+            "finance",
+            nextColumns,
+        );
+        await supabase
+            .from("profiles")
+            .update({ table_column_preferences: payload })
+            .eq("id", user.id);
+        setColumns(nextColumns);
+        setSavingColumns(false);
+        setColumnManagerOpen(false);
+    }
 
     async function handleMarkPaid(id: string) {
         const booking = bookings.find((item) => item.id === id);
@@ -161,7 +238,11 @@ export default function FinancePage() {
     }
 
     function getAddonTotal(booking: BookingFinance) {
-        const baseServicePrice = booking.services?.price ?? booking.total_price;
+        const baseServicePrice = booking.service_selections && booking.service_selections.length > 0
+            ? booking.service_selections
+                .filter((item) => item.kind === "main")
+                .reduce((sum, item) => sum + (item.service.price || 0), 0)
+            : (booking.services?.price ?? booking.total_price);
         const publicAddonTotal = Math.max(booking.total_price - baseServicePrice, 0);
         const finalAddonTotal = Math.max(getFinalInvoiceTotal(booking.total_price, booking.final_adjustments) - booking.total_price, 0);
         return publicAddonTotal + finalAddonTotal;
@@ -230,7 +311,7 @@ export default function FinancePage() {
                 client_name: booking.client_name,
                 booking_code: booking.booking_code,
                 session_date: date,
-                service_name: booking.services?.name || "-",
+                service_name: booking.service_label || booking.services?.name || "-",
                 total_price: formatCurrency(booking.total_price),
                 dp_paid: formatCurrency(booking.dp_paid),
                 studio_name: studioName || "",
@@ -244,7 +325,7 @@ export default function FinancePage() {
             });
         }
 
-        return `📄 *${tf("waInvoiceTitle")} - ${booking.booking_code}*\n\n${tf("waInvoiceHello", { name: booking.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${booking.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(booking.total_price)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(booking.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${booking.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${trackingLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackingLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
+        return `📄 *${tf("waInvoiceTitle")} - ${booking.booking_code}*\n\n${tf("waInvoiceHello", { name: booking.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${booking.service_label || booking.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(booking.total_price)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(booking.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${booking.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${trackingLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackingLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
     }
 
     function buildFinalInvoiceMessage(booking: BookingFinance) {
@@ -261,7 +342,7 @@ export default function FinancePage() {
                 client_name: booking.client_name,
                 booking_code: booking.booking_code,
                 session_date: date,
-                service_name: booking.services?.name || "-",
+                service_name: booking.service_label || booking.services?.name || "-",
                 total_price: formatCurrency(booking.total_price),
                 dp_paid: formatCurrency(booking.dp_paid),
                 final_total: formatCurrency(finalTotal),
@@ -276,7 +357,7 @@ export default function FinancePage() {
             });
         }
 
-        return `Halo ${booking.client_name}, invoice final untuk booking ${booking.booking_code} sudah kami siapkan.\n\nPaket: ${booking.services?.name || "-"}\nTotal awal: ${formatCurrency(booking.total_price)}\nAdd-on akhir: ${formatCurrency(finalTotal - booking.total_price)}\nTotal final: ${formatCurrency(finalTotal)}\nDP terbayar: ${formatCurrency(booking.dp_paid)}\nSisa pelunasan: ${formatCurrency(remaining)}\n\nInvoice final: ${invoiceLink}\nForm pelunasan: ${settlementLink || "-"}${trackingLink ? `\nTracking: ${trackingLink}` : ""}\n\nSilakan lakukan pelunasan dan upload bukti bayar melalui link di atas. Terima kasih.`;
+        return `Halo ${booking.client_name}, invoice final untuk booking ${booking.booking_code} sudah kami siapkan.\n\nPaket: ${booking.service_label || booking.services?.name || "-"}\nTotal awal: ${formatCurrency(booking.total_price)}\nAdd-on akhir: ${formatCurrency(finalTotal - booking.total_price)}\nTotal final: ${formatCurrency(finalTotal)}\nDP terbayar: ${formatCurrency(booking.dp_paid)}\nSisa pelunasan: ${formatCurrency(remaining)}\n\nInvoice final: ${invoiceLink}\nForm pelunasan: ${settlementLink || "-"}${trackingLink ? `\nTracking: ${trackingLink}` : ""}\n\nSilakan lakukan pelunasan dan upload bukti bayar melalui link di atas. Terima kasih.`;
     }
 
     function sendInitialInvoiceWhatsApp(booking: BookingFinance) {
@@ -369,7 +450,7 @@ export default function FinancePage() {
         const detailData = bookings.map(b => ({
             "Kode Booking": b.booking_code,
             "Nama Klien": b.client_name,
-            "Paket": b.services?.name || "-",
+            "Paket": b.service_label || b.services?.name || "-",
             "Jadwal": b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "-",
             "Total Harga": getFinalInvoiceTotal(b.total_price, b.final_adjustments),
             "Total Add-on": getAddonTotal(b),
@@ -450,6 +531,16 @@ export default function FinancePage() {
                 >
                     <Download className="w-4 h-4" /> Export Excel
                 </button>
+                <TableColumnManager
+                    title="Kelola Kolom Keuangan"
+                    description="Atur kolom yang tampil di tabel keuangan. Kolom Nama dan Aksi selalu terkunci."
+                    columns={columns}
+                    open={columnManagerOpen}
+                    onOpenChange={setColumnManagerOpen}
+                    onChange={setColumns}
+                    onSave={() => saveColumnPreferences(columns)}
+                    saving={savingColumns}
+                />
             </div>
 
             {/* Mobile Cards */}
@@ -475,7 +566,7 @@ export default function FinancePage() {
                             <div className="flex items-start justify-between">
                                 <div>
                                     <p className="font-semibold">{b.client_name}</p>
-                                    <p className="text-xs text-muted-foreground">{b.booking_code} · {b.services?.name || "-"}</p>
+                                    <p className="text-xs text-muted-foreground">{b.booking_code} · {b.service_label || b.services?.name || "-"}</p>
                                 </div>
                                 <button
                                     onClick={() => b.is_fully_paid ? handleMarkUnpaid(b.id) : handleMarkPaid(b.id)}
@@ -535,22 +626,22 @@ export default function FinancePage() {
                     <table className="min-w-[1180px] w-full text-sm text-left">
                         <thead className="text-xs uppercase bg-card border-b">
                             <tr>
-                                <th className="px-6 py-4 font-medium text-muted-foreground">{t("klien")}</th>
-                                <th className="px-6 py-4 font-medium text-muted-foreground">{t("hargaTotal")}</th>
-                                <th className="px-6 py-4 font-medium text-muted-foreground">{t("addOn")}</th>
-                                <th className="px-6 py-4 font-medium text-muted-foreground">{t("dpDibayar")}</th>
-                                <th className="px-6 py-4 font-medium text-muted-foreground">{t("sisa")}</th>
-                                <th className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>
-                                <th className="min-w-[300px] px-6 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>
+                                {visibleColumns.has("name") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("klien")}</th>}
+                                {visibleColumns.has("total_price") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("hargaTotal")}</th>}
+                                {visibleColumns.has("addon") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("addOn")}</th>}
+                                {visibleColumns.has("dp_paid") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("dpDibayar")}</th>}
+                                {visibleColumns.has("remaining") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("sisa")}</th>}
+                                {visibleColumns.has("status") && <th className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>}
+                                {visibleColumns.has("actions") && <th className="min-w-[300px] px-4 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
                             {loading ? (
-                                <tr><td colSpan={7} className="px-6 py-12 text-center text-muted-foreground">
+                                <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground">
                                     <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                                 </td></tr>
                             ) : filtered.length === 0 ? (
-                                <tr><td colSpan={7} className="px-6 py-12 text-center text-muted-foreground">
+                                <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground">
                                     {t("tidakAdaData")}
                                 </td></tr>
                             ) : paginateArray(filtered, currentPage, itemsPerPage).map((b) => {
@@ -567,19 +658,19 @@ export default function FinancePage() {
                                 const addonTotal = getAddonTotal(b);
                                 return (
                                     <tr key={b.id} className="group hover:bg-muted/50 transition-colors">
-                                        <td className="px-4 py-3 max-w-[180px]">
+                                        {visibleColumns.has("name") && <td className="px-4 py-3 max-w-[180px]">
                                             <div className="font-medium truncate">{b.client_name}</div>
-                                            <div className="text-xs text-muted-foreground truncate">{b.booking_code} · {b.services?.name || "-"}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(finalTotal)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">{formatCurrency(addonTotal)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(b.dp_paid)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap font-medium">
+                                            <div className="text-xs text-muted-foreground truncate">{b.booking_code} · {b.service_label || b.services?.name || "-"}</div>
+                                        </td>}
+                                        {visibleColumns.has("total_price") && <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(finalTotal)}</td>}
+                                        {visibleColumns.has("addon") && <td className="px-6 py-4 whitespace-nowrap">{formatCurrency(addonTotal)}</td>}
+                                        {visibleColumns.has("dp_paid") && <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(b.dp_paid)}</td>}
+                                        {visibleColumns.has("remaining") && <td className="px-6 py-4 whitespace-nowrap font-medium">
                                             <span className={remaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}>
                                                 {formatCurrency(remaining)}
                                             </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                                        </td>}
+                                        {visibleColumns.has("status") && <td className="px-6 py-4 whitespace-nowrap">
                                             <button
                                                 onClick={() => b.is_fully_paid ? handleMarkUnpaid(b.id) : handleMarkPaid(b.id)}
                                                 className={`text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer transition-colors ${b.is_fully_paid
@@ -589,9 +680,9 @@ export default function FinancePage() {
                                             >
                                                 {b.is_fully_paid ? "✓ " + t("lunas") : t("belumLunas")}
                                             </button>
-                                        </td>
-                                        <td className="min-w-[300px] px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                                        </td>}
+                                        {visibleColumns.has("actions") && <td className="min-w-[300px] px-4 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap pr-1">
                                                 <Link href={`/bookings/${b.id}`}>
                                                     <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tf("detailBooking")}>
                                                         <Info className="w-4 h-4" />
@@ -629,7 +720,7 @@ export default function FinancePage() {
                                                     </Button>
                                                 ) : <span className="h-8 w-8" />}
                                             </div>
-                                        </td>
+                                        </td>}
                                     </tr>
                                 );
                             })}
