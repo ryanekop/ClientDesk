@@ -1,12 +1,12 @@
 import {
   DEFAULT_DRIVE_FOLDER_FORMAT,
   DEFAULT_DRIVE_FOLDER_STRUCTURE,
+  applyDriveTemplate,
   buildCalendarRangeFromLocalInput,
   normalizeDriveFolderStructureMap,
   resolveDriveFolderStructureByEventType,
   resolveTemplateByEventType,
 } from "@/utils/google/template";
-import { applyFolderTemplate } from "@/utils/google/drive";
 
 type BuildDrivePathArgs = {
   structureMap?: unknown;
@@ -88,6 +88,6 @@ export function buildDriveFolderPathSegments({
   });
 
   return rawSegments
-    .map((segment) => applyFolderTemplate(segment, vars).trim())
+    .map((segment) => applyDriveTemplate(segment, vars).trim())
     .filter((segment) => segment.length > 0);
 }

@@ -19,6 +19,17 @@ export type BookingServiceSelection = {
   service: BookingServiceRecord;
 };
 
+type LegacyBookingServiceRecord = {
+  id?: string | null;
+  name?: string | null;
+  price?: number | null;
+  original_price?: number | null;
+  description?: string | null;
+  duration_minutes?: number | null;
+  is_addon?: boolean | null;
+  event_types?: unknown;
+};
+
 type RawBookingServiceRow = {
   id?: string | null;
   booking_id?: string | null;
@@ -31,7 +42,7 @@ type RawBookingServiceRow = {
 
 export function normalizeBookingServiceSelections(
   rows: unknown,
-  legacyService?: BookingServiceRecord | null,
+  legacyService?: unknown,
 ): BookingServiceSelection[] {
   const selections = Array.isArray(rows)
     ? rows
@@ -47,17 +58,41 @@ export function normalizeBookingServiceSelections(
     });
   }
 
-  if (!legacyService?.id) return [];
+  const normalizedLegacyService = normalizeLegacyServiceRecord(legacyService);
+  if (!normalizedLegacyService) return [];
 
   return [
     {
-      id: legacyService.id,
+      id: normalizedLegacyService.id,
       booking_service_id: null,
-      kind: legacyService.is_addon ? "addon" : "main",
+      kind: normalizedLegacyService.is_addon ? "addon" : "main",
       sort_order: 0,
-      service: legacyService,
+      service: normalizedLegacyService,
     },
   ];
+}
+
+export function normalizeLegacyServiceRecord(
+  value: unknown,
+): BookingServiceRecord | null {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (!candidate || typeof candidate !== "object") return null;
+
+  const raw = candidate as LegacyBookingServiceRecord;
+  if (!raw.id || !raw.name) return null;
+
+  return {
+    id: raw.id,
+    name: raw.name,
+    price: raw.price ?? null,
+    original_price: raw.original_price ?? null,
+    description: raw.description ?? null,
+    duration_minutes: raw.duration_minutes ?? null,
+    is_addon: raw.is_addon ?? null,
+    event_types: Array.isArray(raw.event_types)
+      ? raw.event_types.filter((item): item is string => typeof item === "string")
+      : null,
+  };
 }
 
 function normalizeBookingServiceRow(
@@ -67,8 +102,8 @@ function normalizeBookingServiceRow(
   if (!row || typeof row !== "object") return null;
 
   const raw = row as RawBookingServiceRow;
-  const service = raw.service || raw.services;
-  if (!service?.id || !service.name) return null;
+  const service = normalizeLegacyServiceRecord(raw.service || raw.services);
+  if (!service) return null;
 
   return {
     id: service.id,

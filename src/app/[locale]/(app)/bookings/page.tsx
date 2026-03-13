@@ -24,6 +24,7 @@ import {
 import {
     getBookingServiceLabel,
     getBookingServiceNames,
+    normalizeLegacyServiceRecord,
     normalizeBookingServiceSelections,
     type BookingServiceSelection,
 } from "@/lib/booking-services";
@@ -58,7 +59,7 @@ type Booking = {
     notes: string | null;
     services: { id?: string; name: string; price?: number; is_addon?: boolean | null } | null;
     event_type: string | null;
-    freelancers: FreelancerInfo | null; // old single FK (backward compat)
+    freelance?: FreelancerInfo | null; // old single FK (backward compat)
     booking_freelancers: FreelancerInfo[]; // new junction data
     tracking_uuid: string | null;
     location_detail: string | null;
@@ -269,8 +270,9 @@ export default function BookingsPage() {
             freelance?: FreelancerInfo | null;
             booking_freelance?: Array<{ freelance: FreelancerInfo | null }>;
         };
-        const bgs = ((data || []) as BookingRow[]).map((b) => {
+        const bgs = ((data || []) as unknown as BookingRow[]).map((b) => {
             const junctionFreelancers = (b.booking_freelance || []).map((bf) => bf.freelance).filter((item): item is FreelancerInfo => Boolean(item));
+            const legacyService = normalizeLegacyServiceRecord(b.services);
             const serviceSelections = normalizeBookingServiceSelections(
                 b.booking_services,
                 b.services,
@@ -279,7 +281,7 @@ export default function BookingsPage() {
                 ...b,
                 booking_freelancers: junctionFreelancers.length > 0 ? junctionFreelancers : b.freelance ? [b.freelance] : [],
                 service_selections: serviceSelections,
-                service_label: getBookingServiceLabel(serviceSelections, { kind: "main", fallback: b.services?.name || "-" }),
+                service_label: getBookingServiceLabel(serviceSelections, { kind: "main", fallback: legacyService?.name || "-" }),
             };
         }) as unknown as Booking[];
         setBookings(bgs);

@@ -9,6 +9,28 @@ export type TableColumnPreference = {
 
 export type TableColumnPreferenceMap = Record<TableMenuKey, TableColumnPreference[]>;
 
+type RawTableColumnPreference = {
+  id: string;
+  label: string;
+  visible?: boolean;
+  locked?: boolean;
+};
+
+function normalizeTableColumnPreferenceItem(
+  item: unknown,
+): TableColumnPreference | null {
+  if (!item || typeof item !== "object") return null;
+  const raw = item as Partial<RawTableColumnPreference>;
+  if (typeof raw.id !== "string" || typeof raw.label !== "string") return null;
+
+  return {
+    id: raw.id,
+    label: raw.label,
+    visible: raw.visible !== false,
+    locked: raw.locked === true,
+  };
+}
+
 export function normalizeTableColumnPreferences(
   raw: unknown,
 ): Partial<TableColumnPreferenceMap> {
@@ -18,23 +40,13 @@ export function normalizeTableColumnPreferences(
     Object.entries(raw as Record<string, unknown>).map(([menu, value]) => [
       menu,
       Array.isArray(value)
-        ? value
-            .filter((item): item is TableColumnPreference => {
-              return (
-                !!item &&
-                typeof item === "object" &&
-                "id" in item &&
-                "label" in item &&
-                typeof item.id === "string" &&
-                typeof item.label === "string"
-              );
-            })
-            .map((item) => ({
-              id: item.id,
-              label: item.label,
-              visible: item.visible !== false,
-              locked: item.locked === true,
-            }))
+        ? value.reduce<TableColumnPreference[]>((acc, item) => {
+            const normalized = normalizeTableColumnPreferenceItem(item);
+            if (normalized) {
+              acc.push(normalized);
+            }
+            return acc;
+          }, [])
         : [],
     ]),
   ) as Partial<TableColumnPreferenceMap>;
@@ -47,17 +59,16 @@ export function mergeTableColumnPreferences(
   if (!saved || saved.length === 0) return defaults;
 
   const defaultMap = new Map(defaults.map((item) => [item.id, item]));
-  const ordered = saved
-    .map((item) => {
+  const ordered = saved.reduce<TableColumnPreference[]>((acc, item) => {
       const fallback = defaultMap.get(item.id);
-      if (!fallback) return null;
-      return {
+      if (!fallback) return acc;
+      acc.push({
         ...fallback,
         visible: item.locked ? true : item.visible !== false,
         locked: fallback.locked === true,
-      };
-    })
-    .filter((item): item is TableColumnPreference => item !== null);
+      });
+      return acc;
+    }, []);
 
   const missing = defaults.filter(
     (item) => !ordered.some((savedItem) => savedItem.id === item.id),

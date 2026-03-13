@@ -21,6 +21,7 @@ import {
 import {
     normalizeBookingServiceSelections,
     getBookingServiceLabel,
+    normalizeLegacyServiceRecord,
     type BookingServiceSelection,
 } from "@/lib/booking-services";
 import type { FormLayoutItem } from "@/components/form-builder/booking-form-layout";
@@ -139,7 +140,8 @@ export default function ClientStatusPage() {
                 .order("created_at", { ascending: false });
 
             setBookings(
-                ((data || []) as BookingStatus[]).map((booking) => {
+                ((data || []) as unknown as BookingStatus[]).map((booking) => {
+                    const legacyService = normalizeLegacyServiceRecord(booking.services);
                     const serviceSelections = normalizeBookingServiceSelections(
                         booking.booking_services,
                         booking.services,
@@ -149,7 +151,7 @@ export default function ClientStatusPage() {
                         service_selections: serviceSelections,
                         service_label: getBookingServiceLabel(serviceSelections, {
                             kind: "main",
-                            fallback: booking.services?.name || "-",
+                            fallback: legacyService?.name || "-",
                         }),
                     };
                 }),

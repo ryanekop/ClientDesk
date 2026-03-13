@@ -13,6 +13,7 @@ import * as XLSX from "xlsx";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
 import {
     getBookingServiceLabel,
+    normalizeLegacyServiceRecord,
     normalizeBookingServiceSelections,
     type BookingServiceSelection,
 } from "@/lib/booking-services";
@@ -127,7 +128,8 @@ export default function FinancePage() {
             supabase.from("profiles").select("studio_name, table_column_preferences, form_sections").eq("id", user.id).single(),
         ]);
 
-        const normalizedBookings = ((data || []) as Array<BookingFinance & { booking_services?: unknown[] }>).map((booking) => {
+        const normalizedBookings = ((data || []) as unknown as Array<BookingFinance & { booking_services?: unknown[] }>).map((booking) => {
+            const legacyService = normalizeLegacyServiceRecord(booking.services);
             const serviceSelections = normalizeBookingServiceSelections(
                 booking.booking_services,
                 booking.services,
@@ -137,7 +139,7 @@ export default function FinancePage() {
                 service_selections: serviceSelections,
                 service_label: getBookingServiceLabel(serviceSelections, {
                     kind: "main",
-                    fallback: booking.services?.name || "-",
+                    fallback: legacyService?.name || "-",
                 }),
             };
         }) as BookingFinance[];

@@ -99,7 +99,7 @@ type Booking = {
     final_payment_source: PaymentSource | null;
     final_paid_at: string | null;
     final_invoice_sent_at: string | null;
-    services: { id?: string; name: string; price: number; is_addon?: boolean | null } | null;
+    services: { id: string; name: string; price: number; is_addon?: boolean | null } | null;
     freelancers: FreelancerDetail | null; // old single FK
     booking_freelancers: FreelancerDetail[]; // new junction
     tracking_uuid: string | null;

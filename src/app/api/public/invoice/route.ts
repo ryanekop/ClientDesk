@@ -11,6 +11,7 @@ import {
 } from "@/lib/final-settlement";
 import {
   getBookingServiceLabel,
+  normalizeLegacyServiceRecord,
   normalizeBookingServiceSelections,
 } from "@/lib/booking-services";
 
@@ -133,13 +134,14 @@ export async function GET(request: NextRequest) {
     month: "long",
     year: "numeric",
   });
+  const legacyService = normalizeLegacyServiceRecord(booking.services);
   const serviceSelections = normalizeBookingServiceSelections(
     (booking as { booking_services?: unknown[] }).booking_services,
-    booking.services as { id?: string; name: string; price?: number; is_addon?: boolean | null } | null,
+    booking.services,
   );
   const serviceName = getBookingServiceLabel(serviceSelections, {
     kind: "main",
-    fallback: (booking.services as { name?: string } | null)?.name || t.defaultServiceName,
+    fallback: legacyService?.name || t.defaultServiceName,
   });
   const settlementStatus = getSettlementStatus(booking.settlement_status);
   const paymentStatus =
