@@ -87,9 +87,7 @@ export function RichTextEditor({
     content: initialContent,
     editable: !disabled,
     onUpdate: ({ editor: currentEditor }) => {
-      const html = currentEditor.getHTML();
-      lastAppliedValueRef.current = html;
-      onChange(isRichTextEmpty(html) ? "" : html);
+      lastAppliedValueRef.current = currentEditor.getHTML();
     },
     onBlur: ({ editor: currentEditor }) => {
       const html = currentEditor.getHTML();
