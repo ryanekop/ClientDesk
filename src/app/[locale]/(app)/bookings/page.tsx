@@ -4,7 +4,7 @@ import * as React from "react";
 import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatSessionDate, formatSessionTime } from "@/utils/format-date";
+import { formatSessionDate, formatSessionTime, formatTemplateSessionDate } from "@/utils/format-date";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -99,7 +99,7 @@ type SavedTemplate = {
 };
 
 function generateWATemplate(booking: Booking, locale: string, savedTemplates: SavedTemplate[], studioName: string, freelancerName?: string) {
-    const sessionStr = booking.session_date ? formatSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-";
+    const sessionStr = booking.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-";
     const sessionTime = booking.session_date ? formatSessionTime(booking.session_date) : "-";
     const serviceName = booking.service_label || booking.services?.name || "-";
 
@@ -510,6 +510,29 @@ export default function BookingsPage() {
         }
     }
 
+    function renderMobileValue(booking: Booking, column: TableColumnPreference) {
+        switch (column.id) {
+            case "invoice":
+                return booking.booking_code;
+            case "package":
+                return booking.service_label || booking.services?.name || "-";
+            case "schedule":
+                return formatDate(booking.session_date);
+            case "location":
+                return booking.location || "-";
+            case "status":
+                return booking.status;
+            case "freelancer":
+                return booking.booking_freelancers.length > 0
+                    ? booking.booking_freelancers.map((freelancer) => freelancer.name).join(", ")
+                    : "-";
+            case "price":
+                return formatCurrency(booking.total_price);
+            default:
+                return getBookingMetadataValue(booking.extra_fields, column.id);
+        }
+    }
+
     const activeExtraFilterFields = React.useMemo<BookingFilterField[]>(() => {
         if (eventTypeFilter === "All") return [];
 
@@ -714,16 +737,16 @@ export default function BookingsPage() {
                 {showFilterPanel && (
                     <div className="rounded-xl border bg-card p-4 shadow-sm">
                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground">Tanggal dari</label>
+                            <div className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">Tanggal dari</label>
                                 <input type="date" value={dateFromFilter} onChange={e => setDateFromFilter(e.target.value)} className={selectFilterClass} />
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground">Tanggal sampai</label>
+                            <div className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">Tanggal sampai</label>
                                 <input type="date" value={dateToFilter} onChange={e => setDateToFilter(e.target.value)} className={selectFilterClass} />
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground">Jenis acara</label>
+                            <div className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">Jenis acara</label>
                                 <select value={eventTypeFilter} onChange={e => setEventTypeFilter(e.target.value)} className={selectFilterClass}>
                                     <option value="All">Semua Acara</option>
                                     {Array.from(new Set(bookings.map(b => b.event_type).filter(Boolean))).sort().map(t => (
@@ -731,30 +754,30 @@ export default function BookingsPage() {
                                     ))}
                                 </select>
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground">Status</label>
+                            <div className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">Status</label>
                                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={selectFilterClass}>
                                     <option value="All">{tb("allStatus")}</option>
                                     {statusOpts.map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground">Paket</label>
+                            <div className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">Paket</label>
                                 <select value={packageFilter} onChange={e => setPackageFilter(e.target.value)} className={selectFilterClass}>
                                     <option value="All">{tb("allPackages")}</option>
                                     {packages.map(p => <option key={p} value={p}>{p}</option>)}
                                 </select>
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground">Freelance</label>
+                            <div className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">Freelance</label>
                                 <select value={freelanceFilter} onChange={e => setFreelanceFilter(e.target.value)} className={selectFilterClass}>
                                     <option value="All">{tb("allFreelance")}</option>
                                     {freelancerNames.map(f => <option key={f} value={f}>{f}</option>)}
                                 </select>
                             </div>
                             {activeExtraFilterFields.map((field) => (
-                                <div key={field.key} className="space-y-1.5">
-                                    <label className="text-xs font-medium text-muted-foreground">{field.label}</label>
+                                <div key={field.key} className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
+                                    <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">{field.label}</label>
                                     {field.mode === "exact" ? (
                                         <select
                                             value={extraFieldFilters[field.key] || ""}
@@ -798,11 +821,17 @@ export default function BookingsPage() {
                                 </div>
                                 <StatusBadge status={booking.status} />
                             </div>
-                            <div className="border-t pt-2 space-y-1 text-sm text-muted-foreground">
-                                <div className="flex justify-between"><span>{t("paket")}</span><span className="text-foreground font-medium">{booking.service_label || booking.services?.name || "-"}</span></div>
-                                <div className="flex justify-between"><span>{t("jadwal")}</span><span>{formatDate(booking.session_date)}</span></div>
-                                {booking.location && <div className="flex justify-between"><span>{tb("location")}</span><span className="truncate max-w-[180px]">{booking.location}</span></div>}
-                                <div className="flex justify-between"><span>Total</span><span className="text-foreground font-semibold">{formatCurrency(booking.total_price)}</span></div>
+                            <div className="border-t pt-2 space-y-1.5 text-sm text-muted-foreground">
+                                {orderedVisibleColumns
+                                    .filter((column) => column.id !== "name" && column.id !== "actions")
+                                    .map((column) => (
+                                        <div key={column.id} className="flex items-start justify-between gap-3">
+                                            <span className="shrink-0">{column.label}</span>
+                                            <span className="max-w-[180px] truncate text-right text-foreground" title={String(renderMobileValue(booking, column) ?? "-")}>
+                                                {renderMobileValue(booking, column)}
+                                            </span>
+                                        </div>
+                                    ))}
                             </div>
                             <div className="flex items-center gap-1 pt-1 border-t flex-wrap">
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500" title={tb("copyTemplate")} onClick={() => copyTemplate(booking)}>

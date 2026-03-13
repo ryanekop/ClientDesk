@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Save, Loader2, MessageSquare, Building2, Phone, Globe, Link2, Unlink, CheckCircle, XCircle, AlertCircle, ImagePlus, Trash2, Upload, Plus, GripVertical, Pencil, X } from "lucide-react";
+import { Save, Loader2, MessageSquare, Building2, Phone, Globe, Link2, Unlink, CheckCircle, XCircle, AlertCircle, ImagePlus, Trash2, Upload, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -9,7 +9,6 @@ import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import {
-    GOOGLE_EVENT_TYPES,
     DRIVE_TEMPLATE_VARIABLES,
     DEFAULT_CALENDAR_EVENT_FORMAT,
     DEFAULT_DRIVE_FOLDER_FORMAT,
@@ -34,6 +33,15 @@ import {
     getDefaultFinalInvoiceVisibleFromStatus,
     resolveFinalInvoiceVisibleFromStatus,
 } from "@/lib/client-status";
+import {
+    getActiveEventTypes,
+    getEventTypeSettings,
+    normalizeEventTypeList,
+} from "@/lib/event-type-config";
+import {
+    SortableConfigList,
+    type SortableConfigItem,
+} from "@/components/ui/sortable-config-list";
 
 const COUNTRY_CODES = [
     { code: "+62", flag: "🇮🇩", name: "Indonesia" },
@@ -51,6 +59,7 @@ type Profile = {
     whatsapp_number: string | null;
     vendor_slug: string | null;
     final_invoice_visible_from_status?: string | null;
+    form_event_types?: string[] | null;
     custom_event_types?: string[] | null;
     drive_folder_structure_map?: Record<string, string[]> | null;
     form_sections?: Record<string, FormLayoutItem[]> | FormLayoutItem[] | null;
@@ -154,6 +163,7 @@ export default function SettingsPage() {
     const [saving, setSaving] = React.useState(false);
     const [savedMsg, setSavedMsg] = React.useState("");
     const [customEventTypes, setCustomEventTypes] = React.useState<string[]>([]);
+    const [activeEventTypes, setActiveEventTypes] = React.useState<string[]>([]);
     const [newCustomEventType, setNewCustomEventType] = React.useState("");
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
 
@@ -197,20 +207,14 @@ export default function SettingsPage() {
     // Custom statuses
     const [customStatuses, setCustomStatuses] = React.useState<string[]>(["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"]);
     const [newStatusName, setNewStatusName] = React.useState("");
-    const [editingStatusIdx, setEditingStatusIdx] = React.useState<number | null>(null);
-    const [editingStatusName, setEditingStatusName] = React.useState("");
     const [statusSaving, setStatusSaving] = React.useState(false);
     const [statusSaved, setStatusSaved] = React.useState(false);
-    const [dragIdx, setDragIdx] = React.useState<number | null>(null);
 
     // Custom client statuses (progress)
     const [customClientStatuses, setCustomClientStatuses] = React.useState<string[]>(["Booking Confirmed","Sesi Foto / Acara","Antrian Edit","Proses Edit","Revisi","File Siap","Selesai"]);
     const [newClientStatusName, setNewClientStatusName] = React.useState("");
-    const [editingClientStatusIdx, setEditingClientStatusIdx] = React.useState<number | null>(null);
-    const [editingClientStatusName, setEditingClientStatusName] = React.useState("");
     const [clientStatusSaving, setClientStatusSaving] = React.useState(false);
     const [clientStatusSaved, setClientStatusSaved] = React.useState(false);
-    const [dragClientIdx, setDragClientIdx] = React.useState<number | null>(null);
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
     const [finalInvoiceVisibleFromStatus, setFinalInvoiceVisibleFromStatus] = React.useState("Sesi Foto / Acara");
 
@@ -234,10 +238,129 @@ export default function SettingsPage() {
     const [newDriveSegment, setNewDriveSegment] = React.useState("");
     const calendarFormatInputRef = React.useRef<HTMLInputElement>(null);
     const driveFormatInputRef = React.useRef<HTMLInputElement>(null);
-    const availableEventTypes = React.useMemo(
-        () => Array.from(new Set(["Umum", ...GOOGLE_EVENT_TYPES, ...customEventTypes])),
-        [customEventTypes],
+    const eventTypeSettings = React.useMemo(
+        () =>
+            getEventTypeSettings({
+                customEventTypes,
+                activeEventTypes,
+            }),
+        [activeEventTypes, customEventTypes],
     );
+    const availableEventTypes = React.useMemo(
+        () => eventTypeSettings.map((item) => item.name),
+        [eventTypeSettings],
+    );
+    const eventTypeItems = React.useMemo<SortableConfigItem[]>(
+        () =>
+            eventTypeSettings.map((item) => ({
+                id: item.name,
+                label: item.name,
+                active: item.active,
+                editable: !item.builtIn,
+                removable: !item.builtIn,
+                badge: item.builtIn ? (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                        Bawaan
+                    </span>
+                ) : (
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+                        Custom
+                    </span>
+                ),
+            })),
+        [eventTypeSettings],
+    );
+    const bookingStatusItems = React.useMemo<SortableConfigItem[]>(
+        () =>
+            customStatuses.map((status) => ({
+                id: status,
+                label: status,
+            })),
+        [customStatuses],
+    );
+    const clientStatusItems = React.useMemo<SortableConfigItem[]>(
+        () =>
+            customClientStatuses.map((status) => ({
+                id: status,
+                label: status,
+            })),
+        [customClientStatuses],
+    );
+
+    function reorderEventTypes(items: SortableConfigItem[]) {
+        const orderedNames = items.map((item) => item.id);
+        setCustomEventTypes((prev) => orderedNames.filter((name) => prev.includes(name)));
+        setActiveEventTypes((prev) => orderedNames.filter((name) => prev.includes(name)));
+    }
+
+    function renameEventType(oldName: string, nextName: string) {
+        if (!nextName || oldName === nextName || availableEventTypes.includes(nextName)) return;
+        setCustomEventTypes((prev) => prev.map((item) => (item === oldName ? nextName : item)));
+        setActiveEventTypes((prev) => prev.map((item) => (item === oldName ? nextName : item)));
+        setCalendarEventFormats((prev) => {
+            if (!(oldName in prev)) return prev;
+            const next = { ...prev, [nextName]: prev[oldName] };
+            delete next[oldName];
+            return next;
+        });
+        setDriveFolderFormats((prev) => {
+            if (!(oldName in prev)) return prev;
+            const next = { ...prev, [nextName]: prev[oldName] };
+            delete next[oldName];
+            return next;
+        });
+        setDriveFolderStructures((prev) => {
+            if (!(oldName in prev)) return prev;
+            const next = { ...prev, [nextName]: prev[oldName] };
+            delete next[oldName];
+            return next;
+        });
+        setFormSectionsByEventType((prev) => {
+            if (!(oldName in prev)) return prev;
+            const next = { ...prev, [nextName]: prev[oldName] };
+            delete next[oldName];
+            return next;
+        });
+    }
+
+    function toggleEventTypeActive(name: string) {
+        setActiveEventTypes((prev) =>
+            prev.includes(name)
+                ? prev.filter((item) => item !== name)
+                : eventTypeSettings
+                    .map((item) => item.name)
+                    .filter((item) => item === name || prev.includes(item)),
+        );
+    }
+
+    function removeEventType(name: string) {
+        setCustomEventTypes((prev) => prev.filter((item) => item !== name));
+        setActiveEventTypes((prev) => prev.filter((item) => item !== name));
+        setCalendarEventFormats((prev) => {
+            const next = { ...prev };
+            delete next[name];
+            return next;
+        });
+        setDriveFolderFormats((prev) => {
+            const next = { ...prev };
+            delete next[name];
+            return next;
+        });
+        setDriveFolderStructures((prev) => {
+            const next = { ...prev };
+            delete next[name];
+            return next;
+        });
+        setFormSectionsByEventType((prev) => {
+            const next = { ...prev };
+            delete next[name];
+            return next;
+        });
+    }
+
+    function reorderStringItems(items: SortableConfigItem[], setter: React.Dispatch<React.SetStateAction<string[]>>) {
+        setter(items.map((item) => item.id));
+    }
 
     // Listen for Google auth popup callbacks
     React.useEffect(() => {
@@ -268,15 +391,18 @@ export default function SettingsPage() {
 
         const { data: p } = await supabase
             .from("profiles")
-            .select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, calendar_event_format, calendar_event_format_map, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, invoice_logo_url, custom_statuses, custom_client_statuses, queue_trigger_status, default_wa_target, final_invoice_visible_from_status, custom_event_types, form_sections")
+            .select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, calendar_event_format, calendar_event_format_map, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, invoice_logo_url, custom_statuses, custom_client_statuses, queue_trigger_status, default_wa_target, final_invoice_visible_from_status, form_event_types, custom_event_types, form_sections")
             .eq("id", user.id)
             .single();
         const prof = p as Profile;
         setProfile(prof);
-        const loadedCustomEventTypes = Array.isArray((prof as any)?.custom_event_types)
-            ? ((prof as any).custom_event_types as string[]).filter((item) => typeof item === "string" && item.trim().length > 0)
-            : [];
+        const loadedCustomEventTypes = normalizeEventTypeList((prof as any)?.custom_event_types);
+        const loadedActiveEventTypes = getActiveEventTypes({
+            customEventTypes: loadedCustomEventTypes,
+            activeEventTypes: (prof as any)?.form_event_types,
+        });
         setCustomEventTypes(loadedCustomEventTypes);
+        setActiveEventTypes(loadedActiveEventTypes);
         setStudioName(prof?.studio_name || "");
         setIsCalendarConnected(!!(prof as any)?.google_access_token);
         setIsDriveConnected(!!(prof as any)?.google_drive_access_token);
@@ -351,7 +477,10 @@ export default function SettingsPage() {
         // Initialize template contents from existing templates
         const contents: Record<string, string> = {};
         const contentsEn: Record<string, string> = {};
-        const templateEventTypes = Array.from(new Set(["Umum", ...GOOGLE_EVENT_TYPES, ...loadedCustomEventTypes]));
+        const templateEventTypes = getEventTypeSettings({
+            customEventTypes: loadedCustomEventTypes,
+            activeEventTypes: loadedActiveEventTypes,
+        }).map((item) => item.name);
         templateTypes.forEach(tt => {
             if (tt.value === "whatsapp_freelancer") {
                 // Initialize per event type
@@ -386,6 +515,7 @@ export default function SettingsPage() {
             whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
             vendor_slug: slug || null,
             default_wa_target: defaultWaTarget,
+            form_event_types: activeEventTypes,
             custom_event_types: customEventTypes,
             calendar_event_format: calendarEventFormats.Umum || DEFAULT_CALENDAR_EVENT_FORMAT,
             calendar_event_format_map: calendarEventFormats,
@@ -939,24 +1069,15 @@ export default function SettingsPage() {
                                 <div className="space-y-4 pt-2 border-t">
                                     <div>
                                         <label className="text-sm font-medium flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> Jenis Acara Global</label>
-                                        <p className="text-xs text-muted-foreground mt-0.5">Custom jenis acara dikelola di sini dan dipakai lintas form booking, template, filter, serta integrasi.</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Kelola urutan, aktif/nonaktif, dan custom jenis acara dari sini. Berlaku untuk form booking, paket, template, dan filter.</p>
                                     </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {customEventTypes.length === 0 ? (
-                                            <span className="text-xs text-muted-foreground">Belum ada custom jenis acara.</span>
-                                        ) : customEventTypes.map((eventType) => (
-                                            <span key={eventType} className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1 text-xs font-medium">
-                                                {eventType}
-                                                <button
-                                                    type="button"
-                                                    className="text-muted-foreground hover:text-red-500"
-                                                    onClick={() => setCustomEventTypes((prev) => prev.filter((item) => item !== eventType))}
-                                                >
-                                                    <X className="w-3 h-3" />
-                                                </button>
-                                            </span>
-                                        ))}
-                                    </div>
+                                    <SortableConfigList
+                                        items={eventTypeItems}
+                                        onReorder={reorderEventTypes}
+                                        onRename={renameEventType}
+                                        onToggleActive={toggleEventTypeActive}
+                                        onDelete={removeEventType}
+                                    />
                                     <div className="flex items-center gap-2">
                                         <input
                                             value={newCustomEventType}
@@ -967,6 +1088,7 @@ export default function SettingsPage() {
                                                 const value = newCustomEventType.trim();
                                                 if (!value || availableEventTypes.includes(value)) return;
                                                 setCustomEventTypes((prev) => [...prev, value]);
+                                                setActiveEventTypes((prev) => [...prev, value]);
                                                 setNewCustomEventType("");
                                             }}
                                             placeholder="Tambah jenis acara custom..."
@@ -979,11 +1101,15 @@ export default function SettingsPage() {
                                                 const value = newCustomEventType.trim();
                                                 if (!value || availableEventTypes.includes(value)) return;
                                                 setCustomEventTypes((prev) => [...prev, value]);
+                                                setActiveEventTypes((prev) => [...prev, value]);
                                                 setNewCustomEventType("");
                                             }}
                                         >
                                             Tambah
                                         </Button>
+                                    </div>
+                                    <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                                        Jenis acara bawaan bisa diurutkan dan diaktifkan/nonaktifkan. Jenis acara custom bisa ditambah, diubah nama, dihapus, dan diurutkan.
                                     </div>
                                 </div>
 
@@ -1288,87 +1414,22 @@ export default function SettingsPage() {
                             <p className="text-sm text-muted-foreground">Atur status booking sesuai alur kerja kamu. Drag untuk mengubah urutan.</p>
                         </div>
                         <div className="p-6 space-y-4">
-                            {/* Status list with drag-reorder */}
-                            <div className="space-y-1">
-                                {customStatuses.map((s, idx) => (
-                                    <div
-                                        key={idx}
-                                        draggable
-                                        onDragStart={() => setDragIdx(idx)}
-                                        onDragOver={(e) => { e.preventDefault(); }}
-                                        onDrop={() => {
-                                            if (dragIdx === null || dragIdx === idx) return;
-                                            const arr = [...customStatuses];
-                                            const [moved] = arr.splice(dragIdx, 1);
-                                            arr.splice(idx, 0, moved);
-                                            setCustomStatuses(arr);
-                                            setDragIdx(null);
-                                        }}
-                                        onDragEnd={() => setDragIdx(null)}
-                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border bg-background transition-all ${
-                                            dragIdx === idx ? "opacity-50 border-dashed" : "hover:bg-muted/50"
-                                        }`}
-                                    >
-                                        <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab shrink-0" />
-                                        {editingStatusIdx === idx ? (
-                                            <div className="flex items-center gap-2 flex-1">
-                                                <input
-                                                    autoFocus
-                                                    value={editingStatusName}
-                                                    onChange={e => setEditingStatusName(e.target.value)}
-                                                    onKeyDown={e => {
-                                                        if (e.key === "Enter" && editingStatusName.trim()) {
-                                                            const arr = [...customStatuses];
-                                                            arr[idx] = editingStatusName.trim();
-                                                            setCustomStatuses(arr);
-                                                            setEditingStatusIdx(null);
-                                                        }
-                                                        if (e.key === "Escape") setEditingStatusIdx(null);
-                                                    }}
-                                                    className="h-7 flex-1 rounded border border-input px-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                                />
-                                                <button
-                                                    onClick={() => {
-                                                        if (editingStatusName.trim()) {
-                                                            const arr = [...customStatuses];
-                                                            arr[idx] = editingStatusName.trim();
-                                                            setCustomStatuses(arr);
-                                                        }
-                                                        setEditingStatusIdx(null);
-                                                    }}
-                                                    className="text-green-600 hover:text-green-700 cursor-pointer"
-                                                >
-                                                    <CheckCircle className="w-4 h-4" />
-                                                </button>
-                                                <button onClick={() => setEditingStatusIdx(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                                                    <X className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <span className="flex-1 text-sm">{s}</span>
-                                                <button
-                                                    onClick={() => { setEditingStatusIdx(idx); setEditingStatusName(s); }}
-                                                    className="text-muted-foreground hover:text-foreground cursor-pointer p-1 rounded hover:bg-muted"
-                                                    title="Rename"
-                                                >
-                                                    <Pencil className="w-3.5 h-3.5" />
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        if (customStatuses.length <= 2) { alert("Minimal 2 status harus ada."); return; }
-                                                        setCustomStatuses(customStatuses.filter((_, i) => i !== idx));
-                                                    }}
-                                                    className="text-muted-foreground hover:text-red-600 cursor-pointer p-1 rounded hover:bg-muted"
-                                                    title="Hapus"
-                                                >
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
+                            <SortableConfigList
+                                items={bookingStatusItems}
+                                onReorder={(items) => reorderStringItems(items, setCustomStatuses)}
+                                onRename={(id, label) =>
+                                    setCustomStatuses((prev) =>
+                                        prev.map((status) => (status === id ? label : status)),
+                                    )
+                                }
+                                onDelete={(id) => {
+                                    if (customStatuses.length <= 2) {
+                                        alert("Minimal 2 status harus ada.");
+                                        return;
+                                    }
+                                    setCustomStatuses((prev) => prev.filter((status) => status !== id));
+                                }}
+                            />
 
                             {/* Add new status */}
                             <div className="flex items-center gap-2">
@@ -1430,86 +1491,22 @@ export default function SettingsPage() {
                             <p className="text-sm text-muted-foreground">Atur langkah-langkah progress yang ditampilkan ke klien di halaman tracking. Drag untuk urutan.</p>
                         </div>
                         <div className="p-6 space-y-4">
-                            <div className="space-y-1">
-                                {customClientStatuses.map((s, idx) => (
-                                    <div
-                                        key={idx}
-                                        draggable
-                                        onDragStart={() => setDragClientIdx(idx)}
-                                        onDragOver={(e) => { e.preventDefault(); }}
-                                        onDrop={() => {
-                                            if (dragClientIdx === null || dragClientIdx === idx) return;
-                                            const arr = [...customClientStatuses];
-                                            const [moved] = arr.splice(dragClientIdx, 1);
-                                            arr.splice(idx, 0, moved);
-                                            setCustomClientStatuses(arr);
-                                            setDragClientIdx(null);
-                                        }}
-                                        onDragEnd={() => setDragClientIdx(null)}
-                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border bg-background transition-all ${
-                                            dragClientIdx === idx ? "opacity-50 border-dashed" : "hover:bg-muted/50"
-                                        }`}
-                                    >
-                                        <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab shrink-0" />
-                                        {editingClientStatusIdx === idx ? (
-                                            <div className="flex items-center gap-2 flex-1">
-                                                <input
-                                                    autoFocus
-                                                    value={editingClientStatusName}
-                                                    onChange={e => setEditingClientStatusName(e.target.value)}
-                                                    onKeyDown={e => {
-                                                        if (e.key === "Enter" && editingClientStatusName.trim()) {
-                                                            const arr = [...customClientStatuses];
-                                                            arr[idx] = editingClientStatusName.trim();
-                                                            setCustomClientStatuses(arr);
-                                                            setEditingClientStatusIdx(null);
-                                                        }
-                                                        if (e.key === "Escape") setEditingClientStatusIdx(null);
-                                                    }}
-                                                    className="h-7 flex-1 rounded border border-input px-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                                />
-                                                <button
-                                                    onClick={() => {
-                                                        if (editingClientStatusName.trim()) {
-                                                            const arr = [...customClientStatuses];
-                                                            arr[idx] = editingClientStatusName.trim();
-                                                            setCustomClientStatuses(arr);
-                                                        }
-                                                        setEditingClientStatusIdx(null);
-                                                    }}
-                                                    className="text-green-600 hover:text-green-700 cursor-pointer"
-                                                >
-                                                    <CheckCircle className="w-4 h-4" />
-                                                </button>
-                                                <button onClick={() => setEditingClientStatusIdx(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                                                    <X className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <span className="flex-1 text-sm">{s}</span>
-                                                <button
-                                                    onClick={() => { setEditingClientStatusIdx(idx); setEditingClientStatusName(s); }}
-                                                    className="text-muted-foreground hover:text-foreground cursor-pointer p-1 rounded hover:bg-muted"
-                                                    title="Rename"
-                                                >
-                                                    <Pencil className="w-3.5 h-3.5" />
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        if (customClientStatuses.length <= 2) { alert("Minimal 2 status harus ada."); return; }
-                                                        setCustomClientStatuses(customClientStatuses.filter((_, i) => i !== idx));
-                                                    }}
-                                                    className="text-muted-foreground hover:text-red-600 cursor-pointer p-1 rounded hover:bg-muted"
-                                                    title="Hapus"
-                                                >
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
+                            <SortableConfigList
+                                items={clientStatusItems}
+                                onReorder={(items) => reorderStringItems(items, setCustomClientStatuses)}
+                                onRename={(id, label) =>
+                                    setCustomClientStatuses((prev) =>
+                                        prev.map((status) => (status === id ? label : status)),
+                                    )
+                                }
+                                onDelete={(id) => {
+                                    if (customClientStatuses.length <= 2) {
+                                        alert("Minimal 2 status harus ada.");
+                                        return;
+                                    }
+                                    setCustomClientStatuses((prev) => prev.filter((status) => status !== id));
+                                }}
+                            />
 
                             <div className="flex items-center gap-2">
                                 <input

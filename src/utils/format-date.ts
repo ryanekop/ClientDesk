@@ -65,6 +65,21 @@ export function formatSessionDate(
     return result;
 }
 
+export function formatTemplateSessionDate(
+    dateStr: string | null | undefined,
+    options: {
+        locale?: "id" | "en";
+        withDay?: boolean;
+    } = {},
+): string {
+    return formatSessionDate(dateStr, {
+        locale: options.locale,
+        withDay: options.withDay ?? false,
+        withTime: false,
+        dateOnly: true,
+    });
+}
+
 export function formatSessionTime(
     dateStr: string | null | undefined,
     options: { separator?: "." | ":" } = {},

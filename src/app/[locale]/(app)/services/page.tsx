@@ -51,6 +51,11 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
+import {
+  getActiveEventTypes,
+  getBuiltInEventTypes,
+  normalizeEventTypeList,
+} from "@/lib/event-type-config";
 
 type Service = {
   id: string;
@@ -68,20 +73,7 @@ type Service = {
 
 type ServiceGroupKey = "main" | "addon";
 
-const EVENT_TYPES = [
-  "Umum",
-  "Wedding",
-  "Akad",
-  "Resepsi",
-  "Lamaran",
-  "Prewedding",
-  "Wisuda",
-  "Maternity",
-  "Newborn",
-  "Family",
-  "Komersil",
-  "Lainnya",
-];
+const EVENT_TYPES = getBuiltInEventTypes();
 
 function getServiceGroupKey(service: Pick<Service, "is_addon">): ServiceGroupKey {
   return service.is_addon ? "addon" : "main";
@@ -446,6 +438,7 @@ export default function ServicesPage() {
     React.useState<ServiceGroupKey | null>(null);
   const [activeDragId, setActiveDragId] = React.useState<string | null>(null);
   const [pageError, setPageError] = React.useState("");
+  const [eventTypeOptions, setEventTypeOptions] = React.useState<string[]>(EVENT_TYPES);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -473,12 +466,28 @@ export default function ServicesPage() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("services")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: true });
+    const [servicesResult, profileResult] = await Promise.all([
+      supabase
+        .from("services")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("profiles")
+        .select("form_event_types, custom_event_types")
+        .eq("id", user.id)
+        .single(),
+    ]);
+
+    const { data, error } = servicesResult;
+    const profile = profileResult.data;
+    setEventTypeOptions(
+      getActiveEventTypes({
+        customEventTypes: normalizeEventTypeList(profile?.custom_event_types),
+        activeEventTypes: profile?.form_event_types,
+      }),
+    );
 
     if (error) {
       setPageError(error.message);
@@ -755,8 +764,8 @@ export default function ServicesPage() {
   const usedEventTypes = React.useMemo(() => {
     const set = new Set<string>();
     services.forEach((service) => service.event_types?.forEach((eventType) => set.add(eventType)));
-    return EVENT_TYPES.filter((eventType) => set.has(eventType));
-  }, [services]);
+    return eventTypeOptions.filter((eventType) => set.has(eventType));
+  }, [eventTypeOptions, services]);
 
   const groupedServices = React.useMemo(() => splitServicesByGroup(services), [services]);
   const filteredGroupedServices = React.useMemo(
@@ -888,7 +897,7 @@ export default function ServicesPage() {
                     Kosongkan jika paket ini untuk semua jenis acara.
                   </p>
                   <div className="flex flex-wrap gap-1.5">
-                    {EVENT_TYPES.map((eventType) => (
+                    {eventTypeOptions.map((eventType) => (
                       <label
                         key={eventType}
                         className="flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted/50 has-[:checked]:border-foreground has-[:checked]:bg-foreground/5"
@@ -1281,7 +1290,7 @@ export default function ServicesPage() {
                   Kosongkan jika paket ini untuk semua jenis acara.
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {EVENT_TYPES.map((eventType) => (
+                  {eventTypeOptions.map((eventType) => (
                     <label
                       key={eventType}
                       className="flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted/50 has-[:checked]:border-foreground has-[:checked]:bg-foreground/5"

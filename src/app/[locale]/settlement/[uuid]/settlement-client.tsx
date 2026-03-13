@@ -30,6 +30,7 @@ import {
   fillWhatsAppTemplate,
   normalizeWhatsAppNumber,
 } from "@/lib/whatsapp-template";
+import { formatTemplateSessionDate } from "@/utils/format-date";
 
 type BookingData = {
   bookingCode: string;
@@ -368,9 +369,9 @@ export default function SettlementClient({
           booking_code: booking.bookingCode,
           service_name: booking.serviceName || "-",
           session_date: booking.sessionDate
-            ? new Date(booking.sessionDate).toLocaleString(
-                locale === "en" ? "en-US" : "id-ID",
-              )
+            ? formatTemplateSessionDate(booking.sessionDate, {
+                locale: locale === "en" ? "en" : "id",
+              })
             : "-",
           payment_method: paymentMethodLabel,
           final_total: formatCurrency(finalInvoiceTotal),

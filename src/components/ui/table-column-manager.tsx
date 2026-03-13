@@ -2,14 +2,32 @@
 
 import * as React from "react";
 import {
-  ArrowDown,
-  ArrowUp,
   Eye,
   EyeOff,
   GripVertical,
   Loader2,
   Settings2,
 } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,6 +51,77 @@ type TableColumnManagerProps = {
   triggerLabel?: string;
 };
 
+function SortableColumnItem({
+  column,
+  description,
+  onToggleVisibility,
+}: {
+  column: TableColumnPreference;
+  description: string;
+  onToggleVisibility: (id: string) => void;
+}) {
+  /* eslint-disable react-hooks/refs */
+  const sortable = useSortable({
+    id: column.id,
+    disabled: column.locked,
+  });
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.45 : 1,
+  };
+
+  return (
+    <div ref={sortable.setNodeRef} style={style}>
+      <div
+        className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+          sortable.isDragging
+            ? "border-dashed border-primary bg-primary/5"
+            : "bg-card"
+        }`}
+      >
+        <button
+          type="button"
+          ref={sortable.setActivatorNodeRef}
+          disabled={column.locked}
+          className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
+            column.locked
+              ? "cursor-not-allowed border-muted bg-muted/40 text-muted-foreground"
+              : "touch-none cursor-grab border-input bg-background text-muted-foreground hover:bg-muted/50 active:cursor-grabbing"
+          }`}
+          title={column.locked ? "Kolom terkunci" : "Drag untuk ubah urutan"}
+          {...sortable.attributes}
+          {...sortable.listeners}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">{column.label}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => onToggleVisibility(column.id)}
+          disabled={column.locked}
+          title={column.visible ? "Sembunyikan" : "Tampilkan"}
+        >
+          {column.visible ? (
+            <Eye className="h-4 w-4" />
+          ) : (
+            <EyeOff className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+  /* eslint-enable react-hooks/refs */
+}
+
 export function TableColumnManager({
   title,
   description,
@@ -44,34 +133,19 @@ export function TableColumnManager({
   saving = false,
   triggerLabel = "Kelola Kolom",
 }: TableColumnManagerProps) {
-  const [draggedId, setDraggedId] = React.useState<string | null>(null);
+  const [activeColumnId, setActiveColumnId] = React.useState<string | null>(null);
 
-  function reorderColumns(sourceId: string, targetId: string) {
-    if (!sourceId || !targetId || sourceId === targetId) return;
-
-    const sourceIndex = columns.findIndex((column) => column.id === sourceId);
-    const targetIndex = columns.findIndex((column) => column.id === targetId);
-    if (sourceIndex < 0 || targetIndex < 0) return;
-    if (columns[sourceIndex]?.locked || columns[targetIndex]?.locked) return;
-
-    const next = [...columns];
-    const [moved] = next.splice(sourceIndex, 1);
-    next.splice(targetIndex, 0, moved);
-    onChange(next);
-  }
-
-  function moveColumn(id: string, direction: -1 | 1) {
-    const index = columns.findIndex((column) => column.id === id);
-    if (index < 0) return;
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= columns.length) return;
-    if (columns[index]?.locked || columns[nextIndex]?.locked) return;
-
-    const next = [...columns];
-    const [moved] = next.splice(index, 1);
-    next.splice(nextIndex, 0, moved);
-    onChange(next);
-  }
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 120, tolerance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   function toggleVisibility(id: string) {
     onChange(
@@ -82,6 +156,26 @@ export function TableColumnManager({
       ),
     );
   }
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveColumnId(String(event.active.id));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveColumnId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const sourceIndex = columns.findIndex((column) => column.id === active.id);
+    const targetIndex = columns.findIndex((column) => column.id === over.id);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    if (columns[sourceIndex]?.locked || columns[targetIndex]?.locked) return;
+
+    onChange(arrayMove(columns, sourceIndex, targetIndex));
+  }
+
+  const activeColumn =
+    columns.find((column) => column.id === activeColumnId) || null;
 
   return (
     <>
@@ -101,102 +195,55 @@ export function TableColumnManager({
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-2 py-2">
-            {columns.map((column, index) => {
-              const canMoveUp =
-                !column.locked &&
-                index > 0 &&
-                !columns[index - 1]?.locked;
-              const canMoveDown =
-                !column.locked &&
-                index < columns.length - 1 &&
-                !columns[index + 1]?.locked;
-
-              return (
-                <div
-                  key={column.id}
-                  draggable={!column.locked}
-                  onDragStart={() => !column.locked && setDraggedId(column.id)}
-                  onDragOver={(event) => {
-                    if (!column.locked) event.preventDefault();
-                  }}
-                  onDrop={() => {
-                    if (!column.locked && draggedId) {
-                      reorderColumns(draggedId, column.id);
-                    }
-                    setDraggedId(null);
-                  }}
-                  onDragEnd={() => setDraggedId(null)}
-                  className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                    draggedId === column.id
-                      ? "border-dashed border-primary bg-primary/5"
-                      : "bg-card"
-                  }`}
-                >
-                  <div
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg border ${
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveColumnId(null)}
+          >
+            <SortableContext
+              items={columns.map((column) => column.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-2 py-2">
+                {columns.map((column) => (
+                  <SortableColumnItem
+                    key={column.id}
+                    column={column}
+                    description={
                       column.locked
-                        ? "border-muted bg-muted/40 text-muted-foreground"
-                        : "border-input bg-background text-muted-foreground"
-                    }`}
-                  >
-                    <GripVertical className="w-4 h-4" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{column.label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {column.locked
                         ? "Kolom terkunci"
                         : column.visible
                           ? "Tampil di tabel"
-                          : "Disembunyikan dari tabel"}
-                    </p>
-                  </div>
+                          : "Disembunyikan dari tabel"
+                    }
+                    onToggleVisibility={toggleVisibility}
+                  />
+                ))}
+              </div>
+            </SortableContext>
 
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => toggleVisibility(column.id)}
-                      disabled={column.locked}
-                      title={column.visible ? "Sembunyikan" : "Tampilkan"}
-                    >
-                      {column.visible ? (
-                        <Eye className="w-4 h-4" />
-                      ) : (
-                        <EyeOff className="w-4 h-4" />
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => moveColumn(column.id, -1)}
-                      disabled={!canMoveUp}
-                      title="Geser ke atas"
-                    >
-                      <ArrowUp className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => moveColumn(column.id, 1)}
-                      disabled={!canMoveDown}
-                      title="Geser ke bawah"
-                    >
-                      <ArrowDown className="w-4 h-4" />
-                    </Button>
+            <DragOverlay>
+              {activeColumn ? (
+                <div className="rounded-xl border border-primary bg-card px-4 py-3 shadow-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground">
+                      <GripVertical className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{activeColumn.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {activeColumn.visible
+                          ? "Tampil di tabel"
+                          : "Disembunyikan dari tabel"}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>

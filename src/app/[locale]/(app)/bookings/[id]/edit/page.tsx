@@ -18,12 +18,17 @@ import {
     normalizeStoredFormLayout,
     type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
+import {
+    getActiveEventTypes,
+    getBuiltInEventTypes,
+    normalizeEventTypeList,
+} from "@/lib/event-type-config";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
 const selectClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat pr-8";
 
-const EVENT_TYPES = ["Umum", "Wedding", "Akad", "Resepsi", "Lamaran", "Prewedding", "Wisuda", "Maternity", "Newborn", "Family", "Komersil", "Lainnya"];
+const EVENT_TYPES = getBuiltInEventTypes();
 const DEFAULT_STATUSES = ["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"];
 
 const COUNTRY_CODES = [
@@ -128,6 +133,7 @@ export default function EditBookingPage() {
     const [calendarWarning, setCalendarWarning] = React.useState<string | null>(null);
     const [services, setServices] = React.useState<Service[]>([]);
     const [freelancers, setFreelancers] = React.useState<Freelance[]>([]);
+    const [eventTypeOptions, setEventTypeOptions] = React.useState<string[]>(EVENT_TYPES);
 
     const [clientName, setClientName] = React.useState("");
     const [countryCode, setCountryCode] = React.useState("+62");
@@ -176,9 +182,13 @@ export default function EditBookingPage() {
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
                 supabase.from("booking_services").select("service_id, kind, sort_order").eq("booking_id", id).order("sort_order", { ascending: true }),
-                supabase.from("profiles").select("custom_statuses, form_sections").eq("id", user.id).single(),
+                supabase.from("profiles").select("custom_statuses, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
             ]);
             if (prof?.custom_statuses) setCustomStatuses(prof.custom_statuses as string[]);
+            setEventTypeOptions(getActiveEventTypes({
+                customEventTypes: normalizeEventTypeList((prof as any)?.custom_event_types),
+                activeEventTypes: (prof as any)?.form_event_types,
+            }));
             const rawSections = (prof as Record<string, unknown> | null)?.form_sections;
             if (Array.isArray(rawSections)) {
                 setFormSectionsByEventType({ Umum: normalizeStoredFormLayout(rawSections, "Umum") });
@@ -540,7 +550,7 @@ export default function EditBookingPage() {
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
                             <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setCustomFieldValues({}); }} className={selectClass} required>
-                                {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                {eventTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
 

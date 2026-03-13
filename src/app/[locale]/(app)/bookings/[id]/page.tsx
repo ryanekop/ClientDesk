@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
 import { useLocale } from "next-intl";
-import { formatSessionDate, formatSessionTime } from "@/utils/format-date";
+import { formatSessionDate, formatSessionTime, formatTemplateSessionDate } from "@/utils/format-date";
 import {
     buildCustomFieldTemplateVars,
     extractBuiltInExtraFieldValues,
@@ -490,7 +490,7 @@ export default function BookingDetailPage() {
             const vars: Record<string, string> = {
                 client_name: booking?.client_name || name,
                 booking_code: booking?.booking_code || "",
-                session_date: booking?.session_date ? formatDate(booking.session_date) : "-",
+                session_date: booking?.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-",
                 service_name: booking?.service_label || booking?.services?.name || "-",
                 total_price: formatCurrency(finalInvoiceTotal || booking?.total_price || 0),
                 dp_paid: formatCurrency(booking?.dp_paid || 0),
@@ -513,7 +513,7 @@ export default function BookingDetailPage() {
     function sendWAFreelance(phone: string | null, fname: string) {
         if (!phone) { alert("Nomor Whatsapp freelance tidak tersedia."); return; }
         const cleaned = normalizeWhatsAppNumber(phone);
-        const sessionStr = booking?.session_date ? formatDate(booking.session_date) : "-";
+        const sessionStr = booking?.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-";
         const sessionTime = booking?.session_date ? formatSessionTime(booking.session_date) : "-";
         // Use freelancer template if available
         const content = getWhatsAppTemplateContent(
@@ -818,7 +818,7 @@ export default function BookingDetailPage() {
             ? fillWhatsAppTemplate(templateContent, {
                 client_name: booking.client_name,
                 booking_code: booking.booking_code,
-                session_date: booking.session_date ? formatDate(booking.session_date) : "-",
+                session_date: booking.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-",
                 service_name: booking.service_label || booking.services?.name || "-",
                 total_price: formatCurrency(booking.total_price),
                 dp_paid: formatCurrency(booking.dp_paid),

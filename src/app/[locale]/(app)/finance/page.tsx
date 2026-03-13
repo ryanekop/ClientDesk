@@ -532,6 +532,29 @@ export default function FinancePage() {
         }
     }
 
+    function renderMobileValue(
+        booking: BookingFinance,
+        column: TableColumnPreference,
+        remaining: number,
+        finalTotal: number,
+        addonTotal: number,
+    ) {
+        switch (column.id) {
+            case "total_price":
+                return formatCurrency(finalTotal);
+            case "addon":
+                return formatCurrency(addonTotal);
+            case "dp_paid":
+                return formatCurrency(booking.dp_paid);
+            case "remaining":
+                return formatCurrency(remaining);
+            case "status":
+                return booking.is_fully_paid ? t("lunas") : t("belumLunas");
+            default:
+                return getBookingMetadataValue(booking.extra_fields, column.id);
+        }
+    }
+
     const totalRevenue = bookings.reduce((sum, booking) => sum + getTotalPaidAmount({
         total_price: booking.total_price,
         dp_paid: booking.dp_paid,
@@ -725,11 +748,17 @@ export default function FinancePage() {
                                     {b.is_fully_paid ? "✓ " + t("lunas") : t("belumLunas")}
                                 </button>
                             </div>
-                            <div className="border-t pt-2 space-y-1 text-sm">
-                                <div className="flex justify-between"><span className="text-muted-foreground">{t("hargaTotal")}</span><span className="font-medium">{formatCurrency(finalTotal)}</span></div>
-                                <div className="flex justify-between"><span className="text-muted-foreground">{t("addOn")}</span><span>{formatCurrency(addonTotal)}</span></div>
-                                <div className="flex justify-between"><span className="text-muted-foreground">{t("dpDibayar")}</span><span>{formatCurrency(b.dp_paid)}</span></div>
-                                <div className="flex justify-between"><span className="text-muted-foreground">{t("sisa")}</span><span className={remaining > 0 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-green-600 dark:text-green-400"}>{formatCurrency(remaining)}</span></div>
+                            <div className="border-t pt-2 space-y-1.5 text-sm">
+                                {orderedVisibleColumns
+                                    .filter((column) => column.id !== "name" && column.id !== "actions")
+                                    .map((column) => (
+                                        <div key={column.id} className="flex items-start justify-between gap-3">
+                                            <span className="text-muted-foreground">{column.label}</span>
+                                            <span className="max-w-[180px] truncate text-right font-medium text-foreground" title={String(renderMobileValue(b, column, remaining, finalTotal, addonTotal) ?? "-")}>
+                                                {renderMobileValue(b, column, remaining, finalTotal, addonTotal)}
+                                            </span>
+                                        </div>
+                                    ))}
                             </div>
                             <div className="flex flex-wrap items-center gap-1 pt-1 border-t">
                                 <Link href={`/bookings/${b.id}`}>

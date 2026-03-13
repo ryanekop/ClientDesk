@@ -51,21 +51,13 @@ import {
   type BankAccount,
   type PaymentMethod,
 } from "@/lib/payment-config";
-
-const ALL_EVENT_TYPES = [
-  "Umum",
-  "Wedding",
-  "Akad",
-  "Resepsi",
-  "Lamaran",
-  "Prewedding",
-  "Wisuda",
-  "Maternity",
-  "Newborn",
-  "Family",
-  "Komersil",
-  "Lainnya",
-];
+import {
+  getActiveEventTypes,
+  getAllEventTypes,
+  getBuiltInEventTypes,
+  normalizeEventTypeList,
+} from "@/lib/event-type-config";
+const ALL_EVENT_TYPES = getBuiltInEventTypes();
 
 type FormSectionsByEventType = Record<string, FormLayoutItem[]>;
 type PreviewPayload = {
@@ -110,11 +102,6 @@ type FormBookingSnapshot = {
   bank_accounts: BankAccount[];
   form_lang: string;
 };
-
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
-}
 
 const DEFAULTS = {
   brandColor: "#000000",
@@ -245,7 +232,7 @@ export default function FormBookingPage() {
 
   // Merged event types: built-in + custom
   const allEventTypes = React.useMemo(
-    () => [...ALL_EVENT_TYPES, ...customEventTypes],
+    () => getAllEventTypes(customEventTypes),
     [customEventTypes],
   );
 
@@ -437,18 +424,11 @@ export default function FormBookingPage() {
         const loadedGreeting = p.form_greeting || DEFAULTS.greeting;
         setBrandColor(loadedBrandColor);
         setGreeting(loadedGreeting);
-        const loadedFormEventTypes = toStringArray(p.form_event_types);
-        const loadedCustomEventTypes = toStringArray(p.custom_event_types);
-        const loadedSelectedEventTypes =
-          loadedFormEventTypes.length > 0
-            ? [
-                // Maintain order, keep saved selections + add new built-in types
-                ...ALL_EVENT_TYPES.filter((t) => loadedFormEventTypes.includes(t)),
-                ...ALL_EVENT_TYPES.filter((t) => !loadedFormEventTypes.includes(t)),
-                ...loadedCustomEventTypes.filter((t) => loadedFormEventTypes.includes(t)),
-                ...loadedCustomEventTypes.filter((t) => !loadedFormEventTypes.includes(t)),
-              ]
-            : [...ALL_EVENT_TYPES, ...loadedCustomEventTypes];
+        const loadedCustomEventTypes = normalizeEventTypeList(p.custom_event_types);
+        const loadedSelectedEventTypes = getActiveEventTypes({
+          customEventTypes: loadedCustomEventTypes,
+          activeEventTypes: p.form_event_types,
+        });
         setSelectedEventTypes(loadedSelectedEventTypes);
         setCustomEventTypes(loadedCustomEventTypes);
         const rawSections = (p as Record<string, unknown>).form_sections;
@@ -718,7 +698,6 @@ export default function FormBookingPage() {
   function handleResetDefault() {
     setBrandColor(DEFAULTS.brandColor);
     setGreeting(DEFAULTS.greeting);
-    setSelectedEventTypes([...DEFAULTS.eventTypes]);
     setShowNotes(DEFAULTS.showNotes);
     setShowAddons(DEFAULTS.showAddons);
     setShowProof(false); // Requires Google Drive — don't enable by default
@@ -741,12 +720,6 @@ export default function FormBookingPage() {
     navigator.clipboard.writeText(formUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }
-
-  function toggleEventType(t: string) {
-    setSelectedEventTypes((prev) =>
-      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
-    );
   }
 
   function updateBank(index: number, field: keyof BankAccount, value: string) {
@@ -1469,27 +1442,22 @@ export default function FormBookingPage() {
                     <List className="w-4 h-4" /> Tipe Acara
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Pilih tipe acara yang tersedia di form booking.
+                    Daftar tipe acara ini mengikuti Pengaturan Umum dan dipakai otomatis di form booking publik.
                   </p>
                 </div>
                 <div className="p-6 space-y-4">
                   <div className="flex flex-wrap gap-2">
-                    {allEventTypes.map((t) => {
-                      const isActive = selectedEventTypes.includes(t);
-                      return (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => toggleEventType(t)}
-                          className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer ${isActive ? "bg-primary text-primary-foreground border-primary" : "border-input text-muted-foreground hover:bg-muted/50"}`}
-                        >
-                          {t}
-                        </button>
-                      );
-                    })}
+                    {selectedEventTypes.map((t) => (
+                      <span
+                        key={t}
+                        className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary"
+                      >
+                        {t}
+                      </span>
+                    ))}
                   </div>
                   <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                    Custom jenis acara dikelola dari halaman Pengaturan Umum, lalu akan otomatis muncul di sini untuk dipilih tampil atau disembunyikan dari form publik.
+                    Pengaturan aktif/nonaktif, urutan, dan custom jenis acara sekarang dikelola dari halaman Pengaturan Umum.
                   </div>
                 </div>
               </div>

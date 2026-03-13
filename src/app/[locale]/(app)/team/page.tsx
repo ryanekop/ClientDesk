@@ -305,7 +305,7 @@ export default function TeamPage() {
             case "actions":
                 return (
                     <td key={column.id} className="min-w-[120px] px-4 py-4 whitespace-nowrap text-right">
-                        <div className="flex items-center justify-end gap-1.5 pr-1">
+                        <div className="flex items-center justify-end gap-2.5 pr-2">
                             <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)} className="p-0 text-green-600 transition-colors hover:text-green-700 cursor-pointer dark:text-green-400 dark:hover:text-green-300">
                                 <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                             </button>
@@ -327,6 +327,19 @@ export default function TeamPage() {
                 );
             default:
                 return null;
+        }
+    }
+
+    function renderMobileValue(member: Freelancer, column: TableColumnPreference) {
+        switch (column.id) {
+            case "role":
+                return member.role;
+            case "whatsapp":
+                return member.whatsapp_number || "-";
+            case "status":
+                return member.status === "active" ? t("aktif") : t("nonaktif");
+            default:
+                return "-";
         }
     }
 
@@ -463,8 +476,19 @@ export default function TeamPage() {
                                         ))}
                                     </div>
                                 )}
-                                {member.whatsapp_number && <p className="text-xs text-muted-foreground">{member.whatsapp_number}</p>}
-                                <div className="flex items-center gap-1 pt-1 border-t">
+                                <div className="space-y-1 text-sm">
+                                    {orderedVisibleColumns
+                                        .filter((column) => column.id !== "name" && column.id !== "actions")
+                                        .map((column) => (
+                                            <div key={column.id} className="flex items-start justify-between gap-3">
+                                                <span className="text-muted-foreground">{column.label}</span>
+                                                <span className="max-w-[180px] truncate text-right text-foreground" title={String(renderMobileValue(member, column) ?? "-")}>
+                                                    {renderMobileValue(member, column)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                </div>
+                                <div className="flex items-center gap-2.5 pt-1 border-t">
                                     <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
                                         <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                                     </button>

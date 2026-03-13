@@ -38,6 +38,11 @@ import {
   type PaymentMethod,
   type PaymentSource,
 } from "@/lib/payment-config";
+import {
+  getActiveEventTypes,
+  normalizeEventTypeList,
+  PUBLIC_CUSTOM_EVENT_TYPE,
+} from "@/lib/event-type-config";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -81,21 +86,6 @@ export type Vendor = {
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const EVENT_TYPES = [
-  "Umum",
-  "Wedding",
-  "Akad",
-  "Resepsi",
-  "Wisuda",
-  "Maternity",
-  "Newborn",
-  "Family",
-  "Komersil",
-  "Lamaran",
-  "Prewedding",
-  "Lainnya",
-];
 
 const COUNTRY_CODES = [
   { code: "+62", flag: "🇮🇩", name: "Indonesia" },
@@ -604,9 +594,19 @@ export function BookingFormClient({
     normalizedActiveLayout,
     eventType || "Umum",
   );
-  const availableEventTypes = effectiveVendor.form_event_types?.length
-    ? [...effectiveVendor.form_event_types, ...(effectiveVendor.custom_event_types || []).filter(t => effectiveVendor.form_event_types!.includes(t))]
-    : [...EVENT_TYPES, ...(effectiveVendor.custom_event_types || [])];
+  const availableEventTypes = React.useMemo(
+    () =>
+      getActiveEventTypes({
+        customEventTypes: normalizeEventTypeList(effectiveVendor.custom_event_types),
+        activeEventTypes: effectiveVendor.form_event_types,
+      }),
+    [effectiveVendor.custom_event_types, effectiveVendor.form_event_types],
+  );
+  const publicEventTypeOptions = React.useMemo(
+    () => [...availableEventTypes, PUBLIC_CUSTOM_EVENT_TYPE],
+    [availableEventTypes],
+  );
+  const showAllActivePackages = eventType === PUBLIC_CUSTOM_EVENT_TYPE;
   const termsAgreementText =
     effectiveVendor.form_terms_agreement_text?.trim() || t("termsAgreementDefault");
   const termsLinkText =
@@ -628,12 +628,16 @@ export function BookingFormClient({
     () => getEnabledBankAccounts(effectiveVendor.bank_accounts || []),
     [effectiveVendor.bank_accounts],
   );
-  const filteredServices = eventType
-    ? services.filter(s => !s.is_addon && (!s.event_types || s.event_types.length === 0 || s.event_types.includes(eventType)))
-    : services.filter(s => !s.is_addon);
-  const addonServices = eventType
-    ? services.filter(s => s.is_addon && (!s.event_types || s.event_types.length === 0 || s.event_types.includes(eventType)))
-    : services.filter(s => s.is_addon);
+  const filteredServices = !eventType
+    ? []
+    : showAllActivePackages
+      ? services.filter((service) => !service.is_addon)
+      : services.filter((service) => !service.is_addon && (!service.event_types || service.event_types.length === 0 || service.event_types.includes(eventType)));
+  const addonServices = !eventType
+    ? []
+    : showAllActivePackages
+      ? services.filter((service) => service.is_addon)
+      : services.filter((service) => service.is_addon && (!service.event_types || service.event_types.length === 0 || service.event_types.includes(eventType)));
   const selectedMainServices = filteredServices.filter((service) =>
     selectedServiceIds.includes(service.id),
   );
@@ -947,7 +951,7 @@ export function BookingFormClient({
               required
             >
               <option value="">{t("pilihTipe")}</option>
-              {availableEventTypes.map((et) => (
+              {publicEventTypeOptions.map((et) => (
                 <option key={et} value={et}>
                   {et}
                 </option>
@@ -1120,6 +1124,11 @@ export function BookingFormClient({
               <label className="text-sm font-medium">
                 {t("paketLayanan")} <span className="text-red-500">*</span>
               </label>
+              {!eventType ? (
+                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                  Pilih tipe acara dulu untuk menampilkan paket yang tersedia.
+                </div>
+              ) : (
               <div className="space-y-2">
                 {filteredServices.map((service) => {
                   const selected = selectedServiceIds.includes(service.id);
@@ -1149,6 +1158,7 @@ export function BookingFormClient({
                   );
                 })}
               </div>
+              )}
             </div>
             {selectedMainServices.length > 0 && (
               <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
@@ -1173,7 +1183,7 @@ export function BookingFormClient({
           </div>
         );
       case "addon_packages":
-        if (effectiveVendor.form_show_addons === false || addonServices.length === 0) return null;
+        if (!eventType || effectiveVendor.form_show_addons === false || addonServices.length === 0) return null;
         return (
           <div key={item.id} className="space-y-2">
             <div className="flex items-center gap-2 pt-1">

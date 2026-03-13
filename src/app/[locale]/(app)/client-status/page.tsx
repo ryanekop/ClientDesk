@@ -347,6 +347,19 @@ export default function ClientStatusPage() {
         }
     }
 
+    function renderMobileValue(booking: BookingStatus, column: TableColumnPreference) {
+        switch (column.id) {
+            case "package":
+                return booking.service_label || booking.services?.name || "-";
+            case "status":
+                return booking.client_status || t("belumDiset");
+            case "queue":
+                return booking.queue_position ?? "-";
+            default:
+                return getBookingMetadataValue(booking.extra_fields, column.id);
+        }
+    }
+
     const selectClass = "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] cursor-pointer";
     const inputClass = "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] w-16 text-center";
 
@@ -418,6 +431,16 @@ export default function ClientStatusPage() {
                             )}
                         </div>
                         <div className="border-t pt-2 space-y-2">
+                            {orderedVisibleColumns
+                                .filter((column) => !["name", "status", "queue", "actions"].includes(column.id))
+                                .map((column) => (
+                                    <div key={column.id} className="flex items-start justify-between gap-3 text-sm">
+                                        <span className="text-muted-foreground">{column.label}</span>
+                                        <span className="max-w-[180px] truncate text-right text-foreground" title={String(renderMobileValue(b, column) ?? "-")}>
+                                            {renderMobileValue(b, column)}
+                                        </span>
+                                    </div>
+                                ))}
                             <div className="flex items-center gap-3">
                                 <label className="text-xs text-muted-foreground shrink-0 w-14">Status</label>
                                 <select value={b.client_status || ""} onChange={e => updateStatus(b.id, e.target.value)} disabled={savingId === b.id} className={`${selectClass} flex-1`}>
