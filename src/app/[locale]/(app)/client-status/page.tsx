@@ -92,19 +92,6 @@ export default function ClientStatusPage() {
         clientStatuses.forEach((s, i) => { map[s] = STATUS_COLOR_PALETTE[i % STATUS_COLOR_PALETTE.length]; });
         return map;
     }, [clientStatuses]);
-    const metadataColumns = React.useMemo(
-        () => buildBookingMetadataColumns(bookings, formSectionsByEventType),
-        [bookings, formSectionsByEventType],
-    );
-    const clientStatusColumnDefaults = React.useMemo(
-        () => lockBoundaryColumns([
-            ...BASE_CLIENT_STATUS_COLUMNS.slice(0, -1),
-            ...metadataColumns,
-            BASE_CLIENT_STATUS_COLUMNS[BASE_CLIENT_STATUS_COLUMNS.length - 1],
-        ]),
-        [metadataColumns],
-    );
-
     React.useEffect(() => {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
@@ -124,13 +111,8 @@ export default function ClientStatusPage() {
             if (profileData?.queue_trigger_status) {
                 setQueueTriggerStatus(profileData.queue_trigger_status);
             }
-            setColumns(
-                mergeTableColumnPreferences(
-                    clientStatusColumnDefaults,
-                    profileData?.table_column_preferences?.client_status,
-                ),
-            );
-            setFormSectionsByEventType(profileData?.form_sections || {});
+            const resolvedSections = profileData?.form_sections || {};
+            setFormSectionsByEventType(resolvedSections);
 
             const { data } = await supabase
                 .from("bookings")
@@ -139,8 +121,7 @@ export default function ClientStatusPage() {
                 .neq("status", "Batal")
                 .order("created_at", { ascending: false });
 
-            setBookings(
-                ((data || []) as unknown as BookingStatus[]).map((booking) => {
+            const normalizedBookings = ((data || []) as unknown as BookingStatus[]).map((booking) => {
                     const legacyService = normalizeLegacyServiceRecord(booking.services);
                     const serviceSelections = normalizeBookingServiceSelections(
                         booking.booking_services,
@@ -154,12 +135,32 @@ export default function ClientStatusPage() {
                             fallback: legacyService?.name || "-",
                         }),
                     };
-                }),
+                });
+            const nextColumnDefaults = lockBoundaryColumns([
+                ...BASE_CLIENT_STATUS_COLUMNS.slice(0, -1),
+                ...buildBookingMetadataColumns(normalizedBookings, resolvedSections),
+                BASE_CLIENT_STATUS_COLUMNS[BASE_CLIENT_STATUS_COLUMNS.length - 1],
+            ]);
+            setColumns(
+                mergeTableColumnPreferences(
+                    nextColumnDefaults,
+                    profileData?.table_column_preferences?.client_status,
+                ),
             );
+            setBookings(normalizedBookings);
             setLoading(false);
         }
         load();
-    }, [clientStatusColumnDefaults, supabase]);
+    }, [supabase]);
+
+    React.useEffect(() => {
+        const nextDefaults = lockBoundaryColumns([
+            ...BASE_CLIENT_STATUS_COLUMNS.slice(0, -1),
+            ...buildBookingMetadataColumns(bookings, formSectionsByEventType),
+            BASE_CLIENT_STATUS_COLUMNS[BASE_CLIENT_STATUS_COLUMNS.length - 1],
+        ]);
+        setColumns((current) => mergeTableColumnPreferences(nextDefaults, current));
+    }, [bookings, formSectionsByEventType]);
 
     async function updateStatus(id: string, clientStatus: string) {
         setSavingId(id);
@@ -219,9 +220,6 @@ export default function ClientStatusPage() {
         () => columns.filter((column) => column.visible),
         [columns],
     );
-    React.useEffect(() => {
-        setColumns((current) => mergeTableColumnPreferences(clientStatusColumnDefaults, current));
-    }, [clientStatusColumnDefaults]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();

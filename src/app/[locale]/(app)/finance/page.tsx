@@ -96,19 +96,6 @@ export default function FinancePage() {
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
-    const metadataColumns = React.useMemo(
-        () => buildBookingMetadataColumns(bookings, formSectionsByEventType),
-        [bookings, formSectionsByEventType],
-    );
-    const financeColumnDefaults = React.useMemo(
-        () => lockBoundaryColumns([
-            ...BASE_FINANCE_COLUMNS.slice(0, -1),
-            ...metadataColumns,
-            BASE_FINANCE_COLUMNS[BASE_FINANCE_COLUMNS.length - 1],
-        ]),
-        [metadataColumns],
-    );
-
     const fetchBookings = React.useCallback(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
@@ -145,6 +132,15 @@ export default function FinancePage() {
         }) as BookingFinance[];
         const profilePrefs = (profile as { table_column_preferences?: { finance?: TableColumnPreference[] } | null } | null)?.table_column_preferences?.finance;
         const rawSections = (profile as { form_sections?: Record<string, FormLayoutItem[]> | null } | null)?.form_sections;
+        const resolvedSections =
+            rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)
+                ? rawSections
+                : {};
+        const nextColumnDefaults = lockBoundaryColumns([
+            ...BASE_FINANCE_COLUMNS.slice(0, -1),
+            ...buildBookingMetadataColumns(normalizedBookings, resolvedSections),
+            BASE_FINANCE_COLUMNS[BASE_FINANCE_COLUMNS.length - 1],
+        ]);
         if (rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)) {
             setFormSectionsByEventType(rawSections);
         } else {
@@ -155,12 +151,12 @@ export default function FinancePage() {
         setStudioName(profile?.studio_name || "");
         setColumns(
             mergeTableColumnPreferences(
-                financeColumnDefaults,
+                nextColumnDefaults,
                 profilePrefs,
             ),
         );
         setLoading(false);
-    }, [financeColumnDefaults, supabase]);
+    }, [supabase]);
 
     React.useEffect(() => {
         void fetchBookings();
@@ -172,8 +168,13 @@ export default function FinancePage() {
     );
 
     React.useEffect(() => {
-        setColumns((current) => mergeTableColumnPreferences(financeColumnDefaults, current));
-    }, [financeColumnDefaults]);
+        const nextDefaults = lockBoundaryColumns([
+            ...BASE_FINANCE_COLUMNS.slice(0, -1),
+            ...buildBookingMetadataColumns(bookings, formSectionsByEventType),
+            BASE_FINANCE_COLUMNS[BASE_FINANCE_COLUMNS.length - 1],
+        ]);
+        setColumns((current) => mergeTableColumnPreferences(nextDefaults, current));
+    }, [bookings, formSectionsByEventType]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();

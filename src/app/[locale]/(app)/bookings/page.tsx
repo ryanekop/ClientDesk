@@ -204,19 +204,6 @@ export default function BookingsPage() {
     // WA Freelancer popup
     const [waPopup, setWaPopup] = React.useState<{ open: boolean; freelancers: FreelancerInfo[]; booking: Booking | null }>({ open: false, freelancers: [], booking: null });
 
-    const metadataColumns = React.useMemo(
-        () => buildBookingMetadataColumns(bookings, formSectionsByEventType),
-        [bookings, formSectionsByEventType],
-    );
-    const bookingColumnDefaults = React.useMemo(
-        () => lockBoundaryColumns([
-            ...BASE_BOOKING_COLUMNS.slice(0, -1),
-            ...metadataColumns,
-            BASE_BOOKING_COLUMNS[BASE_BOOKING_COLUMNS.length - 1],
-        ]),
-        [metadataColumns],
-    );
-
     const fetchTemplates = React.useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
@@ -241,16 +228,17 @@ export default function BookingsPage() {
             form_sections?: unknown;
             table_column_preferences?: { bookings?: TableColumnPreference[] } | null;
         } & Record<string, unknown>) | null;
+        const rawSections = (profile as Record<string, unknown> | null)?.form_sections;
+        const resolvedSections =
+            rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)
+                ? (rawSections as Record<string, FormLayoutItem[]>)
+                : Array.isArray(rawSections)
+                    ? { Umum: rawSections as FormLayoutItem[] }
+                    : {};
+
         if (profile?.studio_name) setStudioName(profile.studio_name);
         if (profile?.custom_statuses) setStatusOpts(profile.custom_statuses as string[]);
         if (profileData?.default_wa_target) setDefaultWaTarget(profileData.default_wa_target);
-        setColumns(
-            mergeTableColumnPreferences(
-                bookingColumnDefaults,
-                profileData?.table_column_preferences?.bookings,
-            ),
-        );
-        const rawSections = (profile as Record<string, unknown> | null)?.form_sections;
         if (rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)) {
             setFormSectionsByEventType(rawSections as Record<string, FormLayoutItem[]>);
         } else if (Array.isArray(rawSections)) {
@@ -284,11 +272,22 @@ export default function BookingsPage() {
                 service_label: getBookingServiceLabel(serviceSelections, { kind: "main", fallback: legacyService?.name || "-" }),
             };
         }) as unknown as Booking[];
+        const nextColumnDefaults = lockBoundaryColumns([
+            ...BASE_BOOKING_COLUMNS.slice(0, -1),
+            ...buildBookingMetadataColumns(bgs, resolvedSections),
+            BASE_BOOKING_COLUMNS[BASE_BOOKING_COLUMNS.length - 1],
+        ]);
         setBookings(bgs);
+        setColumns(
+            mergeTableColumnPreferences(
+                nextColumnDefaults,
+                profileData?.table_column_preferences?.bookings,
+            ),
+        );
         setPackages(Array.from(new Set(bgs.flatMap(b => getBookingServiceNames(b.service_selections || [], "main")).filter(Boolean))) as string[]);
         setFreelancerNames(Array.from(new Set(bgs.flatMap(b => b.booking_freelancers.map(f => f.name)).filter(Boolean))) as string[]);
         setLoading(false);
-    }, [bookingColumnDefaults, supabase]);
+    }, [supabase]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -568,8 +567,13 @@ export default function BookingsPage() {
     );
 
     React.useEffect(() => {
-        setColumns((current) => mergeTableColumnPreferences(bookingColumnDefaults, current));
-    }, [bookingColumnDefaults]);
+        const nextDefaults = lockBoundaryColumns([
+            ...BASE_BOOKING_COLUMNS.slice(0, -1),
+            ...buildBookingMetadataColumns(bookings, formSectionsByEventType),
+            BASE_BOOKING_COLUMNS[BASE_BOOKING_COLUMNS.length - 1],
+        ]);
+        setColumns((current) => mergeTableColumnPreferences(nextDefaults, current));
+    }, [bookings, formSectionsByEventType]);
 
     const filteredBookings = bookings.filter(b => {
         const q = searchQuery.toLowerCase();
