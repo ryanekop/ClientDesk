@@ -31,7 +31,7 @@ export default async function Home() {
 
   return (
     <LandingUserProvider>
-      <div className="flex flex-col min-h-screen font-[family-name:var(--font-geist-sans)]">
+      <div className="flex flex-col min-h-screen font-sans">
         {/* Header */}
         <header className="sticky top-0 z-50 flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm relative">
           <Link

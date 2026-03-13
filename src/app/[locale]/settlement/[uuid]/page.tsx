@@ -31,7 +31,7 @@ async function getSettlementData(uuid: string) {
   const { data: profile } = await supabaseAdmin
     .from("profiles")
     .select(
-      "studio_name, form_payment_methods, qris_image_url, qris_drive_file_id, bank_accounts",
+      "studio_name, form_payment_methods, settlement_form_brand_color, settlement_form_greeting, settlement_form_payment_methods, settlement_form_lang, qris_image_url, qris_drive_file_id, bank_accounts",
     )
     .eq("id", booking.user_id)
     .single();
@@ -59,7 +59,12 @@ async function getSettlementData(uuid: string) {
     },
     vendor: {
       studioName: profile?.studio_name || "Studio",
-      formPaymentMethods: normalizePaymentMethods(profile?.form_payment_methods),
+      brandColor: profile?.settlement_form_brand_color || "#10b981",
+      greeting: profile?.settlement_form_greeting || null,
+      formLang: profile?.settlement_form_lang || "id",
+      formPaymentMethods: normalizePaymentMethods(
+        profile?.settlement_form_payment_methods ?? profile?.form_payment_methods,
+      ),
       qrisImageUrl: resolveDriveImageUrl(
         profile?.qris_image_url || null,
         profile?.qris_drive_file_id || null,

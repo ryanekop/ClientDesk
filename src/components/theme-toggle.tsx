@@ -8,7 +8,12 @@ import { Button } from "@/components/ui/button";
 export function ThemeToggle() {
     const { setTheme, theme } = useTheme();
     const [open, setOpen] = React.useState(false);
+    const [mounted, setMounted] = React.useState(false);
     const ref = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        setMounted(true);
+    }, []);
 
     React.useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -17,6 +22,8 @@ export function ThemeToggle() {
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, []);
+
+    const activeTheme = mounted ? theme : null;
 
     return (
         <div className="relative" ref={ref}>
@@ -43,7 +50,7 @@ export function ThemeToggle() {
                     <button
                         key={item.value}
                         onClick={() => { setTheme(item.value); setOpen(false); }}
-                        className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm transition-colors cursor-pointer ${theme === item.value ? "bg-muted font-medium" : "hover:bg-muted/50"}`}
+                        className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm transition-colors cursor-pointer ${activeTheme === item.value ? "bg-muted font-medium" : "hover:bg-muted/50"}`}
                     >
                         <item.icon className="w-4 h-4" />
                         {item.label}

@@ -16,6 +16,7 @@ import {
 type VendorRecord = {
   qris_image_url: string | null;
   form_payment_methods: PaymentMethod[] | null;
+  settlement_form_payment_methods: PaymentMethod[] | null;
   bank_accounts: unknown[] | null;
 };
 
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
 
     const { data: vendor } = await supabaseAdmin
       .from("profiles")
-      .select("qris_image_url, form_payment_methods, bank_accounts")
+      .select("qris_image_url, form_payment_methods, settlement_form_payment_methods, bank_accounts")
       .eq("id", booking.user_id)
       .single();
 
@@ -96,7 +97,8 @@ export async function POST(request: NextRequest) {
     }
 
     const availablePaymentMethods = normalizePaymentMethods(
-      vendorRecord.form_payment_methods,
+      vendorRecord.settlement_form_payment_methods ??
+        vendorRecord.form_payment_methods,
     );
     const enabledBankAccounts = getEnabledBankAccounts(
       normalizeBankAccounts(vendorRecord.bank_accounts),

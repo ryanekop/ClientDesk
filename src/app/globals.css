@@ -6,8 +6,6 @@
 @theme inline {
     --color-background: var(--background);
     --color-foreground: var(--foreground);
-    --font-sans: var(--font-geist-sans);
-    --font-mono: var(--font-geist-mono);
     --color-card: var(--card);
     --color-card-foreground: var(--card-foreground);
     --color-popover: var(--popover);
@@ -85,6 +83,13 @@
         transition:
             background-color 0.3s ease,
             color 0.3s ease;
+    }
+
+    code,
+    pre,
+    kbd,
+    samp {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     }
 
     /* Scope border & shadow transition hanya ke elemen interaktif */

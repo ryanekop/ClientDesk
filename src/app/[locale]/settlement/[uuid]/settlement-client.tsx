@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import {
   AlertCircle,
@@ -17,6 +18,7 @@ import { compressImage } from "@/utils/compress-image";
 import {
   getEnabledBankAccounts,
   getPaymentMethodLabel,
+  normalizePaymentMethods,
   type BankAccount,
   type PaymentMethod,
   type PaymentSource,
@@ -57,9 +59,22 @@ type BookingData = {
 
 type VendorData = {
   studioName: string;
+  brandColor: string;
+  greeting: string | null;
+  formLang: string;
   formPaymentMethods: PaymentMethod[];
   qrisImageUrl: string | null;
   bankAccounts: BankAccount[];
+};
+
+type PreviewVendorPayload = Partial<
+  Pick<VendorData, "studioName" | "brandColor" | "greeting" | "formPaymentMethods">
+>;
+
+type PreviewMessage = {
+  type: "clientdesk:settlement-preview-update";
+  previewKey: string;
+  payload: PreviewVendorPayload;
 };
 
 function formatCurrency(n: number) {
@@ -84,10 +99,66 @@ export default function SettlementClient({
 }) {
   const t = useTranslations("Settlement");
   const locale = useLocale();
+  const searchParams = useSearchParams();
+  const previewMode = searchParams.get("preview") === "1";
+  const previewStorageKey = searchParams.get("previewKey") || "";
   const supabase = React.useMemo(() => createClient(), []);
+  const [previewVendor, setPreviewVendor] = React.useState<PreviewVendorPayload | null>(null);
+
+  React.useEffect(() => {
+    if (!previewMode || !previewStorageKey || typeof window === "undefined") return;
+
+    function loadPreviewVendor() {
+      const raw = window.localStorage.getItem(previewStorageKey);
+      if (!raw) return;
+      try {
+        setPreviewVendor(JSON.parse(raw) as PreviewVendorPayload);
+      } catch {
+        setPreviewVendor(null);
+      }
+    }
+
+    function handlePreviewMessage(event: MessageEvent<PreviewMessage>) {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "clientdesk:settlement-preview-update") return;
+      if (event.data.previewKey !== previewStorageKey) return;
+      setPreviewVendor(event.data.payload);
+    }
+
+    loadPreviewVendor();
+    window.addEventListener("storage", loadPreviewVendor);
+    window.addEventListener("message", handlePreviewMessage);
+    return () => {
+      window.removeEventListener("storage", loadPreviewVendor);
+      window.removeEventListener("message", handlePreviewMessage);
+    };
+  }, [previewMode, previewStorageKey]);
+
+  const effectiveVendor = React.useMemo<VendorData>(
+    () => ({
+      ...vendor,
+      studioName:
+        typeof previewVendor?.studioName === "string"
+          ? previewVendor.studioName
+          : vendor.studioName,
+      brandColor:
+        typeof previewVendor?.brandColor === "string"
+          ? previewVendor.brandColor
+          : vendor.brandColor,
+      greeting:
+        typeof previewVendor?.greeting === "string"
+          ? previewVendor.greeting
+          : vendor.greeting,
+      formPaymentMethods: normalizePaymentMethods(
+        previewVendor?.formPaymentMethods ?? vendor.formPaymentMethods,
+      ),
+    }),
+    [previewVendor, vendor],
+  );
+
   const enabledBankAccounts = React.useMemo(
-    () => getEnabledBankAccounts(vendor.bankAccounts || []),
-    [vendor.bankAccounts],
+    () => getEnabledBankAccounts(effectiveVendor.bankAccounts || []),
+    [effectiveVendor.bankAccounts],
   );
   const totalAdjustments = React.useMemo(
     () => getFinalAdjustmentsTotal(booking.finalAdjustments),
@@ -112,8 +183,9 @@ export default function SettlementClient({
   );
   const settlementStatus = getSettlementStatus(booking.settlementStatus);
   const canSubmit = settlementStatus === "sent" || settlementStatus === "submitted";
-  const [selectedPaymentMethod, setSelectedPaymentMethod] =
-    React.useState<PaymentMethod | null>(vendor.formPaymentMethods[0] || null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = React.useState<PaymentMethod | null>(
+    effectiveVendor.formPaymentMethods[0] || null,
+  );
   const [selectedPaymentSource, setSelectedPaymentSource] =
     React.useState<PaymentSource | null>(null);
   const [proofFile, setProofFile] = React.useState<File | null>(null);
@@ -122,6 +194,13 @@ export default function SettlementClient({
   const [submitting, setSubmitting] = React.useState(false);
   const [submitted, setSubmitted] = React.useState(settlementStatus === "submitted");
   const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    setSelectedPaymentMethod((current) => {
+      if (current && effectiveVendor.formPaymentMethods.includes(current)) return current;
+      return effectiveVendor.formPaymentMethods[0] || null;
+    });
+  }, [effectiveVendor.formPaymentMethods]);
 
   React.useEffect(() => {
     if (!selectedPaymentMethod) {
@@ -255,13 +334,33 @@ export default function SettlementClient({
     setSubmitting(false);
   }
 
+  const brandColor = effectiveVendor.brandColor || "#10b981";
+  const topGreeting =
+    effectiveVendor.greeting?.trim() || t("defaultGreeting");
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50 px-4 py-8 sm:py-12">
+    <div
+      className="min-h-screen px-4 py-8 sm:py-12"
+      style={{
+        backgroundImage: `linear-gradient(135deg, ${brandColor}18 0%, #ffffff 40%, #ecfdf5 100%)`,
+      }}
+    >
       <div className="mx-auto max-w-3xl space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight">{vendor.studioName}</h1>
+        <div className="text-center space-y-3">
+          <div
+            className="mx-auto inline-flex rounded-full px-4 py-1 text-xs font-semibold"
+            style={{ backgroundColor: `${brandColor}20`, color: brandColor }}
+          >
+            {t("title")}
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {effectiveVendor.studioName}
+          </h1>
           <p className="text-sm text-muted-foreground">
             {t("title")} - {booking.clientName}
+          </p>
+          <p className="mx-auto max-w-xl text-sm text-foreground/80">
+            {topGreeting}
           </p>
         </div>
 
@@ -271,7 +370,9 @@ export default function SettlementClient({
               <h2 className="text-lg font-bold">{t("finalInvoice")}</h2>
               <p className="text-sm text-muted-foreground">
                 {t("bookingCode")}{" "}
-                <span className="font-semibold text-primary">{booking.bookingCode}</span>
+                <span className="font-semibold" style={{ color: brandColor }}>
+                  {booking.bookingCode}
+                </span>
               </p>
             </div>
             <span
@@ -296,12 +397,32 @@ export default function SettlementClient({
           </div>
 
           <div className="space-y-3 text-sm">
-            {booking.serviceName && (
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">{t("clientName")}</span>
+              <span className="font-medium text-right">{booking.clientName}</span>
+            </div>
+            {booking.serviceName ? (
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">{t("service")}</span>
                 <span className="font-medium text-right">{booking.serviceName}</span>
               </div>
-            )}
+            ) : null}
+            {booking.eventType ? (
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">{t("eventType")}</span>
+                <span className="font-medium text-right">{booking.eventType}</span>
+              </div>
+            ) : null}
+            {booking.sessionDate ? (
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">{t("schedule")}</span>
+                <span className="font-medium text-right">
+                  {new Date(booking.sessionDate).toLocaleString(
+                    locale === "en" ? "en-US" : "id-ID",
+                  )}
+                </span>
+              </div>
+            ) : null}
             <div className="flex justify-between gap-4">
               <span className="text-muted-foreground">{t("baseTotal")}</span>
               <span className="font-medium">{formatCurrency(booking.totalPrice)}</span>
@@ -369,7 +490,8 @@ export default function SettlementClient({
                 "_blank",
               )
             }
-            className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+            className="inline-flex items-center gap-2 text-sm hover:underline"
+            style={{ color: brandColor }}
           >
             <Download className="h-4 w-4" />
             {t("downloadInvoice")}
@@ -394,14 +516,14 @@ export default function SettlementClient({
           </div>
         ) : null}
 
-        {(booking.isFullyPaid || settlementStatus === "paid") && (
+        {(booking.isFullyPaid || settlementStatus === "paid") ? (
           <div className="rounded-2xl border border-green-200 bg-green-50 p-5 text-sm text-green-800">
             <div className="flex items-start gap-3">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
               <p>{t("paidInfo")}</p>
             </div>
           </div>
-        )}
+        ) : null}
 
         {!submitted && !booking.isFullyPaid && canSubmit && remaining > 0 ? (
           <form
@@ -416,17 +538,16 @@ export default function SettlementClient({
             <div className="space-y-3">
               <label className="text-sm font-medium">{t("paymentMethod")}</label>
               <div className="grid gap-3 sm:grid-cols-3">
-                {vendor.formPaymentMethods.map((method) => {
-                  const icon =
+                {effectiveVendor.formPaymentMethods.map((method) => {
+                  const Icon =
                     method === "bank"
                       ? CreditCard
                       : method === "qris"
                         ? QrCode
                         : Banknote;
-                  const Icon = icon;
                   const disabled =
                     (method === "bank" && enabledBankAccounts.length === 0) ||
-                    (method === "qris" && !vendor.qrisImageUrl);
+                    (method === "qris" && !effectiveVendor.qrisImageUrl);
 
                   return (
                     <button
@@ -436,9 +557,14 @@ export default function SettlementClient({
                       onClick={() => setSelectedPaymentMethod(method)}
                       className={`rounded-xl border p-4 text-left transition-colors ${
                         selectedPaymentMethod === method
-                          ? "border-primary bg-primary/5"
+                          ? "shadow-sm"
                           : "hover:bg-muted/50"
                       } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                      style={
+                        selectedPaymentMethod === method
+                          ? { borderColor: brandColor, backgroundColor: `${brandColor}10` }
+                          : undefined
+                      }
                     >
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4" />
@@ -472,9 +598,12 @@ export default function SettlementClient({
                             label: bank.bank_name,
                           })
                         }
-                        className={`w-full rounded-xl border p-3 text-left ${
-                          selected ? "border-primary bg-primary/5" : "hover:bg-muted/50"
-                        }`}
+                        className="w-full rounded-xl border p-3 text-left hover:bg-muted/50"
+                        style={
+                          selected
+                            ? { borderColor: brandColor, backgroundColor: `${brandColor}10` }
+                            : undefined
+                        }
                       >
                         <p className="font-medium">{bank.bank_name}</p>
                         <p className="text-sm text-muted-foreground">
@@ -487,13 +616,12 @@ export default function SettlementClient({
               </div>
             ) : null}
 
-            {selectedPaymentMethod === "qris" && vendor.qrisImageUrl ? (
+            {selectedPaymentMethod === "qris" && effectiveVendor.qrisImageUrl ? (
               <div className="space-y-3">
                 <label className="text-sm font-medium">{t("qris")}</label>
-                {/* QRIS image is vendor-provided remote/public content. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={vendor.qrisImageUrl}
+                  src={effectiveVendor.qrisImageUrl}
                   alt="QRIS"
                   className="max-w-xs rounded-xl border"
                 />
@@ -510,7 +638,6 @@ export default function SettlementClient({
                 </label>
                 {proofPreview ? (
                   <>
-                    {/* Preview uses a local data URL generated in the browser. */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={proofPreview}
@@ -533,7 +660,8 @@ export default function SettlementClient({
             <button
               type="submit"
               disabled={submitting || uploadingProof}
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              style={{ backgroundColor: brandColor }}
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {submitting ? t("sending") : t("submit")}

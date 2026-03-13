@@ -10,6 +10,21 @@ import { Link } from "@/i18n/routing";
 import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { BookingAdminCustomFields } from "@/components/form-builder/booking-admin-custom-fields";
+import {
+    buildCustomFieldSnapshots,
+    extractCustomFieldValueMap,
+    getGroupedCustomLayoutSections,
+    normalizeStoredFormLayout,
+    type FormLayoutItem,
+} from "@/components/form-builder/booking-form-layout";
+import {
+    DEFAULT_CALENDAR_EVENT_FORMAT,
+    applyCalendarTemplate,
+    buildCalendarRangeFromLocalInput,
+    buildCalendarTemplateVars,
+    resolveTemplateByEventType,
+} from "@/utils/google/template";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -119,7 +134,8 @@ export default function NewBookingPage() {
     const supabase = createClient();
     const [saving, setSaving] = React.useState(false);
     const [calendarWarning, setCalendarWarning] = React.useState<string | null>(null);
-    const [calendarEventFormat, setCalendarEventFormat] = React.useState("📸 {{client_name}} — {{service_name}}");
+    const [calendarEventFormat, setCalendarEventFormat] = React.useState(DEFAULT_CALENDAR_EVENT_FORMAT);
+    const [calendarEventFormatMap, setCalendarEventFormatMap] = React.useState<Record<string, string>>({});
     const [studioName, setStudioName] = React.useState("");
     const [services, setServices] = React.useState<Service[]>([]);
     const [freelancers, setFreelancers] = React.useState<Freelance[]>([]);
@@ -144,6 +160,8 @@ export default function NewBookingPage() {
     const [notes, setNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
     const [portfolioUrl, setPortfolioUrl] = React.useState("");
+    const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
+    const [customFieldValues, setCustomFieldValues] = React.useState<Record<string, string>>({});
 
     // Custom popups
     const [showCustomServicePopup, setShowCustomServicePopup] = React.useState(false);
@@ -167,13 +185,29 @@ export default function NewBookingPage() {
             const [{ data: svcs }, { data: frees }, { data: prof }] = await Promise.all([
                 supabase.from("services").select("id, name, price").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
-                supabase.from("profiles").select("custom_statuses, calendar_event_format, studio_name").eq("id", user.id).single(),
+                supabase.from("profiles").select("custom_statuses, calendar_event_format, calendar_event_format_map, studio_name, form_sections").eq("id", user.id).single(),
             ]);
             setServices((svcs || []) as Service[]);
             setFreelancers((frees || []) as Freelance[]);
             if (prof?.custom_statuses) setCustomStatuses(prof.custom_statuses as string[]);
             if ((prof as any)?.calendar_event_format) setCalendarEventFormat((prof as any).calendar_event_format);
+            if ((prof as any)?.calendar_event_format_map && typeof (prof as any).calendar_event_format_map === "object") {
+                setCalendarEventFormatMap((prof as any).calendar_event_format_map);
+            }
             if ((prof as any)?.studio_name) setStudioName((prof as any).studio_name);
+            const rawSections = (prof as Record<string, unknown> | null)?.form_sections;
+            if (Array.isArray(rawSections)) {
+                setFormSectionsByEventType({ Umum: normalizeStoredFormLayout(rawSections, "Umum") });
+            } else if (rawSections && typeof rawSections === "object") {
+                setFormSectionsByEventType(
+                    Object.fromEntries(
+                        Object.entries(rawSections as Record<string, unknown>).map(([key, value]) => [
+                            key,
+                            normalizeStoredFormLayout(value, key),
+                        ]),
+                    ) as Record<string, FormLayoutItem[]>,
+                );
+            }
         }
         load();
     }, []);
@@ -185,6 +219,18 @@ export default function NewBookingPage() {
         const selected = services.find(s => s.id === val);
         if (selected) setTotalPrice(selected.price);
     };
+
+    const activeCustomLayoutSections = React.useMemo(() => {
+        const rawLayout =
+            formSectionsByEventType[eventType] ||
+            formSectionsByEventType.Umum ||
+            [];
+        return getGroupedCustomLayoutSections(rawLayout, eventType);
+    }, [eventType, formSectionsByEventType]);
+
+    const clientCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "client_info")?.items || [];
+    const sessionCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "session_details")?.items || [];
+    const paymentCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "payment_details")?.items || [];
 
     const toggleFreelancer = (id: string) => {
         setSelectedFreelancerIds(prev => {
@@ -266,6 +312,11 @@ export default function NewBookingPage() {
                 finalSessionDate = akadDate || resepsiDate || null;
             }
         }
+        const customFieldSnapshots = buildCustomFieldSnapshots(
+            formSectionsByEventType[eventType] || formSectionsByEventType.Umum || [],
+            eventType,
+            customFieldValues,
+        );
 
         const { data: booking, error } = await supabase.from("bookings").insert({
             user_id: user.id,
@@ -285,7 +336,13 @@ export default function NewBookingPage() {
             notes: notes || null,
             drive_folder_url: driveFolderUrl || null,
             portfolio_url: portfolioUrl || null,
-            extra_fields: Object.keys(mergedExtra).length > 0 ? mergedExtra : null,
+            extra_fields:
+                Object.keys(mergedExtra).length > 0 || customFieldSnapshots.length > 0
+                    ? {
+                        ...mergedExtra,
+                        ...(customFieldSnapshots.length > 0 ? { custom_fields: customFieldSnapshots } : {}),
+                    }
+                    : null,
         }).select("id").single();
 
         setSaving(false);
@@ -336,18 +393,25 @@ export default function NewBookingPage() {
 
             // Auto-sync to Google Calendar (fire-and-forget)
             if (sessionDate) {
-                const start = new Date(sessionDate);
-                const end = new Date(start.getTime() + 2 * 60 * 60 * 1000); // 2 hours default
                 const svc = services.find(s => s.id === selectedServiceId);
+                const durationMinutes = 120;
+                const range = buildCalendarRangeFromLocalInput(sessionDate, durationMinutes);
                 // Build summary from calendar_event_format template
-                const templateVars: Record<string, string> = {
+                const selectedFormat = resolveTemplateByEventType(
+                    calendarEventFormatMap,
+                    eventType,
+                    calendarEventFormat || DEFAULT_CALENDAR_EVENT_FORMAT,
+                );
+                const templateVars = buildCalendarTemplateVars({
                     client_name: clientName,
                     service_name: svc?.name || eventType || "Sesi Foto",
                     event_type: eventType || "-",
                     booking_code: invoiceCode,
                     studio_name: studioName || "Client Desk",
-                };
-                const summary = calendarEventFormat.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => templateVars[key] || `{{${key}}}`);
+                    location: location || "-",
+                    ...range.templateVars,
+                }, extraFields);
+                const summary = applyCalendarTemplate(selectedFormat, templateVars);
 
                 fetch("/api/google/sync", {
                     method: "POST",
@@ -356,8 +420,8 @@ export default function NewBookingPage() {
                         events: [{
                             summary,
                             description: `Kode: ${invoiceCode}\nKlien: ${clientName}\nLokasi: ${location || "-"}\nTipe: ${eventType || "-"}`,
-                            start: start.toISOString(),
-                            end: end.toISOString(),
+                            startLocal: range.start.dateTime,
+                            endLocal: range.end.dateTime,
                         }],
                     }),
                 }).catch(() => { }); // silently ignore if calendar not connected
@@ -445,6 +509,18 @@ export default function NewBookingPage() {
                             ))}
                         </div>
                     )}
+                    {clientCustomItems.length > 0 && (
+                        <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 pt-3 border-t border-dashed">
+                            <BookingAdminCustomFields
+                                items={clientCustomItems}
+                                values={customFieldValues}
+                                onChange={(fieldId, value) => setCustomFieldValues(prev => ({ ...prev, [fieldId]: value }))}
+                                inputClass={inputClass}
+                                textareaClass={textareaClass}
+                                selectClass={selectClass}
+                            />
+                        </div>
+                    )}
                 </div>
 
                 {/* Detail Sesi */}
@@ -455,7 +531,7 @@ export default function NewBookingPage() {
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
-                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); }} className={selectClass} required>
+                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setCustomFieldValues({}); }} className={selectClass} required>
                                 {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
@@ -577,6 +653,16 @@ export default function NewBookingPage() {
                                 <p className="text-[10px] text-muted-foreground">{selectedFreelancerIds.length}/5 dipilih</p>
                             )}
                         </div>
+                        {sessionCustomItems.length > 0 && (
+                            <BookingAdminCustomFields
+                                items={sessionCustomItems}
+                                values={customFieldValues}
+                                onChange={(fieldId, value) => setCustomFieldValues(prev => ({ ...prev, [fieldId]: value }))}
+                                inputClass={inputClass}
+                                textareaClass={textareaClass}
+                                selectClass={selectClass}
+                            />
+                        )}
                     </div>
                 </div>
 
@@ -612,6 +698,16 @@ export default function NewBookingPage() {
                                 />
                             </div>
                         </div>
+                        {paymentCustomItems.length > 0 && (
+                            <BookingAdminCustomFields
+                                items={paymentCustomItems}
+                                values={customFieldValues}
+                                onChange={(fieldId, value) => setCustomFieldValues(prev => ({ ...prev, [fieldId]: value }))}
+                                inputClass={inputClass}
+                                textareaClass={textareaClass}
+                                selectClass={selectClass}
+                            />
+                        )}
                     </div>
                 </div>
 

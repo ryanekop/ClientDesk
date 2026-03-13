@@ -36,6 +36,7 @@ const mainNavItems = [
     { titleKey: "finance" as const, href: "/finance", icon: Wallet },
     { titleKey: "team" as const, href: "/team", icon: Users },
     { titleKey: "formBooking" as const, href: "/form-booking", icon: FileEdit },
+    { titleKey: "formSettlement" as const, href: "/settlement-form", icon: FileEdit },
 ];
 
 export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
@@ -44,7 +45,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     const [isCollapsed, setIsCollapsed] = React.useState(false);
     const [userName, setUserName] = React.useState("");
     const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
-    const [avatarTs, setAvatarTs] = React.useState(Date.now());
+    const [avatarTs, setAvatarTs] = React.useState(() => Date.now());
 
     React.useEffect(() => {
         const saved = localStorage.getItem("clientdesk_sidebar_collapsed");

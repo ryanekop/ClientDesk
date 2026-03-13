@@ -14,6 +14,13 @@ import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
 import { cn } from "@/lib/utils";
 import { getSessionDateUTC, formatSessionDate } from "@/utils/format-date";
+import {
+    DEFAULT_CALENDAR_EVENT_FORMAT,
+    applyCalendarTemplate,
+    buildCalendarRangeFromStoredSession,
+    buildCalendarTemplateVars,
+    resolveTemplateByEventType,
+} from "@/utils/google/template";
 
 const locales = { "id-ID": id };
 
@@ -90,6 +97,9 @@ export default function CalendarPage() {
     const [loading, setLoading] = React.useState(true);
     const [isGoogleConnected, setIsGoogleConnected] = React.useState(false);
     const [syncing, setSyncing] = React.useState(false);
+    const [calendarEventFormat, setCalendarEventFormat] = React.useState(DEFAULT_CALENDAR_EVENT_FORMAT);
+    const [calendarEventFormatMap, setCalendarEventFormatMap] = React.useState<Record<string, string>>({});
+    const [studioName, setStudioName] = React.useState("Client Desk");
     const [calendarWarningDismissed, setCalendarWarningDismissed] = React.useState(() => {
         if (typeof window !== "undefined") return localStorage.getItem("dismiss_calendar_warning") === "1";
         return false;
@@ -118,6 +128,10 @@ export default function CalendarPage() {
         window.addEventListener("message", handleMessage);
         return () => window.removeEventListener("message", handleMessage);
     }, []);
+
+    React.useEffect(() => {
+        fetchBookings();
+    }, [calendarEventFormat, calendarEventFormatMap, studioName]);
 
     // Fetch freelancer calendar events when toggles change
     React.useEffect(() => {
@@ -171,12 +185,21 @@ export default function CalendarPage() {
 
         const { data: profile } = await supabase
             .from("profiles")
-            .select("google_access_token, google_refresh_token")
+            .select("google_access_token, google_refresh_token, calendar_event_format, calendar_event_format_map, studio_name")
             .eq("id", user.id)
             .single();
 
         if (profile?.google_access_token && profile?.google_refresh_token) {
             setIsGoogleConnected(true);
+        }
+        if ((profile as any)?.calendar_event_format) {
+            setCalendarEventFormat((profile as any).calendar_event_format);
+        }
+        if ((profile as any)?.calendar_event_format_map && typeof (profile as any).calendar_event_format_map === "object") {
+            setCalendarEventFormatMap((profile as any).calendar_event_format_map);
+        }
+        if ((profile as any)?.studio_name) {
+            setStudioName((profile as any).studio_name);
         }
     }
 
@@ -187,16 +210,32 @@ export default function CalendarPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, client_name, session_date, status, location, services(name)")
+            .select("id, booking_code, client_name, session_date, status, location, event_type, extra_fields, services(name, duration_minutes)")
             .eq("user_id", user.id)
             .not("session_date", "is", null);
 
         if (data) {
             const bookingEvents: CalendarEvent[] = data.map((booking: any) => {
                 const sessionDate = getSessionDateUTC(booking.session_date);
-                const endDate = new Date(sessionDate.getTime() + 2 * 60 * 60 * 1000);
+                const durationMinutes = booking.services?.duration_minutes || 120;
+                const endDate = new Date(sessionDate.getTime() + durationMinutes * 60 * 1000);
+                const range = buildCalendarRangeFromStoredSession(booking.session_date, durationMinutes);
+                const eventFormat = resolveTemplateByEventType(
+                    calendarEventFormatMap,
+                    booking.event_type,
+                    calendarEventFormat || DEFAULT_CALENDAR_EVENT_FORMAT,
+                );
+                const title = applyCalendarTemplate(eventFormat, buildCalendarTemplateVars({
+                    client_name: booking.client_name,
+                    service_name: booking.services?.name || booking.event_type || "Booking",
+                    event_type: booking.event_type || "-",
+                    booking_code: booking.booking_code || "",
+                    studio_name: studioName || "Client Desk",
+                    location: booking.location || "-",
+                    ...range.templateVars,
+                }, booking.extra_fields));
                 return {
-                    title: `${booking.client_name} - ${booking.services?.name || "Booking"}`,
+                    title,
                     start: sessionDate,
                     end: endDate,
                     bookingId: booking.id,

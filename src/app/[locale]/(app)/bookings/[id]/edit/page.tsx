@@ -10,6 +10,14 @@ import { Link } from "@/i18n/routing";
 import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { BookingAdminCustomFields } from "@/components/form-builder/booking-admin-custom-fields";
+import {
+    buildCustomFieldSnapshots,
+    extractCustomFieldValueMap,
+    getGroupedCustomLayoutSections,
+    normalizeStoredFormLayout,
+    type FormLayoutItem,
+} from "@/components/form-builder/booking-form-layout";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -138,6 +146,8 @@ export default function EditBookingPage() {
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
     const [portfolioUrl, setPortfolioUrl] = React.useState("");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
+    const [customFieldValues, setCustomFieldValues] = React.useState<Record<string, string>>({});
+    const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
     const [splitDates, setSplitDates] = React.useState(false);
     const [akadDate, setAkadDate] = React.useState("");
     const [resepsiDate, setResepsiDate] = React.useState("");
@@ -165,9 +175,22 @@ export default function EditBookingPage() {
                 supabase.from("services").select("id, name, price").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
-                supabase.from("profiles").select("custom_statuses").eq("id", user.id).single(),
+                supabase.from("profiles").select("custom_statuses, form_sections").eq("id", user.id).single(),
             ]);
             if (prof?.custom_statuses) setCustomStatuses(prof.custom_statuses as string[]);
+            const rawSections = (prof as Record<string, unknown> | null)?.form_sections;
+            if (Array.isArray(rawSections)) {
+                setFormSectionsByEventType({ Umum: normalizeStoredFormLayout(rawSections, "Umum") });
+            } else if (rawSections && typeof rawSections === "object") {
+                setFormSectionsByEventType(
+                    Object.fromEntries(
+                        Object.entries(rawSections as Record<string, unknown>).map(([key, value]) => [
+                            key,
+                            normalizeStoredFormLayout(value, key),
+                        ]),
+                    ) as Record<string, FormLayoutItem[]>,
+                );
+            }
             if (booking) {
                 setClientName(booking.client_name || "");
                 const parsed = parseExistingPhone(booking.client_whatsapp);
@@ -188,7 +211,10 @@ export default function EditBookingPage() {
                 setNotes(booking.notes || "");
                 setDriveFolderUrl(booking.drive_folder_url || "");
                 setPortfolioUrl(booking.portfolio_url || "");
-                setExtraFields(booking.extra_fields || {});
+                setExtraFields((booking.extra_fields ? Object.fromEntries(
+                    Object.entries(booking.extra_fields).filter(([key, value]) => key !== "custom_fields" && typeof value === "string")
+                ) : {}) as Record<string, string>);
+                setCustomFieldValues(extractCustomFieldValueMap(booking.extra_fields));
                 // Pre-populate splitDates from extra_fields
                 if (booking.event_type === "Wedding" && booking.extra_fields?.tanggal_akad) {
                     setSplitDates(true);
@@ -216,6 +242,18 @@ export default function EditBookingPage() {
             return [...prev, fid];
         });
     };
+
+    const activeCustomLayoutSections = React.useMemo(() => {
+        const rawLayout =
+            formSectionsByEventType[eventType] ||
+            formSectionsByEventType.Umum ||
+            [];
+        return getGroupedCustomLayoutSections(rawLayout, eventType);
+    }, [eventType, formSectionsByEventType]);
+
+    const clientCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "client_info")?.items || [];
+    const sessionCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "session_details")?.items || [];
+    const paymentCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "payment_details")?.items || [];
 
     async function saveCustomService() {
         if (!customServiceName.trim()) return;
@@ -288,6 +326,11 @@ export default function EditBookingPage() {
             delete mergedExtra.tanggal_akad;
             delete mergedExtra.tanggal_resepsi;
         }
+        const customFieldSnapshots = buildCustomFieldSnapshots(
+            formSectionsByEventType[eventType] || formSectionsByEventType.Umum || [],
+            eventType,
+            customFieldValues,
+        );
 
         const { error } = await supabase.from("bookings").update({
             client_name: clientName,
@@ -306,7 +349,13 @@ export default function EditBookingPage() {
             notes: notes || null,
             drive_folder_url: driveFolderUrl || null,
             portfolio_url: portfolioUrl || null,
-            extra_fields: Object.keys(mergedExtra).length > 0 ? mergedExtra : null,
+            extra_fields:
+                Object.keys(mergedExtra).length > 0 || customFieldSnapshots.length > 0
+                    ? {
+                        ...mergedExtra,
+                        ...(customFieldSnapshots.length > 0 ? { custom_fields: customFieldSnapshots } : {}),
+                    }
+                    : null,
             updated_at: new Date().toISOString(),
         }).eq("id", id);
         setSaving(false);
@@ -432,6 +481,18 @@ export default function EditBookingPage() {
                             ))}
                         </div>
                     )}
+                    {clientCustomItems.length > 0 && (
+                        <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 pt-3 border-t border-dashed">
+                            <BookingAdminCustomFields
+                                items={clientCustomItems}
+                                values={customFieldValues}
+                                onChange={(fieldId, value) => setCustomFieldValues(prev => ({ ...prev, [fieldId]: value }))}
+                                inputClass={inputClass}
+                                textareaClass={textareaClass}
+                                selectClass={selectClass}
+                            />
+                        </div>
+                    )}
                 </div>
 
                 <div className="rounded-xl border bg-card p-6 shadow-sm space-y-4">
@@ -441,7 +502,7 @@ export default function EditBookingPage() {
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
-                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); }} className={selectClass} required>
+                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setCustomFieldValues({}); }} className={selectClass} required>
                                 {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
@@ -562,6 +623,16 @@ export default function EditBookingPage() {
                                 <p className="text-[10px] text-muted-foreground">{freelancerIds.length}/5 dipilih</p>
                             )}
                         </div>
+                        {sessionCustomItems.length > 0 && (
+                            <BookingAdminCustomFields
+                                items={sessionCustomItems}
+                                values={customFieldValues}
+                                onChange={(fieldId, value) => setCustomFieldValues(prev => ({ ...prev, [fieldId]: value }))}
+                                inputClass={inputClass}
+                                textareaClass={textareaClass}
+                                selectClass={selectClass}
+                            />
+                        )}
                     </div>
                 </div>
 
@@ -584,6 +655,16 @@ export default function EditBookingPage() {
                                 <input required type="text" inputMode="numeric" value={formatNumber(dpPaid)} onChange={e => setDpPaid(parseFormattedNumber(e.target.value))} placeholder="0" className={cn(inputClass, "flex-1")} />
                             </div>
                         </div>
+                        {paymentCustomItems.length > 0 && (
+                            <BookingAdminCustomFields
+                                items={paymentCustomItems}
+                                values={customFieldValues}
+                                onChange={(fieldId, value) => setCustomFieldValues(prev => ({ ...prev, [fieldId]: value }))}
+                                inputClass={inputClass}
+                                textareaClass={textareaClass}
+                                selectClass={selectClass}
+                            />
+                        )}
                     </div>
                 </div>
 
