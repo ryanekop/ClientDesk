@@ -11,6 +11,8 @@ import {
   MessageCircle,
   CreditCard,
   FileText,
+  QrCode,
+  Banknote,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { compressImage } from "@/utils/compress-image";
@@ -31,6 +33,16 @@ import {
   type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
 import { isRichTextEmpty, sanitizeRichTextHtml } from "@/utils/rich-text";
+import {
+  createPaymentSourceFromBank,
+  getEnabledBankAccounts,
+  getPaymentMethodLabel,
+  normalizeBankAccounts,
+  normalizePaymentMethods,
+  type BankAccount,
+  type PaymentMethod,
+  type PaymentSource,
+} from "@/lib/payment-config";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,11 +77,9 @@ export type Vendor = {
   form_terms_suffix_text: string | null;
   form_terms_content: string | null;
   form_sections: FormLayoutItem[] | Record<string, FormLayoutItem[]>;
-  bank_accounts: {
-    bank_name: string;
-    account_number: string;
-    account_name: string;
-  }[];
+  form_payment_methods: PaymentMethod[];
+  qris_image_url: string | null;
+  bank_accounts: BankAccount[];
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -153,6 +163,8 @@ type PreviewVendorPayload = Partial<
     | "form_terms_suffix_text"
     | "form_terms_content"
     | "form_sections"
+    | "form_payment_methods"
+    | "qris_image_url"
     | "bank_accounts"
   >
 >;
@@ -166,19 +178,6 @@ type PreviewMessage = {
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string");
-}
-
-function toBankAccounts(value: unknown): Vendor["bank_accounts"] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
-    .map((item) => ({
-      bank_name: typeof item.bank_name === "string" ? item.bank_name : "",
-      account_number:
-        typeof item.account_number === "string" ? item.account_number : "",
-      account_name: typeof item.account_name === "string" ? item.account_name : "",
-    }));
 }
 
 export function BookingFormClient({
@@ -237,7 +236,15 @@ export function BookingFormClient({
         ...vendor,
         ...(previewVendor || {}),
         custom_event_types: toStringArray(rawCustomEventTypes),
-        bank_accounts: toBankAccounts(rawBankAccounts),
+        form_payment_methods: normalizePaymentMethods(
+          (previewVendor?.form_payment_methods as unknown) ??
+            vendor.form_payment_methods,
+        ),
+        qris_image_url:
+          typeof previewVendor?.qris_image_url === "string"
+            ? previewVendor.qris_image_url
+            : vendor.qris_image_url,
+        bank_accounts: normalizeBankAccounts(rawBankAccounts),
         form_sections:
           (previewVendor?.form_sections as Vendor["form_sections"] | undefined) ??
           vendor.form_sections,
@@ -279,6 +286,8 @@ export function BookingFormClient({
   const [splitDates, setSplitDates] = React.useState(false);
   const [akadDate, setAkadDate] = React.useState("");
   const [resepsiDate, setResepsiDate] = React.useState("");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = React.useState<PaymentMethod | null>(null);
+  const [selectedPaymentSource, setSelectedPaymentSource] = React.useState<PaymentSource | null>(null);
   const [proofFile, setProofFile] = React.useState<File | null>(null);
   const [proofPreview, setProofPreview] = React.useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = React.useState(false);
@@ -358,6 +367,21 @@ export function BookingFormClient({
       return;
     }
 
+    if (!selectedPaymentMethod) {
+      setError(t("errorPaymentMethod"));
+      return;
+    }
+
+    if (selectedPaymentMethod === "bank" && !selectedPaymentSource) {
+      setError(t("errorPaymentSource"));
+      return;
+    }
+
+    if (selectedPaymentMethod === "qris" && !effectiveVendor.qris_image_url) {
+      setError(t("paymentNoQris"));
+      return;
+    }
+
     if (hasTerms && !termsAccepted) {
       setError(t("errorTermsRequired"));
       return;
@@ -390,7 +414,7 @@ export function BookingFormClient({
 
     // Upload bukti pembayaran jika ada
     let paymentProofUrl: string | null = null;
-    if (proofFile) {
+    if (proofFile && selectedPaymentMethod !== "cash") {
       setUploadingProof(true);
       try {
         const compressed = proofFile.type.startsWith("image/")
@@ -477,7 +501,9 @@ export function BookingFormClient({
               : {}),
             ...(customFieldSnapshots.length > 0 ? { custom_fields: customFieldSnapshots } : {}),
           },
-          paymentProofUrl,
+          paymentProofUrl: selectedPaymentMethod === "cash" ? null : paymentProofUrl,
+          paymentMethod: selectedPaymentMethod,
+          paymentSource: selectedPaymentSource,
           instagram: instagram || null,
         }),
       });
@@ -523,6 +549,7 @@ export function BookingFormClient({
       (location ? `Lokasi: ${location}\n` : "") +
       `\n💰 Total: ${formatCurrency(selectedBookingTotal)}\n` +
       `✅ DP: ${formatCurrency(dpVal)}\n` +
+      `💳 Metode: ${selectedPaymentMethod ? getPaymentMethodLabel(selectedPaymentMethod) : "-"}\n` +
       (proofFile ? "📎 Bukti transfer sudah diupload.\n" : "") +
       (instagram ? `📸 Instagram: ${instagram}\n` : "") +
       `\nMohon konfirmasi booking saya. Terima kasih! 🙏`;
@@ -595,6 +622,17 @@ export function BookingFormClient({
     [effectiveVendor.form_terms_content],
   );
   const hasTerms = effectiveVendor.form_terms_enabled && !isRichTextEmpty(termsContent);
+  const availablePaymentMethods = React.useMemo(
+    () =>
+      effectiveVendor.form_payment_methods.length > 0
+        ? effectiveVendor.form_payment_methods
+        : (["bank"] as PaymentMethod[]),
+    [effectiveVendor.form_payment_methods],
+  );
+  const enabledBankAccounts = React.useMemo(
+    () => getEnabledBankAccounts(effectiveVendor.bank_accounts || []),
+    [effectiveVendor.bank_accounts],
+  );
 
   React.useEffect(() => {
     if (!selectedService) {
@@ -615,6 +653,53 @@ export function BookingFormClient({
       return current;
     });
   }, [currentMinDpAmount, selectedService]);
+
+  React.useEffect(() => {
+    if (availablePaymentMethods.length === 1) {
+      setSelectedPaymentMethod(availablePaymentMethods[0]);
+      return;
+    }
+
+    setSelectedPaymentMethod((current) => {
+      if (current && availablePaymentMethods.includes(current)) return current;
+      return availablePaymentMethods[0] ?? null;
+    });
+  }, [availablePaymentMethods]);
+
+  React.useEffect(() => {
+    if (!selectedPaymentMethod) {
+      setSelectedPaymentSource(null);
+      return;
+    }
+
+    if (selectedPaymentMethod === "bank") {
+      setSelectedPaymentSource((current) => {
+        if (current?.type === "bank") {
+          const matched = enabledBankAccounts.find(
+            (bank) => bank.id === current.bank_id,
+          );
+          if (matched) return createPaymentSourceFromBank(matched);
+        }
+
+        return enabledBankAccounts[0]
+          ? createPaymentSourceFromBank(enabledBankAccounts[0])
+          : null;
+      });
+      return;
+    }
+
+    setSelectedPaymentSource({
+      type: selectedPaymentMethod,
+      label: getPaymentMethodLabel(selectedPaymentMethod),
+    });
+  }, [enabledBankAccounts, selectedPaymentMethod]);
+
+  React.useEffect(() => {
+    if (selectedPaymentMethod !== "cash") return;
+    setProofFile(null);
+    setProofPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [selectedPaymentMethod]);
 
   // Filter services by selected event type, split main vs addon
   const filteredServices = eventType
@@ -1184,38 +1269,188 @@ export function BookingFormClient({
           </div>
         );
       case "bank_accounts":
-        if (!effectiveVendor.bank_accounts || effectiveVendor.bank_accounts.length === 0) return null;
+        if (availablePaymentMethods.length === 0) return null;
         return (
-          <div key={item.id} className="space-y-2">
-            {effectiveVendor.bank_accounts.map((bank, index) => (
-              <div
-                key={index}
-                className="rounded-lg border bg-blue-50 dark:bg-blue-500/5 border-blue-200 dark:border-blue-500/20 p-3 space-y-1"
-              >
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-400">
-                  <CreditCard className="w-3.5 h-3.5" />
-                  {bank.bank_name}
-                </div>
-                <p className="font-mono text-sm font-bold tracking-wide">
-                  {bank.account_number}
-                </p>
-                {bank.account_name && (
-                  <p className="text-xs text-muted-foreground">
-                    a.n. {bank.account_name}
-                  </p>
+          <div key={item.id} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">
+                {t("paymentMethod")} <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {availablePaymentMethods.map((method) => {
+                  const active = selectedPaymentMethod === method;
+                  const Icon =
+                    method === "bank"
+                      ? CreditCard
+                      : method === "qris"
+                        ? QrCode
+                        : Banknote;
+
+                  return (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => setSelectedPaymentMethod(method)}
+                      className={`rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                        active
+                          ? "border-primary bg-primary/5 shadow-sm"
+                          : "border-input hover:bg-muted/40"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                              active
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold">
+                              {method === "bank"
+                                ? t("paymentMethodBank")
+                                : method === "qris"
+                                  ? t("paymentMethodQris")
+                                  : t("paymentMethodCash")}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {method === "bank"
+                                ? t("paymentMethodBankDesc")
+                                : method === "qris"
+                                  ? t("paymentMethodQrisDesc")
+                                  : t("paymentMethodCashDesc")}
+                            </p>
+                          </div>
+                        </div>
+                        <div
+                          className={`mt-1 h-5 w-5 rounded-full border ${
+                            active
+                              ? "border-primary bg-primary"
+                              : "border-muted-foreground/30"
+                          }`}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {selectedPaymentMethod === "bank" && (
+              <div className="space-y-3">
+                <label className="text-sm font-medium">
+                  {t("paymentSourceBank")} <span className="text-red-500">*</span>
+                </label>
+                {enabledBankAccounts.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                    {t("paymentNoBank")}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {enabledBankAccounts.map((bank) => {
+                      const isSelected =
+                        selectedPaymentSource?.type === "bank" &&
+                        selectedPaymentSource.bank_id === bank.id;
+
+                      return (
+                        <button
+                          key={bank.id}
+                          type="button"
+                          onClick={() =>
+                            setSelectedPaymentSource(
+                              createPaymentSourceFromBank(bank),
+                            )
+                          }
+                          className={`rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? "border-primary bg-primary/5 shadow-sm"
+                              : "border-input hover:bg-muted/40"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-base font-semibold">{bank.bank_name}</p>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {t("paymentMethodBankDescSingle", { bank: bank.bank_name })}
+                              </p>
+                            </div>
+                            {isSelected && (
+                              <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {selectedPaymentSource?.type === "bank" && (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/80 dark:border-blue-500/20 dark:bg-blue-500/5 p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
+                      <CreditCard className="w-4 h-4" />
+                      {selectedPaymentSource.bank_name}
+                    </div>
+                    <div className="rounded-lg bg-background/80 p-4">
+                      <p className="font-mono text-lg font-bold tracking-wide">
+                        {selectedPaymentSource.account_number}
+                      </p>
+                      {selectedPaymentSource.account_name && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          a.n. {selectedPaymentSource.account_name}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
-            ))}
+            )}
+
+            {selectedPaymentMethod === "qris" && (
+              <div className="space-y-3">
+                <label className="text-sm font-medium">
+                  {t("paymentSourceQris")}
+                </label>
+                <div className="rounded-xl border border-blue-200 bg-blue-50/80 dark:border-blue-500/20 dark:bg-blue-500/5 p-4 sm:p-5">
+                  <div className="rounded-lg bg-background/80 p-4 sm:p-6 min-h-56 flex items-center justify-center">
+                    {effectiveVendor.qris_image_url ? (
+                      <img
+                        src={effectiveVendor.qris_image_url}
+                        alt={t("paymentMethodQris")}
+                        className="w-full max-h-[22rem] object-contain mx-auto"
+                      />
+                    ) : (
+                      <div className="text-center text-sm text-muted-foreground">
+                        {t("paymentNoQris")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {selectedPaymentMethod === "cash" && (
+              <div className="rounded-xl border p-4 text-sm text-muted-foreground bg-muted/20">
+                {t("paymentCashNote")}
+              </div>
+            )}
           </div>
         );
       case "payment_proof":
-        if (effectiveVendor.form_show_proof === false) return null;
+        if (!selectedPaymentMethod || selectedPaymentMethod === "cash") return null;
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium flex items-center gap-1.5">
               <Camera className="w-3.5 h-3.5" />
               {t("buktiPembayaran")}
             </label>
+            <p className="text-xs text-muted-foreground">
+              {selectedPaymentMethod === "qris"
+                ? t("paymentProofQrisHint")
+                : t("paymentProofBankHint")}
+            </p>
             <div
               onClick={() => fileInputRef.current?.click()}
               className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer"

@@ -9,6 +9,12 @@ import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
 import { useLocale } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
+import {
+    extractBuiltInExtraFieldValues,
+    extractCustomFieldSnapshots,
+    type CustomFieldSnapshot,
+} from "@/components/form-builder/booking-form-layout";
+import { type PaymentSource } from "@/lib/payment-config";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -32,6 +38,11 @@ const EXTRA_FIELD_LABELS: Record<string, string> = {
 const LOCATION_FIELDS = new Set(["tempat_akad", "tempat_resepsi"]);
 
 type FreelancerDetail = { id: string; name: string; whatsapp_number: string | null };
+type BookingRow = Booking & {
+    payment_proof_url: string | null;
+    freelance: FreelancerDetail | null;
+    booking_freelance?: Array<{ freelance: FreelancerDetail | null }>;
+};
 
 type Booking = {
     id: string;
@@ -42,6 +53,7 @@ type Booking = {
     status: string;
     total_price: number;
     dp_paid: number;
+    payment_proof_url: string | null;
     drive_folder_url: string | null;
     portfolio_url: string | null;
     location: string | null;
@@ -49,7 +61,9 @@ type Booking = {
     instagram: string | null;
     event_type: string | null;
     notes: string | null;
-    extra_fields: Record<string, string> | null;
+    extra_fields: Record<string, unknown> | null;
+    payment_method: string | null;
+    payment_source: PaymentSource | null;
     services: { name: string; price: number } | null;
     freelancers: FreelancerDetail | null; // old single FK
     booking_freelancers: FreelancerDetail[]; // new junction
@@ -77,6 +91,31 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
             <span className="flex-1">{value}</span>
         </div>
     );
+}
+
+function formatPaymentMethod(method: string | null) {
+    if (method === "bank") return "Transfer Bank";
+    if (method === "qris") return "QRIS";
+    if (method === "cash") return "Cash";
+    return "-";
+}
+
+function formatPaymentSource(source: PaymentSource | null) {
+    if (!source) return "-";
+    if (source.type === "bank") {
+        const accountSuffix = source.account_number ? ` • ${source.account_number}` : "";
+        return `${source.bank_name}${accountSuffix}`;
+    }
+    return source.label;
+}
+
+function groupCustomSnapshotsBySection(snapshots: CustomFieldSnapshot[]) {
+    return snapshots.reduce<Record<string, CustomFieldSnapshot[]>>((acc, item) => {
+        const key = item.sectionId;
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(item);
+        return acc;
+    }, {});
 }
 
 function LocationValue({ address }: { address: string }) {
@@ -131,24 +170,32 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_method, payment_source, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token, studio_name").eq("id", user.id).single(),
             ]);
             // Normalize freelancers from junction table
-            const normalized = data ? {
-                ...data,
+            const rawBooking = data as BookingRow | null;
+            const normalized = rawBooking ? {
+                ...rawBooking,
                 booking_freelancers: (() => {
-                    const jf = (data as any).booking_freelance?.map((bf: any) => bf.freelance).filter(Boolean) || [];
-                    return jf.length > 0 ? jf : (data as any).freelance ? [(data as any).freelance] : [];
+                    const junctionFreelancers =
+                        rawBooking.booking_freelance
+                            ?.map((item) => item.freelance)
+                            .filter((item): item is FreelancerDetail => Boolean(item)) || [];
+                    return junctionFreelancers.length > 0
+                        ? junctionFreelancers
+                        : rawBooking.freelance
+                            ? [rawBooking.freelance]
+                            : [];
                 })()
-            } : data;
+            } : rawBooking;
             setBooking(normalized as unknown as Booking);
-            if (data) {
-                setClientStatus((data as any).client_status || "");
-                setQueuePos((data as any).queue_position || "");
+            if (rawBooking) {
+                setClientStatus(rawBooking.client_status || "");
+                setQueuePos(rawBooking.queue_position || "");
                 // Generate tracking_uuid if not set
-                if (!(data as any).tracking_uuid) {
+                if (!rawBooking.tracking_uuid) {
                     const uuid = crypto.randomUUID();
                     await supabase.from("bookings").update({ tracking_uuid: uuid }).eq("id", id);
                     setBooking(prev => prev ? { ...prev, tracking_uuid: uuid } : prev);
@@ -163,11 +210,11 @@ export default function BookingDetailPage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
             const { data } = await supabase.from("templates").select("id, type, content, content_en, event_type").eq("user_id", user.id);
-            setSavedTemplates((data || []) as any[]);
+            setSavedTemplates((data || []) as { id: string; type: string; content: string; content_en: string; event_type: string | null }[]);
         }
         load();
         fetchTemplates();
-    }, [id]);
+    }, [id, supabase]);
 
     async function handleSaveClientStatus() {
         if (!booking) return;
@@ -217,7 +264,7 @@ export default function BookingDetailPage() {
                     event_type: booking?.event_type || "-",
                     location: booking?.location || "-",
                     location_maps_url: booking?.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
-                    detail_location: (booking as any)?.location_detail || "-",
+                    detail_location: booking?.location_detail || "-",
                     notes: booking?.notes || "-",
                     tracking_link: booking?.tracking_uuid ? `${window.location.origin}/id/track/${booking.tracking_uuid}` : "-",
                     invoice_url: `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking?.booking_code || "")}`,
@@ -253,7 +300,7 @@ export default function BookingDetailPage() {
                     event_type: booking?.event_type || "-",
                     location: booking?.location || "-",
                     location_maps_url: booking?.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
-                    detail_location: (booking as any)?.location_detail || "-",
+                    detail_location: booking?.location_detail || "-",
                     notes: booking?.notes || "-",
                 };
                 msg = content.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || `{{${key}}}`);
@@ -350,10 +397,13 @@ export default function BookingDetailPage() {
     );
 
     const remaining = booking.total_price - booking.dp_paid;
-    const extraEntries = booking.extra_fields ? Object.entries(booking.extra_fields).filter(([, v]) => v) : [];
+    const builtInExtraFields = extractBuiltInExtraFieldValues(booking.extra_fields);
+    const extraEntries = Object.entries(builtInExtraFields);
+    const customFieldSnapshots = extractCustomFieldSnapshots(booking.extra_fields);
+    const customFieldsBySection = groupCustomSnapshotsBySection(customFieldSnapshots);
 
     // Separate nama_pasangan from other extra fields (show right after Nama for Wedding)
-    const namaPasangan = booking.extra_fields?.nama_pasangan;
+    const namaPasangan = builtInExtraFields.nama_pasangan;
     const otherExtraEntries = extraEntries.filter(([key]) => key !== "nama_pasangan");
 
     return (
@@ -437,6 +487,9 @@ export default function BookingDetailPage() {
                         LOCATION_FIELDS.has(key) ? <LocationValue address={val} /> : val
                     } />
                 ))}
+                {(customFieldsBySection.client_info || []).map((field) => (
+                    <InfoRow key={field.id} label={field.label} value={field.value} />
+                ))}
             </div>
 
             {/* Detail Sesi */}
@@ -455,6 +508,9 @@ export default function BookingDetailPage() {
                         ? booking.booking_freelancers.map(f => f.name).join(", ")
                         : "-"
                 } />
+                {(customFieldsBySection.session_details || []).map((field) => (
+                    <InfoRow key={field.id} label={field.label} value={field.value} />
+                ))}
             </div>
 
             {/* Keuangan */}
@@ -462,29 +518,34 @@ export default function BookingDetailPage() {
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Keuangan</h3>
                 <InfoRow label="Harga Total" value={<span className="font-semibold">{formatCurrency(booking.total_price)}</span>} />
                 <InfoRow label="DP Dibayar" value={formatCurrency(booking.dp_paid)} />
+                <InfoRow label="Metode Pembayaran" value={formatPaymentMethod(booking.payment_method)} />
+                <InfoRow label="Sumber Pembayaran" value={formatPaymentSource(booking.payment_source)} />
                 <InfoRow label="Sisa" value={
                     <span className={remaining > 0 ? "font-semibold text-amber-600 dark:text-amber-400" : "font-semibold text-green-600 dark:text-green-400"}>
                         {formatCurrency(remaining)}
                     </span>
                 } />
+                {(customFieldsBySection.payment_details || []).map((field) => (
+                    <InfoRow key={field.id} label={field.label} value={field.value} />
+                ))}
             </div>
 
             {/* Bukti Pembayaran */}
-            {(booking as any).payment_proof_url && (
+            {booking.payment_proof_url && (
                 <div className="rounded-xl border bg-card p-6 space-y-3">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                         <ImageIcon className="w-4 h-4" /> Bukti Pembayaran
                     </h3>
-                    {(booking as any).payment_proof_url.startsWith("http") ? (
-                        <a href={(booking as any).payment_proof_url} target="_blank" rel="noopener noreferrer" className="block">
+                    {booking.payment_proof_url.startsWith("http") ? (
+                        <a href={booking.payment_proof_url} target="_blank" rel="noopener noreferrer" className="block">
                             <img
-                                src={(booking as any).payment_proof_url}
+                                src={booking.payment_proof_url}
                                 alt="Bukti Pembayaran"
                                 className="max-w-sm w-full rounded-lg border shadow-sm"
                             />
                         </a>
                     ) : (
-                        <a href={(booking as any).payment_proof_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1.5">
+                        <a href={booking.payment_proof_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1.5">
                             <ExternalLink className="w-3.5 h-3.5" /> Lihat Bukti Pembayaran
                         </a>
                     )}

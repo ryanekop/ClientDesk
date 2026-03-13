@@ -5,6 +5,10 @@ import {
   type Service,
 } from "./booking-form-client";
 import type { Metadata } from "next";
+import {
+  normalizeBankAccounts,
+  normalizePaymentMethods,
+} from "@/lib/payment-config";
 
 type RawVendor = {
   id: string;
@@ -26,7 +30,9 @@ type RawVendor = {
   form_terms_link_text: string | null;
   form_terms_suffix_text: string | null;
   form_terms_content: string | null;
-  form_sections: unknown[] | null;
+  form_sections: unknown[] | Record<string, unknown[]> | null;
+  form_payment_methods: string[] | null;
+  qris_image_url: string | null;
   bank_accounts: Vendor["bank_accounts"] | null;
 };
 
@@ -79,9 +85,9 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
     .select(
       "id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, " +
         "avatar_url, invoice_logo_url, form_brand_color, form_greeting, " +
-        "form_event_types, form_show_location, form_show_notes, form_show_proof, " +
+        "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_proof, " +
         "form_terms_enabled, form_terms_agreement_text, form_terms_link_text, form_terms_suffix_text, form_terms_content, " +
-        "bank_accounts",
+        "form_sections, form_payment_methods, qris_image_url, bank_accounts",
     )
     .eq("vendor_slug", vendorSlug)
     .single()) as { data: RawVendor | null; error: unknown };
@@ -118,7 +124,7 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
     studio_name: vendor.studio_name ?? null,
     whatsapp_number: vendor.whatsapp_number ?? null,
     min_dp_percent: vendor.min_dp_percent ?? null,
-    min_dp_map: (vendor.min_dp_map as Record<string, number> | null) ?? null,
+    min_dp_map: (vendor.min_dp_map as Record<string, number | { mode: string; value: number }> | null) ?? null,
     avatar_url: vendor.avatar_url ?? null,
     invoice_logo_url: vendor.invoice_logo_url ?? null,
     form_brand_color: vendor.form_brand_color ?? "#000000",
@@ -134,7 +140,9 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
     form_terms_suffix_text: vendor.form_terms_suffix_text ?? null,
     form_terms_content: vendor.form_terms_content ?? null,
     form_sections: (vendor.form_sections as Vendor["form_sections"]) ?? [],
-    bank_accounts: (vendor.bank_accounts as Vendor["bank_accounts"]) ?? [],
+    form_payment_methods: normalizePaymentMethods(vendor.form_payment_methods),
+    qris_image_url: vendor.qris_image_url ?? null,
+    bank_accounts: normalizeBankAccounts(vendor.bank_accounts),
   };
 
   // Render form — data sudah tersedia, langsung tampil tanpa loading

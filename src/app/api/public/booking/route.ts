@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { pushEventToCalendar } from "@/utils/google/calendar";
 import { findOrCreateNestedPath, uploadFileToDrive, applyFolderTemplate } from "@/utils/google/drive";
+import {
+    createPaymentSourceFromBank,
+    getEnabledBankAccounts,
+    normalizeBankAccounts,
+    normalizePaymentMethods,
+    type PaymentMethod,
+    type PaymentSource,
+} from "@/lib/payment-config";
 
 type VendorRecord = {
     id: string;
@@ -15,6 +23,9 @@ type VendorRecord = {
     google_drive_refresh_token: string | null;
     drive_folder_format: string | null;
     calendar_event_format: string | null;
+    form_payment_methods: PaymentMethod[] | null;
+    qris_image_url: string | null;
+    bank_accounts: unknown[] | null;
 };
 
 const supabaseAdmin = createClient(
@@ -38,6 +49,8 @@ export async function POST(request: NextRequest) {
             notes,
             extraData,
             paymentProofUrl,
+            paymentMethod,
+            paymentSource,
             instagram,
         } = body;
 
@@ -48,7 +61,7 @@ export async function POST(request: NextRequest) {
         // Find vendor by slug
         const { data: vendorData } = await supabaseAdmin
             .from("profiles")
-            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, calendar_event_format")
+            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, calendar_event_format, form_payment_methods, qris_image_url, bank_accounts")
             .eq("vendor_slug", vendorSlug)
             .single();
         const vendor = vendorData as VendorRecord | null;
@@ -56,6 +69,43 @@ export async function POST(request: NextRequest) {
         if (!vendor) {
             return NextResponse.json({ success: false, error: "Vendor tidak ditemukan." }, { status: 404 });
         }
+
+        const availablePaymentMethods = normalizePaymentMethods(vendor.form_payment_methods);
+        const enabledBankAccounts = getEnabledBankAccounts(normalizeBankAccounts(vendor.bank_accounts));
+        const selectedPaymentMethod = paymentMethod as PaymentMethod | null;
+        let normalizedPaymentSource: PaymentSource | null = null;
+
+        if (!selectedPaymentMethod || !availablePaymentMethods.includes(selectedPaymentMethod)) {
+            return NextResponse.json({ success: false, error: "Metode pembayaran tidak valid." }, { status: 400 });
+        }
+
+        if (selectedPaymentMethod === "bank") {
+            const requestedBankId =
+                paymentSource && typeof paymentSource === "object" && typeof paymentSource.bank_id === "string"
+                    ? paymentSource.bank_id
+                    : "";
+            const matchedBank = enabledBankAccounts.find((bank) => bank.id === requestedBankId);
+            if (!matchedBank) {
+                return NextResponse.json({ success: false, error: "Rekening bank tidak valid." }, { status: 400 });
+            }
+            normalizedPaymentSource = createPaymentSourceFromBank(matchedBank);
+        } else if (selectedPaymentMethod === "qris") {
+            if (!vendor.qris_image_url) {
+                return NextResponse.json({ success: false, error: "QRIS tidak tersedia." }, { status: 400 });
+            }
+            normalizedPaymentSource = {
+                type: "qris",
+                label: "QRIS",
+            };
+        } else {
+            normalizedPaymentSource = {
+                type: "cash",
+                label: "Cash",
+            };
+        }
+
+        const normalizedPaymentProofUrl =
+            selectedPaymentMethod === "cash" ? null : paymentProofUrl || null;
 
         const rawExtraData =
             typeof extraData === "object" && extraData !== null
@@ -142,7 +192,9 @@ export async function POST(request: NextRequest) {
                 location_detail: locationDetail || null,
                 notes: notes || null,
                 extra_fields: Object.keys(sanitizedExtraData).length > 0 ? sanitizedExtraData : null,
-                payment_proof_url: paymentProofUrl || null,
+                payment_proof_url: normalizedPaymentProofUrl,
+                payment_method: selectedPaymentMethod,
+                payment_source: normalizedPaymentSource,
                 instagram: instagram || null,
                 status: "Pending",
                 is_fully_paid: dpPaid >= computedTotalPrice,
@@ -187,20 +239,20 @@ export async function POST(request: NextRequest) {
         }
 
         // Upload payment proof to vendor's Google Drive (fire-and-forget)
-        if (vendor.google_drive_access_token && vendor.google_drive_refresh_token && paymentProofUrl) {
+        if (vendor.google_drive_access_token && vendor.google_drive_refresh_token && normalizedPaymentProofUrl) {
             try {
                 let mimeType = "image/jpeg";
                 let buffer: Buffer;
 
-                if (paymentProofUrl.startsWith("data:")) {
+                if (normalizedPaymentProofUrl.startsWith("data:")) {
                     // Handle base64 data URI (legacy / edge case)
-                    const matches = paymentProofUrl.match(/^data:(.+);base64,(.+)$/);
+                    const matches = normalizedPaymentProofUrl.match(/^data:(.+);base64,(.+)$/);
                     if (!matches) throw new Error("Invalid data URI");
                     mimeType = matches[1];
                     buffer = Buffer.from(matches[2], "base64");
                 } else {
                     // Handle Supabase Storage URL — download the file first
-                    const fileRes = await fetch(paymentProofUrl);
+                    const fileRes = await fetch(normalizedPaymentProofUrl);
                     if (!fileRes.ok) throw new Error("Failed to download payment proof");
                     mimeType = fileRes.headers.get("content-type") || "image/jpeg";
                     const arrayBuffer = await fileRes.arrayBuffer();
@@ -244,10 +296,10 @@ export async function POST(request: NextRequest) {
                         .eq("id", booking.id);
 
                     // Delete from Supabase Storage to save quota
-                    if (paymentProofUrl && !paymentProofUrl.startsWith("data:")) {
+                    if (normalizedPaymentProofUrl && !normalizedPaymentProofUrl.startsWith("data:")) {
                         try {
                             // Extract path from Supabase URL: .../storage/v1/object/public/payment-proofs/path/file.jpg
-                            const urlObj = new URL(paymentProofUrl);
+                            const urlObj = new URL(normalizedPaymentProofUrl);
                             const pathMatch = urlObj.pathname.match(/\/storage\/v1\/object\/public\/payment-proofs\/(.+)/);
                             if (pathMatch) {
                                 await supabaseAdmin.storage

@@ -13,6 +13,8 @@ import {
   ToggleRight,
   RotateCcw,
   CreditCard,
+  QrCode,
+  Banknote,
   Plus,
   Trash2,
   RefreshCw,
@@ -20,6 +22,7 @@ import {
   Eye,
   Globe,
   FileText,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +40,16 @@ import {
   normalizeStoredFormLayout,
   type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
+import {
+  createEmptyBankAccount,
+  getEnabledBankAccounts,
+  getPaymentMethodLabel,
+  getValidBankAccounts,
+  normalizeBankAccounts,
+  normalizePaymentMethods,
+  type BankAccount,
+  type PaymentMethod,
+} from "@/lib/payment-config";
 
 const ALL_EVENT_TYPES = [
   "Umum",
@@ -52,12 +65,6 @@ const ALL_EVENT_TYPES = [
   "Komersil",
   "Lainnya",
 ];
-
-type BankAccount = {
-  bank_name: string;
-  account_number: string;
-  account_name: string;
-};
 
 type FormSectionsByEventType = Record<string, FormLayoutItem[]>;
 type PreviewPayload = {
@@ -76,6 +83,8 @@ type PreviewPayload = {
   form_terms_suffix_text: string;
   form_terms_content: string;
   form_sections: FormSectionsByEventType;
+  form_payment_methods: PaymentMethod[];
+  qris_image_url: string | null;
   bank_accounts: BankAccount[];
 };
 
@@ -94,6 +103,7 @@ type FormBookingSnapshot = {
   form_terms_suffix_text: string;
   form_terms_content: string;
   form_sections: FormSectionsByEventType;
+  form_payment_methods: PaymentMethod[];
   bank_accounts: BankAccount[];
   form_lang: string;
 };
@@ -102,25 +112,6 @@ function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string");
 }
-
-function toBankAccounts(value: unknown): BankAccount[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
-    .map((item) => ({
-      bank_name: typeof item.bank_name === "string" ? item.bank_name : "",
-      account_number:
-        typeof item.account_number === "string" ? item.account_number : "",
-      account_name: typeof item.account_name === "string" ? item.account_name : "",
-    }));
-}
-
-const EMPTY_BANK: BankAccount = {
-  bank_name: "",
-  account_number: "",
-  account_name: "",
-};
 
 const DEFAULTS = {
   brandColor: "#000000",
@@ -135,6 +126,7 @@ const DEFAULTS = {
   termsContent: "",
   minDpPercent: 50,
   minDpMap: {} as Record<string, { mode: "percent" | "fixed"; value: number }>,
+  paymentMethods: ["bank"] as PaymentMethod[],
   bankAccounts: [] as BankAccount[],
 };
 
@@ -153,6 +145,7 @@ function createFormBookingSnapshot({
   termsSuffixText,
   termsContent,
   formSectionsByEventType,
+  formPaymentMethods,
   bankAccounts,
   formLang,
 }: {
@@ -170,6 +163,7 @@ function createFormBookingSnapshot({
   termsSuffixText: string;
   termsContent: string;
   formSectionsByEventType: FormSectionsByEventType;
+  formPaymentMethods: PaymentMethod[];
   bankAccounts: BankAccount[];
   formLang: string;
 }): FormBookingSnapshot {
@@ -188,6 +182,7 @@ function createFormBookingSnapshot({
     form_terms_suffix_text: termsSuffixText,
     form_terms_content: termsContent,
     form_sections: formSectionsByEventType,
+    form_payment_methods: formPaymentMethods,
     bank_accounts: bankAccounts,
     form_lang: formLang,
   };
@@ -223,6 +218,9 @@ export default function FormBookingPage() {
   const [newCustomType, setNewCustomType] = React.useState("");
   const [showNotes, setShowNotes] = React.useState(DEFAULTS.showNotes);
   const [showProof, setShowProof] = React.useState(DEFAULTS.showProof);
+  const [formPaymentMethods, setFormPaymentMethods] = React.useState<PaymentMethod[]>(
+    DEFAULTS.paymentMethods,
+  );
   const [termsEnabled, setTermsEnabled] = React.useState(DEFAULTS.termsEnabled);
   const [termsAgreementText, setTermsAgreementText] = React.useState(
     DEFAULTS.termsAgreementText,
@@ -249,6 +247,10 @@ export default function FormBookingPage() {
 
   // Bank accounts (max 5)
   const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
+  const [qrisImageUrl, setQrisImageUrl] = React.useState<string | null>(null);
+  const [qrisUploading, setQrisUploading] = React.useState(false);
+  const [qrisDeleting, setQrisDeleting] = React.useState(false);
+  const [saveMessageTone, setSaveMessageTone] = React.useState<"success" | "error">("success");
 
   const [iframeKey, setIframeKey] = React.useState(0);
   const [mobileTab, setMobileTab] = React.useState<"settings" | "preview">(
@@ -257,6 +259,7 @@ export default function FormBookingPage() {
   const [isDriveConnected, setIsDriveConnected] = React.useState(false);
   const [siteUrl, setSiteUrl] = React.useState("");
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
+  const qrisInputRef = React.useRef<HTMLInputElement>(null);
 
   const formUrl = vendorSlug
     ? `${siteUrl}/${formLang}/formbooking/${vendorSlug}`
@@ -288,9 +291,9 @@ export default function FormBookingPage() {
       form_terms_suffix_text: termsSuffixText,
       form_terms_content: termsContent,
       form_sections: formSectionsByEventType,
-      bank_accounts: bankAccounts.filter(
-        (bank) => bank.bank_name && bank.account_number,
-      ),
+      form_payment_methods: formPaymentMethods,
+      qris_image_url: qrisImageUrl,
+      bank_accounts: getValidBankAccounts(bankAccounts),
     }),
     [
       bankAccounts,
@@ -301,8 +304,10 @@ export default function FormBookingPage() {
       minDpMap,
       minDpPercent,
       selectedEventTypes,
+      formPaymentMethods,
       showNotes,
       showProof,
+      qrisImageUrl,
       termsAgreementText,
       termsContent,
       termsEnabled,
@@ -328,6 +333,7 @@ export default function FormBookingPage() {
         termsSuffixText,
         termsContent,
         formSectionsByEventType,
+        formPaymentMethods,
         bankAccounts,
         formLang,
       }),
@@ -337,6 +343,7 @@ export default function FormBookingPage() {
       customEventTypes,
       formLang,
       formSectionsByEventType,
+      formPaymentMethods,
       greeting,
       minDpMap,
       minDpPercent,
@@ -362,6 +369,17 @@ export default function FormBookingPage() {
   React.useEffect(() => {
     setSiteUrl(window.location.origin);
   }, [supabase]);
+
+  React.useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "GOOGLE_DRIVE_SUCCESS") {
+        setIsDriveConnected(true);
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
 
   React.useEffect(() => {
     async function load() {
@@ -439,7 +457,14 @@ export default function FormBookingPage() {
         }
         setFormSectionsByEventType(normalizedSections);
         const loadedShowNotes = p.form_show_notes ?? DEFAULTS.showNotes;
-        const loadedBanks = toBankAccounts(p.bank_accounts);
+        const loadedBanks = normalizeBankAccounts(p.bank_accounts);
+        const loadedPaymentMethods = normalizePaymentMethods(
+          (p as Record<string, unknown>).form_payment_methods,
+        );
+        const loadedQrisImageUrl =
+          typeof (p as Record<string, unknown>).qris_image_url === "string"
+            ? ((p as Record<string, unknown>).qris_image_url as string)
+            : null;
         const loadedFormLang =
           ((p as Record<string, unknown>).form_lang as string) || "id";
         const loadedTermsEnabled =
@@ -462,6 +487,8 @@ export default function FormBookingPage() {
             : DEFAULTS.termsContent;
         setShowNotes(loadedShowNotes);
         setBankAccounts(loadedBanks);
+        setFormPaymentMethods(loadedPaymentMethods);
+        setQrisImageUrl(loadedQrisImageUrl);
         setFormLang(loadedFormLang);
         setTermsEnabled(loadedTermsEnabled);
         setTermsAgreementText(loadedTermsAgreementText);
@@ -496,6 +523,7 @@ export default function FormBookingPage() {
               termsSuffixText: loadedTermsSuffixText,
               termsContent: loadedTermsContent,
               formSectionsByEventType: normalizedSections,
+              formPaymentMethods: loadedPaymentMethods,
               bankAccounts: loadedBanks,
               formLang: loadedFormLang,
             }),
@@ -570,6 +598,7 @@ export default function FormBookingPage() {
   async function handleSave() {
     if (!profileId) return false;
     setSaving(true);
+    setSaveMessageTone("success");
 
     let slug = vendorSlug;
     if (!slug && studioName) {
@@ -582,9 +611,29 @@ export default function FormBookingPage() {
     }
 
     // Filter out empty bank accounts
-    const validBanks = bankAccounts.filter(
-      (b) => b.bank_name && b.account_number,
-    );
+    const validBanks = getValidBankAccounts(bankAccounts);
+    const enabledBanks = getEnabledBankAccounts(bankAccounts);
+
+    if (formPaymentMethods.length === 0) {
+      setSavedMsg("Pilih minimal satu metode pembayaran.");
+      setSaveMessageTone("error");
+      setSaving(false);
+      return false;
+    }
+
+    if (formPaymentMethods.includes("bank") && enabledBanks.length === 0) {
+      setSavedMsg("Aktifkan minimal satu rekening bank untuk form booking.");
+      setSaveMessageTone("error");
+      setSaving(false);
+      return false;
+    }
+
+    if (formPaymentMethods.includes("qris") && (!isDriveConnected || !qrisImageUrl)) {
+      setSavedMsg("QRIS memerlukan Google Drive terhubung dan gambar QRIS yang sudah diupload.");
+      setSaveMessageTone("error");
+      setSaving(false);
+      return false;
+    }
 
     const { error } = await supabase
       .from("profiles")
@@ -599,6 +648,7 @@ export default function FormBookingPage() {
         form_sections: formSectionsByEventType,
         form_show_notes: showNotes,
         form_show_proof: showProof,
+        form_payment_methods: formPaymentMethods,
         form_terms_enabled: termsEnabled,
         form_terms_agreement_text: termsAgreementText || null,
         form_terms_link_text: termsLinkText || null,
@@ -611,6 +661,7 @@ export default function FormBookingPage() {
 
     if (error) {
       setSavedMsg("Gagal menyimpan.");
+      setSaveMessageTone("error");
       setTimeout(() => setSavedMsg(""), 3000);
       setSaving(false);
       return false;
@@ -634,6 +685,7 @@ export default function FormBookingPage() {
           termsSuffixText,
           termsContent,
           formSectionsByEventType,
+          formPaymentMethods,
           bankAccounts: validBanks,
           formLang,
         }),
@@ -652,6 +704,7 @@ export default function FormBookingPage() {
     setSelectedEventTypes([...DEFAULTS.eventTypes]);
     setShowNotes(DEFAULTS.showNotes);
     setShowProof(false); // Requires Google Drive — don't enable by default
+    setFormPaymentMethods([...DEFAULTS.paymentMethods]);
     setTermsEnabled(DEFAULTS.termsEnabled);
     setTermsAgreementText(DEFAULTS.termsAgreementText);
     setTermsLinkText(DEFAULTS.termsLinkText);
@@ -662,6 +715,7 @@ export default function FormBookingPage() {
     setFormSectionsByEventType({});
     setBankAccounts([]);
     setFormLang("id");
+    setQrisImageUrl(null);
     setShowResetConfirm(false);
   }
 
@@ -683,9 +737,17 @@ export default function FormBookingPage() {
     );
   }
 
+  function toggleBankEnabled(index: number) {
+    setBankAccounts((prev) =>
+      prev.map((bank, i) =>
+        i === index ? { ...bank, enabled: !bank.enabled } : bank,
+      ),
+    );
+  }
+
   function addBank() {
     if (bankAccounts.length < 5)
-      setBankAccounts((prev) => [...prev, { ...EMPTY_BANK }]);
+      setBankAccounts((prev) => [...prev, createEmptyBankAccount()]);
   }
 
   function removeBank(index: number) {
@@ -697,6 +759,87 @@ export default function FormBookingPage() {
       ...prev,
       [eventType]: normalizeStoredFormLayout(sections, eventType),
     }));
+  }
+
+  function togglePaymentMethod(method: PaymentMethod) {
+    setFormPaymentMethods((prev) =>
+      prev.includes(method)
+        ? prev.filter((item) => item !== method)
+        : [...prev, method],
+    );
+  }
+
+  function connectGoogleDrive() {
+    const w = 520;
+    const h = 700;
+    const left = window.screenX + (window.outerWidth - w) / 2;
+    const top = window.screenY + (window.outerHeight - h) / 2;
+    window.open(
+      "/api/google/drive/auth",
+      "google-drive-auth",
+      `width=${w},height=${h},left=${left},top=${top},popup=yes`,
+    );
+  }
+
+  async function handleQrisFileChange(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setQrisUploading(true);
+    setSaveMessageTone("success");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/google/drive/upload-qris", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await res.json();
+
+      if (!result.success) {
+        setSavedMsg(result.error || "Gagal upload QRIS.");
+        setSaveMessageTone("error");
+        return;
+      }
+
+      setQrisImageUrl(result.qrisImageUrl || null);
+      setSavedMsg("QRIS berhasil diupload.");
+      setSaveMessageTone("success");
+    } catch {
+      setSavedMsg("Gagal upload QRIS.");
+      setSaveMessageTone("error");
+    } finally {
+      if (qrisInputRef.current) qrisInputRef.current.value = "";
+      setQrisUploading(false);
+    }
+  }
+
+  async function handleDeleteQris() {
+    setQrisDeleting(true);
+    try {
+      const res = await fetch("/api/google/drive/delete-qris", {
+        method: "POST",
+      });
+      const result = await res.json();
+
+      if (!result.success) {
+        setSavedMsg(result.error || "Gagal menghapus QRIS.");
+        setSaveMessageTone("error");
+        return;
+      }
+
+      setQrisImageUrl(null);
+      setSavedMsg("QRIS berhasil dihapus.");
+      setSaveMessageTone("success");
+    } catch {
+      setSavedMsg("Gagal menghapus QRIS.");
+      setSaveMessageTone("error");
+    } finally {
+      setQrisDeleting(false);
+    }
   }
 
   React.useEffect(() => {
@@ -746,6 +889,8 @@ export default function FormBookingPage() {
 
   const inputClass =
     "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
+  const validBankAccounts = getValidBankAccounts(bankAccounts);
+  const enabledBankAccounts = getEnabledBankAccounts(bankAccounts);
 
   if (loading) {
     return (
@@ -936,109 +1081,300 @@ export default function FormBookingPage() {
                 </div>
               </div>
 
-              {/* Bank Accounts */}
+              {/* Payment Methods */}
               <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
                 <div className="px-6 py-4 border-b">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold flex items-center gap-2">
-                        <CreditCard className="w-4 h-4" /> Rekening Pembayaran
-                      </h3>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Maksimal 5 rekening. Akan ditampilkan di form booking
-                        publik.
-                      </p>
-                    </div>
-                    {bankAccounts.length < 5 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={addBank}
-                        className="gap-1.5 shrink-0"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Tambah
-                      </Button>
-                    )}
-                  </div>
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <CreditCard className="w-4 h-4" /> Metode Pembayaran
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Pilih metode pembayaran yang tampil di form booking, atur rekening bank yang aktif, dan upload gambar QRIS.
+                  </p>
                 </div>
                 <div className="p-6 space-y-4">
-                  {bankAccounts.length === 0 ? (
-                    <div className="text-center py-6">
-                      <CreditCard className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">
-                        Belum ada rekening.
-                      </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={addBank}
-                        className="gap-1.5 mt-3"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Tambah Rekening
-                      </Button>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {[
+                      {
+                        id: "bank" as PaymentMethod,
+                        title: "Transfer Bank",
+                        description: `${enabledBankAccounts.length}/${validBankAccounts.length} rekening aktif`,
+                        icon: CreditCard,
+                        disabled: false,
+                      },
+                      {
+                        id: "qris" as PaymentMethod,
+                        title: "QRIS",
+                        description: qrisImageUrl
+                          ? "Gambar QRIS siap dipakai"
+                          : "Upload gambar QRIS",
+                        icon: QrCode,
+                        disabled: false,
+                      },
+                      {
+                        id: "cash" as PaymentMethod,
+                        title: "Cash",
+                        description: "Bukti pembayaran otomatis nonaktif",
+                        icon: Banknote,
+                        disabled: false,
+                      },
+                    ].map((method) => {
+                      const Icon = method.icon;
+                      const active = formPaymentMethods.includes(method.id);
+                      return (
+                        <button
+                          key={method.id}
+                          type="button"
+                          onClick={() => togglePaymentMethod(method.id)}
+                          className={`rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                            active
+                              ? "border-primary bg-primary/5 shadow-sm"
+                              : "border-input hover:bg-muted/40"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                                  active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                                }`}
+                              >
+                                <Icon className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold">{method.title}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {method.description}
+                                </p>
+                              </div>
+                            </div>
+                            <div
+                              className={`mt-1 h-5 w-5 rounded-full border ${
+                                active ? "border-primary bg-primary" : "border-muted-foreground/30"
+                              }`}
+                            />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-sm font-semibold flex items-center gap-2">
+                          <CreditCard className="w-4 h-4" /> Rekening Bank
+                        </h4>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Maksimal 5 rekening. Klien hanya melihat rekening yang dicentang aktif.
+                        </p>
+                      </div>
+                      {bankAccounts.length < 5 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={addBank}
+                          className="gap-1.5 shrink-0"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Tambah
+                        </Button>
+                      )}
                     </div>
-                  ) : (
-                    bankAccounts.map((bank, i) => (
-                      <div
-                        key={i}
-                        className="rounded-lg border p-4 space-y-3 relative"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-muted-foreground">
-                            Rekening #{i + 1}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => removeBank(i)}
-                            className="text-red-500 hover:text-red-600 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+
+                    {bankAccounts.length === 0 ? (
+                      <div className="rounded-lg border border-dashed px-4 py-6 text-center">
+                        <p className="text-sm text-muted-foreground">
+                          Belum ada rekening bank.
+                        </p>
+                      </div>
+                    ) : (
+                      bankAccounts.map((bank, i) => (
+                        <div
+                          key={bank.id}
+                          className="rounded-lg border bg-background p-4 space-y-3 relative"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <span className="text-xs font-semibold text-muted-foreground">
+                              Rekening #{i + 1}
+                            </span>
+                            <div className="flex items-center gap-4">
+                              <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={bank.enabled}
+                                  onChange={() => toggleBankEnabled(i)}
+                                  className="accent-primary h-4 w-4"
+                                />
+                                Aktif di form booking
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => removeBank(i)}
+                                className="text-red-500 hover:text-red-600 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Nama Bank
+                              </label>
+                              <input
+                                value={bank.bank_name}
+                                onChange={(e) =>
+                                  updateBank(i, "bank_name", e.target.value)
+                                }
+                                placeholder="BCA / BNI / Mandiri"
+                                className={inputClass}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Nomor Rekening
+                              </label>
+                              <input
+                                value={bank.account_number}
+                                onChange={(e) =>
+                                  updateBank(i, "account_number", e.target.value)
+                                }
+                                placeholder="1234567890"
+                                className={inputClass}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Atas Nama
+                              </label>
+                              <input
+                                value={bank.account_name}
+                                onChange={(e) =>
+                                  updateBank(i, "account_name", e.target.value)
+                                }
+                                placeholder="Nama Pemilik Rekening"
+                                className={inputClass}
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">
-                              Bank / E-Wallet
-                            </label>
-                            <input
-                              value={bank.bank_name}
-                              onChange={(e) =>
-                                updateBank(i, "bank_name", e.target.value)
-                              }
-                              placeholder="BCA / DANA"
-                              className={inputClass}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">
-                              Nomor Rekening
-                            </label>
-                            <input
-                              value={bank.account_number}
-                              onChange={(e) =>
-                                updateBank(i, "account_number", e.target.value)
-                              }
-                              placeholder="1234567890"
-                              className={inputClass}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">
-                              Atas Nama
-                            </label>
-                            <input
-                              value={bank.account_name}
-                              onChange={(e) =>
-                                updateBank(i, "account_name", e.target.value)
-                              }
-                              placeholder="Nama"
-                              className={inputClass}
-                            />
-                          </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-sm font-semibold flex items-center gap-2">
+                          <QrCode className="w-4 h-4" /> QRIS
+                        </h4>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Gambar QRIS disimpan ke Google Drive vendor yang sedang login.
+                        </p>
+                      </div>
+                      {isDriveConnected ? (
+                        <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                          Google Drive terhubung
+                        </span>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={connectGoogleDrive}
+                        >
+                          Hubungkan Google Drive
+                        </Button>
+                      )}
+                    </div>
+
+                    {qrisImageUrl ? (
+                      <div className="rounded-xl border bg-background p-4 space-y-3">
+                        <div className="rounded-lg border bg-muted/30 p-4 flex items-center justify-center min-h-48">
+                          <img
+                            src={qrisImageUrl}
+                            alt="QRIS"
+                            className="max-h-72 w-full object-contain"
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            type="button"
+                            onClick={() => qrisInputRef.current?.click()}
+                            disabled={!isDriveConnected || qrisUploading}
+                            className="gap-1.5"
+                          >
+                            {qrisUploading ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Upload className="w-4 h-4" />
+                            )}
+                            Ganti QRIS
+                          </Button>
+                          <Button
+                            variant="outline"
+                            type="button"
+                            onClick={handleDeleteQris}
+                            disabled={qrisDeleting}
+                            className="gap-1.5 text-red-500 hover:text-red-600"
+                          >
+                            {qrisDeleting ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                            Hapus
+                          </Button>
                         </div>
                       </div>
-                    ))
-                  )}
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => isDriveConnected && qrisInputRef.current?.click()}
+                        disabled={!isDriveConnected || qrisUploading}
+                        className={`w-full rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
+                          isDriveConnected
+                            ? "border-input hover:border-primary/50 hover:bg-muted/30 cursor-pointer"
+                            : "border-input opacity-60 cursor-not-allowed"
+                        }`}
+                      >
+                        {qrisUploading ? (
+                          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto mb-2" />
+                        ) : (
+                          <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                        )}
+                        <p className="text-sm font-medium">
+                          {isDriveConnected
+                            ? "Klik untuk upload QRIS"
+                            : "Hubungkan Google Drive untuk upload QRIS"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Format gambar PNG / JPG. Akan tampil di form booking publik.
+                        </p>
+                      </button>
+                    )}
+
+                    <input
+                      ref={qrisInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleQrisFileChange}
+                    />
+                  </div>
+
+                  <div className="rounded-lg border bg-background px-4 py-3 text-xs text-muted-foreground">
+                    Ringkasan: {formPaymentMethods.length > 0 ? formPaymentMethods.map(getPaymentMethodLabel).join(", ") : "belum ada metode aktif"}.
+                    {formPaymentMethods.includes("bank")
+                      ? ` Rekening aktif: ${enabledBankAccounts.length}.`
+                      : ""}
+                    {formPaymentMethods.includes("qris")
+                      ? qrisImageUrl
+                        ? " QRIS siap ditampilkan."
+                        : " QRIS belum diupload."
+                      : ""}
+                  </div>
                 </div>
               </div>
 
@@ -1209,12 +1545,6 @@ export default function FormBookingPage() {
                       setter: setShowNotes,
                       disabled: false,
                     },
-                    {
-                      label: "Upload Bukti Pembayaran",
-                      value: showProof,
-                      setter: setShowProof,
-                      disabled: !isDriveConnected,
-                    },
                   ].map((item) => (
                     <div key={item.label}>
                       <label
@@ -1234,20 +1564,11 @@ export default function FormBookingPage() {
                           />
                         </button>
                       </label>
-                      {item.disabled && (
-                        <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
-                          Hubungkan Google Drive di Pengaturan untuk mengaktifkan
-                          fitur ini.
-                        </p>
-                      )}
-                      {item.label === "Upload Bukti Pembayaran" && !item.disabled && (
-                        <p className="text-[11px] text-muted-foreground mt-1">
-                          📁 File tersimpan di Google Drive pada folder klien
-                          <span className="font-semibold"> &quot;Nama Klien / Nama Invoice&quot;</span>
-                        </p>
-                      )}
                     </div>
                   ))}
+                  <p className="text-[11px] text-muted-foreground">
+                    Upload bukti pembayaran di form publik akan mengikuti metode yang dipilih klien: aktif untuk bank/QRIS, nonaktif otomatis untuk cash.
+                  </p>
                 </div>
               </div>
 
@@ -1391,7 +1712,13 @@ export default function FormBookingPage() {
               <RotateCcw className="w-4 h-4" /> Reset Default
             </Button>
             {savedMsg && (
-              <span className="text-sm text-green-600 dark:text-green-400">
+              <span
+                className={`text-sm ${
+                  saveMessageTone === "error"
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-green-600 dark:text-green-400"
+                }`}
+              >
                 {savedMsg}
               </span>
             )}

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  normalizeBankAccounts,
+  normalizePaymentMethods,
+} from "@/lib/payment-config";
 
 interface VendorProfile {
   id: string;
@@ -21,7 +25,9 @@ interface VendorProfile {
   form_terms_link_text: string | null;
   form_terms_suffix_text: string | null;
   form_terms_content: string | null;
-  form_sections: unknown[] | null;
+  form_sections: unknown[] | Record<string, unknown[]> | null;
+  form_payment_methods: string[] | null;
+  qris_image_url: string | null;
   bank_accounts: unknown[] | null;
 }
 
@@ -47,7 +53,7 @@ export async function GET(request: NextRequest) {
         "avatar_url, invoice_logo_url, form_brand_color, form_greeting, " +
         "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_proof, " +
         "form_terms_enabled, form_terms_agreement_text, form_terms_link_text, form_terms_suffix_text, form_terms_content, " +
-        "form_sections, bank_accounts",
+        "form_sections, form_payment_methods, qris_image_url, bank_accounts",
     )
     .eq("vendor_slug", slug)
     .single();
@@ -93,7 +99,9 @@ export async function GET(request: NextRequest) {
         form_terms_suffix_text: vendor.form_terms_suffix_text || null,
         form_terms_content: vendor.form_terms_content || null,
         form_sections: vendor.form_sections || [],
-        bank_accounts: vendor.bank_accounts || [],
+        form_payment_methods: normalizePaymentMethods(vendor.form_payment_methods),
+        qris_image_url: vendor.qris_image_url || null,
+        bank_accounts: normalizeBankAccounts(vendor.bank_accounts),
       },
       services: services || [],
     },

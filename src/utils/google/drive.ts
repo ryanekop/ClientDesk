@@ -169,6 +169,10 @@ export async function uploadFileToDrive(
     };
 }
 
+export function buildDriveFilePublicUrl(fileId: string) {
+    return `https://drive.google.com/uc?export=view&id=${fileId}`;
+}
+
 /**
  * Creates a chain of nested folders.
  * e.g. pathParts = ["Data Booking Client Desk", "Client A", "File Client"]
