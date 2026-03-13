@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { pushEventToCalendar } from "@/utils/google/calendar";
-import { findOrCreateNestedPath, uploadFileToDrive, applyFolderTemplate } from "@/utils/google/drive";
 import {
     DEFAULT_CALENDAR_EVENT_FORMAT,
-    DEFAULT_DRIVE_FOLDER_FORMAT,
     buildCalendarRangeFromLocalInput,
     resolveTemplateByEventType,
     applyCalendarTemplate,
@@ -18,6 +16,7 @@ import {
     type PaymentMethod,
     type PaymentSource,
 } from "@/lib/payment-config";
+import { uploadPaymentProofToDrive } from "@/lib/payment-proof-drive";
 
 type VendorRecord = {
     id: string;
@@ -35,7 +34,26 @@ type VendorRecord = {
     calendar_event_format_map: Record<string, string> | null;
     form_payment_methods: PaymentMethod[] | null;
     qris_image_url: string | null;
+    qris_drive_file_id: string | null;
     bank_accounts: unknown[] | null;
+};
+
+type BookingRequestBody = {
+    vendorSlug: string;
+    clientName: string;
+    clientWhatsapp: string;
+    eventType: string | null;
+    sessionDate: string;
+    serviceId: string;
+    dpPaid: number;
+    location: string | null;
+    locationDetail: string | null;
+    notes: string | null;
+    extraData: Record<string, unknown> | null;
+    paymentProofUrl: string | null;
+    paymentMethod: PaymentMethod | null;
+    paymentSource: PaymentSource | null;
+    instagram: string | null;
 };
 
 const supabaseAdmin = createClient(
@@ -45,7 +63,43 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
     try {
-        const body = await request.json();
+        const contentType = request.headers.get("content-type") || "";
+        let body: BookingRequestBody;
+        let paymentProofFile: File | null = null;
+
+        if (contentType.includes("multipart/form-data")) {
+            const formData = await request.formData();
+            body = {
+                vendorSlug: String(formData.get("vendorSlug") || ""),
+                clientName: String(formData.get("clientName") || ""),
+                clientWhatsapp: String(formData.get("clientWhatsapp") || ""),
+                eventType: formData.get("eventType") ? String(formData.get("eventType")) : null,
+                sessionDate: String(formData.get("sessionDate") || ""),
+                serviceId: String(formData.get("serviceId") || ""),
+                dpPaid: Number(formData.get("dpPaid") || 0),
+                location: formData.get("location") ? String(formData.get("location")) : null,
+                locationDetail: formData.get("locationDetail") ? String(formData.get("locationDetail")) : null,
+                notes: formData.get("notes") ? String(formData.get("notes")) : null,
+                extraData: formData.get("extraData")
+                    ? JSON.parse(String(formData.get("extraData")))
+                    : null,
+                paymentProofUrl: formData.get("paymentProofUrl")
+                    ? String(formData.get("paymentProofUrl"))
+                    : null,
+                paymentMethod: formData.get("paymentMethod")
+                    ? (String(formData.get("paymentMethod")) as PaymentMethod)
+                    : null,
+                paymentSource: formData.get("paymentSource")
+                    ? (JSON.parse(String(formData.get("paymentSource"))) as PaymentSource)
+                    : null,
+                instagram: formData.get("instagram") ? String(formData.get("instagram")) : null,
+            };
+            const nextFile = formData.get("paymentProofFile");
+            paymentProofFile = nextFile instanceof File && nextFile.size > 0 ? nextFile : null;
+        } else {
+            body = await request.json();
+        }
+
         const {
             vendorSlug,
             clientName,
@@ -71,7 +125,7 @@ export async function POST(request: NextRequest) {
         // Find vendor by slug
         const { data: vendorData } = await supabaseAdmin
             .from("profiles")
-            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, calendar_event_format, calendar_event_format_map, form_payment_methods, qris_image_url, bank_accounts")
+            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, calendar_event_format, calendar_event_format_map, form_payment_methods, qris_image_url, qris_drive_file_id, bank_accounts")
             .eq("vendor_slug", vendorSlug)
             .single();
         const vendor = vendorData as VendorRecord | null;
@@ -91,7 +145,10 @@ export async function POST(request: NextRequest) {
 
         if (selectedPaymentMethod === "bank") {
             const requestedBankId =
-                paymentSource && typeof paymentSource === "object" && typeof paymentSource.bank_id === "string"
+                paymentSource &&
+                typeof paymentSource === "object" &&
+                paymentSource.type === "bank" &&
+                typeof paymentSource.bank_id === "string"
                     ? paymentSource.bank_id
                     : "";
             const matchedBank = enabledBankAccounts.find((bank) => bank.id === requestedBankId);
@@ -100,7 +157,7 @@ export async function POST(request: NextRequest) {
             }
             normalizedPaymentSource = createPaymentSourceFromBank(matchedBank);
         } else if (selectedPaymentMethod === "qris") {
-            if (!vendor.qris_image_url) {
+            if (!vendor.qris_image_url && !vendor.qris_drive_file_id) {
                 return NextResponse.json({ success: false, error: "QRIS tidak tersedia." }, { status: 400 });
             }
             normalizedPaymentSource = {
@@ -116,6 +173,16 @@ export async function POST(request: NextRequest) {
 
         const normalizedPaymentProofUrl =
             selectedPaymentMethod === "cash" ? null : paymentProofUrl || null;
+
+        if (
+            selectedPaymentMethod !== "cash" &&
+            (!vendor.google_drive_access_token || !vendor.google_drive_refresh_token)
+        ) {
+            return NextResponse.json(
+                { success: false, error: "Google Drive admin belum terhubung." },
+                { status: 400 },
+            );
+        }
 
         const rawExtraData =
             typeof extraData === "object" && extraData !== null
@@ -216,6 +283,42 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: error.message }, { status: 500 });
         }
 
+        if (selectedPaymentMethod !== "cash" && paymentProofFile) {
+            try {
+                if (!vendor.google_drive_access_token || !vendor.google_drive_refresh_token) {
+                    throw new Error("Google Drive admin belum terhubung.");
+                }
+
+                const fileBuffer = Buffer.from(await paymentProofFile.arrayBuffer());
+                const uploaded = await uploadPaymentProofToDrive({
+                    accessToken: vendor.google_drive_access_token,
+                    refreshToken: vendor.google_drive_refresh_token,
+                    driveFolderFormat: vendor.drive_folder_format,
+                    driveFolderFormatMap: vendor.drive_folder_format_map,
+                    studioName: vendor.studio_name,
+                    bookingCode: booking.booking_code,
+                    clientName,
+                    eventType,
+                    sessionDate,
+                    fileName: paymentProofFile.name || `${booking.booking_code}_proof`,
+                    mimeType: paymentProofFile.type || "application/octet-stream",
+                    fileBuffer,
+                    stage: "initial",
+                });
+
+                await supabaseAdmin
+                    .from("bookings")
+                    .update({
+                        payment_proof_url: uploaded.fileUrl,
+                        payment_proof_drive_file_id: uploaded.fileId,
+                    })
+                    .eq("id", booking.id);
+            } catch (uploadError) {
+                await supabaseAdmin.from("bookings").delete().eq("id", booking.id);
+                throw uploadError;
+            }
+        }
+
         // Auto-sync to Google Calendar (fire-and-forget)
         if (vendor.google_access_token && vendor.google_refresh_token && sessionDate) {
             try {
@@ -252,94 +355,6 @@ export async function POST(request: NextRequest) {
                 );
             } catch {
                 // Silently ignore — calendar may not be connected
-            }
-        }
-
-        // Upload payment proof to vendor's Google Drive (fire-and-forget)
-        if (vendor.google_drive_access_token && vendor.google_drive_refresh_token && normalizedPaymentProofUrl) {
-            try {
-                let mimeType = "image/jpeg";
-                let buffer: Buffer;
-
-                if (normalizedPaymentProofUrl.startsWith("data:")) {
-                    // Handle base64 data URI (legacy / edge case)
-                    const matches = normalizedPaymentProofUrl.match(/^data:(.+);base64,(.+)$/);
-                    if (!matches) throw new Error("Invalid data URI");
-                    mimeType = matches[1];
-                    buffer = Buffer.from(matches[2], "base64");
-                } else {
-                    // Handle Supabase Storage URL — download the file first
-                    const fileRes = await fetch(normalizedPaymentProofUrl);
-                    if (!fileRes.ok) throw new Error("Failed to download payment proof");
-                    mimeType = fileRes.headers.get("content-type") || "image/jpeg";
-                    const arrayBuffer = await fileRes.arrayBuffer();
-                    buffer = Buffer.from(arrayBuffer);
-                }
-
-                const ext = mimeType.includes("png") ? "png" : mimeType.includes("webp") ? "webp" : mimeType.includes("pdf") ? "pdf" : "jpg";
-                const fileName = `${bookingCode}_${clientName.replace(/[^a-zA-Z0-9]/g, "_")}.${ext}`;
-
-                // Build nested folder path: Data Booking Client Desk > Client Name > Booking Code
-                const folderFormat = resolveTemplateByEventType(
-                    vendor.drive_folder_format_map,
-                    eventType,
-                    vendor.drive_folder_format || DEFAULT_DRIVE_FOLDER_FORMAT,
-                );
-                const folderTemplateVars = {
-                    client_name: clientName,
-                    booking_code: bookingCode,
-                    event_type: eventType || "",
-                    studio_name: vendor.studio_name || "Client Desk",
-                    ...buildCalendarRangeFromLocalInput(sessionDate, 0).templateVars,
-                };
-                const clientFolderName = applyFolderTemplate(folderFormat, {
-                    ...folderTemplateVars,
-                });
-
-                const folder = await findOrCreateNestedPath(
-                    vendor.google_drive_access_token,
-                    vendor.google_drive_refresh_token,
-                    ["Data Booking Client Desk", clientFolderName, bookingCode]
-                );
-
-                if (!folder.folderId) throw new Error("Folder creation failed");
-
-                // Upload file
-                const uploaded = await uploadFileToDrive(
-                    vendor.google_drive_access_token,
-                    vendor.google_drive_refresh_token,
-                    fileName,
-                    mimeType,
-                    buffer,
-                    folder.folderId
-                );
-
-                // Update booking with Drive URL (replace Supabase URL with Drive URL)
-                if (uploaded.fileUrl) {
-                    await supabaseAdmin
-                        .from("bookings")
-                        .update({ payment_proof_url: uploaded.fileUrl })
-                        .eq("id", booking.id);
-
-                    // Delete from Supabase Storage to save quota
-                    if (normalizedPaymentProofUrl && !normalizedPaymentProofUrl.startsWith("data:")) {
-                        try {
-                            // Extract path from Supabase URL: .../storage/v1/object/public/payment-proofs/path/file.jpg
-                            const urlObj = new URL(normalizedPaymentProofUrl);
-                            const pathMatch = urlObj.pathname.match(/\/storage\/v1\/object\/public\/payment-proofs\/(.+)/);
-                            if (pathMatch) {
-                                await supabaseAdmin.storage
-                                    .from("payment-proofs")
-                                    .remove([pathMatch[1]]);
-                            }
-                        } catch {
-                            // Cleanup is best-effort
-                        }
-                    }
-                }
-            } catch {
-                // Silently ignore — Drive upload is best-effort
-                // Payment proof is still saved in Supabase Storage as fallback
             }
         }
 

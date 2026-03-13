@@ -1,6 +1,10 @@
 export type FinalAdjustment = {
   id: string;
+  service_id?: string | null;
+  source?: "service_addon" | "manual";
   label: string;
+  unit_price?: number;
+  quantity?: number;
   amount: number;
   reason: string;
   created_at: string;
@@ -25,7 +29,23 @@ export function normalizeFinalAdjustments(value: unknown): FinalAdjustment[] {
     .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
     .map((item) => ({
       id: typeof item.id === "string" && item.id.trim() ? item.id : crypto.randomUUID(),
+      service_id:
+        typeof item.service_id === "string" && item.service_id.trim()
+          ? item.service_id
+          : null,
+      source:
+        item.source === "service_addon" || item.source === "manual"
+          ? (item.source as "service_addon" | "manual")
+          : "manual",
       label: typeof item.label === "string" ? item.label.trim() : "",
+      unit_price:
+        typeof item.unit_price === "number"
+          ? item.unit_price
+          : Number(item.unit_price) || 0,
+      quantity:
+        typeof item.quantity === "number"
+          ? item.quantity
+          : Math.max(Number(item.quantity) || 1, 1),
       amount:
         typeof item.amount === "number"
           ? item.amount
@@ -35,6 +55,19 @@ export function normalizeFinalAdjustments(value: unknown): FinalAdjustment[] {
         typeof item.created_at === "string" && item.created_at.trim()
           ? item.created_at
           : new Date().toISOString(),
+    }))
+    .map((item) => ({
+      ...item,
+      amount:
+        item.amount > 0
+          ? item.amount
+          : Math.max(item.unit_price || 0, 0) * Math.max(item.quantity || 1, 1),
+      unit_price:
+        item.unit_price && item.unit_price > 0
+          ? item.unit_price
+          : item.amount > 0
+            ? item.amount / Math.max(item.quantity || 1, 1)
+            : 0,
     }))
     .filter((item) => item.label && item.amount > 0);
 }

@@ -166,12 +166,12 @@ export async function GET(request: NextRequest) {
       } else {
         image = await pdfDoc.embedJpg(imageBytes);
       }
-      const maxW = 120;
-      const maxH = 40;
+      const maxW = 148;
+      const maxH = 52;
       const scale = Math.min(maxW / image.width, maxH / image.height, 1);
       const drawW = image.width * scale;
       const drawH = image.height * scale;
-      page.drawImage(image, { x: mx, y: y - drawH + 18, width: drawW, height: drawH });
+      page.drawImage(image, { x: mx, y: y - drawH + 22, width: drawW, height: drawH });
       logoDrawn = true;
     } catch {
       logoDrawn = false;

@@ -14,7 +14,7 @@ import {
     extractCustomFieldSnapshots,
     type CustomFieldSnapshot,
 } from "@/components/form-builder/booking-form-layout";
-import { type PaymentSource } from "@/lib/payment-config";
+import { buildDriveImageUrl, type PaymentSource } from "@/lib/payment-config";
 import {
     getFinalAdjustmentsTotal,
     getFinalInvoiceTotal,
@@ -66,6 +66,7 @@ type Booking = {
     dp_paid: number;
     is_fully_paid: boolean;
     payment_proof_url: string | null;
+    payment_proof_drive_file_id: string | null;
     drive_folder_url: string | null;
     portfolio_url: string | null;
     location: string | null;
@@ -79,6 +80,7 @@ type Booking = {
     settlement_status: string | null;
     final_adjustments: unknown;
     final_payment_proof_url: string | null;
+    final_payment_proof_drive_file_id: string | null;
     final_payment_amount: number;
     final_payment_method: string | null;
     final_payment_source: PaymentSource | null;
@@ -92,9 +94,21 @@ type Booking = {
     queue_position: number | null;
 };
 
+type AddonService = {
+    id: string;
+    name: string;
+    price: number;
+    description: string | null;
+    event_types: string[] | null;
+};
+
 type EditableAdjustment = {
     id: string;
+    service_id: string | null;
+    source: "service_addon" | "manual";
     label: string;
+    unit_price: string;
+    quantity: string;
     amount: string;
     reason: string;
     created_at: string;
@@ -179,7 +193,11 @@ function LocationValue({ address }: { address: string }) {
 function toEditableAdjustments(items: FinalAdjustment[]): EditableAdjustment[] {
     return items.map((item) => ({
         id: item.id,
+        service_id: item.service_id || null,
+        source: item.source || "manual",
         label: item.label,
+        unit_price: String(item.unit_price || item.amount || 0),
+        quantity: String(item.quantity || 1),
         amount: String(item.amount),
         reason: item.reason,
         created_at: item.created_at,
@@ -190,12 +208,22 @@ function normalizeEditableAdjustments(items: EditableAdjustment[]): FinalAdjustm
     return items
         .map((item) => ({
             id: item.id || crypto.randomUUID(),
+            service_id: item.service_id,
+            source: item.source,
             label: item.label.trim(),
-            amount: Number(item.amount) || 0,
+            unit_price: Number(item.unit_price) || 0,
+            quantity: Math.max(Number(item.quantity) || 1, 1),
+            amount: (Number(item.unit_price) || 0) * Math.max(Number(item.quantity) || 1, 1),
             reason: item.reason.trim(),
             created_at: item.created_at || new Date().toISOString(),
         }))
         .filter((item) => item.label && item.amount > 0);
+}
+
+function isAddonAvailableForEvent(service: AddonService, eventType: string | null) {
+    if (!service.event_types || service.event_types.length === 0) return true;
+    if (!eventType) return true;
+    return service.event_types.includes(eventType);
 }
 
 export default function BookingDetailPage() {
@@ -215,9 +243,15 @@ export default function BookingDetailPage() {
     const [studioName, setStudioName] = React.useState("");
     const [savedTemplates, setSavedTemplates] = React.useState<{ id: string; type: string; content: string; content_en: string; event_type: string | null }[]>([]);
     const [adjustmentItems, setAdjustmentItems] = React.useState<EditableAdjustment[]>([]);
+    const [addonServices, setAddonServices] = React.useState<AddonService[]>([]);
     const [savingAdjustments, setSavingAdjustments] = React.useState(false);
     const [sendingFinalInvoice, setSendingFinalInvoice] = React.useState(false);
     const [markingFinalPaid, setMarkingFinalPaid] = React.useState(false);
+    const [customAddonOpen, setCustomAddonOpen] = React.useState(false);
+    const [customAddonName, setCustomAddonName] = React.useState("");
+    const [customAddonPrice, setCustomAddonPrice] = React.useState("");
+    const [customAddonDescription, setCustomAddonDescription] = React.useState("");
+    const [creatingCustomAddon, setCreatingCustomAddon] = React.useState(false);
 
     // File upload states
     const [uploadingFile, setUploadingFile] = React.useState(false);
@@ -232,11 +266,18 @@ export default function BookingDetailPage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
-            const [{ data }, { data: profile }] = await Promise.all([
+            const [{ data }, { data: profile }, { data: addonServiceRows }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token, studio_name").eq("id", user.id).single(),
+                supabase.from("services")
+                    .select("id, name, price, description, event_types")
+                    .eq("user_id", user.id)
+                    .eq("is_active", true)
+                    .eq("is_addon", true)
+                    .order("sort_order", { ascending: true })
+                    .order("created_at", { ascending: true }),
             ]);
             // Normalize freelancers from junction table
             const rawBooking = data as BookingRow | null;
@@ -260,6 +301,7 @@ export default function BookingDetailPage() {
                     normalizeFinalAdjustments(rawBooking?.final_adjustments),
                 ),
             );
+            setAddonServices((addonServiceRows || []) as AddonService[]);
             if (rawBooking) {
                 setClientStatus(rawBooking.client_status || "");
                 setQueuePos(rawBooking.queue_position || "");
@@ -461,22 +503,60 @@ export default function BookingDetailPage() {
         setDeletingFileIdx(null);
     }
 
-    function addAdjustmentItem() {
+    const filteredAddonServices = React.useMemo(
+        () => addonServices.filter((service) => isAddonAvailableForEvent(service, booking?.event_type || null)),
+        [addonServices, booking?.event_type],
+    );
+
+    function addAdjustmentItem(service?: AddonService) {
         setAdjustmentItems((prev) => [
             ...prev,
             {
                 id: crypto.randomUUID(),
-                label: "",
-                amount: "",
+                service_id: service?.id || null,
+                source: service ? "service_addon" : "manual",
+                label: service?.name || "",
+                unit_price: String(service?.price || ""),
+                quantity: "1",
+                amount: String(service?.price || ""),
                 reason: "",
                 created_at: new Date().toISOString(),
             },
         ]);
     }
 
+    function handleSelectAdjustmentService(id: string, serviceId: string) {
+        const selectedService = filteredAddonServices.find((service) => service.id === serviceId) || null;
+        setAdjustmentItems((prev) =>
+            prev.map((item) =>
+                item.id === id
+                    ? {
+                        ...item,
+                        service_id: selectedService?.id || null,
+                        source: selectedService ? "service_addon" : "manual",
+                        label: selectedService?.name || item.label,
+                        unit_price: selectedService ? String(selectedService.price) : item.unit_price,
+                        amount: selectedService
+                            ? String(selectedService.price * Math.max(Number(item.quantity) || 1, 1))
+                            : item.amount,
+                    }
+                    : item,
+            ),
+        );
+    }
+
     function updateAdjustmentItem(id: string, field: keyof EditableAdjustment, value: string) {
         setAdjustmentItems((prev) =>
-            prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+            prev.map((item) => {
+                if (item.id !== id) return item;
+                const nextItem = { ...item, [field]: value };
+                const unitPrice = Number(field === "unit_price" ? value : nextItem.unit_price) || 0;
+                const quantity = Math.max(Number(field === "quantity" ? value : nextItem.quantity) || 1, 1);
+                return {
+                    ...nextItem,
+                    amount: String(unitPrice * quantity),
+                };
+            }),
         );
     }
 
@@ -522,6 +602,48 @@ export default function BookingDetailPage() {
         return normalizedAdjustments;
     }
 
+    async function handleCreateCustomAddon() {
+        if (!booking || !customAddonName.trim() || Number(customAddonPrice) <= 0) {
+            alert("Isi nama dan harga add-on custom terlebih dahulu.");
+            return;
+        }
+
+        const { data: auth } = await supabase.auth.getUser();
+        if (!auth.user) {
+            alert("Sesi login tidak ditemukan.");
+            return;
+        }
+
+        setCreatingCustomAddon(true);
+        const { data, error } = await supabase
+            .from("services")
+            .insert({
+                user_id: auth.user.id,
+                name: customAddonName.trim(),
+                price: Number(customAddonPrice) || 0,
+                description: customAddonDescription.trim() || null,
+                is_addon: true,
+                is_active: true,
+                event_types: booking.event_type ? [booking.event_type] : null,
+            })
+            .select("id, name, price, description, event_types")
+            .single();
+        setCreatingCustomAddon(false);
+
+        if (error || !data) {
+            alert("Gagal membuat add-on custom.");
+            return;
+        }
+
+        const nextService = data as AddonService;
+        setAddonServices((prev) => [...prev, nextService]);
+        addAdjustmentItem(nextService);
+        setCustomAddonName("");
+        setCustomAddonPrice("");
+        setCustomAddonDescription("");
+        setCustomAddonOpen(false);
+    }
+
     async function handleSendFinalInvoice() {
         if (!booking?.tracking_uuid || !booking.client_whatsapp) {
             alert("Booking ini belum punya tracking link atau nomor WhatsApp klien.");
@@ -545,6 +667,7 @@ export default function BookingDetailPage() {
                 final_payment_method: null,
                 final_payment_source: null,
                 final_payment_proof_url: null,
+                final_payment_proof_drive_file_id: null,
                 final_paid_at: null,
                 is_fully_paid: false,
             })
@@ -591,6 +714,7 @@ export default function BookingDetailPage() {
                     final_payment_method: null,
                     final_payment_source: null,
                     final_payment_proof_url: null,
+                    final_payment_proof_drive_file_id: null,
                     final_paid_at: null,
                     is_fully_paid: false,
                 }
@@ -855,43 +979,81 @@ export default function BookingDetailPage() {
                 <div className="space-y-3">
                     {adjustmentItems.length === 0 ? (
                         <div className="rounded-lg border border-dashed px-4 py-4 text-sm text-muted-foreground">
-                            Belum ada add-on akhir. Tambahkan item jika ada extra time, album, transport, atau penyesuaian lain.
+                            Belum ada add-on akhir. Pilih add-on dari katalog paket atau buat add-on custom yang otomatis masuk ke katalog.
                         </div>
                     ) : (
                         adjustmentItems.map((item) => (
-                            <div key={item.id} className="grid gap-3 rounded-xl border p-4 md:grid-cols-[1.2fr_0.8fr_1.2fr_auto]">
-                                <input
-                                    value={item.label}
-                                    onChange={(e) => updateAdjustmentItem(item.id, "label", e.target.value)}
-                                    placeholder="Nama add-on / biaya tambahan"
-                                    className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                                />
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={item.amount}
-                                    onChange={(e) => updateAdjustmentItem(item.id, "amount", e.target.value)}
-                                    placeholder="Nominal"
-                                    className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                                />
-                                <input
-                                    value={item.reason}
-                                    onChange={(e) => updateAdjustmentItem(item.id, "reason", e.target.value)}
-                                    placeholder="Alasan / catatan"
-                                    className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                                />
-                                <Button variant="ghost" size="icon" onClick={() => removeAdjustmentItem(item.id)}>
-                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                </Button>
+                            <div key={item.id} className="grid gap-3 rounded-xl border p-4">
+                                <div className="grid gap-3 md:grid-cols-[1.6fr_0.6fr_0.8fr_auto]">
+                                    <select
+                                        value={item.service_id || ""}
+                                        onChange={(e) => handleSelectAdjustmentService(item.id, e.target.value)}
+                                        className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    >
+                                        <option value="">Pilih add-on katalog...</option>
+                                        {filteredAddonServices.map((service) => (
+                                            <option key={service.id} value={service.id}>
+                                                {service.name} - {formatCurrency(service.price)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        value={item.quantity}
+                                        onChange={(e) => updateAdjustmentItem(item.id, "quantity", e.target.value)}
+                                        placeholder="Qty"
+                                        className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    />
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        value={item.unit_price}
+                                        onChange={(e) => updateAdjustmentItem(item.id, "unit_price", e.target.value)}
+                                        placeholder="Harga"
+                                        className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    />
+                                    <Button variant="ghost" size="icon" onClick={() => removeAdjustmentItem(item.id)}>
+                                        <Trash2 className="w-4 h-4 text-red-500" />
+                                    </Button>
+                                </div>
+                                <div className="grid gap-3 md:grid-cols-[1.2fr_1fr]">
+                                    <input
+                                        value={item.label}
+                                        onChange={(e) => updateAdjustmentItem(item.id, "label", e.target.value)}
+                                        placeholder="Nama add-on"
+                                        className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    />
+                                    <input
+                                        value={item.reason}
+                                        onChange={(e) => updateAdjustmentItem(item.id, "reason", e.target.value)}
+                                        placeholder="Alasan / catatan"
+                                        className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                    <span>{item.service_id ? "Sumber: katalog add-on" : "Sumber: item manual lama / custom"}</span>
+                                    <span>Total item: {formatCurrency(Number(item.amount) || 0)}</span>
+                                </div>
                             </div>
                         ))
                     )}
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={addAdjustmentItem}>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => addAdjustmentItem(filteredAddonServices[0])}
+                        disabled={filteredAddonServices.length === 0}
+                    >
                         <Upload className="w-4 h-4" />
-                        Tambah Item
+                        Tambah Add-on
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCustomAddonOpen(true)}>
+                        <FileText className="w-4 h-4" />
+                        Add-on Custom
                     </Button>
                     <Button size="sm" className="gap-1.5" onClick={() => { void saveFinalAdjustments(); }} disabled={savingAdjustments}>
                         {savingAdjustments ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
@@ -950,10 +1112,9 @@ export default function BookingDetailPage() {
                     </h3>
                     {booking.payment_proof_url.startsWith("http") ? (
                         <a href={booking.payment_proof_url} target="_blank" rel="noopener noreferrer" className="block">
-                            {/* Remote proof URLs come from storage/public uploads and are shown as-is. */}
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                                src={booking.payment_proof_url}
+                                src={booking.payment_proof_drive_file_id ? buildDriveImageUrl(booking.payment_proof_drive_file_id) : booking.payment_proof_url}
                                 alt="Bukti Pembayaran"
                                 className="max-w-sm w-full rounded-lg border shadow-sm"
                             />
@@ -973,10 +1134,9 @@ export default function BookingDetailPage() {
                     </h3>
                     {booking.final_payment_proof_url.startsWith("http") ? (
                         <a href={booking.final_payment_proof_url} target="_blank" rel="noopener noreferrer" className="block">
-                            {/* Remote proof URLs come from storage/public uploads and are shown as-is. */}
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                                src={booking.final_payment_proof_url}
+                                src={booking.final_payment_proof_drive_file_id ? buildDriveImageUrl(booking.final_payment_proof_drive_file_id) : booking.final_payment_proof_url}
                                 alt="Bukti Pelunasan Final"
                                 className="max-w-sm w-full rounded-lg border shadow-sm"
                             />
@@ -1192,6 +1352,56 @@ export default function BookingDetailPage() {
                             </button>
                         ))}
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={customAddonOpen} onOpenChange={setCustomAddonOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Tambah Add-on Custom</DialogTitle>
+                        <DialogDescription>
+                            Add-on custom akan otomatis disimpan ke katalog Layanan / Paket sebagai add-on aktif.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3 py-2">
+                        <div className="space-y-1.5">
+                            <label className="text-sm font-medium">Nama Add-on</label>
+                            <input
+                                value={customAddonName}
+                                onChange={(e) => setCustomAddonName(e.target.value)}
+                                placeholder="Contoh: Extra Time 2 Jam"
+                                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-sm font-medium">Harga</label>
+                            <input
+                                type="number"
+                                min={0}
+                                value={customAddonPrice}
+                                onChange={(e) => setCustomAddonPrice(e.target.value)}
+                                placeholder="250000"
+                                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-sm font-medium">Deskripsi / Catatan</label>
+                            <textarea
+                                value={customAddonDescription}
+                                onChange={(e) => setCustomAddonDescription(e.target.value)}
+                                rows={3}
+                                placeholder="Contoh: Tambahan album mini atau transport"
+                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setCustomAddonOpen(false)}>Batal</Button>
+                        <Button onClick={() => { void handleCreateCustomAddon(); }} disabled={creatingCustomAddon}>
+                            {creatingCustomAddon ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Simpan ke Katalog
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </>

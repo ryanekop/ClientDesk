@@ -5,19 +5,14 @@ import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import {
   AlertCircle,
-  Banknote,
   CheckCircle2,
-  CreditCard,
   Download,
   Loader2,
-  QrCode,
-  Upload,
 } from "lucide-react";
-import { createClient } from "@/utils/supabase/client";
-import { compressImage } from "@/utils/compress-image";
+import { FileDropzone } from "@/components/public/file-dropzone";
+import { PaymentMethodSection } from "@/components/public/payment-method-section";
 import {
   getEnabledBankAccounts,
-  getPaymentMethodLabel,
   normalizePaymentMethods,
   type BankAccount,
   type PaymentMethod,
@@ -85,11 +80,6 @@ function formatCurrency(n: number) {
   }).format(n || 0);
 }
 
-function createPaymentProofPath(ext?: string) {
-  const safeExt = ext && ext.length > 0 ? ext : "bin";
-  return `final-payment-proofs/${crypto.randomUUID()}.${safeExt}`;
-}
-
 export default function SettlementClient({
   booking,
   vendor,
@@ -102,7 +92,6 @@ export default function SettlementClient({
   const searchParams = useSearchParams();
   const previewMode = searchParams.get("preview") === "1";
   const previewStorageKey = searchParams.get("previewKey") || "";
-  const supabase = React.useMemo(() => createClient(), []);
   const [previewVendor, setPreviewVendor] = React.useState<PreviewVendorPayload | null>(null);
 
   React.useEffect(() => {
@@ -240,13 +229,25 @@ export default function SettlementClient({
     setSelectedPaymentSource({ type: "cash", label: "Cash" });
   }, [enabledBankAccounts, selectedPaymentMethod]);
 
-  function handleProofFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function handleProofFile(file: File | null) {
     setProofFile(file);
-    const reader = new FileReader();
-    reader.onload = () => setProofPreview(reader.result as string);
-    reader.readAsDataURL(file);
+    if (!file) {
+      setProofPreview(null);
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError(t("errorFileTooLarge"));
+      setProofFile(null);
+      setProofPreview(null);
+      return;
+    }
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = () => setProofPreview(reader.result as string);
+      reader.readAsDataURL(file);
+      return;
+    }
+    setProofPreview(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -270,56 +271,24 @@ export default function SettlementClient({
 
     setSubmitting(true);
 
-    let paymentProofUrl: string | null = null;
     if (proofFile && selectedPaymentMethod !== "cash") {
       setUploadingProof(true);
-      try {
-        const compressed = proofFile.type.startsWith("image/")
-          ? await compressImage(proofFile, 1200, 0.7)
-          : proofFile;
-        const ext = proofFile.type.startsWith("image/")
-          ? "jpg"
-          : proofFile.name.split(".").pop();
-        const path = createPaymentProofPath(ext);
-        const { error: uploadErr } = await supabase.storage
-          .from("payment-proofs")
-          .upload(path, compressed, {
-            upsert: false,
-            contentType: proofFile.type.startsWith("image/")
-              ? "image/jpeg"
-              : proofFile.type,
-          });
-
-        if (uploadErr) {
-          setError(`${t("errorUpload")}${uploadErr.message}`);
-          setSubmitting(false);
-          setUploadingProof(false);
-          return;
-        }
-
-        const { data: publicUrl } = supabase.storage
-          .from("payment-proofs")
-          .getPublicUrl(path);
-        paymentProofUrl = publicUrl.publicUrl;
-      } catch {
-        setError(t("errorCompress"));
-        setSubmitting(false);
-        setUploadingProof(false);
-        return;
-      }
-      setUploadingProof(false);
     }
 
     try {
+      const formData = new FormData();
+      formData.append("trackingUuid", booking.trackingUuid || "");
+      formData.append("paymentMethod", selectedPaymentMethod);
+      if (selectedPaymentSource) {
+        formData.append("paymentSource", JSON.stringify(selectedPaymentSource));
+      }
+      if (proofFile && selectedPaymentMethod !== "cash") {
+        formData.append("paymentProofFile", proofFile);
+      }
+
       const res = await fetch("/api/public/settlement", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          trackingUuid: booking.trackingUuid,
-          paymentMethod: selectedPaymentMethod,
-          paymentSource: selectedPaymentSource,
-          paymentProofUrl,
-        }),
+        body: formData,
       });
       const data = await res.json();
       if (!data.success) {
@@ -331,6 +300,7 @@ export default function SettlementClient({
       setError(t("submitFailed"));
     }
 
+    setUploadingProof(false);
     setSubmitting(false);
   }
 
@@ -535,118 +505,40 @@ export default function SettlementClient({
               <p className="text-sm text-muted-foreground">{t("paymentFormDesc")}</p>
             </div>
 
-            <div className="space-y-3">
-              <label className="text-sm font-medium">{t("paymentMethod")}</label>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {effectiveVendor.formPaymentMethods.map((method) => {
-                  const Icon =
-                    method === "bank"
-                      ? CreditCard
-                      : method === "qris"
-                        ? QrCode
-                        : Banknote;
-                  const disabled =
-                    (method === "bank" && enabledBankAccounts.length === 0) ||
-                    (method === "qris" && !effectiveVendor.qrisImageUrl);
-
-                  return (
-                    <button
-                      key={method}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => setSelectedPaymentMethod(method)}
-                      className={`rounded-xl border p-4 text-left transition-colors ${
-                        selectedPaymentMethod === method
-                          ? "shadow-sm"
-                          : "hover:bg-muted/50"
-                      } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
-                      style={
-                        selectedPaymentMethod === method
-                          ? { borderColor: brandColor, backgroundColor: `${brandColor}10` }
-                          : undefined
-                      }
-                    >
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4" />
-                        <span className="font-medium">{getPaymentMethodLabel(method)}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {selectedPaymentMethod === "bank" && enabledBankAccounts.length > 0 ? (
-              <div className="space-y-3">
-                <label className="text-sm font-medium">{t("bankAccount")}</label>
-                <div className="space-y-2">
-                  {enabledBankAccounts.map((bank) => {
-                    const selected =
-                      selectedPaymentSource?.type === "bank" &&
-                      selectedPaymentSource.bank_id === bank.id;
-                    return (
-                      <button
-                        key={bank.id}
-                        type="button"
-                        onClick={() =>
-                          setSelectedPaymentSource({
-                            type: "bank",
-                            bank_id: bank.id,
-                            bank_name: bank.bank_name,
-                            account_number: bank.account_number,
-                            account_name: bank.account_name,
-                            label: bank.bank_name,
-                          })
-                        }
-                        className="w-full rounded-xl border p-3 text-left hover:bg-muted/50"
-                        style={
-                          selected
-                            ? { borderColor: brandColor, backgroundColor: `${brandColor}10` }
-                            : undefined
-                        }
-                      >
-                        <p className="font-medium">{bank.bank_name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {bank.account_number} a.n. {bank.account_name}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-
-            {selectedPaymentMethod === "qris" && effectiveVendor.qrisImageUrl ? (
-              <div className="space-y-3">
-                <label className="text-sm font-medium">{t("qris")}</label>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={effectiveVendor.qrisImageUrl}
-                  alt="QRIS"
-                  className="max-w-xs rounded-xl border"
-                />
-              </div>
-            ) : null}
+            <PaymentMethodSection
+              methods={effectiveVendor.formPaymentMethods}
+              selectedMethod={selectedPaymentMethod}
+              selectedSource={selectedPaymentSource}
+              onSelectMethod={setSelectedPaymentMethod}
+              onSelectSource={setSelectedPaymentSource}
+              bankAccounts={enabledBankAccounts}
+              qrisImageUrl={effectiveVendor.qrisImageUrl}
+              brandColor={brandColor}
+              labels={{
+                methodLabel: t("paymentMethod"),
+                bankLabel: t("bankAccount"),
+                bankEmpty: t("bankEmpty"),
+                qrisLabel: t("qris"),
+                cashNote: t("cashInfo"),
+                bankDescriptions: {
+                  bank: t("paymentMethodBankDesc"),
+                  qris: t("paymentMethodQrisDesc"),
+                  cash: t("paymentMethodCashDesc"),
+                },
+              }}
+            />
 
             {selectedPaymentMethod !== "cash" ? (
-              <div className="space-y-3">
-                <label className="text-sm font-medium">{t("paymentProof")}</label>
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed px-4 py-4 text-sm hover:bg-muted/50">
-                  <Upload className="h-4 w-4" />
-                  <span>{t("uploadProof")}</span>
-                  <input type="file" className="hidden" onChange={handleProofFile} />
-                </label>
-                {proofPreview ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={proofPreview}
-                      alt="Preview bukti pembayaran"
-                      className="max-w-xs rounded-xl border"
-                    />
-                  </>
-                ) : null}
-              </div>
+              <FileDropzone
+                file={proofFile}
+                previewUrl={proofPreview}
+                accept="image/*,.pdf"
+                label={t("paymentProof")}
+                emptyText={t("uploadProof")}
+                emptySubtext={t("dragDropHint")}
+                removeLabel={t("removeFile")}
+                onFileSelect={handleProofFile}
+              />
             ) : (
               <p className="text-sm text-muted-foreground">{t("cashInfo")}</p>
             )}

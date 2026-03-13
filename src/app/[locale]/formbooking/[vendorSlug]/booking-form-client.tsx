@@ -5,17 +5,10 @@ import { useParams, useSearchParams } from "next/navigation";
 import {
   Loader2,
   CheckCircle2,
-  Upload,
   MapPin,
-  Camera,
   MessageCircle,
-  CreditCard,
   FileText,
-  QrCode,
-  Banknote,
 } from "lucide-react";
-import { createClient } from "@/utils/supabase/client";
-import { compressImage } from "@/utils/compress-image";
 import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
 import {
   Dialog,
@@ -31,6 +24,8 @@ import {
   normalizeStoredFormLayout,
   type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
+import { FileDropzone } from "@/components/public/file-dropzone";
+import { PaymentMethodSection } from "@/components/public/payment-method-section";
 import { EVENT_EXTRA_FIELDS } from "@/utils/form-extra-fields";
 import { isRichTextEmpty, sanitizeRichTextHtml } from "@/utils/rich-text";
 import {
@@ -135,11 +130,6 @@ function parseFormatted(s: string): number | "" {
   return isNaN(num) ? "" : num;
 }
 
-function createPaymentProofPath(ext?: string) {
-  const safeExt = ext && ext.length > 0 ? ext : "bin";
-  return `payment-proofs/${crypto.randomUUID()}.${safeExt}`;
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface BookingFormClientProps {
@@ -189,7 +179,6 @@ export function BookingFormClient({
   const params = useParams();
   const searchParams = useSearchParams();
   const slug = params?.vendorSlug as string;
-  const supabase = React.useMemo(() => createClient(), []);
   const t = useTranslations("BookingForm");
   const previewMode = searchParams.get("preview") === "1";
   const previewStorageKey = searchParams.get("previewKey") || "";
@@ -297,7 +286,6 @@ export function BookingFormClient({
   const [termsDialogOpen, setTermsDialogOpen] = React.useState(false);
   const [error, setError] = React.useState("");
 
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const autoDpAmountRef = React.useRef<number | null>(null);
 
   // ── Helpers ──
@@ -337,13 +325,28 @@ export function BookingFormClient({
     }
   }
 
-  function handleProofFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function handleProofFile(file: File | null) {
     setProofFile(file);
-    const reader = new FileReader();
-    reader.onload = () => setProofPreview(reader.result as string);
-    reader.readAsDataURL(file);
+
+    if (!file) {
+      setProofPreview(null);
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError(t("errorFileTooLarge"));
+      setProofFile(null);
+      setProofPreview(null);
+      return;
+    }
+
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = () => setProofPreview(reader.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setProofPreview(null);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -414,44 +417,8 @@ export function BookingFormClient({
 
     setSubmitting(true);
 
-    // Upload bukti pembayaran jika ada
-    let paymentProofUrl: string | null = null;
     if (proofFile && selectedPaymentMethod !== "cash") {
       setUploadingProof(true);
-      try {
-        const compressed = proofFile.type.startsWith("image/")
-          ? await compressImage(proofFile, 1200, 0.7)
-          : proofFile;
-        const ext = proofFile.type.startsWith("image/")
-          ? "jpg"
-          : proofFile.name.split(".").pop();
-        const path = createPaymentProofPath(ext);
-        const { error: uploadErr } = await supabase.storage
-          .from("payment-proofs")
-          .upload(path, compressed, {
-            upsert: false,
-            contentType: proofFile.type.startsWith("image/")
-              ? "image/jpeg"
-              : proofFile.type,
-          });
-
-        if (uploadErr) {
-          setError(t("errorUpload") + uploadErr.message);
-          setSubmitting(false);
-          setUploadingProof(false);
-          return;
-        }
-        const { data: publicUrl } = supabase.storage
-          .from("payment-proofs")
-          .getPublicUrl(path);
-        paymentProofUrl = publicUrl.publicUrl;
-      } catch {
-        setError(t("errorCompress"));
-        setSubmitting(false);
-        setUploadingProof(false);
-        return;
-      }
-      setUploadingProof(false);
     }
 
     try {
@@ -472,42 +439,48 @@ export function BookingFormClient({
         customFields,
       );
 
+      const formData = new FormData();
+      formData.append("vendorSlug", slug);
+      formData.append("clientName", clientName);
+      formData.append("clientWhatsapp", fullPhone);
+      formData.append("eventType", eventType || "");
+      formData.append("sessionDate", finalSessionDate);
+      formData.append("serviceId", serviceId);
+      formData.append("dpPaid", String(dpValue));
+      formData.append("location", finalLocation || "");
+      formData.append("locationDetail", locationDetail || "");
+      formData.append("notes", notes || "");
+      formData.append(
+        "extraData",
+        JSON.stringify({
+          ...(Object.keys(mergedExtra).length > 0 ? mergedExtra : {}),
+          ...(selectedAddons.size > 0
+            ? {
+                addon_ids: Array.from(selectedAddons),
+                addon_names: selectedAddonServices.map((service) => service.name),
+              }
+            : {}),
+          ...(hasTerms
+            ? {
+                terms_accepted: true,
+                terms_accepted_at: new Date().toISOString(),
+              }
+            : {}),
+          ...(customFieldSnapshots.length > 0 ? { custom_fields: customFieldSnapshots } : {}),
+        }),
+      );
+      formData.append("paymentMethod", selectedPaymentMethod);
+      if (selectedPaymentSource) {
+        formData.append("paymentSource", JSON.stringify(selectedPaymentSource));
+      }
+      formData.append("instagram", instagram || "");
+      if (proofFile && selectedPaymentMethod !== "cash") {
+        formData.append("paymentProofFile", proofFile);
+      }
+
       const res = await fetch("/api/public/booking", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          vendorSlug: slug,
-          clientName,
-          clientWhatsapp: fullPhone,
-          eventType: eventType || null,
-          sessionDate: finalSessionDate,
-          serviceId,
-          totalPrice: selectedBookingTotal,
-          dpPaid: dpValue,
-          location: finalLocation || null,
-          locationDetail: locationDetail || null,
-          notes: notes || null,
-          extraData: {
-            ...(Object.keys(mergedExtra).length > 0 ? mergedExtra : {}),
-            ...(selectedAddons.size > 0
-              ? {
-                  addon_ids: Array.from(selectedAddons),
-                  addon_names: selectedAddonServices.map((service) => service.name),
-                }
-              : {}),
-            ...(hasTerms
-              ? {
-                  terms_accepted: true,
-                  terms_accepted_at: new Date().toISOString(),
-                }
-              : {}),
-            ...(customFieldSnapshots.length > 0 ? { custom_fields: customFieldSnapshots } : {}),
-          },
-          paymentProofUrl: selectedPaymentMethod === "cash" ? null : paymentProofUrl,
-          paymentMethod: selectedPaymentMethod,
-          paymentSource: selectedPaymentSource,
-          instagram: instagram || null,
-        }),
+        body: formData,
       });
 
       const data = await res.json();
@@ -520,6 +493,7 @@ export function BookingFormClient({
     } catch {
       setError("Terjadi kesalahan. Silakan coba lagi.");
     }
+    setUploadingProof(false);
     setSubmitting(false);
   }
 
@@ -700,7 +674,6 @@ export function BookingFormClient({
     if (selectedPaymentMethod !== "cash") return;
     setProofFile(null);
     setProofPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }, [selectedPaymentMethod]);
 
   // Filter services by selected event type, split main vs addon
@@ -1274,210 +1247,48 @@ export function BookingFormClient({
         if (availablePaymentMethods.length === 0) return null;
         return (
           <div key={item.id} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">
-                {t("paymentMethod")} <span className="text-red-500">*</span>
-              </label>
-              <div className="space-y-3">
-                {availablePaymentMethods.map((method) => {
-                  const active = selectedPaymentMethod === method;
-                  const Icon =
-                    method === "bank"
-                      ? CreditCard
-                      : method === "qris"
-                        ? QrCode
-                        : Banknote;
-
-                  return (
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() => setSelectedPaymentMethod(method)}
-                      className={`w-full rounded-xl border p-4 text-left transition-all cursor-pointer ${
-                        active
-                          ? "border-primary bg-primary/5 shadow-sm"
-                          : "border-input hover:bg-muted/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div
-                            className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                              active
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            <Icon className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold">
-                              {method === "bank"
-                                ? t("paymentMethodBank")
-                                : method === "qris"
-                                  ? t("paymentMethodQris")
-                                  : t("paymentMethodCash")}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {method === "bank"
-                                ? t("paymentMethodBankDesc")
-                                : method === "qris"
-                                  ? t("paymentMethodQrisDesc")
-                                  : t("paymentMethodCashDesc")}
-                            </p>
-                          </div>
-                        </div>
-                        <div
-                          className={`mt-1 h-5 w-5 rounded-full border ${
-                            active
-                              ? "border-primary bg-primary"
-                              : "border-muted-foreground/30"
-                          }`}
-                        />
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {selectedPaymentMethod === "bank" && (
-              <div className="space-y-3">
-                <label className="text-sm font-medium">
-                  {t("paymentSourceBank")} <span className="text-red-500">*</span>
-                </label>
-                {enabledBankAccounts.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    {t("paymentNoBank")}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {enabledBankAccounts.map((bank) => {
-                      const isSelected =
-                        selectedPaymentSource?.type === "bank" &&
-                        selectedPaymentSource.bank_id === bank.id;
-
-                      return (
-                        <button
-                          key={bank.id}
-                          type="button"
-                          onClick={() =>
-                            setSelectedPaymentSource(
-                              createPaymentSourceFromBank(bank),
-                            )
-                          }
-                          className={`w-full rounded-xl border p-4 text-left transition-all cursor-pointer ${
-                            isSelected
-                              ? "border-primary bg-primary/5 shadow-sm"
-                              : "border-input hover:bg-muted/40"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-base font-semibold">{bank.bank_name}</p>
-                              <p className="text-sm text-muted-foreground mt-1">
-                                {t("paymentMethodBankDescSingle", { bank: bank.bank_name })}
-                              </p>
-                            </div>
-                            {isSelected && (
-                              <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {selectedPaymentSource?.type === "bank" && (
-                  <div className="rounded-xl border border-blue-200 bg-blue-50/80 dark:border-blue-500/20 dark:bg-blue-500/5 p-4 space-y-2">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
-                      <CreditCard className="w-4 h-4" />
-                      {selectedPaymentSource.bank_name}
-                    </div>
-                    <div className="rounded-lg bg-background/80 p-4">
-                      <p className="font-mono text-lg font-bold tracking-wide">
-                        {selectedPaymentSource.account_number}
-                      </p>
-                      {selectedPaymentSource.account_name && (
-                        <p className="text-sm text-muted-foreground mt-1">
-                          a.n. {selectedPaymentSource.account_name}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {selectedPaymentMethod === "qris" && (
-              <div className="space-y-3">
-                <label className="text-sm font-medium">
-                  {t("paymentSourceQris")}
-                </label>
-                <div className="rounded-xl border border-blue-200 bg-blue-50/80 dark:border-blue-500/20 dark:bg-blue-500/5 p-4 sm:p-5">
-                  <div className="rounded-lg bg-background/80 p-4 sm:p-6 min-h-56 flex items-center justify-center">
-                    {effectiveVendor.qris_image_url ? (
-                      <img
-                        src={effectiveVendor.qris_image_url}
-                        alt={t("paymentMethodQris")}
-                        referrerPolicy="no-referrer"
-                        className="w-full max-h-[22rem] object-contain mx-auto"
-                      />
-                    ) : (
-                      <div className="text-center text-sm text-muted-foreground">
-                        {t("paymentNoQris")}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {selectedPaymentMethod === "cash" && (
-              <div className="rounded-xl border p-4 text-sm text-muted-foreground bg-muted/20">
-                {t("paymentCashNote")}
-              </div>
-            )}
+            <PaymentMethodSection
+              methods={availablePaymentMethods}
+              selectedMethod={selectedPaymentMethod}
+              selectedSource={selectedPaymentSource}
+              onSelectMethod={setSelectedPaymentMethod}
+              onSelectSource={setSelectedPaymentSource}
+              bankAccounts={enabledBankAccounts}
+              qrisImageUrl={effectiveVendor.qris_image_url}
+              brandColor={brandColor}
+              labels={{
+                methodLabel: `${t("paymentMethod")} *`,
+                bankLabel: `${t("paymentSourceBank")} *`,
+                bankEmpty: t("paymentNoBank"),
+                qrisLabel: t("paymentSourceQris"),
+                cashNote: t("paymentCashNote"),
+                bankDescriptions: {
+                  bank: t("paymentMethodBankDesc"),
+                  qris: t("paymentMethodQrisDesc"),
+                  cash: t("paymentMethodCashDesc"),
+                },
+              }}
+            />
           </div>
         );
       case "payment_proof":
         if (!selectedPaymentMethod || selectedPaymentMethod === "cash") return null;
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium flex items-center gap-1.5">
-              <Camera className="w-3.5 h-3.5" />
-              {t("buktiPembayaran")}
-            </label>
-            <p className="text-xs text-muted-foreground">
-              {selectedPaymentMethod === "qris"
-                ? t("paymentProofQrisHint")
-                : t("paymentProofBankHint")}
-            </p>
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 hover:border-primary/50 hover:bg-muted/30 transition-colors cursor-pointer"
-            >
-              {proofPreview ? (
-                <img
-                  src={proofPreview}
-                  alt="Bukti"
-                  className="max-h-40 rounded-lg object-contain"
-                />
-              ) : (
-                <>
-                  <Upload className="w-8 h-8 text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">{t("klikUpload")}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{t("formatFile")}</p>
-                </>
-              )}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
+            <FileDropzone
+              file={proofFile}
+              previewUrl={proofPreview}
               accept="image/*,.pdf"
-              className="hidden"
-              onChange={handleProofFile}
+              label={t("buktiPembayaran")}
+              helperText={
+                selectedPaymentMethod === "qris"
+                  ? t("paymentProofQrisHint")
+                  : t("paymentProofBankHint")
+              }
+              emptyText={t("klikUpload")}
+              emptySubtext={t("dragDropHint", { format: t("formatFile") })}
+              removeLabel={t("removeFile")}
+              onFileSelect={handleProofFile}
             />
           </div>
         );
@@ -1542,8 +1353,13 @@ export function BookingFormClient({
   // ── Form ──
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 py-8 sm:py-12 px-4">
-      <div className="max-w-xl mx-auto space-y-6">
+    <div
+      className="min-h-screen px-4 py-8 sm:py-12"
+      style={{
+        backgroundImage: `linear-gradient(135deg, ${brandColor}18 0%, #ffffff 40%, #f8fafc 100%)`,
+      }}
+    >
+      <div className="mx-auto max-w-4xl space-y-6">
         {/* Vendor Header */}
         <div className="text-center space-y-3">
           <div className="w-20 h-20 bg-background border-2 rounded-full mx-auto flex items-center justify-center font-bold text-2xl shadow-sm overflow-hidden">

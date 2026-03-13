@@ -18,7 +18,8 @@ import {
     LogOut,
     Menu,
     FileEdit,
-    Activity
+    Activity,
+    ReceiptText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -36,7 +37,7 @@ const mainNavItems = [
     { titleKey: "finance" as const, href: "/finance", icon: Wallet },
     { titleKey: "team" as const, href: "/team", icon: Users },
     { titleKey: "formBooking" as const, href: "/form-booking", icon: FileEdit },
-    { titleKey: "formSettlement" as const, href: "/settlement-form", icon: FileEdit },
+    { titleKey: "formSettlement" as const, href: "/settlement-form", icon: ReceiptText },
 ];
 
 export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
