@@ -22,9 +22,23 @@ FROM (
     (
       '1.5.2',
       'Format Google Per Jenis Acara',
-      'Format nama event Google Calendar dan nama folder klien Google Drive sekarang bisa dibedakan untuk tiap jenis acara, lengkap dengan preview dan tombol variabel.',
+      'Format nama event Google Calendar dan nama folder klien Google Drive sekarang bisa dibedakan untuk tiap jenis acara, termasuk dukungan variabel extra field dari form booking.',
       'new',
       '2026-03-13T09:55:00Z'
+    ),
+    (
+      '1.5.2',
+      'Preview dan Tombol Variabel Google',
+      'Pengaturan format nama event calendar dan format nama folder klien sekarang dilengkapi preview hasil, tombol variabel yang bisa diklik, dan panel format folder klien terpisah dari kotak koneksi Google Drive.',
+      'improvement',
+      '2026-03-13T09:52:00Z'
+    ),
+    (
+      '1.5.2',
+      'Metode Pembayaran Full Width',
+      'Kartu metode pembayaran di pengaturan form booking dan form booking publik sekarang ditampilkan full width dengan susunan stack vertikal agar lebih rapi dan mudah dipilih.',
+      'improvement',
+      '2026-03-13T09:51:00Z'
     ),
     (
       '1.5.2',
