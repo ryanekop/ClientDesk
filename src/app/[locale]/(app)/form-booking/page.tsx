@@ -880,6 +880,9 @@ export default function FormBookingPage() {
 
   const inputClass =
     "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
+  const disabledTermsFieldClass = termsEnabled
+    ? ""
+    : " bg-muted/60 text-muted-foreground opacity-80 cursor-not-allowed border-muted";
   const validBankAccounts = getValidBankAccounts(bankAccounts);
   const enabledBankAccounts = getEnabledBankAccounts(bankAccounts);
 
@@ -1546,46 +1549,52 @@ export default function FormBookingPage() {
                     </button>
                   </label>
 
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div
+                    className={`grid gap-4 rounded-xl transition-colors md:grid-cols-2 ${
+                      termsEnabled ? "" : "bg-muted/25 p-4"
+                    }`}
+                  >
                     <div className="space-y-2 md:col-span-2">
-                      <label className="text-sm font-medium">Teks sebelum hyperlink</label>
+                      <label className={`text-sm font-medium ${termsEnabled ? "" : "text-muted-foreground"}`}>Teks sebelum hyperlink</label>
                       <input
                         value={termsAgreementText}
                         onChange={(e) => setTermsAgreementText(e.target.value)}
                         placeholder="Saya telah membaca & setuju terhadap"
-                        className={inputClass}
+                        className={inputClass + disabledTermsFieldClass}
                         disabled={!termsEnabled}
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Teks hyperlink</label>
+                      <label className={`text-sm font-medium ${termsEnabled ? "" : "text-muted-foreground"}`}>Teks hyperlink</label>
                       <input
                         value={termsLinkText}
                         onChange={(e) => setTermsLinkText(e.target.value)}
                         placeholder="Syarat & Ketentuan"
-                        className={inputClass}
+                        className={inputClass + disabledTermsFieldClass}
                         disabled={!termsEnabled}
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Teks sesudah hyperlink</label>
+                      <label className={`text-sm font-medium ${termsEnabled ? "" : "text-muted-foreground"}`}>Teks sesudah hyperlink</label>
                       <input
                         value={termsSuffixText}
                         onChange={(e) => setTermsSuffixText(e.target.value)}
                         placeholder="yang sudah ada."
-                        className={inputClass}
+                        className={inputClass + disabledTermsFieldClass}
                         disabled={!termsEnabled}
                       />
                     </div>
                     <div className="space-y-2 md:col-span-2">
-                      <label className="text-sm font-medium">Isi popup T&amp;C</label>
-                      <RichTextEditor
-                        value={termsContent}
-                        onChange={setTermsContent}
-                        placeholder="Tulis syarat & ketentuan di sini. Bisa bold, italic, bullet list, numbering, heading, dan quote."
-                        disabled={!termsEnabled}
-                      />
-                      <p className="text-xs text-muted-foreground">
+                      <label className={`text-sm font-medium ${termsEnabled ? "" : "text-muted-foreground"}`}>Isi popup T&amp;C</label>
+                      <div className={termsEnabled ? "" : "cursor-not-allowed opacity-75"}>
+                        <RichTextEditor
+                          value={termsContent}
+                          onChange={setTermsContent}
+                          placeholder="Tulis syarat & ketentuan di sini. Bisa bold, italic, bullet list, numbering, heading, dan quote."
+                          disabled={!termsEnabled}
+                        />
+                      </div>
+                      <p className={`text-xs ${termsEnabled ? "text-muted-foreground" : "text-muted-foreground/80"}`}>
                         Editor ini mendukung format dasar seperti bold, italic, underline, bullet list, numbering, heading, dan quote.
                       </p>
                     </div>

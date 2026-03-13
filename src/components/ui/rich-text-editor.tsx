@@ -123,12 +123,12 @@ export function RichTextEditor({
   }, [editor, value]);
 
   if (!editor) {
-    return <div className="min-h-[240px] rounded-xl border bg-background" />;
+    return <div className={`min-h-[240px] rounded-xl border ${disabled ? "cursor-not-allowed border-muted bg-muted/50" : "bg-background"}`} />;
   }
 
   return (
-    <div className="rounded-xl border bg-background">
-      <div className="flex flex-wrap gap-2 border-b p-3">
+    <div className={`rounded-xl border transition-colors ${disabled ? "cursor-not-allowed border-muted bg-muted/50" : "bg-background"}`}>
+      <div className={`flex flex-wrap gap-2 border-b p-3 ${disabled ? "bg-muted/30" : ""}`}>
         <ToolbarButton
           label="Bold"
           active={editor.isActive("bold")}
@@ -241,7 +241,9 @@ export function RichTextEditor({
         </ToolbarButton>
       </div>
 
-      <EditorContent editor={editor} />
+      <div className={disabled ? "pointer-events-none" : ""}>
+        <EditorContent editor={editor} />
+      </div>
     </div>
   );
 }
