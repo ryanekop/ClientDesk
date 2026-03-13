@@ -1,204 +1,157 @@
 "use client";
 
 import * as React from "react";
-import { X, Sparkles, Wrench, Bug, Zap } from "lucide-react";
+import { BellRing } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Link } from "@/i18n/routing";
+import { ChangelogReleaseCard } from "@/components/changelog-list";
 import { createClient } from "@/utils/supabase/client";
+import {
+  CHANGELOG_PREFERENCE_EVENT,
+  type ChangelogEntry,
+  groupChangelogEntries,
+  isChangelogDismissed,
+  saveChangelogPreference,
+} from "@/lib/changelog";
 
-type ChangelogEntry = {
-  id: string;
-  version: string;
-  title: string;
-  description: string | null;
-  badge: string;
-  published_at: string;
-};
-
-const BADGE_CONFIG: Record<
-  string,
-  { label: string; icon: React.ElementType; className: string }
-> = {
-  new: {
-    label: "Baru",
-    icon: Sparkles,
-    className:
-      "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
-  },
-  improvement: {
-    label: "Peningkatan",
-    icon: Zap,
-    className:
-      "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-  },
-  fix: {
-    label: "Perbaikan",
-    icon: Bug,
-    className:
-      "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-  },
-  update: {
-    label: "Update",
-    icon: Wrench,
-    className:
-      "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400",
-  },
-};
-
-export function ChangelogModal({
-  open,
-  onClose,
+export function DashboardChangelogPopup({
+  entries,
+  locale,
 }: {
-  open: boolean;
-  onClose: () => void;
+  entries: ChangelogEntry[];
+  locale: string;
 }) {
-  const [entries, setEntries] = React.useState<ChangelogEntry[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const supabase = createClient();
+  const [open, setOpen] = React.useState(false);
+  const [persistInBrowser, setPersistInBrowser] = React.useState(false);
+  const releases = React.useMemo(() => groupChangelogEntries(entries), [entries]);
+  const latestRelease = releases[0];
+  const latestVersion = latestRelease?.version;
 
   React.useEffect(() => {
-    if (!open) return;
-    fetchChangelog();
-    markAsSeen();
-  }, [open]);
+    if (!latestVersion) {
+      return;
+    }
 
-  async function fetchChangelog() {
-    setLoading(true);
-    const { data } = await supabase
-      .from("changelog")
-      .select("*")
-      .order("published_at", { ascending: false })
-      .limit(50);
-    setEntries((data || []) as ChangelogEntry[]);
-    setLoading(false);
+    if (!isChangelogDismissed(latestVersion)) {
+      setOpen(true);
+    }
+  }, [latestVersion]);
+
+  const closePopup = React.useCallback(() => {
+    if (!latestVersion) {
+      setOpen(false);
+      return;
+    }
+
+    saveChangelogPreference(latestVersion, persistInBrowser);
+    setOpen(false);
+  }, [latestVersion, persistInBrowser]);
+
+  if (!latestRelease) {
+    return null;
   }
-
-  async function markAsSeen() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase.from("changelog_reads").upsert(
-      { user_id: user.id, last_seen_at: new Date().toISOString() },
-      { onConflict: "user_id" }
-    );
-  }
-
-  // Group entries by version
-  const grouped = React.useMemo(() => {
-    const map = new Map<string, ChangelogEntry[]>();
-    entries.forEach((e) => {
-      const key = e.version;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(e);
-    });
-    return Array.from(map.entries());
-  }, [entries]);
-
-  if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          closePopup();
+          return;
+        }
 
-      {/* Modal */}
-      <div className="relative bg-card rounded-2xl shadow-2xl border w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
-          <div>
-            <h2 className="text-lg font-bold">Log Perubahan</h2>
-            <p className="text-xs text-muted-foreground">
-              Fitur baru & perbaikan
-            </p>
+        setOpen(nextOpen);
+      }}
+    >
+      <DialogContent className="max-w-[min(780px,calc(100vw-1.5rem))] border-0 bg-transparent p-0 shadow-none sm:max-h-[85vh] [&>button]:right-5 [&>button]:top-5 [&>button]:rounded-full [&>button]:bg-background [&>button]:p-2 [&>button]:opacity-100 [&>button]:shadow-sm">
+        <div className="rounded-[1.75rem] border border-border/70 bg-background/95 p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.45)] backdrop-blur sm:p-5">
+          <DialogHeader className="px-2 pb-4 pt-2 text-left">
+            <div className="flex items-center gap-3 text-primary">
+              <BellRing className="h-5 w-5" />
+              <DialogTitle>
+                {locale === "en" ? "What’s new in Client Desk" : "Log perubahan terbaru"}
+              </DialogTitle>
+            </div>
+            <DialogDescription>
+              {locale === "en"
+                ? "This popup appears on the dashboard and can be hidden using browser storage."
+                : "Popup ini muncul di dashboard awal dan bisa disembunyikan dari browser tanpa menyimpan ke database."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[58vh] overflow-y-auto pr-1">
+            <ChangelogReleaseCard
+              release={latestRelease}
+              locale={locale}
+              isLatest
+              compact
+            />
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="mt-4 flex flex-col gap-4 border-t border-border/70 px-2 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3 text-sm text-muted-foreground">
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={persistInBrowser}
+                data-state={persistInBrowser ? "checked" : "unchecked"}
+                onClick={() => setPersistInBrowser((current) => !current)}
+                className="peer mt-0.5 size-4 shrink-0 rounded-[4px] border border-input shadow-xs outline-none transition-shadow dark:bg-input/30 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                {persistInBrowser && (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="grid place-content-center text-current"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPersistInBrowser((current) => !current)}
+                className="text-left"
+              >
+                {locale === "en"
+                  ? "Don’t show this popup again for this version."
+                  : "Jangan tampilkan lagi popup ini untuk versi ini."}
+              </button>
             </div>
-          ) : entries.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-12">
-              Belum ada catatan perubahan.
-            </p>
-          ) : (
-            <div className="space-y-6">
-              {grouped.map(([version, items]) => (
-                <div key={version}>
-                  {/* Version header */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-foreground text-background">
-                      v{version}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">
-                      {new Date(items[0].published_at).toLocaleDateString(
-                        "id-ID",
-                        {
-                          day: "numeric",
-                          month: "long",
-                          year: "numeric",
-                        }
-                      )}
-                    </span>
-                  </div>
 
-                  {/* Entries */}
-                  <div className="space-y-2 pl-1">
-                    {items.map((entry) => {
-                      const badgeConf =
-                        BADGE_CONFIG[entry.badge] || BADGE_CONFIG.update;
-                      const Icon = badgeConf.icon;
-                      return (
-                        <div
-                          key={entry.id}
-                          className="flex gap-3 rounded-lg p-3 hover:bg-muted/30 transition-colors"
-                        >
-                          <div className="pt-0.5 shrink-0">
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${badgeConf.className}`}
-                            >
-                              <Icon className="w-3 h-3" />
-                              {badgeConf.label}
-                            </span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-semibold">
-                              {entry.title}
-                            </h4>
-                            {entry.description && (
-                              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                                {entry.description}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button variant="outline" asChild>
+                <Link
+                  href="/changelog"
+                  onClick={() => {
+                    closePopup();
+                  }}
+                >
+                  {locale === "en" ? "View full log" : "Lihat log lengkap"}
+                </Link>
+              </Button>
+              <Button onClick={closePopup}>
+                {locale === "en" ? "Close" : "Tutup"}
+              </Button>
             </div>
-          )}
+          </div>
         </div>
-
-        {/* Footer */}
-        <div className="px-6 py-3 border-t text-center shrink-0">
-          <p className="text-[11px] text-muted-foreground">
-            Client Desk — Dibuat dengan ❤️
-          </p>
-        </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -208,41 +161,43 @@ export function ChangelogModal({
  */
 export function useChangelogUnread() {
   const [hasUnread, setHasUnread] = React.useState(false);
-  const supabase = createClient();
+  const supabase = React.useMemo(() => createClient(), []);
+
+  const checkUnread = React.useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from("changelog")
+        .select("version")
+        .order("published_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!data?.version) {
+        setHasUnread(false);
+        return;
+      }
+
+      setHasUnread(!isChangelogDismissed(data.version));
+    } catch {
+      setHasUnread(false);
+    }
+  }, [supabase]);
 
   React.useEffect(() => {
     checkUnread();
-  }, []);
 
-  async function checkUnread() {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+    const syncState = () => {
+      checkUnread();
+    };
 
-      // Get user's last_seen_at
-      const { data: readData } = await supabase
-        .from("changelog_reads")
-        .select("last_seen_at")
-        .eq("user_id", user.id)
-        .single();
+    window.addEventListener("storage", syncState);
+    window.addEventListener(CHANGELOG_PREFERENCE_EVENT, syncState);
 
-      // Count entries newer than last_seen_at
-      let query = supabase
-        .from("changelog")
-        .select("id", { count: "exact", head: true });
-
-      if (readData?.last_seen_at) {
-        query = query.gt("published_at", readData.last_seen_at);
-      }
-
-      const { count } = await query;
-      setHasUnread((count || 0) > 0);
-    } catch {
-      // Table might not exist yet — ignore
-    }
-  }
+    return () => {
+      window.removeEventListener("storage", syncState);
+      window.removeEventListener(CHANGELOG_PREFERENCE_EVENT, syncState);
+    };
+  }, [checkUnread]);
 
   return { hasUnread, checkUnread };
 }

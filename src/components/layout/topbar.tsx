@@ -17,14 +17,29 @@ import { Button } from "@/components/ui/button";
 import { Link, usePathname } from "@/i18n/routing";
 import { createClient } from "@/utils/supabase/client";
 import { signOut } from "@/app/actions/auth";
-import { ChangelogModal, useChangelogUnread } from "@/components/changelog-modal";
+import { useChangelogUnread } from "@/components/changelog-modal";
 
 function TopbarClock() {
-  const [now, setNow] = React.useState(new Date());
+  const [now, setNow] = React.useState<Date | null>(null);
+
   React.useEffect(() => {
+    setNow(new Date());
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  if (!now) {
+    return (
+      <div
+        className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground tabular-nums mr-1"
+        aria-hidden="true"
+      >
+        <span className="font-medium opacity-0">Kam, 12 Mar</span>
+        <span className="text-foreground font-bold opacity-0">23.59.59</span>
+      </div>
+    );
+  }
+
   const dateStr = now.toLocaleDateString("id-ID", {
     weekday: "short",
     day: "numeric",
@@ -60,8 +75,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   const ref = React.useRef<HTMLDivElement>(null);
   const t = useTranslations("Topbar");
   const pathname = usePathname();
-  const [changelogOpen, setChangelogOpen] = React.useState(false);
-  const { hasUnread, checkUnread } = useChangelogUnread();
+  const { hasUnread } = useChangelogUnread();
 
   const pageTitle = React.useMemo(() => {
     if (pathname.startsWith("/bookings/new")) return "Buat Booking";
@@ -75,6 +89,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
     if (pathname.startsWith("/team")) return "Tim / Freelance";
     if (pathname.startsWith("/form-booking")) return "Form Booking";
     if (pathname.startsWith("/client-status")) return "Status Booking";
+    if (pathname.startsWith("/changelog")) return "Log Perubahan";
     if (pathname.startsWith("/settings")) return "Pengaturan";
     if (pathname.startsWith("/profile")) return "Profil";
     if (pathname.startsWith("/dashboard")) return "Dashboard";
@@ -170,6 +185,21 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         <TopbarClock />
         <LanguageSwitcher />
         <ThemeToggle />
+        <Button
+          variant="outline"
+          asChild
+          className="relative gap-2 rounded-md px-3"
+        >
+          <Link href="/changelog">
+            <Megaphone className="h-4 w-4 text-muted-foreground" />
+            <span className="hidden text-sm font-medium sm:inline">
+              Log Perubahan
+            </span>
+            {hasUnread && (
+              <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-emerald-500 sm:static sm:ml-1" />
+            )}
+          </Link>
+        </Button>
 
         {/* Profile Avatar & Dropdown */}
         <div className="relative" ref={ref}>
@@ -227,21 +257,8 @@ export function Topbar({ onMenuClick }: TopbarProps) {
               ))}
             </div>
 
-            {/* Changelog + Logout */}
+            {/* Logout */}
             <div className="border-t py-1">
-              <button
-                onClick={() => {
-                  setProfileOpen(false);
-                  setChangelogOpen(true);
-                }}
-                className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted/50 transition-colors w-full cursor-pointer"
-              >
-                <Megaphone className="w-4 h-4 text-muted-foreground" />
-                Log Perubahan
-                {hasUnread && (
-                  <span className="ml-auto w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                )}
-              </button>
               <button
                 onClick={() => signOut()}
                 className="flex items-center gap-3 px-4 py-2 text-sm text-red-500 hover:bg-muted/50 transition-colors w-full cursor-pointer"
@@ -254,15 +271,6 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         </div>
       </div>
     </header>
-
-    {/* Changelog Modal */}
-    <ChangelogModal
-      open={changelogOpen}
-      onClose={() => {
-        setChangelogOpen(false);
-        checkUnread();
-      }}
-    />
     </>
   );
 }

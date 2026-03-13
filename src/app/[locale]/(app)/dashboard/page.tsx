@@ -17,8 +17,10 @@ import {
 } from "lucide-react";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import { UpcomingBookingCard } from "@/components/dashboard/dashboard-widgets";
+import { DashboardChangelogPopup } from "@/components/changelog-modal";
 import { getTranslations, getLocale } from "next-intl/server";
 import { Link } from "@/i18n/routing";
+import type { ChangelogEntry } from "@/lib/changelog";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -50,7 +52,7 @@ export default async function DashboardPage() {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const yearAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
-  // All 11 queries run in parallel — no more waterfall!
+  // Dashboard data + changelog are fetched in parallel to keep the page snappy.
   const [
     { data: profile },
     { count: totalBookings },
@@ -63,6 +65,7 @@ export default async function DashboardPage() {
     { data: upcomingBooking },
     { data: dailyRaw },
     { data: yearlyRaw },
+    { data: changelogRaw },
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -130,6 +133,11 @@ export default async function DashboardPage() {
       .eq("user_id", user!.id)
       .gte("created_at", yearAgo.toISOString())
       .order("created_at", { ascending: true }),
+    supabase
+      .from("changelog")
+      .select("id, version, title, description, badge, published_at")
+      .order("published_at", { ascending: false })
+      .limit(50),
   ]);
 
   const pendingAmount = (pendingPayments || []).reduce(
@@ -222,9 +230,12 @@ export default async function DashboardPage() {
     edit: "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400",
     batal: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
   };
+  const changelogEntries = (changelogRaw || []) as ChangelogEntry[];
 
   return (
     <div className="space-y-6">
+      <DashboardChangelogPopup entries={changelogEntries} locale={locale} />
+
       {/* Header */}
       <div>
         <h2 className="text-2xl font-bold tracking-tight">
