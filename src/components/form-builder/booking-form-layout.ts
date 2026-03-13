@@ -1,0 +1,844 @@
+"use client";
+
+export type CustomFieldType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "select"
+  | "checkbox";
+
+export type FormField = {
+  id: string;
+  label: string;
+  type: CustomFieldType;
+  required: boolean;
+  placeholder: string;
+  options?: string[];
+};
+
+export type FormSection = {
+  id: string;
+  title: string;
+  fields: FormField[];
+  is_builtin?: boolean;
+};
+
+export type BuiltInCategory = "Klien" | "Sesi" | "Pembayaran";
+
+export type BuiltInSectionId =
+  | "client_info"
+  | "session_details"
+  | "payment_details";
+
+export type BuiltInFieldId =
+  | "client_name"
+  | "client_whatsapp"
+  | "instagram"
+  | "event_type"
+  | "wedding_split_toggle"
+  | "akad_date"
+  | "akad_time"
+  | "resepsi_date"
+  | "resepsi_time"
+  | "session_date"
+  | "session_time"
+  | "location"
+  | "location_detail"
+  | "notes"
+  | "service_package"
+  | "addon_packages"
+  | "dp_paid"
+  | "bank_accounts"
+  | "payment_proof"
+  | `extra:${string}`;
+
+export type BuiltInSectionDefinition = {
+  sectionId: BuiltInSectionId;
+  title: string;
+  category: BuiltInCategory;
+};
+
+export type BuiltInFieldDefinition = {
+  builtinId: BuiltInFieldId;
+  label: string;
+  category: BuiltInCategory;
+  sectionId: BuiltInSectionId;
+};
+
+export type BuiltInSectionItem = {
+  id: string;
+  kind: "builtin_section";
+  sectionId: BuiltInSectionId;
+};
+
+export type BuiltInFieldItem = {
+  id: string;
+  kind: "builtin_field";
+  builtinId: BuiltInFieldId;
+};
+
+export type CustomFieldItem = {
+  id: string;
+  kind: "custom_field";
+  label: string;
+  type: CustomFieldType;
+  required: boolean;
+  placeholder: string;
+  options?: string[];
+};
+
+export type CustomSectionItem = {
+  id: string;
+  kind: "custom_section";
+  title: string;
+};
+
+export type SectionContentItem =
+  | BuiltInFieldItem
+  | CustomFieldItem
+  | CustomSectionItem;
+
+export type FormLayoutItem = BuiltInSectionItem | SectionContentItem;
+
+export type GroupedFormLayoutSection = {
+  section: BuiltInSectionDefinition;
+  items: SectionContentItem[];
+};
+
+export type CustomFieldSnapshot = {
+  id: string;
+  label: string;
+  type: CustomFieldType;
+  value: string;
+  sectionId: BuiltInSectionId;
+  sectionTitle: string;
+};
+
+export type GroupedCustomLayoutSection = {
+  sectionId: BuiltInSectionId;
+  sectionTitle: string;
+  items: Array<CustomFieldItem | CustomSectionItem>;
+};
+
+type EventExtraField = {
+  key: string;
+  label: string;
+  isLocation?: boolean;
+  fullWidth?: boolean;
+  required?: boolean;
+  isNumeric?: boolean;
+};
+
+export const EVENT_EXTRA_FIELDS: Record<string, EventExtraField[]> = {
+  Wisuda: [
+    { key: "universitas", label: "Universitas" },
+    { key: "fakultas", label: "Fakultas" },
+  ],
+  Wedding: [
+    {
+      key: "nama_pasangan",
+      label: "Nama Pasangan",
+      fullWidth: true,
+      required: true,
+    },
+    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
+    {
+      key: "jumlah_tamu",
+      label: "Estimasi Tamu",
+      fullWidth: true,
+      isNumeric: true,
+    },
+    {
+      key: "tempat_akad",
+      label: "Lokasi Akad",
+      isLocation: true,
+      required: true,
+    },
+    {
+      key: "tempat_resepsi",
+      label: "Lokasi Resepsi",
+      isLocation: true,
+      required: true,
+    },
+  ],
+  Akad: [
+    {
+      key: "nama_pasangan",
+      label: "Nama Pasangan",
+      fullWidth: true,
+      required: true,
+    },
+    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
+    {
+      key: "jumlah_tamu",
+      label: "Estimasi Tamu",
+      fullWidth: true,
+      isNumeric: true,
+    },
+  ],
+  Resepsi: [
+    {
+      key: "nama_pasangan",
+      label: "Nama Pasangan",
+      fullWidth: true,
+      required: true,
+    },
+    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
+    {
+      key: "jumlah_tamu",
+      label: "Estimasi Tamu",
+      fullWidth: true,
+      isNumeric: true,
+    },
+  ],
+  Lamaran: [
+    {
+      key: "nama_pasangan",
+      label: "Nama Pasangan",
+      fullWidth: true,
+      required: true,
+    },
+    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
+    {
+      key: "jumlah_tamu",
+      label: "Estimasi Tamu",
+      fullWidth: true,
+      isNumeric: true,
+    },
+  ],
+  Prewedding: [
+    {
+      key: "nama_pasangan",
+      label: "Nama Pasangan",
+      fullWidth: true,
+      required: true,
+    },
+    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
+  ],
+  Maternity: [
+    { key: "usia_kehamilan", label: "Usia Kehamilan" },
+    { key: "gender_bayi", label: "Gender Bayi" },
+  ],
+  Newborn: [
+    { key: "nama_bayi", label: "Nama Bayi" },
+    { key: "tanggal_lahir", label: "Tanggal Lahir" },
+  ],
+  Komersil: [
+    { key: "nama_brand", label: "Nama Brand" },
+    { key: "tipe_konten", label: "Tipe Konten" },
+  ],
+  Family: [{ key: "jumlah_anggota", label: "Jumlah Anggota" }],
+};
+
+const BUILT_IN_SECTIONS: BuiltInSectionDefinition[] = [
+  {
+    sectionId: "client_info",
+    title: "Informasi Klien",
+    category: "Klien",
+  },
+  {
+    sectionId: "session_details",
+    title: "Detail Sesi",
+    category: "Sesi",
+  },
+  {
+    sectionId: "payment_details",
+    title: "Paket Pembayaran",
+    category: "Pembayaran",
+  },
+];
+
+const BASE_BUILT_IN_FIELDS: BuiltInFieldDefinition[] = [
+  {
+    builtinId: "client_name",
+    label: "Nama Lengkap",
+    category: "Klien",
+    sectionId: "client_info",
+  },
+  {
+    builtinId: "client_whatsapp",
+    label: "Nomor WhatsApp",
+    category: "Klien",
+    sectionId: "client_info",
+  },
+  {
+    builtinId: "instagram",
+    label: "Instagram",
+    category: "Klien",
+    sectionId: "client_info",
+  },
+  {
+    builtinId: "event_type",
+    label: "Tipe Acara",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+];
+
+const WEDDING_BUILT_IN_FIELDS: BuiltInFieldDefinition[] = [
+  {
+    builtinId: "wedding_split_toggle",
+    label: "Toggle Akad & Resepsi beda hari",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+  {
+    builtinId: "akad_date",
+    label: "Tanggal Akad",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+  {
+    builtinId: "akad_time",
+    label: "Jam Akad",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+  {
+    builtinId: "resepsi_date",
+    label: "Tanggal Resepsi",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+  {
+    builtinId: "resepsi_time",
+    label: "Jam Resepsi",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+];
+
+const DEFAULT_SESSION_FIELDS: BuiltInFieldDefinition[] = [
+  {
+    builtinId: "session_date",
+    label: "Jadwal Sesi",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+  {
+    builtinId: "session_time",
+    label: "Jam",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+];
+
+const PAYMENT_BUILT_IN_FIELDS: BuiltInFieldDefinition[] = [
+  {
+    builtinId: "service_package",
+    label: "Paket Layanan",
+    category: "Pembayaran",
+    sectionId: "payment_details",
+  },
+  {
+    builtinId: "addon_packages",
+    label: "Paket Tambahan",
+    category: "Pembayaran",
+    sectionId: "payment_details",
+  },
+  {
+    builtinId: "dp_paid",
+    label: "DP Dibayar",
+    category: "Pembayaran",
+    sectionId: "payment_details",
+  },
+  {
+    builtinId: "bank_accounts",
+    label: "Rekening Pembayaran",
+    category: "Pembayaran",
+    sectionId: "payment_details",
+  },
+  {
+    builtinId: "payment_proof",
+    label: "Bukti Pembayaran",
+    category: "Pembayaran",
+    sectionId: "payment_details",
+  },
+];
+
+function customFieldToLayout(field: FormField): CustomFieldItem {
+  return {
+    id: field.id,
+    kind: "custom_field",
+    label: field.label,
+    type: field.type,
+    required: field.required,
+    placeholder: field.placeholder,
+    options: Array.isArray(field.options) ? field.options : undefined,
+  };
+}
+
+function isCustomFieldType(value: unknown): value is CustomFieldType {
+  return (
+    value === "text" ||
+    value === "textarea" ||
+    value === "number" ||
+    value === "select" ||
+    value === "checkbox"
+  );
+}
+
+function normalizeLegacyField(raw: unknown, fallbackIndex: number): FormField | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const field = raw as Record<string, unknown>;
+  const options = Array.isArray(field.options)
+    ? field.options.filter((option): option is string => typeof option === "string")
+    : undefined;
+
+  return {
+    id:
+      typeof field.id === "string" && field.id.length > 0
+        ? field.id
+        : `legacy-field-${fallbackIndex}`,
+    label: typeof field.label === "string" ? field.label : "",
+    type: isCustomFieldType(field.type) ? field.type : "text",
+    required: Boolean(field.required),
+    placeholder:
+      typeof field.placeholder === "string" ? field.placeholder : "",
+    options,
+  };
+}
+
+function getLegacySectionFields(section: unknown): FormField[] {
+  if (!section || typeof section !== "object") {
+    return [];
+  }
+
+  const rawFields = (section as Record<string, unknown>).fields;
+  if (!Array.isArray(rawFields)) {
+    return [];
+  }
+
+  return rawFields
+    .map((field, index) => normalizeLegacyField(field, index))
+    .filter((field): field is FormField => field !== null);
+}
+
+function createBuiltInSectionItem(sectionId: BuiltInSectionId): BuiltInSectionItem {
+  return {
+    id: `section:${sectionId}`,
+    kind: "builtin_section",
+    sectionId,
+  };
+}
+
+function createBuiltInFieldItem(builtinId: BuiltInFieldId): BuiltInFieldItem {
+  return {
+    id: `builtin:${builtinId}`,
+    kind: "builtin_field",
+    builtinId,
+  };
+}
+
+function initializeBuckets(): Record<BuiltInSectionId, SectionContentItem[]> {
+  return {
+    client_info: [],
+    session_details: [],
+    payment_details: [],
+  };
+}
+
+function flattenBuckets(
+  buckets: Record<BuiltInSectionId, SectionContentItem[]>,
+): FormLayoutItem[] {
+  return BUILT_IN_SECTIONS.flatMap((section) => [
+    createBuiltInSectionItem(section.sectionId),
+    ...buckets[section.sectionId],
+  ]);
+}
+
+function legacySectionsToLayout(
+  eventType: string,
+  sections: FormSection[],
+): FormLayoutItem[] {
+  const buckets = initializeBuckets();
+  const clientSection = sections.find(
+    (section) =>
+      !!section &&
+      typeof section === "object" &&
+      (section as FormSection).id === "builtin-client-info",
+  );
+  const sessionSection = sections.find(
+    (section) =>
+      !!section &&
+      typeof section === "object" &&
+      (section as FormSection).id === "builtin-session-details",
+  );
+  const clientCustomFields = getLegacySectionFields(clientSection);
+  const sessionCustomFields = getLegacySectionFields(sessionSection);
+  const additionalSections = sections.filter(
+    (section) =>
+      !!section &&
+      typeof section === "object" &&
+      section.id !== "builtin-client-info" &&
+      section.id !== "builtin-session-details",
+  );
+
+  const clientBuiltIns = getBuiltInFieldDefinitions(eventType).filter(
+    (field) => field.sectionId === "client_info",
+  );
+  const sessionBuiltIns = getBuiltInFieldDefinitions(eventType).filter(
+    (field) => field.sectionId === "session_details",
+  );
+  const paymentBuiltIns = getBuiltInFieldDefinitions(eventType).filter(
+    (field) => field.sectionId === "payment_details",
+  );
+
+  buckets.client_info.push(
+    ...clientBuiltIns.map((field) => createBuiltInFieldItem(field.builtinId)),
+    ...clientCustomFields.map(customFieldToLayout),
+  );
+  buckets.session_details.push(
+    ...sessionBuiltIns.map((field) => createBuiltInFieldItem(field.builtinId)),
+    ...sessionCustomFields.map(customFieldToLayout),
+  );
+  additionalSections.forEach((section, index) => {
+    const customFields = getLegacySectionFields(section);
+    if (!customFields.length) {
+      return;
+    }
+
+    buckets.session_details.push({
+      id: typeof section.id === "string" ? section.id : `legacy-section-${index}`,
+      kind: "custom_section",
+      title: typeof section.title === "string" ? section.title : "Section Lama",
+    });
+    buckets.session_details.push(...customFields.map(customFieldToLayout));
+  });
+  buckets.payment_details.push(
+    ...paymentBuiltIns.map((field) => createBuiltInFieldItem(field.builtinId)),
+  );
+
+  return flattenBuckets(buckets);
+}
+
+export function getBuiltInSectionDefinitions(): BuiltInSectionDefinition[] {
+  return BUILT_IN_SECTIONS;
+}
+
+export function getBuiltInSectionDefinition(
+  sectionId: BuiltInSectionId,
+): BuiltInSectionDefinition | undefined {
+  return BUILT_IN_SECTIONS.find((section) => section.sectionId === sectionId);
+}
+
+export function getBuiltInFieldDefinitions(
+  eventType: string,
+): BuiltInFieldDefinition[] {
+  const extraFields = (EVENT_EXTRA_FIELDS[eventType] || []).map((field) => ({
+    builtinId: `extra:${field.key}` as BuiltInFieldId,
+    label: field.label,
+    category: "Sesi" as const,
+    sectionId: "session_details" as const,
+  }));
+  const locationFields =
+    eventType === "Wedding"
+      ? [
+          {
+            builtinId: "location_detail" as const,
+            label: "Detail Lokasi",
+            category: "Sesi" as const,
+            sectionId: "session_details" as const,
+          },
+        ]
+      : [
+          {
+            builtinId: "location" as const,
+            label: "Lokasi",
+            category: "Sesi" as const,
+            sectionId: "session_details" as const,
+          },
+          {
+            builtinId: "location_detail" as const,
+            label: "Detail Lokasi",
+            category: "Sesi" as const,
+            sectionId: "session_details" as const,
+          },
+        ];
+
+  return [
+    ...BASE_BUILT_IN_FIELDS,
+    ...(eventType === "Wedding"
+      ? WEDDING_BUILT_IN_FIELDS
+      : DEFAULT_SESSION_FIELDS),
+    ...extraFields,
+    ...locationFields,
+    {
+      builtinId: "notes",
+      label: "Catatan",
+      category: "Sesi",
+      sectionId: "session_details",
+    },
+    ...PAYMENT_BUILT_IN_FIELDS,
+  ];
+}
+
+export function getBuiltInFieldDefinition(
+  builtinId: BuiltInFieldId,
+  eventType: string,
+): BuiltInFieldDefinition | undefined {
+  return getBuiltInFieldDefinitions(eventType).find(
+    (field) => field.builtinId === builtinId,
+  );
+}
+
+export function getSectionIdForBuiltInField(
+  builtinId: BuiltInFieldId,
+  eventType: string,
+): BuiltInSectionId {
+  return (
+    getBuiltInFieldDefinition(builtinId, eventType)?.sectionId ??
+    "session_details"
+  );
+}
+
+export function createDefaultFormLayout(eventType: string): FormLayoutItem[] {
+  const buckets = initializeBuckets();
+  getBuiltInFieldDefinitions(eventType).forEach((field) => {
+    buckets[field.sectionId].push(createBuiltInFieldItem(field.builtinId));
+  });
+  return flattenBuckets(buckets);
+}
+
+export function createCustomFieldItem(): CustomFieldItem {
+  return {
+    id: Math.random().toString(36).slice(2, 10),
+    kind: "custom_field",
+    label: "",
+    type: "text",
+    required: false,
+    placeholder: "",
+  };
+}
+
+export function createCustomSectionItem(): CustomSectionItem {
+  return {
+    id: Math.random().toString(36).slice(2, 10),
+    kind: "custom_section",
+    title: "Divider Baru",
+  };
+}
+
+function isNewLayoutItem(value: unknown): value is FormLayoutItem {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "kind" in value &&
+    (((value as FormLayoutItem).kind === "builtin_section" &&
+      "sectionId" in value) ||
+      ((value as FormLayoutItem).kind === "builtin_field" &&
+        "builtinId" in value) ||
+      (value as FormLayoutItem).kind === "custom_field" ||
+      (value as FormLayoutItem).kind === "custom_section")
+  );
+}
+
+function normalizeNewLayout(
+  items: FormLayoutItem[],
+  eventType: string,
+): FormLayoutItem[] {
+  const validBuiltInIds = new Set(
+    getBuiltInFieldDefinitions(eventType).map((field) => field.builtinId),
+  );
+  const seenBuiltIns = new Set<BuiltInFieldId>();
+  const buckets = initializeBuckets();
+  let currentSection: BuiltInSectionId = "client_info";
+
+  items.forEach((item) => {
+    if (item.kind === "builtin_section") {
+      currentSection = item.sectionId;
+      return;
+    }
+
+    if (item.kind === "builtin_field") {
+      if (!validBuiltInIds.has(item.builtinId) || seenBuiltIns.has(item.builtinId)) {
+        return;
+      }
+
+      const sectionId = getSectionIdForBuiltInField(item.builtinId, eventType);
+      seenBuiltIns.add(item.builtinId);
+      currentSection = sectionId;
+      buckets[sectionId].push(createBuiltInFieldItem(item.builtinId));
+      return;
+    }
+
+    buckets[currentSection].push(item);
+  });
+
+  getBuiltInFieldDefinitions(eventType).forEach((field) => {
+    if (seenBuiltIns.has(field.builtinId)) return;
+    buckets[field.sectionId].push(createBuiltInFieldItem(field.builtinId));
+  });
+
+  return flattenBuckets(buckets);
+}
+
+export function normalizeStoredFormLayout(
+  raw: unknown,
+  eventType: string,
+): FormLayoutItem[] {
+  if (!raw) return createDefaultFormLayout(eventType);
+
+  if (Array.isArray(raw) && raw.every(isNewLayoutItem)) {
+    return normalizeNewLayout(raw, eventType);
+  }
+
+  if (Array.isArray(raw)) {
+    return normalizeNewLayout(legacySectionsToLayout(eventType, raw as FormSection[]), eventType);
+  }
+
+  return createDefaultFormLayout(eventType);
+}
+
+export function groupFormLayoutBySection(
+  raw: unknown,
+  eventType: string,
+): GroupedFormLayoutSection[] {
+  const normalized = normalizeStoredFormLayout(raw, eventType);
+  const buckets = initializeBuckets();
+  let currentSection: BuiltInSectionId = "client_info";
+
+  normalized.forEach((item) => {
+    if (item.kind === "builtin_section") {
+      currentSection = item.sectionId;
+      return;
+    }
+
+    if (item.kind === "builtin_field") {
+      const sectionId = getSectionIdForBuiltInField(item.builtinId, eventType);
+      currentSection = sectionId;
+      buckets[sectionId].push(item);
+      return;
+    }
+
+    buckets[currentSection].push(item);
+  });
+
+  return BUILT_IN_SECTIONS.map((section) => ({
+    section,
+    items: buckets[section.sectionId],
+  }));
+}
+
+export function flattenGroupedFormLayout(
+  sections: GroupedFormLayoutSection[],
+): FormLayoutItem[] {
+  const buckets = initializeBuckets();
+
+  sections.forEach((section) => {
+    buckets[section.section.sectionId] = section.items;
+  });
+
+  return flattenBuckets(buckets);
+}
+
+export function getGroupedCustomLayoutSections(
+  raw: unknown,
+  eventType: string,
+): GroupedCustomLayoutSection[] {
+  return groupFormLayoutBySection(raw, eventType).map((section) => ({
+    sectionId: section.section.sectionId,
+    sectionTitle: section.section.title,
+    items: section.items.filter(
+      (item): item is CustomFieldItem | CustomSectionItem =>
+        item.kind === "custom_field" || item.kind === "custom_section",
+    ),
+  }));
+}
+
+export function buildCustomFieldSnapshots(
+  raw: unknown,
+  eventType: string,
+  values: Record<string, string>,
+): CustomFieldSnapshot[] {
+  const snapshots: CustomFieldSnapshot[] = [];
+
+  getGroupedCustomLayoutSections(raw, eventType).forEach((section) => {
+    section.items.forEach((item) => {
+      if (item.kind !== "custom_field") return;
+      const value = values[item.id];
+      if (!value) return;
+
+      snapshots.push({
+        id: item.id,
+        label: item.label,
+        type: item.type,
+        value,
+        sectionId: section.sectionId,
+        sectionTitle: section.sectionTitle,
+      });
+    });
+  });
+
+  return snapshots;
+}
+
+function isCustomFieldSnapshot(value: unknown): value is CustomFieldSnapshot {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "id" in value &&
+    "label" in value &&
+    "type" in value &&
+    "value" in value
+  );
+}
+
+export function extractCustomFieldSnapshots(raw: unknown): CustomFieldSnapshot[] {
+  if (!raw || typeof raw !== "object") return [];
+
+  const customFields = (raw as Record<string, unknown>).custom_fields;
+  if (Array.isArray(customFields) && customFields.every(isCustomFieldSnapshot)) {
+    return customFields;
+  }
+
+  return [];
+}
+
+export function extractLegacyCustomFieldValues(
+  raw: unknown,
+): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+
+  const customFields = (raw as Record<string, unknown>).custom_fields;
+  if (!customFields || typeof customFields !== "object" || Array.isArray(customFields)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(customFields).filter(
+      ([, value]) => typeof value === "string" && value.length > 0,
+    ),
+  ) as Record<string, string>;
+}
+
+export function extractCustomFieldValueMap(
+  raw: unknown,
+): Record<string, string> {
+  const snapshots = extractCustomFieldSnapshots(raw);
+  if (snapshots.length > 0) {
+    return Object.fromEntries(
+      snapshots.map((item) => [item.id, item.value]),
+    ) as Record<string, string>;
+  }
+
+  return extractLegacyCustomFieldValues(raw);
+}
+
+export function extractBuiltInExtraFieldValues(
+  raw: unknown,
+): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>).filter(
+      ([key, value]) =>
+        key !== "custom_fields" &&
+        typeof value === "string" &&
+        value.length > 0,
+    ),
+  ) as Record<string, string>;
+}

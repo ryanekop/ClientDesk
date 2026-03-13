@@ -21,9 +21,20 @@ import {
   Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
-import { useTranslations } from "next-intl";
-import CustomFormBuilder, { type FormSection } from "@/components/form-builder/custom-form-builder";
+import CustomFormBuilder from "@/components/form-builder/custom-form-builder";
+import {
+  normalizeStoredFormLayout,
+  type FormLayoutItem,
+} from "@/components/form-builder/booking-form-layout";
 
 const ALL_EVENT_TYPES = [
   "Umum",
@@ -46,6 +57,53 @@ type BankAccount = {
   account_name: string;
 };
 
+type FormSectionsByEventType = Record<string, FormLayoutItem[]>;
+type PreviewPayload = {
+  studio_name: string | null;
+  min_dp_percent: number;
+  min_dp_map: Record<string, { mode: "percent" | "fixed"; value: number }>;
+  form_brand_color: string;
+  form_greeting: string | null;
+  form_event_types: string[];
+  custom_event_types: string[];
+  form_show_notes: boolean;
+  form_show_proof: boolean;
+  form_sections: FormSectionsByEventType;
+  bank_accounts: BankAccount[];
+};
+
+type FormBookingSnapshot = {
+  min_dp_percent: number;
+  min_dp_map: Record<string, { mode: "percent" | "fixed"; value: number }>;
+  form_brand_color: string;
+  form_greeting: string;
+  form_event_types: string[];
+  custom_event_types: string[];
+  form_show_notes: boolean;
+  form_show_proof: boolean;
+  form_sections: FormSectionsByEventType;
+  bank_accounts: BankAccount[];
+  form_lang: string;
+};
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function toBankAccounts(value: unknown): BankAccount[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .map((item) => ({
+      bank_name: typeof item.bank_name === "string" ? item.bank_name : "",
+      account_number:
+        typeof item.account_number === "string" ? item.account_number : "",
+      account_name: typeof item.account_name === "string" ? item.account_name : "",
+    }));
+}
+
 const EMPTY_BANK: BankAccount = {
   bank_name: "",
   account_number: "",
@@ -63,8 +121,48 @@ const DEFAULTS = {
   bankAccounts: [] as BankAccount[],
 };
 
+function createFormBookingSnapshot({
+  minDpPercent,
+  minDpMap,
+  brandColor,
+  greeting,
+  selectedEventTypes,
+  customEventTypes,
+  showNotes,
+  showProof,
+  formSectionsByEventType,
+  bankAccounts,
+  formLang,
+}: {
+  minDpPercent: number;
+  minDpMap: Record<string, { mode: "percent" | "fixed"; value: number }>;
+  brandColor: string;
+  greeting: string;
+  selectedEventTypes: string[];
+  customEventTypes: string[];
+  showNotes: boolean;
+  showProof: boolean;
+  formSectionsByEventType: FormSectionsByEventType;
+  bankAccounts: BankAccount[];
+  formLang: string;
+}): FormBookingSnapshot {
+  return {
+    min_dp_percent: minDpPercent,
+    min_dp_map: minDpMap,
+    form_brand_color: brandColor,
+    form_greeting: greeting,
+    form_event_types: selectedEventTypes,
+    custom_event_types: customEventTypes,
+    form_show_notes: showNotes,
+    form_show_proof: showProof,
+    form_sections: formSectionsByEventType,
+    bank_accounts: bankAccounts,
+    form_lang: formLang,
+  };
+}
+
 export default function FormBookingPage() {
-  const supabase = createClient();
+  const supabase = React.useMemo(() => createClient(), []);
   const locale = useLocale();
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -79,6 +177,9 @@ export default function FormBookingPage() {
   const [copied, setCopied] = React.useState(false);
   const [profileId, setProfileId] = React.useState("");
   const [showResetConfirm, setShowResetConfirm] = React.useState(false);
+  const [lastSavedSnapshot, setLastSavedSnapshot] = React.useState<string | null>(null);
+  const [showLeaveConfirm, setShowLeaveConfirm] = React.useState(false);
+  const [pendingNavigation, setPendingNavigation] = React.useState<string | null>(null);
 
   // Customization
   const [brandColor, setBrandColor] = React.useState(DEFAULTS.brandColor);
@@ -91,12 +192,17 @@ export default function FormBookingPage() {
   const [showNotes, setShowNotes] = React.useState(DEFAULTS.showNotes);
   const [showProof, setShowProof] = React.useState(DEFAULTS.showProof);
   const [formLang, setFormLang] = React.useState("id");
+  const [settingsTab, setSettingsTab] = React.useState<"general" | "customForm">("general");
+  const [selectedCustomFormEventType, setSelectedCustomFormEventType] = React.useState("Umum");
 
   // Merged event types: built-in + custom
-  const allEventTypes = [...ALL_EVENT_TYPES, ...customEventTypes];
+  const allEventTypes = React.useMemo(
+    () => [...ALL_EVENT_TYPES, ...customEventTypes],
+    [customEventTypes],
+  );
 
   // Custom Form Builder
-  const [formSections, setFormSections] = React.useState<FormSection[]>([]);
+  const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<FormSectionsByEventType>({});
 
   // Bank accounts (max 5)
   const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
@@ -106,11 +212,93 @@ export default function FormBookingPage() {
     "settings",
   );
   const [isDriveConnected, setIsDriveConnected] = React.useState(false);
+  const [siteUrl, setSiteUrl] = React.useState("");
+  const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
-  const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
   const formUrl = vendorSlug
     ? `${siteUrl}/${formLang}/formbooking/${vendorSlug}`
     : "";
+  const formPath = vendorSlug ? `/${formLang}/formbooking/${vendorSlug}` : "";
+  const previewStorageKey = React.useMemo(
+    () => (vendorSlug ? `clientdesk:form-preview:${vendorSlug}` : ""),
+    [vendorSlug],
+  );
+  const previewPath = React.useMemo(() => {
+    if (!formPath || !previewStorageKey) return "";
+    return `${formPath}?preview=1&previewKey=${encodeURIComponent(previewStorageKey)}`;
+  }, [formPath, previewStorageKey]);
+  const previewSrc = previewPath || formPath;
+  const previewPayload = React.useMemo<PreviewPayload>(
+    () => ({
+      studio_name: studioName || null,
+      min_dp_percent: minDpPercent,
+      min_dp_map: minDpMap,
+      form_brand_color: brandColor,
+      form_greeting: greeting || null,
+      form_event_types: selectedEventTypes,
+      custom_event_types: customEventTypes,
+      form_show_notes: showNotes,
+      form_show_proof: showProof,
+      form_sections: formSectionsByEventType,
+      bank_accounts: bankAccounts.filter(
+        (bank) => bank.bank_name && bank.account_number,
+      ),
+    }),
+    [
+      bankAccounts,
+      brandColor,
+      customEventTypes,
+      formSectionsByEventType,
+      greeting,
+      minDpMap,
+      minDpPercent,
+      selectedEventTypes,
+      showNotes,
+      showProof,
+      studioName,
+    ],
+  );
+  const draftSnapshot = React.useMemo(
+    () =>
+      createFormBookingSnapshot({
+        minDpPercent,
+        minDpMap,
+        brandColor,
+        greeting,
+        selectedEventTypes,
+        customEventTypes,
+        showNotes,
+        showProof,
+        formSectionsByEventType,
+        bankAccounts,
+        formLang,
+      }),
+    [
+      bankAccounts,
+      brandColor,
+      customEventTypes,
+      formLang,
+      formSectionsByEventType,
+      greeting,
+      minDpMap,
+      minDpPercent,
+      selectedEventTypes,
+      showNotes,
+      showProof,
+    ],
+  );
+  const serializedDraftSnapshot = React.useMemo(
+    () => JSON.stringify(draftSnapshot),
+    [draftSnapshot],
+  );
+  const hasUnsavedChanges =
+    !loading &&
+    lastSavedSnapshot !== null &&
+    serializedDraftSnapshot !== lastSavedSnapshot;
+
+  React.useEffect(() => {
+    setSiteUrl(window.location.origin);
+  }, [supabase]);
 
   React.useEffect(() => {
     async function load() {
@@ -128,45 +316,72 @@ export default function FormBookingPage() {
       if (p) {
         setProfileId(p.id);
         setStudioName(p.studio_name || "");
-        setMinDpPercent(p.min_dp_percent ?? DEFAULTS.minDpPercent);
+        const loadedMinDpPercent = p.min_dp_percent ?? DEFAULTS.minDpPercent;
+        setMinDpPercent(loadedMinDpPercent);
         // Load per-event-type DP map
         const savedMap: Record<string, { mode: "percent" | "fixed"; value: number }> =
           typeof p.min_dp_map === "object" && p.min_dp_map !== null
             ? Object.fromEntries(
-                Object.entries(p.min_dp_map as Record<string, any>).map(([k, v]) => [
-                  k,
-                  typeof v === "number"
-                    ? { mode: "percent" as const, value: v } // backward compat
-                    : { mode: v.mode || "percent", value: v.value ?? 50 },
-                ]),
+                Object.entries(p.min_dp_map as Record<string, unknown>).map(([k, v]) => {
+                  if (typeof v === "number") {
+                    return [k, { mode: "percent" as const, value: v }];
+                  }
+                  if (v && typeof v === "object") {
+                    const cfg = v as { mode?: unknown; value?: unknown };
+                    return [
+                      k,
+                      {
+                        mode: cfg.mode === "fixed" ? "fixed" : "percent",
+                        value: typeof cfg.value === "number" ? cfg.value : 50,
+                      },
+                    ];
+                  }
+                  return [k, { mode: "percent" as const, value: 50 }];
+                }),
               )
             : {};
         setMinDpMap(savedMap);
-        setBrandColor(p.form_brand_color || DEFAULTS.brandColor);
-        setGreeting(p.form_greeting || DEFAULTS.greeting);
-        setSelectedEventTypes(
-          p.form_event_types?.length > 0
+        const loadedBrandColor = p.form_brand_color || DEFAULTS.brandColor;
+        const loadedGreeting = p.form_greeting || DEFAULTS.greeting;
+        setBrandColor(loadedBrandColor);
+        setGreeting(loadedGreeting);
+        const loadedFormEventTypes = toStringArray(p.form_event_types);
+        const loadedCustomEventTypes = toStringArray(p.custom_event_types);
+        const loadedSelectedEventTypes =
+          loadedFormEventTypes.length > 0
             ? [
                 // Maintain order, keep saved selections + add new built-in types
-                ...ALL_EVENT_TYPES.filter(t => p.form_event_types.includes(t)),
-                ...ALL_EVENT_TYPES.filter(t => !p.form_event_types.includes(t)),
-                ...(p.custom_event_types || []).filter((t: string) => p.form_event_types.includes(t)),
-                ...(p.custom_event_types || []).filter((t: string) => !p.form_event_types.includes(t)),
+                ...ALL_EVENT_TYPES.filter((t) => loadedFormEventTypes.includes(t)),
+                ...ALL_EVENT_TYPES.filter((t) => !loadedFormEventTypes.includes(t)),
+                ...loadedCustomEventTypes.filter((t) => loadedFormEventTypes.includes(t)),
+                ...loadedCustomEventTypes.filter((t) => !loadedFormEventTypes.includes(t)),
               ]
-            : [...ALL_EVENT_TYPES, ...(p.custom_event_types || [])],
-        );
-        setCustomEventTypes(p.custom_event_types || []);
-        setFormSections(p.form_sections || []);
-        setShowNotes(p.form_show_notes ?? DEFAULTS.showNotes);
-        setShowProof(p.form_show_proof ?? DEFAULTS.showProof);
-        setBankAccounts(
-          Array.isArray(p.bank_accounts) && p.bank_accounts.length > 0
-            ? p.bank_accounts
-            : [],
-        );
-        setFormLang(
-          ((p as Record<string, unknown>).form_lang as string) || "id",
-        );
+            : [...ALL_EVENT_TYPES, ...loadedCustomEventTypes];
+        setSelectedEventTypes(loadedSelectedEventTypes);
+        setCustomEventTypes(loadedCustomEventTypes);
+        const rawSections = (p as Record<string, unknown>).form_sections;
+        let normalizedSections: FormSectionsByEventType = {};
+        if (Array.isArray(rawSections)) {
+          // Backward compatibility: old data stored as single array
+          normalizedSections = {
+            Umum: normalizeStoredFormLayout(rawSections, "Umum"),
+          };
+        } else if (rawSections && typeof rawSections === "object") {
+          normalizedSections = Object.fromEntries(
+            Object.entries(rawSections as Record<string, unknown>).map(([k, v]) => [
+              k,
+              normalizeStoredFormLayout(v, k),
+            ]),
+          ) as FormSectionsByEventType;
+        }
+        setFormSectionsByEventType(normalizedSections);
+        const loadedShowNotes = p.form_show_notes ?? DEFAULTS.showNotes;
+        const loadedBanks = toBankAccounts(p.bank_accounts);
+        const loadedFormLang =
+          ((p as Record<string, unknown>).form_lang as string) || "id";
+        setShowNotes(loadedShowNotes);
+        setBankAccounts(loadedBanks);
+        setFormLang(loadedFormLang);
 
         if (p.vendor_slug) {
           setVendorSlug(p.vendor_slug);
@@ -174,12 +389,73 @@ export default function FormBookingPage() {
         const driveOk = !!(p as Record<string, unknown>)
           .google_drive_access_token;
         setIsDriveConnected(driveOk);
-        if (!driveOk) setShowProof(false);
+        const loadedShowProof = driveOk
+          ? (p.form_show_proof ?? DEFAULTS.showProof)
+          : false;
+        setShowProof(loadedShowProof);
+        setLastSavedSnapshot(
+          JSON.stringify(
+            createFormBookingSnapshot({
+              minDpPercent: loadedMinDpPercent,
+              minDpMap: savedMap,
+              brandColor: loadedBrandColor,
+              greeting: loadedGreeting,
+              selectedEventTypes: loadedSelectedEventTypes,
+              customEventTypes: loadedCustomEventTypes,
+              showNotes: loadedShowNotes,
+              showProof: loadedShowProof,
+              formSectionsByEventType: normalizedSections,
+              bankAccounts: loadedBanks,
+              formLang: loadedFormLang,
+            }),
+          ),
+        );
       }
       setLoading(false);
     }
     load();
-  }, []);
+  }, [supabase]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !previewStorageKey || !vendorSlug) return;
+
+    window.localStorage.setItem(
+      previewStorageKey,
+      JSON.stringify(previewPayload),
+    );
+
+    iframeRef.current?.contentWindow?.postMessage(
+      {
+        type: "clientdesk:form-preview-update",
+        previewKey: previewStorageKey,
+        payload: previewPayload,
+      },
+      window.location.origin,
+    );
+  }, [
+    previewPayload,
+    previewStorageKey,
+    vendorSlug,
+  ]);
+
+  const customFormEventTypes = React.useMemo(
+    () => (selectedEventTypes.length > 0 ? selectedEventTypes : allEventTypes),
+    [selectedEventTypes, allEventTypes],
+  );
+
+  React.useEffect(() => {
+    if (selectedEventTypes.length === 0) return;
+    if (!selectedEventTypes.includes(selectedDpEventType)) {
+      setSelectedDpEventType(selectedEventTypes[0]);
+    }
+  }, [selectedEventTypes, selectedDpEventType]);
+
+  React.useEffect(() => {
+    if (customFormEventTypes.length === 0) return;
+    if (!customFormEventTypes.includes(selectedCustomFormEventType)) {
+      setSelectedCustomFormEventType(customFormEventTypes[0]);
+    }
+  }, [customFormEventTypes, selectedCustomFormEventType]);
 
   // Get DP config for currently selected event type
   function getDpForEventType(eventType: string): { mode: "percent" | "fixed"; value: number } {
@@ -190,8 +466,18 @@ export default function FormBookingPage() {
     setMinDpMap((prev) => ({ ...prev, [eventType]: { mode, value } }));
   }
 
+  const navigateToPath = React.useCallback(
+    (href: string) => {
+      const targetUrl = new URL(href, window.location.href);
+      setPendingNavigation(null);
+      setShowLeaveConfirm(false);
+      window.location.assign(targetUrl.toString());
+    },
+    [],
+  );
+
   async function handleSave() {
-    if (!profileId) return;
+    if (!profileId) return false;
     setSaving(true);
 
     let slug = vendorSlug;
@@ -209,7 +495,7 @@ export default function FormBookingPage() {
       (b) => b.bank_name && b.account_number,
     );
 
-    await supabase
+    const { error } = await supabase
       .from("profiles")
       .update({
         vendor_slug: slug || null,
@@ -219,7 +505,7 @@ export default function FormBookingPage() {
         form_greeting: greeting || null,
         form_event_types: selectedEventTypes,
         custom_event_types: customEventTypes,
-        form_sections: formSections,
+        form_sections: formSectionsByEventType,
         form_show_notes: showNotes,
         form_show_proof: showProof,
         bank_accounts: validBanks,
@@ -227,11 +513,36 @@ export default function FormBookingPage() {
       })
       .eq("id", profileId);
 
+    if (error) {
+      setSavedMsg("Gagal menyimpan.");
+      setTimeout(() => setSavedMsg(""), 3000);
+      setSaving(false);
+      return false;
+    }
+
     setBankAccounts(validBanks);
+    setLastSavedSnapshot(
+      JSON.stringify(
+        createFormBookingSnapshot({
+          minDpPercent,
+          minDpMap,
+          brandColor,
+          greeting,
+          selectedEventTypes,
+          customEventTypes,
+          showNotes,
+          showProof,
+          formSectionsByEventType,
+          bankAccounts: validBanks,
+          formLang,
+        }),
+      ),
+    );
     setSavedMsg("Tersimpan!");
     setIframeKey((k) => k + 1);
     setTimeout(() => setSavedMsg(""), 3000);
     setSaving(false);
+    return true;
   }
 
   function handleResetDefault() {
@@ -242,6 +553,7 @@ export default function FormBookingPage() {
     setShowProof(false); // Requires Google Drive — don't enable by default
     setMinDpPercent(DEFAULTS.minDpPercent);
     setMinDpMap({});
+    setFormSectionsByEventType({});
     setBankAccounts([]);
     setFormLang("id");
     setShowResetConfirm(false);
@@ -273,6 +585,58 @@ export default function FormBookingPage() {
   function removeBank(index: number) {
     setBankAccounts((prev) => prev.filter((_, i) => i !== index));
   }
+
+  function updateFormSections(eventType: string, sections: FormLayoutItem[]) {
+    setFormSectionsByEventType((prev) => ({
+      ...prev,
+      [eventType]: normalizeStoredFormLayout(sections, eventType),
+    }));
+  }
+
+  React.useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!hasUnsavedChanges) return;
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const anchor = target.closest("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement)) return;
+      if (anchor.target && anchor.target !== "_self") return;
+      if (anchor.hasAttribute("download")) return;
+
+      const rawHref = anchor.getAttribute("href");
+      if (!rawHref || rawHref.startsWith("#")) return;
+      if (
+        rawHref.startsWith("mailto:") ||
+        rawHref.startsWith("tel:") ||
+        rawHref.startsWith("javascript:")
+      ) {
+        return;
+      }
+
+      const currentUrl = new URL(window.location.href);
+      const nextUrl = new URL(anchor.href, currentUrl.href);
+      const nextPath = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+      const currentPath = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+
+      if (nextUrl.origin !== currentUrl.origin || nextPath === currentPath) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingNavigation(nextPath);
+      setShowLeaveConfirm(true);
+    };
+
+    document.addEventListener("click", handleDocumentClick, true);
+    return () => {
+      document.removeEventListener("click", handleDocumentClick, true);
+    };
+  }, [hasUnsavedChanges]);
 
   const inputClass =
     "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
@@ -316,446 +680,519 @@ export default function FormBookingPage() {
         <div
           className={`space-y-6 ${mobileTab === "preview" ? "hidden lg:block" : ""}`}
         >
-          {/* Payment Settings */}
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-            <div className="px-6 py-4 border-b">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Percent className="w-4 h-4" /> Pengaturan Pembayaran
-              </h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Atur minimum DP berbeda untuk setiap jenis acara.
-              </p>
+          <div className="rounded-xl border bg-card p-1 shadow-sm">
+            <div className="grid grid-cols-2 gap-1">
+              <button
+                type="button"
+                onClick={() => setSettingsTab("general")}
+                className={`rounded-lg px-4 py-3 text-sm font-semibold transition-colors cursor-pointer ${
+                  settingsTab === "general"
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Pengaturan Umum
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettingsTab("customForm")}
+                className={`rounded-lg px-4 py-3 text-sm font-semibold transition-colors cursor-pointer ${
+                  settingsTab === "customForm"
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Custom Form
+              </button>
             </div>
-            <div className="p-6 space-y-4">
-              {/* Event type selector */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Jenis Acara</label>
-                <select
-                  value={selectedDpEventType}
-                  onChange={(e) => setSelectedDpEventType(e.target.value)}
-                  className={inputClass + " cursor-pointer"}
-                >
-                  {selectedEventTypes.map((et) => (
-                    <option key={et} value={et}>
-                      {et}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          </div>
 
-              {/* DP Mode Toggle + Value */}
-              <div className="space-y-3">
-                <label className="text-sm font-medium">
-                  Minimum DP —{" "}
-                  <span className="text-primary">{selectedDpEventType}</span>
-                </label>
-                {/* Mode Toggle */}
-                <div className="flex rounded-lg border overflow-hidden w-fit">
-                  <button
-                    type="button"
-                    onClick={() => setDpForEventType(selectedDpEventType, "percent", getDpForEventType(selectedDpEventType).value)}
-                    className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${getDpForEventType(selectedDpEventType).mode === "percent" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50"}`}
-                  >
-                    Persentase (%)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDpForEventType(selectedDpEventType, "fixed", getDpForEventType(selectedDpEventType).value)}
-                    className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${getDpForEventType(selectedDpEventType).mode === "fixed" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50"}`}
-                  >
-                    Nominal (Rp)
-                  </button>
-                </div>
-                {/* Value Input */}
-                {getDpForEventType(selectedDpEventType).mode === "percent" ? (
-                  <div className="flex items-center gap-4">
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={5}
-                      value={getDpForEventType(selectedDpEventType).value}
-                      onChange={(e) =>
-                        setDpForEventType(
-                          selectedDpEventType,
-                          "percent",
-                          Number(e.target.value),
-                        )
-                      }
-                      className="flex-1 accent-primary h-2 cursor-pointer"
-                    />
-                    <span className="text-sm font-bold w-12 text-right tabular-nums">
-                      {getDpForEventType(selectedDpEventType).value}%
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Rp</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={50000}
-                      value={getDpForEventType(selectedDpEventType).value}
-                      onChange={(e) =>
-                        setDpForEventType(
-                          selectedDpEventType,
-                          "fixed",
-                          Number(e.target.value),
-                        )
-                      }
-                      className={inputClass + " flex-1"}
-                      placeholder="500000"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Summary of all DP values */}
-              {Object.keys(minDpMap).length > 0 && (
-                <div className="pt-3 border-t space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Ringkasan DP
+          {settingsTab === "general" && (
+            <>
+              {/* Payment Settings */}
+              <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                <div className="px-6 py-4 border-b">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Percent className="w-4 h-4" /> Pengaturan Pembayaran
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Atur minimum DP berbeda untuk setiap jenis acara.
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedEventTypes.map((et) => {
-                      const dp = minDpMap[et] ?? { mode: "percent" as const, value: minDpPercent };
-                      const label = dp.mode === "fixed"
-                        ? `Rp ${dp.value.toLocaleString("id-ID")}`
-                        : `${dp.value}%`;
-                      return (
-                        <span
-                          key={et}
-                          className="text-[11px] px-2 py-1 rounded-md border bg-muted/50 text-muted-foreground"
-                        >
-                          {et}: <strong>{label}</strong>
+                </div>
+                <div className="p-6 space-y-4">
+                  {/* Event type selector */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Jenis Acara</label>
+                    <select
+                      value={selectedDpEventType}
+                      onChange={(e) => setSelectedDpEventType(e.target.value)}
+                      className={inputClass + " cursor-pointer"}
+                    >
+                      {selectedEventTypes.map((et) => (
+                        <option key={et} value={et}>
+                          {et}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* DP Mode Toggle + Value */}
+                  <div className="space-y-3">
+                    <label className="text-sm font-medium">
+                      Minimum DP —{" "}
+                      <span className="text-primary">{selectedDpEventType}</span>
+                    </label>
+                    {/* Mode Toggle */}
+                    <div className="flex rounded-lg border overflow-hidden w-fit">
+                      <button
+                        type="button"
+                        onClick={() => setDpForEventType(selectedDpEventType, "percent", getDpForEventType(selectedDpEventType).value)}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${getDpForEventType(selectedDpEventType).mode === "percent" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50"}`}
+                      >
+                        Persentase (%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDpForEventType(selectedDpEventType, "fixed", getDpForEventType(selectedDpEventType).value)}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${getDpForEventType(selectedDpEventType).mode === "fixed" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50"}`}
+                      >
+                        Nominal (Rp)
+                      </button>
+                    </div>
+                    {/* Value Input */}
+                    {getDpForEventType(selectedDpEventType).mode === "percent" ? (
+                      <div className="flex items-center gap-4">
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={getDpForEventType(selectedDpEventType).value}
+                          onChange={(e) =>
+                            setDpForEventType(
+                              selectedDpEventType,
+                              "percent",
+                              Number(e.target.value),
+                            )
+                          }
+                          className="flex-1 accent-primary h-2 cursor-pointer"
+                        />
+                        <span className="text-sm font-bold w-12 text-right tabular-nums">
+                          {getDpForEventType(selectedDpEventType).value}%
                         </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Rp</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step={50000}
+                          value={getDpForEventType(selectedDpEventType).value}
+                          onChange={(e) =>
+                            setDpForEventType(
+                              selectedDpEventType,
+                              "fixed",
+                              Number(e.target.value),
+                            )
+                          }
+                          className={inputClass + " flex-1"}
+                          placeholder="500000"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Summary of all DP values */}
+                  {Object.keys(minDpMap).length > 0 && (
+                    <div className="pt-3 border-t space-y-1">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Ringkasan DP
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedEventTypes.map((et) => {
+                          const dp = minDpMap[et] ?? { mode: "percent" as const, value: minDpPercent };
+                          const label = dp.mode === "fixed"
+                            ? `Rp ${dp.value.toLocaleString("id-ID")}`
+                            : `${dp.value}%`;
+                          return (
+                            <span
+                              key={et}
+                              className="text-[11px] px-2 py-1 rounded-md border bg-muted/50 text-muted-foreground"
+                            >
+                              {et}: <strong>{label}</strong>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Bank Accounts */}
+              <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                <div className="px-6 py-4 border-b">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold flex items-center gap-2">
+                        <CreditCard className="w-4 h-4" /> Rekening Pembayaran
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Maksimal 5 rekening. Akan ditampilkan di form booking
+                        publik.
+                      </p>
+                    </div>
+                    {bankAccounts.length < 5 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addBank}
+                        className="gap-1.5 shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Tambah
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="p-6 space-y-4">
+                  {bankAccounts.length === 0 ? (
+                    <div className="text-center py-6">
+                      <CreditCard className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        Belum ada rekening.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addBank}
+                        className="gap-1.5 mt-3"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Tambah Rekening
+                      </Button>
+                    </div>
+                  ) : (
+                    bankAccounts.map((bank, i) => (
+                      <div
+                        key={i}
+                        className="rounded-lg border p-4 space-y-3 relative"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-muted-foreground">
+                            Rekening #{i + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeBank(i)}
+                            className="text-red-500 hover:text-red-600 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground">
+                              Bank / E-Wallet
+                            </label>
+                            <input
+                              value={bank.bank_name}
+                              onChange={(e) =>
+                                updateBank(i, "bank_name", e.target.value)
+                              }
+                              placeholder="BCA / DANA"
+                              className={inputClass}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground">
+                              Nomor Rekening
+                            </label>
+                            <input
+                              value={bank.account_number}
+                              onChange={(e) =>
+                                updateBank(i, "account_number", e.target.value)
+                              }
+                              placeholder="1234567890"
+                              className={inputClass}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground">
+                              Atas Nama
+                            </label>
+                            <input
+                              value={bank.account_name}
+                              onChange={(e) =>
+                                updateBank(i, "account_name", e.target.value)
+                              }
+                              placeholder="Nama"
+                              className={inputClass}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Customization */}
+              <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                <div className="px-6 py-4 border-b">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Palette className="w-4 h-4" /> Kustomisasi Tampilan
+                  </h3>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Warna Brand</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={brandColor}
+                        onChange={(e) => setBrandColor(e.target.value)}
+                        className="w-10 h-10 rounded-lg border cursor-pointer p-0.5"
+                      />
+                      <input
+                        value={brandColor}
+                        onChange={(e) => setBrandColor(e.target.value)}
+                        placeholder="#000000"
+                        className={inputClass + " !w-32"}
+                      />
+                      <div
+                        className="w-24 h-9 rounded-md"
+                        style={{ backgroundColor: brandColor }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Teks Sapaan</label>
+                    <input
+                      value={greeting}
+                      onChange={(e) => setGreeting(e.target.value)}
+                      placeholder="Silakan isi formulir di bawah ini untuk booking."
+                      className={inputClass}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Kosongkan untuk menggunakan teks default.
+                    </p>
+                  </div>
+
+                  {/* Form Language */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5" />{" "}
+                      {locale === "en" ? "Form Language" : "Bahasa Form"}
+                    </label>
+                    <select
+                      value={formLang}
+                      onChange={(e) => setFormLang(e.target.value)}
+                      className={inputClass + " cursor-pointer"}
+                    >
+                      <option value="id">🇮🇩 Bahasa Indonesia</option>
+                      <option value="en">🇬🇧 English</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      {locale === "en"
+                        ? "Choose the language for the public booking form."
+                        : "Pilih bahasa untuk form booking publik."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Event Types */}
+              <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                <div className="px-6 py-4 border-b">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <List className="w-4 h-4" /> Tipe Acara
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Pilih tipe acara yang tersedia di form booking.
+                  </p>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    {allEventTypes.map((t) => {
+                      const isActive = selectedEventTypes.includes(t);
+                      const isCustom = customEventTypes.includes(t);
+                      return (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => toggleEventType(t)}
+                          className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer ${isActive ? "bg-primary text-primary-foreground border-primary" : "border-input text-muted-foreground hover:bg-muted/50"}`}
+                        >
+                          {t}
+                          {isCustom && (
+                            <span
+                              className="ml-1.5 text-[10px] opacity-70 hover:opacity-100"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCustomEventTypes((prev) => prev.filter((c) => c !== t));
+                                setSelectedEventTypes((prev) => prev.filter((c) => c !== t));
+                                setMinDpMap((prev) => {
+                                  const next = { ...prev };
+                                  delete next[t];
+                                  return next;
+                                });
+                                setFormSectionsByEventType((prev) => {
+                                  const next = { ...prev };
+                                  delete next[t];
+                                  return next;
+                                });
+                              }}
+                            >
+                              ×
+                            </span>
+                          )}
+                        </button>
                       );
                     })}
                   </div>
+                  {/* Add custom event type */}
+                  <div className="flex items-center gap-2 pt-2 border-t">
+                    <input
+                      type="text"
+                      value={newCustomType}
+                      onChange={(e) => setNewCustomType(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const val = newCustomType.trim();
+                          if (val && !allEventTypes.includes(val)) {
+                            setCustomEventTypes((prev) => [...prev, val]);
+                            setSelectedEventTypes((prev) => [...prev, val]);
+                            setNewCustomType("");
+                          }
+                        }
+                      }}
+                      placeholder="Tambah tipe acara custom..."
+                      className={inputClass + " flex-1 !h-8 text-xs"}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = newCustomType.trim();
+                        if (val && !allEventTypes.includes(val)) {
+                          setCustomEventTypes((prev) => [...prev, val]);
+                          setSelectedEventTypes((prev) => [...prev, val]);
+                          setNewCustomType("");
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg border text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
+                    >
+                      Tambah
+                    </button>
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
 
-          {/* Bank Accounts */}
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-            <div className="px-6 py-4 border-b">
-              <div className="flex items-center justify-between">
-                <div>
+              {/* Field Toggles */}
+              <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                <div className="px-6 py-4 border-b">
                   <h3 className="font-semibold flex items-center gap-2">
-                    <CreditCard className="w-4 h-4" /> Rekening Pembayaran
+                    <ToggleRight className="w-4 h-4" /> Field Opsional
                   </h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Maksimal 5 rekening. Akan ditampilkan di form booking
-                    publik.
-                  </p>
                 </div>
-                {bankAccounts.length < 5 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={addBank}
-                    className="gap-1.5 shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Tambah
-                  </Button>
+                <div className="p-6 space-y-3">
+                  {[
+                    {
+                      label: "Catatan",
+                      value: showNotes,
+                      setter: setShowNotes,
+                      disabled: false,
+                    },
+                    {
+                      label: "Upload Bukti Pembayaran",
+                      value: showProof,
+                      setter: setShowProof,
+                      disabled: !isDriveConnected,
+                    },
+                  ].map((item) => (
+                    <div key={item.label}>
+                      <label
+                        className={`flex items-center justify-between ${item.disabled ? "opacity-50" : "cursor-pointer"}`}
+                      >
+                        <span className="text-sm font-medium">{item.label}</span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={item.value}
+                          disabled={item.disabled}
+                          onClick={() => !item.disabled && item.setter(!item.value)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${item.disabled ? "cursor-not-allowed" : "cursor-pointer"} ${item.value ? "bg-primary" : "bg-muted"}`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${item.value ? "translate-x-6" : "translate-x-1"}`}
+                          />
+                        </button>
+                      </label>
+                      {item.disabled && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                          Hubungkan Google Drive di Pengaturan untuk mengaktifkan
+                          fitur ini.
+                        </p>
+                      )}
+                      {item.label === "Upload Bukti Pembayaran" && !item.disabled && (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          📁 File tersimpan di Google Drive pada folder klien
+                          <span className="font-semibold"> &quot;Nama Klien / Nama Invoice&quot;</span>
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {settingsTab === "customForm" && (
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+              <div className="px-6 py-4 border-b">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <List className="w-4 h-4" /> Custom Form
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Setiap jenis acara memiliki section bawaan sendiri: Informasi Klien, Detail Sesi, dan Paket Pembayaran. Item bawaan di dalamnya bisa direorder, lalu kamu bisa tambah field atau divider custom per section.
+                </p>
+              </div>
+              <div className="p-6 space-y-4">
+                {customFormEventTypes.length > 0 ? (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Jenis Acara</label>
+                      <select
+                        value={selectedCustomFormEventType}
+                        onChange={(e) => setSelectedCustomFormEventType(e.target.value)}
+                        className={inputClass + " cursor-pointer"}
+                      >
+                        {customFormEventTypes.map((eventType) => (
+                          <option key={eventType} value={eventType}>
+                            {eventType}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <CustomFormBuilder
+                      eventType={selectedCustomFormEventType}
+                      layout={normalizeStoredFormLayout(
+                        formSectionsByEventType[selectedCustomFormEventType] || [],
+                        selectedCustomFormEventType,
+                      )}
+                      onChange={(layout) =>
+                        updateFormSections(selectedCustomFormEventType, layout)
+                      }
+                    />
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Belum ada jenis acara aktif. Tambahkan dulu di Pengaturan Umum.
+                  </p>
                 )}
               </div>
             </div>
-            <div className="p-6 space-y-4">
-              {bankAccounts.length === 0 ? (
-                <div className="text-center py-6">
-                  <CreditCard className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Belum ada rekening.
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={addBank}
-                    className="gap-1.5 mt-3"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Tambah Rekening
-                  </Button>
-                </div>
-              ) : (
-                bankAccounts.map((bank, i) => (
-                  <div
-                    key={i}
-                    className="rounded-lg border p-4 space-y-3 relative"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        Rekening #{i + 1}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeBank(i)}
-                        className="text-red-500 hover:text-red-600 transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">
-                          Bank / E-Wallet
-                        </label>
-                        <input
-                          value={bank.bank_name}
-                          onChange={(e) =>
-                            updateBank(i, "bank_name", e.target.value)
-                          }
-                          placeholder="BCA / DANA"
-                          className={inputClass}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">
-                          Nomor Rekening
-                        </label>
-                        <input
-                          value={bank.account_number}
-                          onChange={(e) =>
-                            updateBank(i, "account_number", e.target.value)
-                          }
-                          placeholder="1234567890"
-                          className={inputClass}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">
-                          Atas Nama
-                        </label>
-                        <input
-                          value={bank.account_name}
-                          onChange={(e) =>
-                            updateBank(i, "account_name", e.target.value)
-                          }
-                          placeholder="Nama"
-                          className={inputClass}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Customization */}
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-            <div className="px-6 py-4 border-b">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Palette className="w-4 h-4" /> Kustomisasi Tampilan
-              </h3>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Warna Brand</label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="color"
-                    value={brandColor}
-                    onChange={(e) => setBrandColor(e.target.value)}
-                    className="w-10 h-10 rounded-lg border cursor-pointer p-0.5"
-                  />
-                  <input
-                    value={brandColor}
-                    onChange={(e) => setBrandColor(e.target.value)}
-                    placeholder="#000000"
-                    className={inputClass + " !w-32"}
-                  />
-                  <div
-                    className="w-24 h-9 rounded-md"
-                    style={{ backgroundColor: brandColor }}
-                  ></div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Teks Sapaan</label>
-                <input
-                  value={greeting}
-                  onChange={(e) => setGreeting(e.target.value)}
-                  placeholder="Silakan isi formulir di bawah ini untuk booking."
-                  className={inputClass}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Kosongkan untuk menggunakan teks default.
-                </p>
-              </div>
-
-              {/* Form Language */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5" />{" "}
-                  {locale === "en" ? "Form Language" : "Bahasa Form"}
-                </label>
-                <select
-                  value={formLang}
-                  onChange={(e) => setFormLang(e.target.value)}
-                  className={inputClass + " cursor-pointer"}
-                >
-                  <option value="id">🇮🇩 Bahasa Indonesia</option>
-                  <option value="en">🇬🇧 English</option>
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  {locale === "en"
-                    ? "Choose the language for the public booking form."
-                    : "Pilih bahasa untuk form booking publik."}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Event Types */}
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-            <div className="px-6 py-4 border-b">
-              <h3 className="font-semibold flex items-center gap-2">
-                <List className="w-4 h-4" /> Tipe Acara
-              </h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Pilih tipe acara yang tersedia di form booking.
-              </p>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {allEventTypes.map((t) => {
-                  const isActive = selectedEventTypes.includes(t);
-                  const isCustom = customEventTypes.includes(t);
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => toggleEventType(t)}
-                      className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer ${isActive ? "bg-primary text-primary-foreground border-primary" : "border-input text-muted-foreground hover:bg-muted/50"}`}
-                    >
-                      {t}
-                      {isCustom && (
-                        <span
-                          className="ml-1.5 text-[10px] opacity-70 hover:opacity-100"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCustomEventTypes(prev => prev.filter(c => c !== t));
-                            setSelectedEventTypes(prev => prev.filter(c => c !== t));
-                          }}
-                        >
-                          ×
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              {/* Add custom event type */}
-              <div className="flex items-center gap-2 pt-2 border-t">
-                <input
-                  type="text"
-                  value={newCustomType}
-                  onChange={(e) => setNewCustomType(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const val = newCustomType.trim();
-                      if (val && !allEventTypes.includes(val)) {
-                        setCustomEventTypes(prev => [...prev, val]);
-                        setSelectedEventTypes(prev => [...prev, val]);
-                        setNewCustomType("");
-                      }
-                    }
-                  }}
-                  placeholder="Tambah tipe acara custom..."
-                  className={inputClass + " flex-1 !h-8 text-xs"}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const val = newCustomType.trim();
-                    if (val && !allEventTypes.includes(val)) {
-                      setCustomEventTypes(prev => [...prev, val]);
-                      setSelectedEventTypes(prev => [...prev, val]);
-                      setNewCustomType("");
-                    }
-                  }}
-                  className="px-3 py-1.5 rounded-lg border text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
-                >
-                  Tambah
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Field Toggles */}
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-            <div className="px-6 py-4 border-b">
-              <h3 className="font-semibold flex items-center gap-2">
-                <ToggleRight className="w-4 h-4" /> Field Opsional
-              </h3>
-            </div>
-            <div className="p-6 space-y-3">
-              {[
-                {
-                  label: "Catatan",
-                  value: showNotes,
-                  setter: setShowNotes,
-                  disabled: false,
-                },
-                {
-                  label: "Upload Bukti Pembayaran",
-                  value: showProof,
-                  setter: setShowProof,
-                  disabled: !isDriveConnected,
-                },
-              ].map((item) => (
-                <div key={item.label}>
-                  <label
-                    className={`flex items-center justify-between ${item.disabled ? "opacity-50" : "cursor-pointer"}`}
-                  >
-                    <span className="text-sm font-medium">{item.label}</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={item.value}
-                      disabled={item.disabled}
-                      onClick={() => !item.disabled && item.setter(!item.value)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${item.disabled ? "cursor-not-allowed" : "cursor-pointer"} ${item.value ? "bg-primary" : "bg-muted"}`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${item.value ? "translate-x-6" : "translate-x-1"}`}
-                      />
-                    </button>
-                  </label>
-                  {item.disabled && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
-                      Hubungkan Google Drive di Pengaturan untuk mengaktifkan
-                      fitur ini.
-                    </p>
-                  )}
-                  {item.label === "Upload Bukti Pembayaran" && !item.disabled && (
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      📁 File tersimpan di Google Drive pada folder klien
-                      <span className="font-semibold"> "Nama Klien / Nama Invoice"</span>
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Custom Form Builder */}
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-            <div className="px-6 py-4 border-b">
-              <h3 className="font-semibold flex items-center gap-2">
-                <List className="w-4 h-4" /> Custom Form
-              </h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Tambahkan section dan field khusus di form booking. Mirip Google Form.
-              </p>
-            </div>
-            <div className="p-6">
-              <CustomFormBuilder sections={formSections} onChange={setFormSections} />
-            </div>
-          </div>
+          )}
 
           {/* Save + Reset */}
           <div className="flex items-center gap-3 flex-wrap">
@@ -810,6 +1247,57 @@ export default function FormBookingPage() {
               </div>
             </div>
           )}
+
+          <Dialog
+            open={showLeaveConfirm}
+            onOpenChange={(open) => {
+              setShowLeaveConfirm(open);
+              if (!open) setPendingNavigation(null);
+            }}
+          >
+            <DialogContent className="overflow-x-hidden sm:max-w-lg">
+              <DialogHeader className="items-center text-center">
+                <DialogTitle className="text-xl">Simpan perubahan dulu?</DialogTitle>
+                <DialogDescription className="max-w-sm">
+                  Ada perubahan di Form Booking yang belum disimpan. Kalau kamu keluar sekarang, perubahan ini akan hilang.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="gap-2 pt-2 sm:flex-col md:flex-row md:justify-center">
+                <Button
+                  variant="outline"
+                  className="w-full md:w-auto"
+                  onClick={() => {
+                    setShowLeaveConfirm(false);
+                    setPendingNavigation(null);
+                  }}
+                >
+                  Tetap di Sini
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full md:w-auto"
+                  onClick={() => {
+                    if (pendingNavigation) navigateToPath(pendingNavigation);
+                  }}
+                >
+                  Keluar Tanpa Simpan
+                </Button>
+                <Button
+                  className="w-full gap-2 md:w-auto"
+                  onClick={async () => {
+                    const saved = await handleSave();
+                    if (saved && pendingNavigation) {
+                      navigateToPath(pendingNavigation);
+                    }
+                  }}
+                  disabled={saving}
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Simpan & Keluar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* RIGHT: Linktree-Style Preview — hidden on mobile when viewing settings */}
@@ -878,19 +1366,42 @@ export default function FormBookingPage() {
                     </div>
                     <div className="flex-1 text-center">
                       <span className="text-[11px] text-muted-foreground truncate block">
-                        {formUrl.replace(/^https?:\/\//, "")}
+                        {formUrl
+                          ? formUrl.replace(/^https?:\/\//, "")
+                          : "Memuat preview..."}
                       </span>
                     </div>
                   </div>
 
                   {/* iframe content — fills remaining space */}
                   <div className="rounded-b-2xl overflow-hidden border border-t-0 bg-white dark:bg-background flex-1 min-h-0">
-                    <iframe
-                      key={iframeKey}
-                      src={formUrl}
-                      className="w-full h-full"
-                      title="Form Preview"
-                    />
+                    {previewSrc ? (
+                      <iframe
+                        ref={iframeRef}
+                        key={iframeKey}
+                        src={previewSrc}
+                        className="w-full h-full"
+                        title="Form Preview"
+                        onLoad={() => {
+                          if (!previewStorageKey || typeof window === "undefined") return;
+                          iframeRef.current?.contentWindow?.postMessage(
+                            {
+                              type: "clientdesk:form-preview-update",
+                              previewKey: previewStorageKey,
+                              payload: previewPayload,
+                            },
+                            window.location.origin,
+                          );
+                        }}
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center bg-muted/10">
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                          <span className="text-xs">Menyiapkan preview...</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
