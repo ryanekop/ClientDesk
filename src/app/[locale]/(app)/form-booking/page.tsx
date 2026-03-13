@@ -1095,7 +1095,7 @@ export default function FormBookingPage() {
                   </p>
                 </div>
                 <div className="p-6 space-y-4">
-                  <div className="space-y-3 max-w-2xl">
+                  <div className="space-y-3">
                     {[
                       {
                         id: "bank" as PaymentMethod,
@@ -1128,7 +1128,7 @@ export default function FormBookingPage() {
                           key={method.id}
                           type="button"
                           onClick={() => togglePaymentMethod(method.id)}
-                          className={`rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                          className={`w-full rounded-xl border p-4 text-left transition-all cursor-pointer ${
                             active
                               ? "border-primary bg-primary/5 shadow-sm"
                               : "border-input hover:bg-muted/40"

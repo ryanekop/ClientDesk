@@ -1291,7 +1291,7 @@ export function BookingFormClient({
                       key={method}
                       type="button"
                       onClick={() => setSelectedPaymentMethod(method)}
-                      className={`rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                      className={`w-full rounded-xl border p-4 text-left transition-all cursor-pointer ${
                         active
                           ? "border-primary bg-primary/5 shadow-sm"
                           : "border-input hover:bg-muted/40"
@@ -1364,7 +1364,7 @@ export function BookingFormClient({
                               createPaymentSourceFromBank(bank),
                             )
                           }
-                          className={`rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                          className={`w-full rounded-xl border p-4 text-left transition-all cursor-pointer ${
                             isSelected
                               ? "border-primary bg-primary/5 shadow-sm"
                               : "border-input hover:bg-muted/40"
