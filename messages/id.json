@@ -120,10 +120,15 @@
         "errorLokasiWedding": "Mohon lengkapi Lokasi Akad dan Lokasi Resepsi.",
         "errorDPMin": "DP minimal {percent}% dari harga paket ({amount}).",
         "errorDPMinFixed": "DP minimal {amount}.",
+        "errorTermsRequired": "Mohon setujui Syarat & Ketentuan terlebih dahulu.",
         "errorUpload": "Gagal upload bukti pembayaran: ",
         "errorCompress": "Gagal compress/upload bukti pembayaran.",
         "greetingDefault": "Silakan isi formulir di bawah ini untuk booking.",
-        "cariLokasiField": "Cari lokasi {field}..."
+        "cariLokasiField": "Cari lokasi {field}...",
+        "termsAgreementDefault": "Saya telah membaca & setuju terhadap",
+        "termsLinkDefault": "Syarat & Ketentuan",
+        "termsDialogDescription": "Silakan baca syarat dan ketentuan berikut sebelum melanjutkan booking.",
+        "tutup": "Tutup"
     },
     "Bookings": {
         "title": "Daftar Booking",

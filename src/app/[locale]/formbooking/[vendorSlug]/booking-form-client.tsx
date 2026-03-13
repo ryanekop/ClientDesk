@@ -10,10 +10,18 @@ import {
   Camera,
   MessageCircle,
   CreditCard,
+  FileText,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { compressImage } from "@/utils/compress-image";
 import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useTranslations } from "next-intl";
 import {
   buildCustomFieldSnapshots,
@@ -50,6 +58,11 @@ export type Vendor = {
   form_show_location: boolean;
   form_show_notes: boolean;
   form_show_proof: boolean;
+  form_terms_enabled: boolean;
+  form_terms_agreement_text: string | null;
+  form_terms_link_text: string | null;
+  form_terms_suffix_text: string | null;
+  form_terms_content: string | null;
   form_sections: FormLayoutItem[] | Record<string, FormLayoutItem[]>;
   bank_accounts: {
     bank_name: string;
@@ -133,6 +146,11 @@ type PreviewVendorPayload = Partial<
     | "custom_event_types"
     | "form_show_notes"
     | "form_show_proof"
+    | "form_terms_enabled"
+    | "form_terms_agreement_text"
+    | "form_terms_link_text"
+    | "form_terms_suffix_text"
+    | "form_terms_content"
     | "form_sections"
     | "bank_accounts"
   >
@@ -263,6 +281,8 @@ export function BookingFormClient({
   const [proofFile, setProofFile] = React.useState<File | null>(null);
   const [proofPreview, setProofPreview] = React.useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = React.useState(false);
+  const [termsAccepted, setTermsAccepted] = React.useState(false);
+  const [termsDialogOpen, setTermsDialogOpen] = React.useState(false);
   const [error, setError] = React.useState("");
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -334,6 +354,11 @@ export function BookingFormClient({
       (!extraData.tempat_akad || !extraData.tempat_resepsi)
     ) {
       setError(t("errorLokasiWedding"));
+      return;
+    }
+
+    if (hasTerms && !termsAccepted) {
+      setError(t("errorTermsRequired"));
       return;
     }
 
@@ -441,6 +466,12 @@ export function BookingFormClient({
               ? {
                   addon_ids: Array.from(selectedAddons),
                   addon_names: selectedAddonServices.map((service) => service.name),
+                }
+              : {}),
+            ...(hasTerms
+              ? {
+                  terms_accepted: true,
+                  terms_accepted_at: new Date().toISOString(),
                 }
               : {}),
             ...(customFieldSnapshots.length > 0 ? { custom_fields: customFieldSnapshots } : {}),
@@ -553,6 +584,13 @@ export function BookingFormClient({
   const availableEventTypes = effectiveVendor.form_event_types?.length
     ? [...effectiveVendor.form_event_types, ...(effectiveVendor.custom_event_types || []).filter(t => effectiveVendor.form_event_types!.includes(t))]
     : [...EVENT_TYPES, ...(effectiveVendor.custom_event_types || [])];
+  const termsAgreementText =
+    effectiveVendor.form_terms_agreement_text?.trim() || t("termsAgreementDefault");
+  const termsLinkText =
+    effectiveVendor.form_terms_link_text?.trim() || t("termsLinkDefault");
+  const termsSuffixText = effectiveVendor.form_terms_suffix_text?.trim() || "";
+  const termsContent = effectiveVendor.form_terms_content?.trim() || "";
+  const hasTerms = effectiveVendor.form_terms_enabled && Boolean(termsContent);
 
   React.useEffect(() => {
     if (!selectedService) {
@@ -1321,6 +1359,42 @@ export function BookingFormClient({
             );
           })}
 
+          {hasTerms && (
+            <section className="space-y-3 rounded-xl border bg-muted/20 p-4">
+              <div className="flex items-start gap-3">
+                <input
+                  id="booking-terms"
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => {
+                    setTermsAccepted(e.target.checked);
+                    if (e.target.checked) setError("");
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-input accent-primary"
+                />
+                <label
+                  htmlFor="booking-terms"
+                  className="text-sm leading-6 text-muted-foreground"
+                >
+                  {termsAgreementText}{" "}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setTermsDialogOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1 font-semibold text-primary underline underline-offset-4 cursor-pointer"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    {termsLinkText}
+                  </button>
+                  {termsSuffixText ? ` ${termsSuffixText}` : ""}
+                </label>
+              </div>
+            </section>
+          )}
+
           {/* Error */}
           {error && (
             <div className="rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-3 text-sm text-red-600 dark:text-red-400">
@@ -1348,6 +1422,31 @@ export function BookingFormClient({
             )}
           </button>
         </form>
+
+        {hasTerms && (
+          <Dialog open={termsDialogOpen} onOpenChange={setTermsDialogOpen}>
+            <DialogContent className="sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>{termsLinkText}</DialogTitle>
+                <DialogDescription>
+                  {t("termsDialogDescription")}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="max-h-[55vh] overflow-y-auto rounded-lg border bg-muted/20 p-4 text-sm leading-6 whitespace-pre-wrap">
+                {termsContent}
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setTermsDialogOpen(false)}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border px-4 text-sm font-medium transition-colors hover:bg-muted cursor-pointer"
+                >
+                  {t("tutup")}
+                </button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
 
         <p className="text-center text-xs text-muted-foreground pb-4">
           Powered by <span className="font-semibold">Client Desk</span>

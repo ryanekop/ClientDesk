@@ -19,6 +19,7 @@ import {
   Settings2,
   Eye,
   Globe,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,6 +69,11 @@ type PreviewPayload = {
   custom_event_types: string[];
   form_show_notes: boolean;
   form_show_proof: boolean;
+  form_terms_enabled: boolean;
+  form_terms_agreement_text: string;
+  form_terms_link_text: string;
+  form_terms_suffix_text: string;
+  form_terms_content: string;
   form_sections: FormSectionsByEventType;
   bank_accounts: BankAccount[];
 };
@@ -81,6 +87,11 @@ type FormBookingSnapshot = {
   custom_event_types: string[];
   form_show_notes: boolean;
   form_show_proof: boolean;
+  form_terms_enabled: boolean;
+  form_terms_agreement_text: string;
+  form_terms_link_text: string;
+  form_terms_suffix_text: string;
+  form_terms_content: string;
   form_sections: FormSectionsByEventType;
   bank_accounts: BankAccount[];
   form_lang: string;
@@ -116,6 +127,11 @@ const DEFAULTS = {
   eventTypes: ALL_EVENT_TYPES,
   showNotes: true,
   showProof: true,
+  termsEnabled: false,
+  termsAgreementText: "Saya telah membaca & setuju terhadap",
+  termsLinkText: "Syarat & Ketentuan",
+  termsSuffixText: "yang sudah ada.",
+  termsContent: "",
   minDpPercent: 50,
   minDpMap: {} as Record<string, { mode: "percent" | "fixed"; value: number }>,
   bankAccounts: [] as BankAccount[],
@@ -130,6 +146,11 @@ function createFormBookingSnapshot({
   customEventTypes,
   showNotes,
   showProof,
+  termsEnabled,
+  termsAgreementText,
+  termsLinkText,
+  termsSuffixText,
+  termsContent,
   formSectionsByEventType,
   bankAccounts,
   formLang,
@@ -142,6 +163,11 @@ function createFormBookingSnapshot({
   customEventTypes: string[];
   showNotes: boolean;
   showProof: boolean;
+  termsEnabled: boolean;
+  termsAgreementText: string;
+  termsLinkText: string;
+  termsSuffixText: string;
+  termsContent: string;
   formSectionsByEventType: FormSectionsByEventType;
   bankAccounts: BankAccount[];
   formLang: string;
@@ -155,6 +181,11 @@ function createFormBookingSnapshot({
     custom_event_types: customEventTypes,
     form_show_notes: showNotes,
     form_show_proof: showProof,
+    form_terms_enabled: termsEnabled,
+    form_terms_agreement_text: termsAgreementText,
+    form_terms_link_text: termsLinkText,
+    form_terms_suffix_text: termsSuffixText,
+    form_terms_content: termsContent,
     form_sections: formSectionsByEventType,
     bank_accounts: bankAccounts,
     form_lang: formLang,
@@ -191,6 +222,17 @@ export default function FormBookingPage() {
   const [newCustomType, setNewCustomType] = React.useState("");
   const [showNotes, setShowNotes] = React.useState(DEFAULTS.showNotes);
   const [showProof, setShowProof] = React.useState(DEFAULTS.showProof);
+  const [termsEnabled, setTermsEnabled] = React.useState(DEFAULTS.termsEnabled);
+  const [termsAgreementText, setTermsAgreementText] = React.useState(
+    DEFAULTS.termsAgreementText,
+  );
+  const [termsLinkText, setTermsLinkText] = React.useState(
+    DEFAULTS.termsLinkText,
+  );
+  const [termsSuffixText, setTermsSuffixText] = React.useState(
+    DEFAULTS.termsSuffixText,
+  );
+  const [termsContent, setTermsContent] = React.useState(DEFAULTS.termsContent);
   const [formLang, setFormLang] = React.useState("id");
   const [settingsTab, setSettingsTab] = React.useState<"general" | "customForm">("general");
   const [selectedCustomFormEventType, setSelectedCustomFormEventType] = React.useState("Umum");
@@ -239,6 +281,11 @@ export default function FormBookingPage() {
       custom_event_types: customEventTypes,
       form_show_notes: showNotes,
       form_show_proof: showProof,
+      form_terms_enabled: termsEnabled,
+      form_terms_agreement_text: termsAgreementText,
+      form_terms_link_text: termsLinkText,
+      form_terms_suffix_text: termsSuffixText,
+      form_terms_content: termsContent,
       form_sections: formSectionsByEventType,
       bank_accounts: bankAccounts.filter(
         (bank) => bank.bank_name && bank.account_number,
@@ -255,6 +302,11 @@ export default function FormBookingPage() {
       selectedEventTypes,
       showNotes,
       showProof,
+      termsAgreementText,
+      termsContent,
+      termsEnabled,
+      termsLinkText,
+      termsSuffixText,
       studioName,
     ],
   );
@@ -269,6 +321,11 @@ export default function FormBookingPage() {
         customEventTypes,
         showNotes,
         showProof,
+        termsEnabled,
+        termsAgreementText,
+        termsLinkText,
+        termsSuffixText,
+        termsContent,
         formSectionsByEventType,
         bankAccounts,
         formLang,
@@ -285,6 +342,11 @@ export default function FormBookingPage() {
       selectedEventTypes,
       showNotes,
       showProof,
+      termsAgreementText,
+      termsContent,
+      termsEnabled,
+      termsLinkText,
+      termsSuffixText,
     ],
   );
   const serializedDraftSnapshot = React.useMemo(
@@ -379,9 +441,32 @@ export default function FormBookingPage() {
         const loadedBanks = toBankAccounts(p.bank_accounts);
         const loadedFormLang =
           ((p as Record<string, unknown>).form_lang as string) || "id";
+        const loadedTermsEnabled =
+          (p as Record<string, unknown>).form_terms_enabled === true;
+        const loadedTermsAgreementText =
+          typeof (p as Record<string, unknown>).form_terms_agreement_text === "string"
+            ? ((p as Record<string, unknown>).form_terms_agreement_text as string)
+            : DEFAULTS.termsAgreementText;
+        const loadedTermsLinkText =
+          typeof (p as Record<string, unknown>).form_terms_link_text === "string"
+            ? ((p as Record<string, unknown>).form_terms_link_text as string)
+            : DEFAULTS.termsLinkText;
+        const loadedTermsSuffixText =
+          typeof (p as Record<string, unknown>).form_terms_suffix_text === "string"
+            ? ((p as Record<string, unknown>).form_terms_suffix_text as string)
+            : DEFAULTS.termsSuffixText;
+        const loadedTermsContent =
+          typeof (p as Record<string, unknown>).form_terms_content === "string"
+            ? ((p as Record<string, unknown>).form_terms_content as string)
+            : DEFAULTS.termsContent;
         setShowNotes(loadedShowNotes);
         setBankAccounts(loadedBanks);
         setFormLang(loadedFormLang);
+        setTermsEnabled(loadedTermsEnabled);
+        setTermsAgreementText(loadedTermsAgreementText);
+        setTermsLinkText(loadedTermsLinkText);
+        setTermsSuffixText(loadedTermsSuffixText);
+        setTermsContent(loadedTermsContent);
 
         if (p.vendor_slug) {
           setVendorSlug(p.vendor_slug);
@@ -404,6 +489,11 @@ export default function FormBookingPage() {
               customEventTypes: loadedCustomEventTypes,
               showNotes: loadedShowNotes,
               showProof: loadedShowProof,
+              termsEnabled: loadedTermsEnabled,
+              termsAgreementText: loadedTermsAgreementText,
+              termsLinkText: loadedTermsLinkText,
+              termsSuffixText: loadedTermsSuffixText,
+              termsContent: loadedTermsContent,
               formSectionsByEventType: normalizedSections,
               bankAccounts: loadedBanks,
               formLang: loadedFormLang,
@@ -508,6 +598,11 @@ export default function FormBookingPage() {
         form_sections: formSectionsByEventType,
         form_show_notes: showNotes,
         form_show_proof: showProof,
+        form_terms_enabled: termsEnabled,
+        form_terms_agreement_text: termsAgreementText || null,
+        form_terms_link_text: termsLinkText || null,
+        form_terms_suffix_text: termsSuffixText || null,
+        form_terms_content: termsContent || null,
         bank_accounts: validBanks,
         form_lang: formLang,
       })
@@ -532,6 +627,11 @@ export default function FormBookingPage() {
           customEventTypes,
           showNotes,
           showProof,
+          termsEnabled,
+          termsAgreementText,
+          termsLinkText,
+          termsSuffixText,
+          termsContent,
           formSectionsByEventType,
           bankAccounts: validBanks,
           formLang,
@@ -551,6 +651,11 @@ export default function FormBookingPage() {
     setSelectedEventTypes([...DEFAULTS.eventTypes]);
     setShowNotes(DEFAULTS.showNotes);
     setShowProof(false); // Requires Google Drive — don't enable by default
+    setTermsEnabled(DEFAULTS.termsEnabled);
+    setTermsAgreementText(DEFAULTS.termsAgreementText);
+    setTermsLinkText(DEFAULTS.termsLinkText);
+    setTermsSuffixText(DEFAULTS.termsSuffixText);
+    setTermsContent(DEFAULTS.termsContent);
     setMinDpPercent(DEFAULTS.minDpPercent);
     setMinDpMap({});
     setFormSectionsByEventType({});
@@ -1148,50 +1253,131 @@ export default function FormBookingPage() {
           )}
 
           {settingsTab === "customForm" && (
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-              <div className="px-6 py-4 border-b">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <List className="w-4 h-4" /> Custom Form
-                </h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Setiap jenis acara memiliki section bawaan sendiri: Informasi Klien, Detail Sesi, dan Paket Pembayaran. Item bawaan di dalamnya bisa direorder, lalu kamu bisa tambah field atau divider custom per section.
-                </p>
-              </div>
-              <div className="p-6 space-y-4">
-                {customFormEventTypes.length > 0 ? (
-                  <>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Jenis Acara</label>
-                      <select
-                        value={selectedCustomFormEventType}
-                        onChange={(e) => setSelectedCustomFormEventType(e.target.value)}
-                        className={inputClass + " cursor-pointer"}
-                      >
-                        {customFormEventTypes.map((eventType) => (
-                          <option key={eventType} value={eventType}>
-                            {eventType}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <CustomFormBuilder
-                      eventType={selectedCustomFormEventType}
-                      layout={normalizeStoredFormLayout(
-                        formSectionsByEventType[selectedCustomFormEventType] || [],
-                        selectedCustomFormEventType,
-                      )}
-                      onChange={(layout) =>
-                        updateFormSections(selectedCustomFormEventType, layout)
-                      }
-                    />
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Belum ada jenis acara aktif. Tambahkan dulu di Pengaturan Umum.
+            <>
+              <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                <div className="px-6 py-4 border-b">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <List className="w-4 h-4" /> Custom Form
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Setiap jenis acara memiliki section bawaan sendiri: Informasi Klien, Detail Sesi, dan Paket Pembayaran. Item bawaan di dalamnya bisa direorder, lalu kamu bisa tambah field atau divider custom per section.
                   </p>
-                )}
+                </div>
+                <div className="p-6 space-y-4">
+                  {customFormEventTypes.length > 0 ? (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Jenis Acara</label>
+                        <select
+                          value={selectedCustomFormEventType}
+                          onChange={(e) => setSelectedCustomFormEventType(e.target.value)}
+                          className={inputClass + " cursor-pointer"}
+                        >
+                          {customFormEventTypes.map((eventType) => (
+                            <option key={eventType} value={eventType}>
+                              {eventType}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <CustomFormBuilder
+                        eventType={selectedCustomFormEventType}
+                        layout={normalizeStoredFormLayout(
+                          formSectionsByEventType[selectedCustomFormEventType] || [],
+                          selectedCustomFormEventType,
+                        )}
+                        onChange={(layout) =>
+                          updateFormSections(selectedCustomFormEventType, layout)
+                        }
+                      />
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Belum ada jenis acara aktif. Tambahkan dulu di Pengaturan Umum.
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
+
+              <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                <div className="px-6 py-4 border-b">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <FileText className="w-4 h-4" /> Terms & Conditions
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Tambahkan checkbox persetujuan di bagian paling bawah form booking, dengan teks custom dan isi popup T&amp;C.
+                  </p>
+                </div>
+                <div className="p-6 space-y-4">
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <div>
+                      <p className="text-sm font-medium">Aktifkan T&amp;C</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Saat aktif, klien harus menyetujui syarat sebelum booking bisa dikirim.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={termsEnabled}
+                      onClick={() => setTermsEnabled((prev) => !prev)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${termsEnabled ? "bg-primary" : "bg-muted"}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${termsEnabled ? "translate-x-6" : "translate-x-1"}`}
+                      />
+                    </button>
+                  </label>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-sm font-medium">Teks sebelum hyperlink</label>
+                      <input
+                        value={termsAgreementText}
+                        onChange={(e) => setTermsAgreementText(e.target.value)}
+                        placeholder="Saya telah membaca & setuju terhadap"
+                        className={inputClass}
+                        disabled={!termsEnabled}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Teks hyperlink</label>
+                      <input
+                        value={termsLinkText}
+                        onChange={(e) => setTermsLinkText(e.target.value)}
+                        placeholder="Syarat & Ketentuan"
+                        className={inputClass}
+                        disabled={!termsEnabled}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Teks sesudah hyperlink</label>
+                      <input
+                        value={termsSuffixText}
+                        onChange={(e) => setTermsSuffixText(e.target.value)}
+                        placeholder="yang sudah ada."
+                        className={inputClass}
+                        disabled={!termsEnabled}
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-sm font-medium">Isi popup T&amp;C</label>
+                      <textarea
+                        value={termsContent}
+                        onChange={(e) => setTermsContent(e.target.value)}
+                        placeholder={"Tuliskan syarat dan ketentuan di sini.\n\nSetiap baris baru akan tetap tampil di popup."}
+                        rows={8}
+                        className="placeholder:text-muted-foreground w-full min-w-0 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-y transition-all"
+                        disabled={!termsEnabled}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Kalau isi popup kosong, T&amp;C tidak akan ditampilkan di form publik walaupun toggle aktif.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
           {/* Save + Reset */}

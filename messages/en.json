@@ -120,10 +120,15 @@
         "errorLokasiWedding": "Please fill in Akad Venue and Reception Venue.",
         "errorDPMin": "Minimum DP is {percent}% of the package price ({amount}).",
         "errorDPMinFixed": "Minimum DP is {amount}.",
+        "errorTermsRequired": "Please agree to the Terms & Conditions first.",
         "errorUpload": "Failed to upload payment proof: ",
         "errorCompress": "Failed to compress/upload payment proof.",
         "greetingDefault": "Please fill in the form below to make a booking.",
-        "cariLokasiField": "Search {field} location..."
+        "cariLokasiField": "Search {field} location...",
+        "termsAgreementDefault": "I have read and agree to the",
+        "termsLinkDefault": "Terms & Conditions",
+        "termsDialogDescription": "Please read the following terms and conditions before continuing your booking.",
+        "tutup": "Close"
     },
     "Bookings": {
         "title": "Bookings",
