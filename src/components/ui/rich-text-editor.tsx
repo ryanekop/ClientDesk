@@ -87,10 +87,18 @@ export function RichTextEditor({
     content: initialContent,
     editable: !disabled,
     onUpdate: ({ editor: currentEditor }) => {
-      const sanitized = sanitizeRichTextHtml(currentEditor.getHTML());
-      if (sanitized !== currentEditor.getHTML()) {
+      const html = currentEditor.getHTML();
+      lastAppliedValueRef.current = html;
+      onChange(isRichTextEmpty(html) ? "" : html);
+    },
+    onBlur: ({ editor: currentEditor }) => {
+      const html = currentEditor.getHTML();
+      const sanitized = sanitizeRichTextHtml(html);
+
+      if (sanitized !== html) {
         currentEditor.commands.setContent(sanitized, { emitUpdate: false });
       }
+
       lastAppliedValueRef.current = sanitized;
       onChange(isRichTextEmpty(sanitized) ? "" : sanitized);
     },
@@ -109,8 +117,11 @@ export function RichTextEditor({
 
   React.useEffect(() => {
     if (!editor) return;
+    if (editor.isFocused) return;
+
     const sanitized = sanitizeRichTextHtml(value);
-    if (sanitized === lastAppliedValueRef.current) return;
+    if (sanitized === sanitizeRichTextHtml(lastAppliedValueRef.current)) return;
+
     lastAppliedValueRef.current = sanitized;
     editor.commands.setContent(sanitized, { emitUpdate: false });
   }, [editor, value]);
