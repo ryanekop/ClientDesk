@@ -679,12 +679,43 @@ function isCustomFieldSnapshot(value: unknown): value is CustomFieldSnapshot {
   );
 }
 
+export function stringifyFormFieldValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => stringifyFormFieldValue(item))
+      .filter((item) => item.length > 0)
+      .join(", ");
+  }
+
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>)
+      .map((item) => stringifyFormFieldValue(item))
+      .filter((item) => item.length > 0)
+      .join(", ");
+  }
+
+  return "";
+}
+
 export function extractCustomFieldSnapshots(raw: unknown): CustomFieldSnapshot[] {
   if (!raw || typeof raw !== "object") return [];
 
   const customFields = (raw as Record<string, unknown>).custom_fields;
   if (Array.isArray(customFields) && customFields.every(isCustomFieldSnapshot)) {
-    return customFields;
+    return customFields.map((item) => ({
+      ...item,
+      id: String(item.id),
+      label: String(item.label),
+      value: stringifyFormFieldValue(item.value),
+    }));
   }
 
   return [];
@@ -701,9 +732,9 @@ export function extractLegacyCustomFieldValues(
   }
 
   return Object.fromEntries(
-    Object.entries(customFields).filter(
-      ([, value]) => typeof value === "string" && value.length > 0,
-    ),
+    Object.entries(customFields)
+      .map(([key, value]) => [key, stringifyFormFieldValue(value)] as const)
+      .filter(([, value]) => value.length > 0),
   ) as Record<string, string>;
 }
 
@@ -726,12 +757,10 @@ export function extractBuiltInExtraFieldValues(
   if (!raw || typeof raw !== "object") return {};
 
   return Object.fromEntries(
-    Object.entries(raw as Record<string, unknown>).filter(
-      ([key, value]) =>
-        key !== "custom_fields" &&
-        typeof value === "string" &&
-        value.length > 0,
-    ),
+    Object.entries(raw as Record<string, unknown>)
+      .filter(([key]) => key !== "custom_fields")
+      .map(([key, value]) => [key, stringifyFormFieldValue(value)] as const)
+      .filter(([, value]) => value.length > 0),
   ) as Record<string, string>;
 }
 
