@@ -10,7 +10,6 @@ import { useLocale } from "next-intl";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import {
     GOOGLE_EVENT_TYPES,
-    CALENDAR_TEMPLATE_VARIABLES,
     DRIVE_TEMPLATE_VARIABLES,
     DEFAULT_CALENDAR_EVENT_FORMAT,
     DEFAULT_DRIVE_FOLDER_FORMAT,
@@ -18,7 +17,9 @@ import {
     resolveTemplateByEventType,
     applyCalendarTemplate,
     applyDriveTemplate,
+    getCalendarTemplateVariables,
 } from "@/utils/google/template";
+import { getEventExtraFieldPreviewVars } from "@/utils/form-extra-fields";
 
 const COUNTRY_CODES = [
     { code: "+62", flag: "🇮🇩", name: "Indonesia" },
@@ -479,6 +480,7 @@ export default function SettingsPage() {
     const calendarPreviewVars = {
         ...previewData,
         event_type: selectedCalendarEventType,
+        ...getEventExtraFieldPreviewVars(selectedCalendarEventType),
     };
     const drivePreviewVars = {
         ...previewData,
@@ -486,6 +488,7 @@ export default function SettingsPage() {
     };
     const currentCalendarFormat = calendarEventFormats[selectedCalendarEventType] || "";
     const currentDriveFormat = driveFolderFormats[selectedDriveEventType] || "";
+    const calendarTemplateVariables = getCalendarTemplateVariables(selectedCalendarEventType);
     const calendarEventPreview = applyCalendarTemplate(
         resolveTemplateByEventType(
             calendarEventFormats,
@@ -866,7 +869,7 @@ export default function SettingsPage() {
                                             placeholder={DEFAULT_CALENDAR_EVENT_FORMAT}
                                         />
                                         <div className="flex flex-wrap gap-1.5">
-                                            {CALENDAR_TEMPLATE_VARIABLES.map((token) => (
+                                            {calendarTemplateVariables.map((token) => (
                                                 <button
                                                     key={token}
                                                     type="button"

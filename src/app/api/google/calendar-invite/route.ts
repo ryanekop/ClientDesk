@@ -6,6 +6,7 @@ import {
     buildCalendarRangeFromStoredSession,
     resolveTemplateByEventType,
     applyCalendarTemplate,
+    buildCalendarTemplateVars,
 } from "@/utils/google/template";
 
 export async function POST(req: NextRequest) {
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
         // Get booking details including service duration
         const { data: booking } = await supabase
             .from("bookings")
-            .select("booking_code, client_name, session_date, location, event_type, services(name, duration_minutes)")
+            .select("booking_code, client_name, session_date, location, event_type, extra_fields, services(name, duration_minutes)")
             .eq("id", bookingId)
             .eq("user_id", user.id)
             .single();
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
             booking.event_type,
             (profile as any).calendar_event_format || DEFAULT_CALENDAR_EVENT_FORMAT,
         );
-        const vars: Record<string, string> = {
+        const vars = buildCalendarTemplateVars({
             client_name: booking.client_name,
             service_name: serviceName,
             event_type: booking.event_type || "-",
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
             studio_name: profile.studio_name || "Client Desk",
             location: booking.location || "-",
             ...range.templateVars,
-        };
+        }, (booking as any).extra_fields);
         const summary = applyCalendarTemplate(eventFormat, vars);
 
         await pushEventToCalendar(

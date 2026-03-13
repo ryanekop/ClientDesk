@@ -1,5 +1,7 @@
 "use client";
 
+import { EVENT_EXTRA_FIELDS } from "@/utils/form-extra-fields";
+
 export type CustomFieldType =
   | "text"
   | "textarea"
@@ -118,116 +120,6 @@ export type GroupedCustomLayoutSection = {
   sectionId: BuiltInSectionId;
   sectionTitle: string;
   items: Array<CustomFieldItem | CustomSectionItem>;
-};
-
-type EventExtraField = {
-  key: string;
-  label: string;
-  isLocation?: boolean;
-  fullWidth?: boolean;
-  required?: boolean;
-  isNumeric?: boolean;
-};
-
-export const EVENT_EXTRA_FIELDS: Record<string, EventExtraField[]> = {
-  Wisuda: [
-    { key: "universitas", label: "Universitas" },
-    { key: "fakultas", label: "Fakultas" },
-  ],
-  Wedding: [
-    {
-      key: "nama_pasangan",
-      label: "Nama Pasangan",
-      fullWidth: true,
-      required: true,
-    },
-    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
-    {
-      key: "jumlah_tamu",
-      label: "Estimasi Tamu",
-      fullWidth: true,
-      isNumeric: true,
-    },
-    {
-      key: "tempat_akad",
-      label: "Lokasi Akad",
-      isLocation: true,
-      required: true,
-    },
-    {
-      key: "tempat_resepsi",
-      label: "Lokasi Resepsi",
-      isLocation: true,
-      required: true,
-    },
-  ],
-  Akad: [
-    {
-      key: "nama_pasangan",
-      label: "Nama Pasangan",
-      fullWidth: true,
-      required: true,
-    },
-    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
-    {
-      key: "jumlah_tamu",
-      label: "Estimasi Tamu",
-      fullWidth: true,
-      isNumeric: true,
-    },
-  ],
-  Resepsi: [
-    {
-      key: "nama_pasangan",
-      label: "Nama Pasangan",
-      fullWidth: true,
-      required: true,
-    },
-    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
-    {
-      key: "jumlah_tamu",
-      label: "Estimasi Tamu",
-      fullWidth: true,
-      isNumeric: true,
-    },
-  ],
-  Lamaran: [
-    {
-      key: "nama_pasangan",
-      label: "Nama Pasangan",
-      fullWidth: true,
-      required: true,
-    },
-    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
-    {
-      key: "jumlah_tamu",
-      label: "Estimasi Tamu",
-      fullWidth: true,
-      isNumeric: true,
-    },
-  ],
-  Prewedding: [
-    {
-      key: "nama_pasangan",
-      label: "Nama Pasangan",
-      fullWidth: true,
-      required: true,
-    },
-    { key: "instagram_pasangan", label: "Instagram Pasangan", fullWidth: true },
-  ],
-  Maternity: [
-    { key: "usia_kehamilan", label: "Usia Kehamilan" },
-    { key: "gender_bayi", label: "Gender Bayi" },
-  ],
-  Newborn: [
-    { key: "nama_bayi", label: "Nama Bayi" },
-    { key: "tanggal_lahir", label: "Tanggal Lahir" },
-  ],
-  Komersil: [
-    { key: "nama_brand", label: "Nama Brand" },
-    { key: "tipe_konten", label: "Tipe Konten" },
-  ],
-  Family: [{ key: "jumlah_anggota", label: "Jumlah Anggota" }],
 };
 
 const BUILT_IN_SECTIONS: BuiltInSectionDefinition[] = [

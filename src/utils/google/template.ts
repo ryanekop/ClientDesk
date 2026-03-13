@@ -1,3 +1,8 @@
+import {
+    buildExtraFieldTemplateVars,
+    getEventExtraFieldTemplateTokens,
+} from "@/utils/form-extra-fields";
+
 export const GOOGLE_TEMPLATE_TIMEZONE = "Asia/Jakarta";
 
 export const GOOGLE_EVENT_TYPES = [
@@ -104,8 +109,27 @@ export function resolveTemplateByEventType(
     return eventSpecific || normalized.Umum?.trim() || fallback;
 }
 
+export function getCalendarTemplateVariables(eventType: string | null | undefined): string[] {
+    return Array.from(
+        new Set([
+            ...CALENDAR_TEMPLATE_VARIABLES,
+            ...getEventExtraFieldTemplateTokens(eventType, "calendar"),
+        ]),
+    );
+}
+
 export function applyCalendarTemplate(template: string, vars: Record<string, string | null | undefined>): string {
     return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => vars[key] || `{{${key}}}`);
+}
+
+export function buildCalendarTemplateVars(
+    baseVars: Record<string, string | null | undefined>,
+    extraFields?: unknown,
+): Record<string, string | null | undefined> {
+    return {
+        ...baseVars,
+        ...buildExtraFieldTemplateVars(extraFields),
+    };
 }
 
 export function applyDriveTemplate(template: string, vars: Record<string, string | null | undefined>): string {

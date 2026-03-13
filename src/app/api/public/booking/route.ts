@@ -8,6 +8,7 @@ import {
     buildCalendarRangeFromLocalInput,
     resolveTemplateByEventType,
     applyCalendarTemplate,
+    buildCalendarTemplateVars,
 } from "@/utils/google/template";
 import {
     createPaymentSourceFromBank,
@@ -228,7 +229,7 @@ export async function POST(request: NextRequest) {
                     eventType,
                     vendor.calendar_event_format || DEFAULT_CALENDAR_EVENT_FORMAT,
                 );
-                const templateVars: Record<string, string> = {
+                const templateVars = buildCalendarTemplateVars({
                     client_name: clientName,
                     service_name: mainService.name || eventType || "Sesi Foto",
                     event_type: eventType || "-",
@@ -236,7 +237,7 @@ export async function POST(request: NextRequest) {
                     studio_name: vendor.studio_name || "Client Desk",
                     location: location || "-",
                     ...range.templateVars,
-                };
+                }, sanitizedExtraData);
                 const summary = applyCalendarTemplate(eventFormat, templateVars);
 
                 await pushEventToCalendar(
