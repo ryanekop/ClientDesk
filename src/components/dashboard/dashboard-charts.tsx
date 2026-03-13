@@ -46,8 +46,8 @@ export function DashboardCharts({
       {/* 30-day daily trend */}
       <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
         <h3 className="font-semibold text-sm mb-3">{t("pemasukan30")}</h3>
-        <div className="h-[220px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-[220px] min-h-[220px] w-full min-w-0">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <AreaChart
               data={dailyData}
               margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
@@ -120,8 +120,8 @@ export function DashboardCharts({
       {/* 12-month column chart */}
       <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
         <h3 className="font-semibold text-sm mb-3">{t("pemasukanBulanan")}</h3>
-        <div className="h-[220px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-[220px] min-h-[220px] w-full min-w-0">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <BarChart
               data={monthlyData}
               margin={{ top: 10, right: 10, left: 0, bottom: 0 }}

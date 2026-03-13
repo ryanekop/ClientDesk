@@ -4,7 +4,6 @@ import * as React from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import Underline from "@tiptap/extension-underline";
 import {
   Bold,
   Italic,
@@ -79,7 +78,6 @@ export function RichTextEditor({
           levels: [2, 3],
         },
       }),
-      Underline,
       Placeholder.configure({
         placeholder,
       }),
