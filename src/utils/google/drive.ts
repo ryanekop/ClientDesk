@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { Readable } from "node:stream";
 
 export function getDriveOAuth2Client() {
     return new google.auth.OAuth2(
@@ -71,7 +72,11 @@ export async function createBookingFolder(
 ) {
     const { drive } = await getDriveClient(accessToken, refreshToken);
 
-    const fileMetadata: any = {
+    const fileMetadata: {
+        name: string;
+        mimeType: string;
+        parents?: string[];
+    } = {
         name: folderName,
         mimeType: "application/vnd.google-apps.folder",
     };
@@ -133,7 +138,6 @@ export async function uploadFileToDrive(
     parentFolderId: string
 ) {
     const { drive } = await getDriveClient(accessToken, refreshToken);
-    const { Readable } = require("stream");
 
     const res = await drive.files.create({
         requestBody: {
@@ -170,7 +174,7 @@ export async function uploadFileToDrive(
 }
 
 export function buildDriveFilePublicUrl(fileId: string) {
-    return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    return `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`;
 }
 
 /**

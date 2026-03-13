@@ -1276,7 +1276,7 @@ export function BookingFormClient({
               <label className="text-sm font-medium">
                 {t("paymentMethod")} <span className="text-red-500">*</span>
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-3">
                 {availablePaymentMethods.map((method) => {
                   const active = selectedPaymentMethod === method;
                   const Icon =
@@ -1298,7 +1298,7 @@ export function BookingFormClient({
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div
                             className={`flex h-10 w-10 items-center justify-center rounded-lg ${
                               active
@@ -1308,7 +1308,7 @@ export function BookingFormClient({
                           >
                             <Icon className="w-4 h-4" />
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <p className="text-sm font-semibold">
                               {method === "bank"
                                 ? t("paymentMethodBank")
@@ -1349,7 +1349,7 @@ export function BookingFormClient({
                     {t("paymentNoBank")}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-3">
                     {enabledBankAccounts.map((bank) => {
                       const isSelected =
                         selectedPaymentSource?.type === "bank" &&
@@ -1419,6 +1419,7 @@ export function BookingFormClient({
                       <img
                         src={effectiveVendor.qris_image_url}
                         alt={t("paymentMethodQris")}
+                        referrerPolicy="no-referrer"
                         className="w-full max-h-[22rem] object-contain mx-auto"
                       />
                     ) : (

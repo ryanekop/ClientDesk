@@ -8,6 +8,7 @@ import type { Metadata } from "next";
 import {
   normalizeBankAccounts,
   normalizePaymentMethods,
+  resolveDriveImageUrl,
 } from "@/lib/payment-config";
 
 type RawVendor = {
@@ -33,6 +34,7 @@ type RawVendor = {
   form_sections: unknown[] | Record<string, unknown[]> | null;
   form_payment_methods: string[] | null;
   qris_image_url: string | null;
+  qris_drive_file_id: string | null;
   bank_accounts: Vendor["bank_accounts"] | null;
 };
 
@@ -87,7 +89,7 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
         "avatar_url, invoice_logo_url, form_brand_color, form_greeting, " +
         "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_proof, " +
         "form_terms_enabled, form_terms_agreement_text, form_terms_link_text, form_terms_suffix_text, form_terms_content, " +
-        "form_sections, form_payment_methods, qris_image_url, bank_accounts",
+        "form_sections, form_payment_methods, qris_image_url, qris_drive_file_id, bank_accounts",
     )
     .eq("vendor_slug", vendorSlug)
     .single()) as { data: RawVendor | null; error: unknown };
@@ -141,7 +143,7 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
     form_terms_content: vendor.form_terms_content ?? null,
     form_sections: (vendor.form_sections as Vendor["form_sections"]) ?? [],
     form_payment_methods: normalizePaymentMethods(vendor.form_payment_methods),
-    qris_image_url: vendor.qris_image_url ?? null,
+    qris_image_url: resolveDriveImageUrl(vendor.qris_image_url, vendor.qris_drive_file_id),
     bank_accounts: normalizeBankAccounts(vendor.bank_accounts),
   };
 

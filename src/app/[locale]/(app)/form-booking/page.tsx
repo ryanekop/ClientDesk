@@ -42,6 +42,7 @@ import {
 } from "@/components/form-builder/booking-form-layout";
 import {
   createEmptyBankAccount,
+  buildDriveImageUrl,
   getEnabledBankAccounts,
   getPaymentMethodLabel,
   getValidBankAccounts,
@@ -462,9 +463,11 @@ export default function FormBookingPage() {
           (p as Record<string, unknown>).form_payment_methods,
         );
         const loadedQrisImageUrl =
-          typeof (p as Record<string, unknown>).qris_image_url === "string"
-            ? ((p as Record<string, unknown>).qris_image_url as string)
-            : null;
+          typeof (p as Record<string, unknown>).qris_drive_file_id === "string"
+            ? buildDriveImageUrl((p as Record<string, unknown>).qris_drive_file_id as string)
+            : typeof (p as Record<string, unknown>).qris_image_url === "string"
+              ? ((p as Record<string, unknown>).qris_image_url as string)
+              : null;
         const loadedFormLang =
           ((p as Record<string, unknown>).form_lang as string) || "id";
         const loadedTermsEnabled =
@@ -1092,7 +1095,7 @@ export default function FormBookingPage() {
                   </p>
                 </div>
                 <div className="p-6 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-3 max-w-2xl">
                     {[
                       {
                         id: "bank" as PaymentMethod,
@@ -1132,7 +1135,7 @@ export default function FormBookingPage() {
                           }`}
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
                               <div
                                 className={`flex h-10 w-10 items-center justify-center rounded-lg ${
                                   active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
@@ -1140,7 +1143,7 @@ export default function FormBookingPage() {
                               >
                                 <Icon className="w-4 h-4" />
                               </div>
-                              <div>
+                              <div className="min-w-0">
                                 <p className="text-sm font-semibold">{method.title}</p>
                                 <p className="text-xs text-muted-foreground mt-1">
                                   {method.description}
@@ -1294,6 +1297,7 @@ export default function FormBookingPage() {
                           <img
                             src={qrisImageUrl}
                             alt="QRIS"
+                            referrerPolicy="no-referrer"
                             className="max-h-72 w-full object-contain"
                           />
                         </div>

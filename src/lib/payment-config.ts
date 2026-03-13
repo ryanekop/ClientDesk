@@ -107,3 +107,18 @@ export function createPaymentSourceFromBank(bank: BankAccount): PaymentSource {
     label: bank.bank_name,
   };
 }
+
+export function buildDriveImageUrl(fileId: string) {
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`;
+}
+
+export function resolveDriveImageUrl(
+  imageUrl: string | null | undefined,
+  fileId: string | null | undefined,
+) {
+  if (fileId && fileId.trim()) {
+    return buildDriveImageUrl(fileId);
+  }
+
+  return imageUrl || null;
+}
