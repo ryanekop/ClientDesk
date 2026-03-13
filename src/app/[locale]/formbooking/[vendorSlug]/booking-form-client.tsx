@@ -27,11 +27,11 @@ import {
 import { useTranslations } from "next-intl";
 import {
   buildCustomFieldSnapshots,
-  EVENT_EXTRA_FIELDS,
   groupFormLayoutBySection,
   normalizeStoredFormLayout,
   type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
+import { EVENT_EXTRA_FIELDS } from "@/utils/form-extra-fields";
 import { isRichTextEmpty, sanitizeRichTextHtml } from "@/utils/rich-text";
 import {
   createPaymentSourceFromBank,
