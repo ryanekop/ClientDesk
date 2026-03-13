@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import { CheckCircle2, Clock, PlayCircle, HardDrive, Edit3, Camera, Loader2, ExternalLink, Users, Download } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
 
 type BookingData = {
     bookingCode: string;
+    trackingUuid: string | null;
     clientName: string;
     sessionDate: string | null;
     eventType: string | null;
@@ -19,6 +20,11 @@ type BookingData = {
     totalPrice: number;
     dpPaid: number;
     isFullyPaid: boolean;
+    settlementStatus: string;
+    finalAdjustmentsTotal: number;
+    finalInvoiceTotal: number;
+    remainingFinalPayment: number;
+    finalInvoiceSentAt: string | null;
     location: string | null;
 };
 
@@ -32,6 +38,8 @@ const DEFAULT_STEPS = [
     { key: "Selesai", labelKey: "stepDone", icon: CheckCircle2 },
 ];
 
+type DefaultStep = (typeof DEFAULT_STEPS)[number];
+
 const ICON_PALETTE = [CheckCircle2, Camera, Users, Edit3, PlayCircle, HardDrive, CheckCircle2, Clock, Edit3, Loader2];
 
 interface TrackingClientProps {
@@ -42,6 +50,7 @@ interface TrackingClientProps {
 
 export default function TrackingClient({ booking, vendorName, customStatuses }: TrackingClientProps) {
     const t = useTranslations("Track");
+    const locale = useLocale();
 
     // Build steps from custom statuses or fallback to defaults
     const steps = React.useMemo(() => {
@@ -125,6 +134,8 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                             const isCurrent = idx === currentIdx;
                             const isLast = idx === steps.length - 1;
                             const Icon = step.icon;
+                            const defaultStep: DefaultStep | undefined = DEFAULT_STEPS.find((item) => item.key === step.key);
+                            const stepLabel = defaultStep ? t(defaultStep.labelKey as never) : step.key;
 
                             return (
                                 <div key={step.key} className="relative flex gap-4">
@@ -144,7 +155,7 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
 
                                     <div className={`flex flex-col pb-8 pt-2 ${!isDone && !isCurrent ? "opacity-40" : ""}`}>
                                         <p className={`font-semibold text-sm ${isCurrent ? "text-primary" : ""}`}>
-                                            {DEFAULT_STEPS.find(d => d.key === step.key) ? t(step.labelKey as any) : step.key}
+                                            {stepLabel}
                                             {isCurrent && booking.queuePosition && booking.queuePosition > 0 && step.key === "Antrian Edit" && (
                                                 <span className="text-xs font-normal text-muted-foreground ml-2">({t("position")} #{booking.queuePosition})</span>
                                             )}
@@ -198,6 +209,38 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                         <Download className="w-4 h-4" />
                         {t("downloadInvoice")}
                     </button>
+                </div>
+
+                <div className="bg-background rounded-2xl shadow-lg border p-6">
+                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("finalInvoiceTitle")}</h3>
+                    <div className="space-y-2 text-sm border-b pb-3 mb-3">
+                        <div className="flex justify-between"><span className="text-muted-foreground">{t("baseTotal")}</span><span className="font-medium">Rp {(booking.totalPrice || 0).toLocaleString("id-ID")}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">{t("adjustments")}</span><span className="font-medium">Rp {(booking.finalAdjustmentsTotal || 0).toLocaleString("id-ID")}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">{t("finalTotal")}</span><span className="font-medium">Rp {(booking.finalInvoiceTotal || 0).toLocaleString("id-ID")}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">{t("remaining")}</span><span className="font-semibold">Rp {(booking.remainingFinalPayment || 0).toLocaleString("id-ID")}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className={`font-semibold ${booking.isFullyPaid ? "text-green-600" : booking.settlementStatus === "submitted" ? "text-blue-600" : "text-amber-600"}`}>{booking.isFullyPaid ? `✅ ${t("paid")}` : booking.settlementStatus === "submitted" ? t("awaitingVerification") : booking.settlementStatus === "draft" ? t("notReady") : `⏳ ${t("unpaid")}`}</span></div>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                        <button
+                            onClick={() => window.open(`/api/public/invoice?code=${encodeURIComponent(booking.bookingCode)}&lang=${locale}&stage=final`, "_blank")}
+                            className="flex items-center gap-2 text-sm text-primary hover:underline cursor-pointer"
+                        >
+                            <Download className="w-4 h-4" />
+                            {t("downloadFinalInvoice")}
+                        </button>
+                        {booking.trackingUuid && (
+                            <a
+                                href={`/${locale}/settlement/${booking.trackingUuid}`}
+                                className="flex items-center gap-2 text-sm text-primary hover:underline"
+                            >
+                                <ExternalLink className="w-4 h-4" />
+                                {t("openSettlementForm")}
+                            </a>
+                        )}
+                    </div>
+                    {booking.settlementStatus === "draft" && !booking.isFullyPaid && (
+                        <p className="mt-3 text-xs text-muted-foreground">{t("settlementNotOpened")}</p>
+                    )}
                 </div>
 
                 <p className="text-center text-xs text-muted-foreground pb-4">

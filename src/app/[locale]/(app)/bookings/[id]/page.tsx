@@ -15,6 +15,17 @@ import {
     type CustomFieldSnapshot,
 } from "@/components/form-builder/booking-form-layout";
 import { type PaymentSource } from "@/lib/payment-config";
+import {
+    getFinalAdjustmentsTotal,
+    getFinalInvoiceTotal,
+    getInvoiceStage,
+    getRemainingFinalPayment,
+    getSettlementLabel,
+    getSettlementStatus,
+    normalizeFinalAdjustments,
+    type FinalAdjustment,
+    type SettlementStatus,
+} from "@/lib/final-settlement";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -53,6 +64,7 @@ type Booking = {
     status: string;
     total_price: number;
     dp_paid: number;
+    is_fully_paid: boolean;
     payment_proof_url: string | null;
     drive_folder_url: string | null;
     portfolio_url: string | null;
@@ -64,12 +76,28 @@ type Booking = {
     extra_fields: Record<string, unknown> | null;
     payment_method: string | null;
     payment_source: PaymentSource | null;
+    settlement_status: string | null;
+    final_adjustments: unknown;
+    final_payment_proof_url: string | null;
+    final_payment_amount: number;
+    final_payment_method: string | null;
+    final_payment_source: PaymentSource | null;
+    final_paid_at: string | null;
+    final_invoice_sent_at: string | null;
     services: { name: string; price: number } | null;
     freelancers: FreelancerDetail | null; // old single FK
     booking_freelancers: FreelancerDetail[]; // new junction
     tracking_uuid: string | null;
     client_status: string | null;
     queue_position: number | null;
+};
+
+type EditableAdjustment = {
+    id: string;
+    label: string;
+    amount: string;
+    reason: string;
+    created_at: string;
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -82,6 +110,16 @@ function StatusBadge({ status }: { status: string }) {
     };
     const cls = variants[status.toLowerCase()] || "bg-muted text-muted-foreground";
     return <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${cls}`}>{status}</span>;
+}
+
+function SettlementBadge({ status }: { status: SettlementStatus }) {
+    const variants: Record<SettlementStatus, string> = {
+        draft: "bg-slate-100 text-slate-700 dark:bg-slate-500/10 dark:text-slate-400",
+        sent: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
+        submitted: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+        paid: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
+    };
+    return <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${variants[status]}`}>{getSettlementLabel(status)}</span>;
 }
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -138,6 +176,28 @@ function LocationValue({ address }: { address: string }) {
     );
 }
 
+function toEditableAdjustments(items: FinalAdjustment[]): EditableAdjustment[] {
+    return items.map((item) => ({
+        id: item.id,
+        label: item.label,
+        amount: String(item.amount),
+        reason: item.reason,
+        created_at: item.created_at,
+    }));
+}
+
+function normalizeEditableAdjustments(items: EditableAdjustment[]): FinalAdjustment[] {
+    return items
+        .map((item) => ({
+            id: item.id || crypto.randomUUID(),
+            label: item.label.trim(),
+            amount: Number(item.amount) || 0,
+            reason: item.reason.trim(),
+            created_at: item.created_at || new Date().toISOString(),
+        }))
+        .filter((item) => item.label && item.amount > 0);
+}
+
 export default function BookingDetailPage() {
     const params = useParams();
     const id = params.id as string;
@@ -154,6 +214,10 @@ export default function BookingDetailPage() {
     const [copiedTrack, setCopiedTrack] = React.useState(false);
     const [studioName, setStudioName] = React.useState("");
     const [savedTemplates, setSavedTemplates] = React.useState<{ id: string; type: string; content: string; content_en: string; event_type: string | null }[]>([]);
+    const [adjustmentItems, setAdjustmentItems] = React.useState<EditableAdjustment[]>([]);
+    const [savingAdjustments, setSavingAdjustments] = React.useState(false);
+    const [sendingFinalInvoice, setSendingFinalInvoice] = React.useState(false);
+    const [markingFinalPaid, setMarkingFinalPaid] = React.useState(false);
 
     // File upload states
     const [uploadingFile, setUploadingFile] = React.useState(false);
@@ -170,7 +234,7 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_method, payment_source, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(name, price), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token, studio_name").eq("id", user.id).single(),
             ]);
@@ -191,6 +255,11 @@ export default function BookingDetailPage() {
                 })()
             } : rawBooking;
             setBooking(normalized as unknown as Booking);
+            setAdjustmentItems(
+                toEditableAdjustments(
+                    normalizeFinalAdjustments(rawBooking?.final_adjustments),
+                ),
+            );
             if (rawBooking) {
                 setClientStatus(rawBooking.client_status || "");
                 setQueuePos(rawBooking.queue_position || "");
@@ -230,7 +299,7 @@ export default function BookingDetailPage() {
 
     function copyTrackingLink() {
         if (!booking?.tracking_uuid) return;
-        const url = `${window.location.origin}/id/track/${booking.tracking_uuid}`;
+        const url = `${window.location.origin}/${locale}/track/${booking.tracking_uuid}`;
         navigator.clipboard.writeText(url);
         setCopiedTrack(true);
         setTimeout(() => setCopiedTrack(false), 2000);
@@ -258,7 +327,7 @@ export default function BookingDetailPage() {
                     booking_code: booking?.booking_code || "",
                     session_date: booking?.session_date ? formatDate(booking.session_date) : "-",
                     service_name: booking?.services?.name || "-",
-                    total_price: formatCurrency(booking?.total_price || 0),
+                    total_price: formatCurrency(finalInvoiceTotal || booking?.total_price || 0),
                     dp_paid: formatCurrency(booking?.dp_paid || 0),
                     studio_name: studioName || "",
                     event_type: booking?.event_type || "-",
@@ -266,8 +335,8 @@ export default function BookingDetailPage() {
                     location_maps_url: booking?.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
                     detail_location: booking?.location_detail || "-",
                     notes: booking?.notes || "-",
-                    tracking_link: booking?.tracking_uuid ? `${window.location.origin}/id/track/${booking.tracking_uuid}` : "-",
-                    invoice_url: `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking?.booking_code || "")}`,
+                    tracking_link: booking?.tracking_uuid ? `${window.location.origin}/${locale}/track/${booking.tracking_uuid}` : "-",
+                    invoice_url: `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking?.booking_code || "")}&lang=${locale}&stage=${activeInvoiceStage}`,
                 };
                 msg = content.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || `{{${key}}}`);
             } else {
@@ -392,6 +461,196 @@ export default function BookingDetailPage() {
         setDeletingFileIdx(null);
     }
 
+    function addAdjustmentItem() {
+        setAdjustmentItems((prev) => [
+            ...prev,
+            {
+                id: crypto.randomUUID(),
+                label: "",
+                amount: "",
+                reason: "",
+                created_at: new Date().toISOString(),
+            },
+        ]);
+    }
+
+    function updateAdjustmentItem(id: string, field: keyof EditableAdjustment, value: string) {
+        setAdjustmentItems((prev) =>
+            prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+        );
+    }
+
+    function removeAdjustmentItem(id: string) {
+        setAdjustmentItems((prev) => prev.filter((item) => item.id !== id));
+    }
+
+    async function saveFinalAdjustments(nextStatus?: SettlementStatus) {
+        if (!booking) return null;
+
+        const normalizedAdjustments = normalizeEditableAdjustments(adjustmentItems);
+        setSavingAdjustments(true);
+        const updatePayload: Record<string, unknown> = {
+            final_adjustments: normalizedAdjustments,
+        };
+        if (nextStatus) {
+            updatePayload.settlement_status = nextStatus;
+        }
+
+        const { error } = await supabase
+            .from("bookings")
+            .update(updatePayload)
+            .eq("id", booking.id);
+
+        setSavingAdjustments(false);
+
+        if (error) {
+            alert("Gagal menyimpan add-on pelunasan.");
+            return null;
+        }
+
+        setBooking((prev) =>
+            prev
+                ? {
+                    ...prev,
+                    final_adjustments: normalizedAdjustments,
+                    settlement_status: nextStatus || prev.settlement_status,
+                }
+                : prev,
+        );
+        setAdjustmentItems(toEditableAdjustments(normalizedAdjustments));
+
+        return normalizedAdjustments;
+    }
+
+    async function handleSendFinalInvoice() {
+        if (!booking?.tracking_uuid || !booking.client_whatsapp) {
+            alert("Booking ini belum punya tracking link atau nomor WhatsApp klien.");
+            return;
+        }
+
+        setSendingFinalInvoice(true);
+        const normalizedAdjustments = await saveFinalAdjustments("sent");
+        if (!normalizedAdjustments) {
+            setSendingFinalInvoice(false);
+            return;
+        }
+
+        const sentAt = new Date().toISOString();
+        const { error } = await supabase
+            .from("bookings")
+            .update({
+                settlement_status: "sent",
+                final_invoice_sent_at: sentAt,
+                final_payment_amount: 0,
+                final_payment_method: null,
+                final_payment_source: null,
+                final_payment_proof_url: null,
+                final_paid_at: null,
+                is_fully_paid: false,
+            })
+            .eq("id", booking.id);
+
+        setSendingFinalInvoice(false);
+
+        if (error) {
+            alert("Gagal mengirim invoice final.");
+            return;
+        }
+
+        const finalTotal = getFinalInvoiceTotal(booking.total_price, normalizedAdjustments);
+        const remainingFinal = getRemainingFinalPayment({
+            total_price: booking.total_price,
+            dp_paid: booking.dp_paid,
+            final_adjustments: normalizedAdjustments,
+            is_fully_paid: false,
+            settlement_status: "sent",
+        });
+        const invoiceUrl = `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}&lang=${locale}&stage=final`;
+        const settlementUrl = `${window.location.origin}/${locale}/settlement/${booking.tracking_uuid}`;
+        const cleaned = booking.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
+        const message =
+            `Halo ${booking.client_name}, invoice final untuk booking ${booking.booking_code} sudah kami siapkan.\n\n` +
+            `Paket: ${booking.services?.name || "-"}\n` +
+            `Total awal: ${formatCurrency(booking.total_price)}\n` +
+            `Add-on akhir: ${formatCurrency(getFinalAdjustmentsTotal(normalizedAdjustments))}\n` +
+            `Total final: ${formatCurrency(finalTotal)}\n` +
+            `DP terbayar: ${formatCurrency(booking.dp_paid)}\n` +
+            `Sisa pelunasan: ${formatCurrency(remainingFinal)}\n\n` +
+            `Invoice final: ${invoiceUrl}\n` +
+            `Form pelunasan: ${settlementUrl}\n\n` +
+            `Silakan lakukan pelunasan dan upload bukti bayar melalui link di atas. Terima kasih.`;
+
+        setBooking((prev) =>
+            prev
+                ? {
+                    ...prev,
+                    settlement_status: "sent",
+                    final_invoice_sent_at: sentAt,
+                    final_adjustments: normalizedAdjustments,
+                    final_payment_amount: 0,
+                    final_payment_method: null,
+                    final_payment_source: null,
+                    final_payment_proof_url: null,
+                    final_paid_at: null,
+                    is_fully_paid: false,
+                }
+                : prev,
+        );
+
+        window.open(
+            `https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(message)}`,
+            "_blank",
+        );
+    }
+
+    async function handleMarkFinalPaid() {
+        if (!booking) return;
+
+        const normalizedAdjustments = normalizeEditableAdjustments(adjustmentItems);
+        const remainingFinal = getRemainingFinalPayment({
+            total_price: booking.total_price,
+            dp_paid: booking.dp_paid,
+            final_adjustments: normalizedAdjustments,
+            final_payment_amount: booking.final_payment_amount,
+            final_paid_at: booking.final_paid_at,
+            settlement_status: booking.settlement_status,
+            is_fully_paid: booking.is_fully_paid,
+        });
+
+        setMarkingFinalPaid(true);
+        const paidAt = new Date().toISOString();
+        const { error } = await supabase
+            .from("bookings")
+            .update({
+                final_adjustments: normalizedAdjustments,
+                settlement_status: "paid",
+                final_payment_amount: remainingFinal,
+                final_paid_at: paidAt,
+                is_fully_paid: true,
+            })
+            .eq("id", booking.id);
+        setMarkingFinalPaid(false);
+
+        if (error) {
+            alert("Gagal menandai booking sebagai lunas.");
+            return;
+        }
+
+        setBooking((prev) =>
+            prev
+                ? {
+                    ...prev,
+                    final_adjustments: normalizedAdjustments,
+                    settlement_status: "paid",
+                    final_payment_amount: remainingFinal,
+                    final_paid_at: paidAt,
+                    is_fully_paid: true,
+                }
+                : prev,
+        );
+        setAdjustmentItems(toEditableAdjustments(normalizedAdjustments));
+    }
+
     if (loading) return (
         <div className="flex items-center justify-center py-24">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -402,7 +661,31 @@ export default function BookingDetailPage() {
         <div className="text-center py-24 text-muted-foreground">Booking tidak ditemukan.</div>
     );
 
-    const remaining = booking.total_price - booking.dp_paid;
+    const settlementStatus = getSettlementStatus(booking.settlement_status);
+    const finalAdjustments = normalizeEditableAdjustments(adjustmentItems);
+    const finalAdjustmentsTotal = getFinalAdjustmentsTotal(finalAdjustments);
+    const finalInvoiceTotal = getFinalInvoiceTotal(booking.total_price, finalAdjustments);
+    const verifiedFinalPayment = booking.final_paid_at ? booking.final_payment_amount || 0 : 0;
+    const remaining = getRemainingFinalPayment({
+        total_price: booking.total_price,
+        dp_paid: booking.dp_paid,
+        final_adjustments: finalAdjustments,
+        final_payment_amount: booking.final_payment_amount,
+        final_paid_at: booking.final_paid_at,
+        settlement_status: booking.settlement_status,
+        is_fully_paid: booking.is_fully_paid,
+    });
+    const activeInvoiceStage = getInvoiceStage({
+        total_price: booking.total_price,
+        dp_paid: booking.dp_paid,
+        final_adjustments: finalAdjustments,
+        final_payment_amount: booking.final_payment_amount,
+        final_paid_at: booking.final_paid_at,
+        settlement_status: booking.settlement_status,
+        is_fully_paid: booking.is_fully_paid,
+    });
+    const trackingLink = booking.tracking_uuid ? `${window.location.origin}/${locale}/track/${booking.tracking_uuid}` : "";
+    const settlementLink = booking.tracking_uuid ? `${window.location.origin}/${locale}/settlement/${booking.tracking_uuid}` : "";
     const builtInExtraFields = extractBuiltInExtraFieldValues(booking.extra_fields);
     const extraEntries = Object.entries(builtInExtraFields);
     const customFieldSnapshots = extractCustomFieldSnapshots(booking.extra_fields);
@@ -522,8 +805,11 @@ export default function BookingDetailPage() {
             {/* Keuangan */}
             <div className="rounded-xl border bg-card p-6 space-y-3">
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Keuangan</h3>
-                <InfoRow label="Harga Total" value={<span className="font-semibold">{formatCurrency(booking.total_price)}</span>} />
+                <InfoRow label="Total Awal" value={<span className="font-semibold">{formatCurrency(booking.total_price)}</span>} />
+                <InfoRow label="Addon Akhir" value={formatCurrency(finalAdjustmentsTotal)} />
+                <InfoRow label="Total Final" value={<span className="font-semibold">{formatCurrency(finalInvoiceTotal)}</span>} />
                 <InfoRow label="DP Dibayar" value={formatCurrency(booking.dp_paid)} />
+                <InfoRow label="Pelunasan Terverifikasi" value={formatCurrency(verifiedFinalPayment)} />
                 <InfoRow label="Metode Pembayaran" value={formatPaymentMethod(booking.payment_method)} />
                 <InfoRow label="Sumber Pembayaran" value={formatPaymentSource(booking.payment_source)} />
                 <InfoRow label="Sisa" value={
@@ -536,14 +822,136 @@ export default function BookingDetailPage() {
                 ))}
             </div>
 
-            {/* Bukti Pembayaran */}
+            <div className="rounded-xl border bg-card p-6 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Pelunasan Final</h3>
+                        <SettlementBadge status={settlementStatus} />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => window.open(`/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}&lang=${locale}&stage=final`, "_blank")}
+                        >
+                            <FileText className="w-4 h-4" />
+                            Invoice Final
+                        </Button>
+                        {booking.tracking_uuid && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => window.open(settlementLink, "_blank")}
+                            >
+                                <ExternalLink className="w-4 h-4" />
+                                Form Pelunasan
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
+                <div className="space-y-3">
+                    {adjustmentItems.length === 0 ? (
+                        <div className="rounded-lg border border-dashed px-4 py-4 text-sm text-muted-foreground">
+                            Belum ada add-on akhir. Tambahkan item jika ada extra time, album, transport, atau penyesuaian lain.
+                        </div>
+                    ) : (
+                        adjustmentItems.map((item) => (
+                            <div key={item.id} className="grid gap-3 rounded-xl border p-4 md:grid-cols-[1.2fr_0.8fr_1.2fr_auto]">
+                                <input
+                                    value={item.label}
+                                    onChange={(e) => updateAdjustmentItem(item.id, "label", e.target.value)}
+                                    placeholder="Nama add-on / biaya tambahan"
+                                    className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                />
+                                <input
+                                    type="number"
+                                    min={0}
+                                    value={item.amount}
+                                    onChange={(e) => updateAdjustmentItem(item.id, "amount", e.target.value)}
+                                    placeholder="Nominal"
+                                    className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                />
+                                <input
+                                    value={item.reason}
+                                    onChange={(e) => updateAdjustmentItem(item.id, "reason", e.target.value)}
+                                    placeholder="Alasan / catatan"
+                                    className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                />
+                                <Button variant="ghost" size="icon" onClick={() => removeAdjustmentItem(item.id)}>
+                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={addAdjustmentItem}>
+                        <Upload className="w-4 h-4" />
+                        Tambah Item
+                    </Button>
+                    <Button size="sm" className="gap-1.5" onClick={() => { void saveFinalAdjustments(); }} disabled={savingAdjustments}>
+                        {savingAdjustments ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                        Simpan Add-on
+                    </Button>
+                </div>
+
+                <div className="rounded-xl bg-muted/30 border p-4 space-y-2 text-sm">
+                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Total Awal</span><span className="font-medium">{formatCurrency(booking.total_price)}</span></div>
+                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Total Add-on Akhir</span><span className="font-medium">{formatCurrency(finalAdjustmentsTotal)}</span></div>
+                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">Total Final</span><span className="font-medium">{formatCurrency(finalInvoiceTotal)}</span></div>
+                    <div className="flex justify-between gap-4"><span className="text-muted-foreground">DP Dibayar</span><span className="font-medium">- {formatCurrency(booking.dp_paid)}</span></div>
+                    <div className="flex justify-between gap-4 border-t pt-2"><span className="font-semibold">Sisa Pelunasan</span><span className="font-semibold text-amber-600 dark:text-amber-400">{formatCurrency(remaining)}</span></div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                    <Button size="sm" className="gap-1.5" onClick={handleSendFinalInvoice} disabled={sendingFinalInvoice || !booking.client_whatsapp}>
+                        {sendingFinalInvoice ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+                        Kirim Invoice Final
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={handleMarkFinalPaid} disabled={markingFinalPaid || booking.is_fully_paid}>
+                        {markingFinalPaid ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
+                        Tandai Lunas
+                    </Button>
+                </div>
+
+                {booking.final_invoice_sent_at && (
+                    <p className="text-xs text-muted-foreground">
+                        Invoice final terakhir dikirim pada {formatDate(booking.final_invoice_sent_at)}.
+                    </p>
+                )}
+
+                {booking.tracking_uuid && (
+                    <div className="grid gap-2 text-xs text-muted-foreground">
+                        <div className="rounded-md bg-muted/50 px-3 py-2 break-all">Tracking: {trackingLink}</div>
+                        <div className="rounded-md bg-muted/50 px-3 py-2 break-all">Pelunasan: {settlementLink}</div>
+                    </div>
+                )}
+
+                {(booking.final_payment_method || booking.final_payment_source) && (
+                    <div className="rounded-lg border p-4 space-y-2 text-sm">
+                        <p className="font-medium">Data Pelunasan Masuk</p>
+                        <InfoRow label="Metode" value={formatPaymentMethod(booking.final_payment_method)} />
+                        <InfoRow label="Sumber" value={formatPaymentSource(booking.final_payment_source)} />
+                        <InfoRow label="Nominal" value={formatCurrency(booking.final_payment_amount || 0)} />
+                        <InfoRow label="Status" value={getSettlementLabel(settlementStatus)} />
+                    </div>
+                )}
+            </div>
+
+            {/* Bukti Pembayaran Awal */}
             {booking.payment_proof_url && (
                 <div className="rounded-xl border bg-card p-6 space-y-3">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                        <ImageIcon className="w-4 h-4" /> Bukti Pembayaran
+                        <ImageIcon className="w-4 h-4" /> Bukti Pembayaran Awal
                     </h3>
                     {booking.payment_proof_url.startsWith("http") ? (
                         <a href={booking.payment_proof_url} target="_blank" rel="noopener noreferrer" className="block">
+                            {/* Remote proof URLs come from storage/public uploads and are shown as-is. */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src={booking.payment_proof_url}
                                 alt="Bukti Pembayaran"
@@ -553,6 +961,29 @@ export default function BookingDetailPage() {
                     ) : (
                         <a href={booking.payment_proof_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1.5">
                             <ExternalLink className="w-3.5 h-3.5" /> Lihat Bukti Pembayaran
+                        </a>
+                    )}
+                </div>
+            )}
+
+            {booking.final_payment_proof_url && (
+                <div className="rounded-xl border bg-card p-6 space-y-3">
+                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                        <ImageIcon className="w-4 h-4" /> Bukti Pelunasan Final
+                    </h3>
+                    {booking.final_payment_proof_url.startsWith("http") ? (
+                        <a href={booking.final_payment_proof_url} target="_blank" rel="noopener noreferrer" className="block">
+                            {/* Remote proof URLs come from storage/public uploads and are shown as-is. */}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                                src={booking.final_payment_proof_url}
+                                alt="Bukti Pelunasan Final"
+                                className="max-w-sm w-full rounded-lg border shadow-sm"
+                            />
+                        </a>
+                    ) : (
+                        <a href={booking.final_payment_proof_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1.5">
+                            <ExternalLink className="w-3.5 h-3.5" /> Lihat Bukti Pelunasan Final
                         </a>
                     )}
                 </div>
@@ -706,7 +1137,7 @@ export default function BookingDetailPage() {
 
                 {booking.tracking_uuid && (
                     <div className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md break-all">
-                        Link klien: {window.location.origin}/id/track/{booking.tracking_uuid}
+                        Link klien: {trackingLink}
                     </div>
                 )}
             </div>

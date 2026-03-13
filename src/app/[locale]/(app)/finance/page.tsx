@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { TrendingUp, Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, Copy, ClipboardCheck } from "lucide-react";
+import { Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, Copy, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -9,6 +9,12 @@ import { useLocale } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import * as XLSX from "xlsx";
+import {
+    getFinalInvoiceTotal,
+    getInvoiceStage,
+    getRemainingFinalPayment,
+    getTotalPaidAmount,
+} from "@/lib/final-settlement";
 type BookingFinance = {
     id: string;
     booking_code: string;
@@ -20,6 +26,11 @@ type BookingFinance = {
     status: string;
     session_date: string | null;
     tracking_uuid: string | null;
+    settlement_status: string | null;
+    final_adjustments: unknown;
+    final_payment_amount: number;
+    final_paid_at: string | null;
+    final_invoice_sent_at: string | null;
     services: { name: string } | null;
 };
 
@@ -31,40 +42,29 @@ export default function FinancePage() {
     const [bookings, setBookings] = React.useState<BookingFinance[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [filter, setFilter] = React.useState<"all" | "pending" | "paid">("all");
-    const [studioName, setStudioName] = React.useState("Client Desk");
-    const [invoiceLogoUrl, setInvoiceLogoUrl] = React.useState<string | null>(null);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
-    React.useEffect(() => { fetchBookings(); }, []);
-
-    async function fetchBookings() {
+    const fetchBookings = React.useCallback(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Load profile for invoice branding
-        const { data: profile } = await supabase
-            .from("profiles")
-            .select("studio_name, invoice_logo_url")
-            .eq("id", user.id)
-            .single();
-        if (profile) {
-            if (profile.studio_name) setStudioName(profile.studio_name);
-            if (profile.invoice_logo_url) setInvoiceLogoUrl(profile.invoice_logo_url);
-        }
-
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, tracking_uuid, services(name)")
+            .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, tracking_uuid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, services(name)")
             .eq("user_id", user.id)
             .neq("status", "Batal")
             .order("created_at", { ascending: false });
 
         setBookings((data || []) as unknown as BookingFinance[]);
         setLoading(false);
-    }
+    }, [supabase]);
+
+    React.useEffect(() => {
+        void fetchBookings();
+    }, [fetchBookings]);
 
     async function handleUpdatePayment(id: string, field: "dp_paid" | "total_price", value: number) {
         await supabase.from("bookings").update({ [field]: value }).eq("id", id);
@@ -72,17 +72,48 @@ export default function FinancePage() {
     }
 
     async function handleMarkPaid(id: string) {
-        await supabase.from("bookings").update({ is_fully_paid: true }).eq("id", id);
+        const booking = bookings.find((item) => item.id === id);
+        if (!booking) return;
+        const remaining = getRemainingFinalPayment({
+            total_price: booking.total_price,
+            dp_paid: booking.dp_paid,
+            final_adjustments: booking.final_adjustments,
+            final_payment_amount: booking.final_payment_amount,
+            final_paid_at: booking.final_paid_at,
+            settlement_status: booking.settlement_status,
+            is_fully_paid: booking.is_fully_paid,
+        });
+        await supabase.from("bookings").update({
+            is_fully_paid: true,
+            settlement_status: "paid",
+            final_payment_amount: remaining,
+            final_paid_at: new Date().toISOString(),
+        }).eq("id", id);
         fetchBookings();
     }
 
     async function handleMarkUnpaid(id: string) {
-        await supabase.from("bookings").update({ is_fully_paid: false }).eq("id", id);
+        const booking = bookings.find((item) => item.id === id);
+        await supabase.from("bookings").update({
+            is_fully_paid: false,
+            settlement_status: booking?.final_invoice_sent_at ? "sent" : "draft",
+            final_payment_amount: 0,
+            final_paid_at: null,
+        }).eq("id", id);
         fetchBookings();
     }
 
     function generateInvoice(booking: BookingFinance) {
-        window.open(`/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}`, "_blank");
+        const stage = getInvoiceStage({
+            total_price: booking.total_price,
+            dp_paid: booking.dp_paid,
+            final_adjustments: booking.final_adjustments,
+            final_payment_amount: booking.final_payment_amount,
+            final_paid_at: booking.final_paid_at,
+            settlement_status: booking.settlement_status,
+            is_fully_paid: booking.is_fully_paid,
+        });
+        window.open(`/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}&lang=${locale}&stage=${stage}`, "_blank");
     }
 
     const formatCurrency = (n: number) =>
@@ -90,23 +121,61 @@ export default function FinancePage() {
 
     function sendInvoiceWhatsApp(b: BookingFinance) {
         if (!b.client_whatsapp) { alert(tf("waNotAvailable")); return; }
-        const remaining = b.total_price - b.dp_paid;
+        const remaining = getRemainingFinalPayment({
+            total_price: b.total_price,
+            dp_paid: b.dp_paid,
+            final_adjustments: b.final_adjustments,
+            final_payment_amount: b.final_payment_amount,
+            final_paid_at: b.final_paid_at,
+            settlement_status: b.settlement_status,
+            is_fully_paid: b.is_fully_paid,
+        });
+        const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
         const date = b.session_date ? formatSessionDate(b.session_date, { locale: locale === "en" ? "en" : "id", dateOnly: true }) : "-";
         const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
         const trackLink = b.tracking_uuid ? `${siteUrl}/${locale}/track/${b.tracking_uuid}` : "";
-        const invoiceLink = `${siteUrl}/api/public/invoice?code=${encodeURIComponent(b.booking_code)}&lang=${locale}`;
-        const msg = `📄 *${tf("waInvoiceTitle")} - ${b.booking_code}*\n\n${tf("waInvoiceHello", { name: b.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${b.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(b.total_price)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(b.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${trackLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
+        const settlementLink = b.tracking_uuid ? `${siteUrl}/${locale}/settlement/${b.tracking_uuid}` : "";
+        const invoiceStage = getInvoiceStage({
+            total_price: b.total_price,
+            dp_paid: b.dp_paid,
+            final_adjustments: b.final_adjustments,
+            final_payment_amount: b.final_payment_amount,
+            final_paid_at: b.final_paid_at,
+            settlement_status: b.settlement_status,
+            is_fully_paid: b.is_fully_paid,
+        });
+        const invoiceLink = `${siteUrl}/api/public/invoice?code=${encodeURIComponent(b.booking_code)}&lang=${locale}&stage=${invoiceStage}`;
+        const msg = `📄 *${tf("waInvoiceTitle")} - ${b.booking_code}*\n\n${tf("waInvoiceHello", { name: b.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${b.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(finalTotal)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(b.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${settlementLink ? `\n🧾 Form Pelunasan: ${settlementLink}` : ""}${trackLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
         const cleaned = b.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
         window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(msg)}`, "_blank");
     }
 
     function getInvoiceMessage(b: BookingFinance) {
-        const remaining = b.total_price - b.dp_paid;
+        const remaining = getRemainingFinalPayment({
+            total_price: b.total_price,
+            dp_paid: b.dp_paid,
+            final_adjustments: b.final_adjustments,
+            final_payment_amount: b.final_payment_amount,
+            final_paid_at: b.final_paid_at,
+            settlement_status: b.settlement_status,
+            is_fully_paid: b.is_fully_paid,
+        });
+        const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
         const date = b.session_date ? formatSessionDate(b.session_date, { locale: locale === "en" ? "en" : "id", dateOnly: true }) : "-";
         const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
         const trackLink = b.tracking_uuid ? `${siteUrl}/${locale}/track/${b.tracking_uuid}` : "";
-        const invoiceLink = `${siteUrl}/api/public/invoice?code=${encodeURIComponent(b.booking_code)}&lang=${locale}`;
-        return `📄 *${tf("waInvoiceTitle")} - ${b.booking_code}*\n\n${tf("waInvoiceHello", { name: b.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${b.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(b.total_price)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(b.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${trackLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
+        const settlementLink = b.tracking_uuid ? `${siteUrl}/${locale}/settlement/${b.tracking_uuid}` : "";
+        const invoiceStage = getInvoiceStage({
+            total_price: b.total_price,
+            dp_paid: b.dp_paid,
+            final_adjustments: b.final_adjustments,
+            final_payment_amount: b.final_payment_amount,
+            final_paid_at: b.final_paid_at,
+            settlement_status: b.settlement_status,
+            is_fully_paid: b.is_fully_paid,
+        });
+        const invoiceLink = `${siteUrl}/api/public/invoice?code=${encodeURIComponent(b.booking_code)}&lang=${locale}&stage=${invoiceStage}`;
+        return `📄 *${tf("waInvoiceTitle")} - ${b.booking_code}*\n\n${tf("waInvoiceHello", { name: b.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${b.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(finalTotal)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(b.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${settlementLink ? `\n🧾 Form Pelunasan: ${settlementLink}` : ""}${trackLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
     }
 
     function copyInvoiceTemplate(b: BookingFinance) {
@@ -115,15 +184,31 @@ export default function FinancePage() {
         setTimeout(() => setCopiedId(null), 2000);
     }
 
-    const totalRevenue = bookings.reduce((s, b) => s + b.dp_paid, 0);
-    const totalPending = bookings.filter(b => !b.is_fully_paid).reduce((s, b) => s + (b.total_price - b.dp_paid), 0);
+    const totalRevenue = bookings.reduce((sum, booking) => sum + getTotalPaidAmount({
+        total_price: booking.total_price,
+        dp_paid: booking.dp_paid,
+        final_adjustments: booking.final_adjustments,
+        final_payment_amount: booking.final_payment_amount,
+        final_paid_at: booking.final_paid_at,
+        settlement_status: booking.settlement_status,
+        is_fully_paid: booking.is_fully_paid,
+    }), 0);
+    const totalPending = bookings.filter(b => !b.is_fully_paid).reduce((sum, booking) => sum + getRemainingFinalPayment({
+        total_price: booking.total_price,
+        dp_paid: booking.dp_paid,
+        final_adjustments: booking.final_adjustments,
+        final_payment_amount: booking.final_payment_amount,
+        final_paid_at: booking.final_paid_at,
+        settlement_status: booking.settlement_status,
+        is_fully_paid: booking.is_fully_paid,
+    }), 0);
     const totalDP = bookings.reduce((s, b) => s + b.dp_paid, 0);
 
     function exportFinance() {
         const wb = XLSX.utils.book_new();
 
         // Sheet 1: Summary
-        const summaryData = [
+        const summaryData: Array<Array<string | number>> = [
             ["Ringkasan Keuangan", "", ""],
             ["", "", ""],
             ["Total Pemasukan", totalRevenue, ""],
@@ -141,13 +226,21 @@ export default function FinancePage() {
             const d = b.session_date ? new Date(b.session_date) : new Date();
             const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
             if (!monthMap[key]) monthMap[key] = { total: 0, dp: 0 };
-            monthMap[key].total += b.total_price;
-            monthMap[key].dp += b.dp_paid;
+            monthMap[key].total += getFinalInvoiceTotal(b.total_price, b.final_adjustments);
+            monthMap[key].dp += getTotalPaidAmount({
+                total_price: b.total_price,
+                dp_paid: b.dp_paid,
+                final_adjustments: b.final_adjustments,
+                final_payment_amount: b.final_payment_amount,
+                final_paid_at: b.final_paid_at,
+                settlement_status: b.settlement_status,
+                is_fully_paid: b.is_fully_paid,
+            });
         });
         Object.keys(monthMap).sort().reverse().forEach(key => {
             const [y, m] = key.split("-");
             const label = new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
-            summaryData.push([label, monthMap[key].total as any, monthMap[key].dp as any]);
+            summaryData.push([label, monthMap[key].total, monthMap[key].dp]);
         });
         const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
         wsSummary["!cols"] = [{ wch: 30 }, { wch: 20 }, { wch: 20 }];
@@ -159,9 +252,17 @@ export default function FinancePage() {
             "Nama Klien": b.client_name,
             "Paket": b.services?.name || "-",
             "Jadwal": b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "-",
-            "Total Harga": b.total_price,
+            "Total Harga": getFinalInvoiceTotal(b.total_price, b.final_adjustments),
             "DP Dibayar": b.dp_paid,
-            "Sisa": b.total_price - b.dp_paid,
+            "Sisa": getRemainingFinalPayment({
+                total_price: b.total_price,
+                dp_paid: b.dp_paid,
+                final_adjustments: b.final_adjustments,
+                final_payment_amount: b.final_payment_amount,
+                final_paid_at: b.final_paid_at,
+                settlement_status: b.settlement_status,
+                is_fully_paid: b.is_fully_paid,
+            }),
             "Status": b.is_fully_paid ? "Lunas" : "Belum Lunas",
         }));
         const wsDetail = XLSX.utils.json_to_sheet(detailData);
@@ -233,7 +334,16 @@ export default function FinancePage() {
                 ) : filtered.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">{t("tidakAdaData")}</div>
                 ) : paginateArray(filtered, currentPage, itemsPerPage).map((b) => {
-                    const remaining = b.total_price - b.dp_paid;
+                    const remaining = getRemainingFinalPayment({
+                        total_price: b.total_price,
+                        dp_paid: b.dp_paid,
+                        final_adjustments: b.final_adjustments,
+                        final_payment_amount: b.final_payment_amount,
+                        final_paid_at: b.final_paid_at,
+                        settlement_status: b.settlement_status,
+                        is_fully_paid: b.is_fully_paid,
+                    });
+                    const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
                     return (
                         <div key={b.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
                             <div className="flex items-start justify-between">
@@ -251,7 +361,7 @@ export default function FinancePage() {
                                 </button>
                             </div>
                             <div className="border-t pt-2 space-y-1 text-sm">
-                                <div className="flex justify-between"><span className="text-muted-foreground">{t("hargaTotal")}</span><span className="font-medium">{formatCurrency(b.total_price)}</span></div>
+                                <div className="flex justify-between"><span className="text-muted-foreground">{t("hargaTotal")}</span><span className="font-medium">{formatCurrency(finalTotal)}</span></div>
                                 <div className="flex justify-between"><span className="text-muted-foreground">{t("dpDibayar")}</span><span>{formatCurrency(b.dp_paid)}</span></div>
                                 <div className="flex justify-between"><span className="text-muted-foreground">{t("sisa")}</span><span className={remaining > 0 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-green-600 dark:text-green-400"}>{formatCurrency(remaining)}</span></div>
                             </div>
@@ -295,14 +405,23 @@ export default function FinancePage() {
                                     {t("tidakAdaData")}
                                 </td></tr>
                             ) : paginateArray(filtered, currentPage, itemsPerPage).map((b) => {
-                                const remaining = b.total_price - b.dp_paid;
+                                const remaining = getRemainingFinalPayment({
+                                    total_price: b.total_price,
+                                    dp_paid: b.dp_paid,
+                                    final_adjustments: b.final_adjustments,
+                                    final_payment_amount: b.final_payment_amount,
+                                    final_paid_at: b.final_paid_at,
+                                    settlement_status: b.settlement_status,
+                                    is_fully_paid: b.is_fully_paid,
+                                });
+                                const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
                                 return (
                                     <tr key={b.id} className="hover:bg-muted/50 transition-colors">
                                         <td className="px-4 py-3 max-w-[180px]">
                                             <div className="font-medium truncate">{b.client_name}</div>
                                             <div className="text-xs text-muted-foreground truncate">{b.booking_code} · {b.services?.name || "-"}</div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(b.total_price)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(finalTotal)}</td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <EditableAmount value={b.dp_paid} onSave={(v) => handleUpdatePayment(b.id, "dp_paid", v)} editTitle={tf("clickToEditDP")} />
                                         </td>
