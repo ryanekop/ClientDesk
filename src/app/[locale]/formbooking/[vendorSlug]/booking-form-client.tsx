@@ -30,6 +30,7 @@ import {
   normalizeStoredFormLayout,
   type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
+import { isRichTextEmpty, sanitizeRichTextHtml } from "@/utils/rich-text";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -589,8 +590,11 @@ export function BookingFormClient({
   const termsLinkText =
     effectiveVendor.form_terms_link_text?.trim() || t("termsLinkDefault");
   const termsSuffixText = effectiveVendor.form_terms_suffix_text?.trim() || "";
-  const termsContent = effectiveVendor.form_terms_content?.trim() || "";
-  const hasTerms = effectiveVendor.form_terms_enabled && Boolean(termsContent);
+  const termsContent = React.useMemo(
+    () => sanitizeRichTextHtml(effectiveVendor.form_terms_content || ""),
+    [effectiveVendor.form_terms_content],
+  );
+  const hasTerms = effectiveVendor.form_terms_enabled && !isRichTextEmpty(termsContent);
 
   React.useEffect(() => {
     if (!selectedService) {
@@ -1432,9 +1436,10 @@ export function BookingFormClient({
                   {t("termsDialogDescription")}
                 </DialogDescription>
               </DialogHeader>
-              <div className="max-h-[55vh] overflow-y-auto rounded-lg border bg-muted/20 p-4 text-sm leading-6 whitespace-pre-wrap">
-                {termsContent}
-              </div>
+              <div
+                className="max-h-[55vh] overflow-y-auto rounded-lg border bg-muted/20 p-4 text-sm leading-6 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:italic [&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:ml-5 [&_li]:list-item [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5"
+                dangerouslySetInnerHTML={{ __html: termsContent }}
+              />
               <div className="flex justify-end">
                 <button
                   type="button"

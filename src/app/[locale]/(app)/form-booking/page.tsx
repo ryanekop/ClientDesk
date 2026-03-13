@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import CustomFormBuilder from "@/components/form-builder/custom-form-builder";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import {
   normalizeStoredFormLayout,
   type FormLayoutItem,
@@ -1249,55 +1250,6 @@ export default function FormBookingPage() {
                   ))}
                 </div>
               </div>
-            </>
-          )}
-
-          {settingsTab === "customForm" && (
-            <>
-              <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-                <div className="px-6 py-4 border-b">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <List className="w-4 h-4" /> Custom Form
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Setiap jenis acara memiliki section bawaan sendiri: Informasi Klien, Detail Sesi, dan Paket Pembayaran. Item bawaan di dalamnya bisa direorder, lalu kamu bisa tambah field atau divider custom per section.
-                  </p>
-                </div>
-                <div className="p-6 space-y-4">
-                  {customFormEventTypes.length > 0 ? (
-                    <>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Jenis Acara</label>
-                        <select
-                          value={selectedCustomFormEventType}
-                          onChange={(e) => setSelectedCustomFormEventType(e.target.value)}
-                          className={inputClass + " cursor-pointer"}
-                        >
-                          {customFormEventTypes.map((eventType) => (
-                            <option key={eventType} value={eventType}>
-                              {eventType}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <CustomFormBuilder
-                        eventType={selectedCustomFormEventType}
-                        layout={normalizeStoredFormLayout(
-                          formSectionsByEventType[selectedCustomFormEventType] || [],
-                          selectedCustomFormEventType,
-                        )}
-                        onChange={(layout) =>
-                          updateFormSections(selectedCustomFormEventType, layout)
-                        }
-                      />
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Belum ada jenis acara aktif. Tambahkan dulu di Pengaturan Umum.
-                    </p>
-                  )}
-                </div>
-              </div>
 
               <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
                 <div className="px-6 py-4 border-b">
@@ -1305,7 +1257,7 @@ export default function FormBookingPage() {
                     <FileText className="w-4 h-4" /> Terms & Conditions
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Tambahkan checkbox persetujuan di bagian paling bawah form booking, dengan teks custom dan isi popup T&amp;C.
+                    Tambahkan checkbox persetujuan di bagian paling bawah form booking, dengan teks custom dan popup yang bisa diformat.
                   </p>
                 </div>
                 <div className="p-6 space-y-4">
@@ -1362,22 +1314,67 @@ export default function FormBookingPage() {
                     </div>
                     <div className="space-y-2 md:col-span-2">
                       <label className="text-sm font-medium">Isi popup T&amp;C</label>
-                      <textarea
+                      <RichTextEditor
                         value={termsContent}
-                        onChange={(e) => setTermsContent(e.target.value)}
-                        placeholder={"Tuliskan syarat dan ketentuan di sini.\n\nSetiap baris baru akan tetap tampil di popup."}
-                        rows={8}
-                        className="placeholder:text-muted-foreground w-full min-w-0 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-y transition-all"
+                        onChange={setTermsContent}
+                        placeholder="Tulis syarat & ketentuan di sini. Bisa bold, italic, bullet list, numbering, heading, dan quote."
                         disabled={!termsEnabled}
                       />
                       <p className="text-xs text-muted-foreground">
-                        Kalau isi popup kosong, T&amp;C tidak akan ditampilkan di form publik walaupun toggle aktif.
+                        Editor ini mendukung format dasar seperti bold, italic, underline, bullet list, numbering, heading, dan quote.
                       </p>
                     </div>
                   </div>
                 </div>
               </div>
             </>
+          )}
+
+          {settingsTab === "customForm" && (
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+              <div className="px-6 py-4 border-b">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <List className="w-4 h-4" /> Custom Form
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Setiap jenis acara memiliki section bawaan sendiri: Informasi Klien, Detail Sesi, dan Paket Pembayaran. Item bawaan di dalamnya bisa direorder, lalu kamu bisa tambah field atau divider custom per section.
+                </p>
+              </div>
+              <div className="p-6 space-y-4">
+                {customFormEventTypes.length > 0 ? (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Jenis Acara</label>
+                      <select
+                        value={selectedCustomFormEventType}
+                        onChange={(e) => setSelectedCustomFormEventType(e.target.value)}
+                        className={inputClass + " cursor-pointer"}
+                      >
+                        {customFormEventTypes.map((eventType) => (
+                          <option key={eventType} value={eventType}>
+                            {eventType}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <CustomFormBuilder
+                      eventType={selectedCustomFormEventType}
+                      layout={normalizeStoredFormLayout(
+                        formSectionsByEventType[selectedCustomFormEventType] || [],
+                        selectedCustomFormEventType,
+                      )}
+                      onChange={(layout) =>
+                        updateFormSections(selectedCustomFormEventType, layout)
+                      }
+                    />
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Belum ada jenis acara aktif. Tambahkan dulu di Pengaturan Umum.
+                  </p>
+                )}
+              </div>
+            </div>
           )}
 
           {/* Save + Reset */}
