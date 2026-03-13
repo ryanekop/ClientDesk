@@ -20,6 +20,10 @@ import {
     getCalendarTemplateVariables,
 } from "@/utils/google/template";
 import { getEventExtraFieldPreviewVars } from "@/utils/form-extra-fields";
+import {
+    getDefaultFinalInvoiceVisibleFromStatus,
+    resolveFinalInvoiceVisibleFromStatus,
+} from "@/lib/client-status";
 
 const COUNTRY_CODES = [
     { code: "+62", flag: "🇮🇩", name: "Indonesia" },
@@ -36,6 +40,7 @@ type Profile = {
     studio_name: string | null;
     whatsapp_number: string | null;
     vendor_slug: string | null;
+    final_invoice_visible_from_status?: string | null;
 };
 
 type Template = {
@@ -51,6 +56,8 @@ type Template = {
 const templateTypes = [
     { value: "whatsapp_client", label: "Whatsapp ke Klien" },
     { value: "whatsapp_booking_confirm", label: "Whatsapp Konfirmasi Booking" },
+    { value: "whatsapp_settlement_client", label: "Whatsapp Invoice Pelunasan" },
+    { value: "whatsapp_settlement_confirm", label: "Whatsapp Konfirmasi Pelunasan" },
     { value: "whatsapp_freelancer", label: "Whatsapp ke Freelance" },
     { value: "invoice", label: "Invoice" },
 ];
@@ -66,6 +73,17 @@ const variableHints: Record<string, string[]> = {
         "{{client_name}}", "{{booking_code}}", "{{session_date}}", "{{service_name}}",
         "{{total_price}}", "{{dp_paid}}", "{{studio_name}}", "{{event_type}}",
         "{{location}}", "{{tracking_link}}",
+    ],
+    whatsapp_settlement_client: [
+        "{{client_name}}", "{{booking_code}}", "{{session_date}}", "{{service_name}}",
+        "{{total_price}}", "{{dp_paid}}", "{{final_total}}", "{{adjustments_total}}",
+        "{{remaining_payment}}", "{{studio_name}}", "{{event_type}}", "{{location}}",
+        "{{tracking_link}}", "{{invoice_url}}", "{{settlement_link}}",
+    ],
+    whatsapp_settlement_confirm: [
+        "{{client_name}}", "{{booking_code}}", "{{service_name}}", "{{session_date}}",
+        "{{payment_method}}", "{{final_total}}", "{{remaining_payment}}", "{{studio_name}}",
+        "{{invoice_url}}", "{{settlement_link}}",
     ],
     whatsapp_freelancer: [
         "{{freelancer_name}}", "{{client_name}}", "{{client_whatsapp}}", "{{booking_code}}", "{{session_date}}",
@@ -178,6 +196,7 @@ export default function SettingsPage() {
     const [clientStatusSaved, setClientStatusSaved] = React.useState(false);
     const [dragClientIdx, setDragClientIdx] = React.useState<number | null>(null);
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
+    const [finalInvoiceVisibleFromStatus, setFinalInvoiceVisibleFromStatus] = React.useState("Sesi Foto / Acara");
 
     // Default WA target
     const [defaultWaTarget, setDefaultWaTarget] = React.useState<"client" | "freelancer">("client");
@@ -215,7 +234,7 @@ export default function SettingsPage() {
 
         const { data: p } = await supabase
             .from("profiles")
-            .select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, calendar_event_format, calendar_event_format_map, drive_folder_format, drive_folder_format_map, invoice_logo_url, custom_statuses, custom_client_statuses, queue_trigger_status, default_wa_target")
+            .select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, calendar_event_format, calendar_event_format_map, drive_folder_format, drive_folder_format_map, invoice_logo_url, custom_statuses, custom_client_statuses, queue_trigger_status, default_wa_target, final_invoice_visible_from_status")
             .eq("id", user.id)
             .single();
         const prof = p as Profile;
@@ -242,9 +261,16 @@ export default function SettingsPage() {
         if ((prof as any)?.custom_client_statuses) {
             setCustomClientStatuses((prof as any).custom_client_statuses);
         }
+        const loadedClientStatuses = ((prof as any)?.custom_client_statuses as string[] | undefined) || customClientStatuses;
         if ((prof as any)?.queue_trigger_status) {
             setQueueTriggerStatus((prof as any).queue_trigger_status);
         }
+        setFinalInvoiceVisibleFromStatus(
+            resolveFinalInvoiceVisibleFromStatus(
+                loadedClientStatuses,
+                (prof as any)?.final_invoice_visible_from_status,
+            ),
+        );
         if ((prof as any)?.default_wa_target) {
             setDefaultWaTarget((prof as any).default_wa_target);
         }
@@ -460,6 +486,10 @@ export default function SettingsPage() {
         service_name: "Paket Wedding",
         total_price: "Rp 5.000.000",
         dp_paid: "Rp 2.500.000",
+        final_total: "Rp 6.000.000",
+        adjustments_total: "Rp 1.000.000",
+        remaining_payment: "Rp 3.500.000",
+        payment_method: "Transfer Bank",
         studio_name: studioName || "Memori Studio",
         freelancer_name: "Andi",
         event_type: selectedEventType,
@@ -470,6 +500,7 @@ export default function SettingsPage() {
         notes: "Mohon datang 30 menit lebih awal",
         tracking_link: "https://clientdesk.ryanekoapp.web.id/id/track/abc123",
         invoice_url: "https://clientdesk.ryanekoapp.web.id/api/public/invoice?code=INV-100120250001",
+        settlement_link: "https://clientdesk.ryanekoapp.web.id/id/settlement/abc123",
     };
 
     function renderPreview(content: string) {
@@ -519,11 +550,23 @@ export default function SettingsPage() {
                 <div className="px-6 py-4 border-b">
                     <h3 className="font-semibold flex items-center gap-2">
                         <MessageSquare className="w-4 h-4" />
-                        {tt.value === "whatsapp_client" ? tp("templateWAClient") : tt.value === "whatsapp_booking_confirm" ? "Konfirmasi Booking" : tt.value === "whatsapp_freelancer" ? tp("templateWAFreelancer") : tp("templateInvoice")}
+                        {tt.value === "whatsapp_client"
+                            ? tp("templateWAClient")
+                            : tt.value === "whatsapp_booking_confirm"
+                                ? "Konfirmasi Booking"
+                                : tt.value === "whatsapp_settlement_client"
+                                    ? "Invoice Pelunasan ke Klien"
+                                    : tt.value === "whatsapp_settlement_confirm"
+                                        ? "Konfirmasi Pelunasan ke Admin"
+                                        : tt.value === "whatsapp_freelancer"
+                                            ? tp("templateWAFreelancer")
+                                            : tp("templateInvoice")}
                     </h3>
                     <p className="text-sm text-muted-foreground">
                         {tt.value === "whatsapp_client" && tp("templateWAClientDesc")}
                         {tt.value === "whatsapp_booking_confirm" && "Template pesan konfirmasi setelah klien mengisi form booking."}
+                        {tt.value === "whatsapp_settlement_client" && "Template pesan WhatsApp dari admin ke klien saat invoice pelunasan dikirim."}
+                        {tt.value === "whatsapp_settlement_confirm" && "Template pesan WhatsApp dari klien ke admin setelah pelunasan dikirim."}
                         {tt.value === "whatsapp_freelancer" && tp("templateWAFreelancerDesc")}
                         {tt.value === "invoice" && tp("templateInvoiceDesc")}
                     </p>
@@ -1255,7 +1298,16 @@ export default function SettingsPage() {
                                     onClick={async () => {
                                         if (!profile) return;
                                         setClientStatusSaving(true);
-                                        await supabase.from("profiles").update({ custom_client_statuses: customClientStatuses, queue_trigger_status: queueTriggerStatus }).eq("id", profile.id);
+                                        const nextVisibleFromStatus = resolveFinalInvoiceVisibleFromStatus(
+                                            customClientStatuses,
+                                            finalInvoiceVisibleFromStatus,
+                                        );
+                                        await supabase.from("profiles").update({
+                                            custom_client_statuses: customClientStatuses,
+                                            queue_trigger_status: queueTriggerStatus,
+                                            final_invoice_visible_from_status: nextVisibleFromStatus,
+                                        }).eq("id", profile.id);
+                                        setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
                                         setClientStatusSaving(false);
                                         setClientStatusSaved(true);
                                         setTimeout(() => setClientStatusSaved(false), 2000);
@@ -1279,6 +1331,26 @@ export default function SettingsPage() {
                                 >
                                     <option value="">(Tidak ada trigger)</option>
                                     {customClientStatuses.map(s => (
+                                        <option key={s} value={s}>{s}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
+                                <p className="text-sm font-medium">
+                                    {locale === "en" ? "Final Invoice Visibility" : "Tampilkan Invoice Final Mulai Status"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                    {locale === "en"
+                                        ? "Choose the first client status where the final invoice card should appear on the tracking page."
+                                        : "Pilih status klien pertama saat kartu invoice final mulai ditampilkan di halaman tracking."}
+                                </p>
+                                <select
+                                    value={resolveFinalInvoiceVisibleFromStatus(customClientStatuses, finalInvoiceVisibleFromStatus)}
+                                    onChange={e => setFinalInvoiceVisibleFromStatus(e.target.value)}
+                                    className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                >
+                                    {(customClientStatuses.length > 0 ? customClientStatuses : [getDefaultFinalInvoiceVisibleFromStatus(customClientStatuses)]).map((s) => (
                                         <option key={s} value={s}>{s}</option>
                                     ))}
                                 </select>

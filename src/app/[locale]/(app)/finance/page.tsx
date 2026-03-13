@@ -1,20 +1,25 @@
 "use client";
 
 import * as React from "react";
-import { Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, Copy, ClipboardCheck } from "lucide-react";
+import { Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, ExternalLink, Receipt, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
+import { Link } from "@/i18n/routing";
 import * as XLSX from "xlsx";
 import {
     getFinalInvoiceTotal,
-    getInvoiceStage,
     getRemainingFinalPayment,
     getTotalPaidAmount,
 } from "@/lib/final-settlement";
+import {
+    fillWhatsAppTemplate,
+    getWhatsAppTemplateContent,
+    normalizeWhatsAppNumber,
+} from "@/lib/whatsapp-template";
 type BookingFinance = {
     id: string;
     booking_code: string;
@@ -25,13 +30,20 @@ type BookingFinance = {
     is_fully_paid: boolean;
     status: string;
     session_date: string | null;
+    event_type: string | null;
+    location: string | null;
     tracking_uuid: string | null;
+    client_status: string | null;
     settlement_status: string | null;
     final_adjustments: unknown;
     final_payment_amount: number;
     final_paid_at: string | null;
     final_invoice_sent_at: string | null;
-    services: { name: string } | null;
+    payment_proof_url: string | null;
+    payment_proof_drive_file_id: string | null;
+    final_payment_proof_url: string | null;
+    final_payment_proof_drive_file_id: string | null;
+    services: { name: string; price: number } | null;
 };
 
 export default function FinancePage() {
@@ -44,32 +56,39 @@ export default function FinancePage() {
     const [filter, setFilter] = React.useState<"all" | "pending" | "paid">("all");
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
-    const [copiedId, setCopiedId] = React.useState<string | null>(null);
+    const [studioName, setStudioName] = React.useState("");
+    const [savedTemplates, setSavedTemplates] = React.useState<
+        { id: string; type: string; content: string; content_en: string; event_type: string | null }[]
+    >([]);
 
     const fetchBookings = React.useCallback(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const { data } = await supabase
-            .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, tracking_uuid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, services(name)")
-            .eq("user_id", user.id)
-            .neq("status", "Batal")
-            .order("created_at", { ascending: false });
+        const [{ data }, { data: templates }, { data: profile }] = await Promise.all([
+            supabase
+                .from("bookings")
+                .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, event_type, location, tracking_uuid, client_status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, payment_proof_url, payment_proof_drive_file_id, final_payment_proof_url, final_payment_proof_drive_file_id, services(name, price)")
+                .eq("user_id", user.id)
+                .neq("status", "Batal")
+                .order("created_at", { ascending: false }),
+            supabase
+                .from("templates")
+                .select("id, type, content, content_en, event_type")
+                .eq("user_id", user.id),
+            supabase.from("profiles").select("studio_name").eq("id", user.id).single(),
+        ]);
 
         setBookings((data || []) as unknown as BookingFinance[]);
+        setSavedTemplates((templates || []) as { id: string; type: string; content: string; content_en: string; event_type: string | null }[]);
+        setStudioName(profile?.studio_name || "");
         setLoading(false);
     }, [supabase]);
 
     React.useEffect(() => {
         void fetchBookings();
     }, [fetchBookings]);
-
-    async function handleUpdatePayment(id: string, field: "dp_paid" | "total_price", value: number) {
-        await supabase.from("bookings").update({ [field]: value }).eq("id", id);
-        fetchBookings();
-    }
 
     async function handleMarkPaid(id: string) {
         const booking = bookings.find((item) => item.id === id);
@@ -103,8 +122,30 @@ export default function FinancePage() {
         fetchBookings();
     }
 
-    function generateInvoice(booking: BookingFinance) {
-        const stage = getInvoiceStage({
+    const formatCurrency = (n: number) =>
+        new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
+    function getSiteUrl() {
+        return typeof window !== "undefined" ? window.location.origin : "";
+    }
+
+    function getInitialInvoiceLink(booking: BookingFinance) {
+        return `${getSiteUrl()}/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}&lang=${locale}&stage=initial`;
+    }
+
+    function getFinalInvoiceLink(booking: BookingFinance) {
+        return `${getSiteUrl()}/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}&lang=${locale}&stage=final`;
+    }
+
+    function getSettlementLink(booking: BookingFinance) {
+        return booking.tracking_uuid ? `${getSiteUrl()}/${locale}/settlement/${booking.tracking_uuid}` : "";
+    }
+
+    function getTrackingLink(booking: BookingFinance) {
+        return booking.tracking_uuid ? `${getSiteUrl()}/${locale}/track/${booking.tracking_uuid}` : "";
+    }
+
+    function getRemainingAmount(booking: BookingFinance) {
+        return getRemainingFinalPayment({
             total_price: booking.total_price,
             dp_paid: booking.dp_paid,
             final_adjustments: booking.final_adjustments,
@@ -113,75 +154,153 @@ export default function FinancePage() {
             settlement_status: booking.settlement_status,
             is_fully_paid: booking.is_fully_paid,
         });
-        window.open(`/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}&lang=${locale}&stage=${stage}`, "_blank");
     }
 
-    const formatCurrency = (n: number) =>
-        new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
-
-    function sendInvoiceWhatsApp(b: BookingFinance) {
-        if (!b.client_whatsapp) { alert(tf("waNotAvailable")); return; }
-        const remaining = getRemainingFinalPayment({
-            total_price: b.total_price,
-            dp_paid: b.dp_paid,
-            final_adjustments: b.final_adjustments,
-            final_payment_amount: b.final_payment_amount,
-            final_paid_at: b.final_paid_at,
-            settlement_status: b.settlement_status,
-            is_fully_paid: b.is_fully_paid,
-        });
-        const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
-        const date = b.session_date ? formatSessionDate(b.session_date, { locale: locale === "en" ? "en" : "id", dateOnly: true }) : "-";
-        const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
-        const trackLink = b.tracking_uuid ? `${siteUrl}/${locale}/track/${b.tracking_uuid}` : "";
-        const settlementLink = b.tracking_uuid ? `${siteUrl}/${locale}/settlement/${b.tracking_uuid}` : "";
-        const invoiceStage = getInvoiceStage({
-            total_price: b.total_price,
-            dp_paid: b.dp_paid,
-            final_adjustments: b.final_adjustments,
-            final_payment_amount: b.final_payment_amount,
-            final_paid_at: b.final_paid_at,
-            settlement_status: b.settlement_status,
-            is_fully_paid: b.is_fully_paid,
-        });
-        const invoiceLink = `${siteUrl}/api/public/invoice?code=${encodeURIComponent(b.booking_code)}&lang=${locale}&stage=${invoiceStage}`;
-        const msg = `📄 *${tf("waInvoiceTitle")} - ${b.booking_code}*\n\n${tf("waInvoiceHello", { name: b.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${b.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(finalTotal)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(b.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${settlementLink ? `\n🧾 Form Pelunasan: ${settlementLink}` : ""}${trackLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
-        const cleaned = b.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
-        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(msg)}`, "_blank");
+    function getFinalTotalAmount(booking: BookingFinance) {
+        return getFinalInvoiceTotal(booking.total_price, booking.final_adjustments);
     }
 
-    function getInvoiceMessage(b: BookingFinance) {
-        const remaining = getRemainingFinalPayment({
-            total_price: b.total_price,
-            dp_paid: b.dp_paid,
-            final_adjustments: b.final_adjustments,
-            final_payment_amount: b.final_payment_amount,
-            final_paid_at: b.final_paid_at,
-            settlement_status: b.settlement_status,
-            is_fully_paid: b.is_fully_paid,
-        });
-        const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
-        const date = b.session_date ? formatSessionDate(b.session_date, { locale: locale === "en" ? "en" : "id", dateOnly: true }) : "-";
-        const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
-        const trackLink = b.tracking_uuid ? `${siteUrl}/${locale}/track/${b.tracking_uuid}` : "";
-        const settlementLink = b.tracking_uuid ? `${siteUrl}/${locale}/settlement/${b.tracking_uuid}` : "";
-        const invoiceStage = getInvoiceStage({
-            total_price: b.total_price,
-            dp_paid: b.dp_paid,
-            final_adjustments: b.final_adjustments,
-            final_payment_amount: b.final_payment_amount,
-            final_paid_at: b.final_paid_at,
-            settlement_status: b.settlement_status,
-            is_fully_paid: b.is_fully_paid,
-        });
-        const invoiceLink = `${siteUrl}/api/public/invoice?code=${encodeURIComponent(b.booking_code)}&lang=${locale}&stage=${invoiceStage}`;
-        return `📄 *${tf("waInvoiceTitle")} - ${b.booking_code}*\n\n${tf("waInvoiceHello", { name: b.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${b.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(finalTotal)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(b.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${b.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${settlementLink ? `\n🧾 Form Pelunasan: ${settlementLink}` : ""}${trackLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
+    function getAddonTotal(booking: BookingFinance) {
+        const baseServicePrice = booking.services?.price ?? booking.total_price;
+        const publicAddonTotal = Math.max(booking.total_price - baseServicePrice, 0);
+        const finalAddonTotal = Math.max(getFinalInvoiceTotal(booking.total_price, booking.final_adjustments) - booking.total_price, 0);
+        return publicAddonTotal + finalAddonTotal;
     }
 
-    function copyInvoiceTemplate(b: BookingFinance) {
-        navigator.clipboard.writeText(getInvoiceMessage(b));
-        setCopiedId(b.id);
-        setTimeout(() => setCopiedId(null), 2000);
+    function openInvoice(booking: BookingFinance, stage: "initial" | "final") {
+        const href = stage === "initial" ? getInitialInvoiceLink(booking) : getFinalInvoiceLink(booking);
+        window.open(href, "_blank");
+    }
+
+    async function ensureSettlementOpened(booking: BookingFinance) {
+        if (!booking.tracking_uuid) {
+            alert(locale === "en" ? "Settlement link is not available yet." : "Link pelunasan belum tersedia.");
+            return null;
+        }
+
+        if (booking.settlement_status && booking.settlement_status !== "draft" && booking.final_invoice_sent_at) {
+            return booking;
+        }
+
+        const sentAt = new Date().toISOString();
+        const { error } = await supabase
+            .from("bookings")
+            .update({
+                settlement_status: "sent",
+                final_invoice_sent_at: sentAt,
+                final_payment_amount: 0,
+                final_payment_method: null,
+                final_payment_source: null,
+                final_payment_proof_url: null,
+                final_payment_proof_drive_file_id: null,
+                final_paid_at: null,
+                is_fully_paid: false,
+            })
+            .eq("id", booking.id);
+
+        if (error) {
+            alert(locale === "en" ? "Failed to open settlement." : "Gagal membuka pelunasan.");
+            return null;
+        }
+
+        const nextBooking: BookingFinance = {
+            ...booking,
+            settlement_status: "sent",
+            final_invoice_sent_at: sentAt,
+            final_payment_amount: 0,
+            final_paid_at: null,
+            final_payment_proof_url: null,
+            final_payment_proof_drive_file_id: null,
+            is_fully_paid: false,
+        };
+
+        setBookings((prev) => prev.map((item) => item.id === booking.id ? nextBooking : item));
+        return nextBooking;
+    }
+
+    function buildInitialInvoiceMessage(booking: BookingFinance) {
+        const date = booking.session_date ? formatSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id", dateOnly: true }) : "-";
+        const remaining = Math.max((booking.total_price || 0) - (booking.dp_paid || 0), 0);
+        const invoiceLink = getInitialInvoiceLink(booking);
+        const trackingLink = getTrackingLink(booking);
+        const templateContent = getWhatsAppTemplateContent(savedTemplates, "whatsapp_client", locale);
+
+        if (templateContent.trim()) {
+            return fillWhatsAppTemplate(templateContent, {
+                client_name: booking.client_name,
+                booking_code: booking.booking_code,
+                session_date: date,
+                service_name: booking.services?.name || "-",
+                total_price: formatCurrency(booking.total_price),
+                dp_paid: formatCurrency(booking.dp_paid),
+                studio_name: studioName || "",
+                event_type: booking.event_type || "-",
+                location: booking.location || "-",
+                location_maps_url: booking.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
+                detail_location: "-",
+                notes: "-",
+                tracking_link: trackingLink || "-",
+                invoice_url: invoiceLink,
+            });
+        }
+
+        return `📄 *${tf("waInvoiceTitle")} - ${booking.booking_code}*\n\n${tf("waInvoiceHello", { name: booking.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${booking.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(booking.total_price)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(booking.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${booking.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${trackingLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackingLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
+    }
+
+    function buildFinalInvoiceMessage(booking: BookingFinance) {
+        const remaining = getRemainingAmount(booking);
+        const finalTotal = getFinalTotalAmount(booking);
+        const date = booking.session_date ? formatSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id", dateOnly: true }) : "-";
+        const trackingLink = getTrackingLink(booking);
+        const settlementLink = getSettlementLink(booking);
+        const invoiceLink = getFinalInvoiceLink(booking);
+        const templateContent = getWhatsAppTemplateContent(savedTemplates, "whatsapp_settlement_client", locale);
+
+        if (templateContent.trim()) {
+            return fillWhatsAppTemplate(templateContent, {
+                client_name: booking.client_name,
+                booking_code: booking.booking_code,
+                session_date: date,
+                service_name: booking.services?.name || "-",
+                total_price: formatCurrency(booking.total_price),
+                dp_paid: formatCurrency(booking.dp_paid),
+                final_total: formatCurrency(finalTotal),
+                adjustments_total: formatCurrency(finalTotal - booking.total_price),
+                remaining_payment: formatCurrency(remaining),
+                studio_name: studioName || "",
+                event_type: booking.event_type || "-",
+                location: booking.location || "-",
+                tracking_link: trackingLink || "-",
+                invoice_url: invoiceLink,
+                settlement_link: settlementLink || "-",
+            });
+        }
+
+        return `Halo ${booking.client_name}, invoice final untuk booking ${booking.booking_code} sudah kami siapkan.\n\nPaket: ${booking.services?.name || "-"}\nTotal awal: ${formatCurrency(booking.total_price)}\nAdd-on akhir: ${formatCurrency(finalTotal - booking.total_price)}\nTotal final: ${formatCurrency(finalTotal)}\nDP terbayar: ${formatCurrency(booking.dp_paid)}\nSisa pelunasan: ${formatCurrency(remaining)}\n\nInvoice final: ${invoiceLink}\nForm pelunasan: ${settlementLink || "-"}${trackingLink ? `\nTracking: ${trackingLink}` : ""}\n\nSilakan lakukan pelunasan dan upload bukti bayar melalui link di atas. Terima kasih.`;
+    }
+
+    function sendInitialInvoiceWhatsApp(booking: BookingFinance) {
+        if (!booking.client_whatsapp) {
+            alert(tf("waNotAvailable"));
+            return;
+        }
+        const cleaned = normalizeWhatsAppNumber(booking.client_whatsapp);
+        const message = buildInitialInvoiceMessage(booking);
+        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(message)}`, "_blank");
+    }
+
+    async function sendFinalInvoiceWhatsApp(booking: BookingFinance) {
+        if (!booking.client_whatsapp) {
+            alert(tf("waNotAvailable"));
+            return;
+        }
+
+        const openedBooking = await ensureSettlementOpened(booking);
+        if (!openedBooking) return;
+
+        const cleaned = normalizeWhatsAppNumber(openedBooking.client_whatsapp);
+        const message = buildFinalInvoiceMessage(openedBooking);
+        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(message)}`, "_blank");
     }
 
     const totalRevenue = bookings.reduce((sum, booking) => sum + getTotalPaidAmount({
@@ -253,6 +372,7 @@ export default function FinancePage() {
             "Paket": b.services?.name || "-",
             "Jadwal": b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "-",
             "Total Harga": getFinalInvoiceTotal(b.total_price, b.final_adjustments),
+            "Total Add-on": getAddonTotal(b),
             "DP Dibayar": b.dp_paid,
             "Sisa": getRemainingFinalPayment({
                 total_price: b.total_price,
@@ -266,10 +386,15 @@ export default function FinancePage() {
             "Status": b.is_fully_paid ? "Lunas" : "Belum Lunas",
         }));
         const wsDetail = XLSX.utils.json_to_sheet(detailData);
-        wsDetail["!cols"] = [{ wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+        wsDetail["!cols"] = [{ wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
         XLSX.utils.book_append_sheet(wb, wsDetail, "Detail Booking");
 
         XLSX.writeFile(wb, `keuangan_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }
+
+    function openProof(url: string | null) {
+        if (!url) return;
+        window.open(url, "_blank");
     }
 
     const filtered = filter === "all" ? bookings
@@ -344,6 +469,7 @@ export default function FinancePage() {
                         is_fully_paid: b.is_fully_paid,
                     });
                     const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
+                    const addonTotal = getAddonTotal(b);
                     return (
                         <div key={b.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
                             <div className="flex items-start justify-between">
@@ -362,19 +488,41 @@ export default function FinancePage() {
                             </div>
                             <div className="border-t pt-2 space-y-1 text-sm">
                                 <div className="flex justify-between"><span className="text-muted-foreground">{t("hargaTotal")}</span><span className="font-medium">{formatCurrency(finalTotal)}</span></div>
+                                <div className="flex justify-between"><span className="text-muted-foreground">{t("addOn")}</span><span>{formatCurrency(addonTotal)}</span></div>
                                 <div className="flex justify-between"><span className="text-muted-foreground">{t("dpDibayar")}</span><span>{formatCurrency(b.dp_paid)}</span></div>
                                 <div className="flex justify-between"><span className="text-muted-foreground">{t("sisa")}</span><span className={remaining > 0 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-green-600 dark:text-green-400"}>{formatCurrency(remaining)}</span></div>
                             </div>
-                            <div className="flex items-center gap-1 pt-1 border-t">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500" title="Salin Template" onClick={() => copyInvoiceTemplate(b)}>
-                                    {copiedId === b.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500" title={tf("sendInvoiceWA")} disabled={!b.client_whatsapp} onClick={() => sendInvoiceWhatsApp(b)}>
-                                    <MessageCircle className="w-4 h-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" title="Invoice" onClick={() => generateInvoice(b)}>
+                            <div className="flex flex-wrap items-center gap-1 pt-1 border-t">
+                                <Link href={`/bookings/${b.id}`}>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" title={tf("detailBooking")}>
+                                        <Info className="w-4 h-4" />
+                                    </Button>
+                                </Link>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" title={tf("openInitialInvoice")} onClick={() => openInvoice(b, "initial")}>
                                     <FileText className="w-4 h-4" />
                                 </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500" title={tf("openFinalInvoice")} onClick={() => openInvoice(b, "final")}>
+                                    <Download className="w-4 h-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300" title={tf("sendInitialInvoiceWA")} disabled={!b.client_whatsapp} onClick={() => sendInitialInvoiceWhatsApp(b)}>
+                                    <MessageCircle className="w-4 h-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300" title={tf("sendFinalInvoiceWA")} disabled={!b.client_whatsapp || !b.tracking_uuid} onClick={() => { void sendFinalInvoiceWhatsApp(b); }}>
+                                    <MessageCircle className="w-4 h-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-sky-500" title={tf("openSettlementLink")} disabled={!b.tracking_uuid} onClick={() => window.open(getSettlementLink(b), "_blank")}>
+                                    <ExternalLink className="w-4 h-4" />
+                                </Button>
+                                {b.payment_proof_url && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-500" title={tf("openInitialProof")} onClick={() => openProof(b.payment_proof_url)}>
+                                        <Receipt className="w-4 h-4" />
+                                    </Button>
+                                )}
+                                {b.final_payment_proof_url && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-cyan-500" title={tf("openFinalProof")} onClick={() => openProof(b.final_payment_proof_url)}>
+                                        <Receipt className="w-4 h-4" />
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     );
@@ -383,25 +531,26 @@ export default function FinancePage() {
 
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="text-xs uppercase bg-muted/50 border-b">
+                <div className="relative overflow-x-auto">
+                    <table className="min-w-[1180px] w-full text-sm text-left">
+                        <thead className="text-xs uppercase bg-card border-b">
                             <tr>
                                 <th className="px-6 py-4 font-medium text-muted-foreground">{t("klien")}</th>
                                 <th className="px-6 py-4 font-medium text-muted-foreground">{t("hargaTotal")}</th>
+                                <th className="px-6 py-4 font-medium text-muted-foreground">{t("addOn")}</th>
                                 <th className="px-6 py-4 font-medium text-muted-foreground">{t("dpDibayar")}</th>
                                 <th className="px-6 py-4 font-medium text-muted-foreground">{t("sisa")}</th>
                                 <th className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>
-                                <th className="px-6 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>
+                                <th className="min-w-[300px] px-6 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
                             {loading ? (
-                                <tr><td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
+                                <tr><td colSpan={7} className="px-6 py-12 text-center text-muted-foreground">
                                     <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                                 </td></tr>
                             ) : filtered.length === 0 ? (
-                                <tr><td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
+                                <tr><td colSpan={7} className="px-6 py-12 text-center text-muted-foreground">
                                     {t("tidakAdaData")}
                                 </td></tr>
                             ) : paginateArray(filtered, currentPage, itemsPerPage).map((b) => {
@@ -415,16 +564,16 @@ export default function FinancePage() {
                                     is_fully_paid: b.is_fully_paid,
                                 });
                                 const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
+                                const addonTotal = getAddonTotal(b);
                                 return (
-                                    <tr key={b.id} className="hover:bg-muted/50 transition-colors">
+                                    <tr key={b.id} className="group hover:bg-muted/50 transition-colors">
                                         <td className="px-4 py-3 max-w-[180px]">
                                             <div className="font-medium truncate">{b.client_name}</div>
                                             <div className="text-xs text-muted-foreground truncate">{b.booking_code} · {b.services?.name || "-"}</div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(finalTotal)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <EditableAmount value={b.dp_paid} onSave={(v) => handleUpdatePayment(b.id, "dp_paid", v)} editTitle={tf("clickToEditDP")} />
-                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">{formatCurrency(addonTotal)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(b.dp_paid)}</td>
                                         <td className="px-6 py-4 whitespace-nowrap font-medium">
                                             <span className={remaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}>
                                                 {formatCurrency(remaining)}
@@ -441,21 +590,44 @@ export default function FinancePage() {
                                                 {b.is_fully_paid ? "✓ " + t("lunas") : t("belumLunas")}
                                             </button>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                                            <div className="flex items-center justify-end gap-1">
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500 hover:text-violet-600" title="Salin Template"
-                                                    onClick={() => copyInvoiceTemplate(b)}>
-                                                    {copiedId === b.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600" title={tf("sendInvoiceWA")}
-                                                    disabled={!b.client_whatsapp}
-                                                    onClick={() => sendInvoiceWhatsApp(b)}>
-                                                    <MessageCircle className="w-4 h-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-slate-700" title="Invoice"
-                                                    onClick={() => generateInvoice(b)}>
+                                        <td className="min-w-[300px] px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                                                <Link href={`/bookings/${b.id}`}>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tf("detailBooking")}>
+                                                        <Info className="w-4 h-4" />
+                                                    </Button>
+                                                </Link>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tf("openInitialInvoice")} onClick={() => openInvoice(b, "initial")}>
                                                     <FileText className="w-4 h-4" />
                                                 </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-indigo-500 hover:bg-transparent hover:text-indigo-600" title={tf("openFinalInvoice")} onClick={() => openInvoice(b, "final")}>
+                                                    <Download className="w-4 h-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-emerald-600 hover:bg-transparent hover:text-emerald-700 dark:text-emerald-400" title={tf("sendInitialInvoiceWA")}
+                                                    disabled={!b.client_whatsapp}
+                                                    onClick={() => sendInitialInvoiceWhatsApp(b)}>
+                                                    <MessageCircle className="w-4 h-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-orange-500 hover:bg-transparent hover:text-orange-600 dark:text-orange-400" title={tf("sendFinalInvoiceWA")}
+                                                    disabled={!b.client_whatsapp || !b.tracking_uuid}
+                                                    onClick={() => { void sendFinalInvoiceWhatsApp(b); }}>
+                                                    <MessageCircle className="w-4 h-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-sky-500 hover:bg-transparent hover:text-sky-600" title={tf("openSettlementLink")}
+                                                    disabled={!b.tracking_uuid}
+                                                    onClick={() => window.open(getSettlementLink(b), "_blank")}>
+                                                    <ExternalLink className="w-4 h-4" />
+                                                </Button>
+                                                {b.payment_proof_url ? (
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-amber-500 hover:bg-transparent hover:text-amber-600" title={tf("openInitialProof")} onClick={() => openProof(b.payment_proof_url)}>
+                                                        <Receipt className="w-4 h-4" />
+                                                    </Button>
+                                                ) : <span className="h-8 w-8" />}
+                                                {b.final_payment_proof_url ? (
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-cyan-500 hover:bg-transparent hover:text-cyan-600" title={tf("openFinalProof")} onClick={() => openProof(b.final_payment_proof_url)}>
+                                                        <Receipt className="w-4 h-4" />
+                                                    </Button>
+                                                ) : <span className="h-8 w-8" />}
                                             </div>
                                         </td>
                                     </tr>
@@ -467,42 +639,5 @@ export default function FinancePage() {
                 <TablePagination totalItems={filtered.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
             </div>
         </div>
-    );
-}
-
-/** Inline editable amount component */
-function EditableAmount({ value, onSave, editTitle }: { value: number; onSave: (v: number) => void; editTitle?: string }) {
-    const [editing, setEditing] = React.useState(false);
-    const [val, setVal] = React.useState(String(value));
-    const inputRef = React.useRef<HTMLInputElement>(null);
-
-    React.useEffect(() => { setVal(String(value)); }, [value]);
-    React.useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
-
-    const formatCurrency = (n: number) =>
-        new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
-
-    if (!editing) {
-        return (
-            <button
-                onClick={() => setEditing(true)}
-                className="text-sm font-medium hover:underline cursor-pointer text-blue-600 dark:text-blue-400"
-                title={editTitle}
-            >
-                {formatCurrency(value)}
-            </button>
-        );
-    }
-
-    return (
-        <input
-            ref={inputRef}
-            type="number"
-            value={val}
-            onChange={(e) => setVal(e.target.value)}
-            onBlur={() => { onSave(parseFloat(val) || 0); setEditing(false); }}
-            onKeyDown={(e) => { if (e.key === "Enter") { onSave(parseFloat(val) || 0); setEditing(false); } if (e.key === "Escape") setEditing(false); }}
-            className="w-28 h-8 rounded-md border border-input px-2 text-sm bg-transparent shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-        />
     );
 }

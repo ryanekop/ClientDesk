@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, AlertTriangle, X, Download, ExternalLink, Receipt } from "lucide-react";
+import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, AlertTriangle, X, Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatSessionDate, formatSessionTime } from "@/utils/format-date";
@@ -35,7 +35,6 @@ type Booking = {
     event_type: string | null;
     freelancers: FreelancerInfo | null; // old single FK (backward compat)
     booking_freelancers: FreelancerInfo[]; // new junction data
-    payment_proof_url: string | null;
     tracking_uuid: string | null;
     location_detail: string | null;
 };
@@ -181,7 +180,7 @@ export default function BookingsPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, location_detail, notes, payment_proof_url, event_type, tracking_uuid, services(name), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, location_detail, notes, event_type, tracking_uuid, services(name), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
@@ -405,11 +404,6 @@ export default function BookingsPage() {
                                     }}>
                                     <MessageCircle className="w-4 h-4" />
                                 </Button>
-                                {booking.payment_proof_url && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-500" title="Bukti Transfer" onClick={() => window.open(booking.payment_proof_url!, "_blank")}>
-                                        <Receipt className="w-4 h-4" />
-                                    </Button>
-                                )}
                                 <Link href={`/bookings/${booking.id}`}><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500"><Info className="w-4 h-4" /></Button></Link>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-500" onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
                                     <RefreshCcw className="w-4 h-4" />
@@ -426,9 +420,9 @@ export default function BookingsPage() {
 
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left border-collapse">
-                        <thead className="text-[11px] uppercase bg-muted/30 border-b">
+                <div className="relative overflow-x-auto">
+                    <table className="min-w-[1320px] w-full text-sm text-left border-collapse">
+                        <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("namaKlien")}</th>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("invoice")}</th>
@@ -438,7 +432,7 @@ export default function BookingsPage() {
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("status")}</th>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("freelancer")}</th>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("harga")}</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">{t("aksi")}</th>
+                                <th className="min-w-[220px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">{t("aksi")}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border/50">
@@ -480,15 +474,15 @@ export default function BookingsPage() {
                                                 : "-"}
                                         </td>
                                         <td className="px-4 py-3 whitespace-nowrap font-medium text-foreground">{formatCurrency(booking.total_price)}</td>
-                                        <td className="px-4 py-3 whitespace-nowrap text-right">
-                                            <div className="flex items-center justify-end">
+                                        <td className="min-w-[220px] px-4 py-3 whitespace-nowrap text-right">
+                                            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                                                 {/* 1. Copy Template */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500 hover:text-violet-600" title={tb("copyTemplate")}
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-violet-500 hover:bg-transparent hover:text-violet-600" title={tb("copyTemplate")}
                                                     onClick={() => copyTemplate(booking)}>
                                                     {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                                                 </Button>
                                                 {/* 2. WA Freelancer (default) / Client fallback */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500 hover:text-green-600"
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-green-500 hover:bg-transparent hover:text-green-600"
                                                     title={booking.booking_freelancers.length > 0 ? `${tb("waFreelance")} (${booking.booking_freelancers.length})` : tb("whatsapp")}
                                                     disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
                                                     onClick={() => {
@@ -515,42 +509,36 @@ export default function BookingsPage() {
                                                     }}>
                                                     <MessageCircle className="w-4 h-4" />
                                                 </Button>
-                                                {/* Bukti Transfer */}
-                                                {booking.payment_proof_url && (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-500 hover:text-amber-600" title="Bukti Transfer" onClick={() => window.open(booking.payment_proof_url!, "_blank")}>
-                                                        <Receipt className="w-4 h-4" />
-                                                    </Button>
-                                                )}
                                                 {/* 3. Drive Folder */}
                                                 {booking.drive_folder_url ? (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" title={tb("openDrive")} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-blue-500 hover:bg-transparent hover:text-blue-600" title={tb("openDrive")} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
                                                         <Folder className="w-4 h-4" />
                                                     </Button>
                                                 ) : (
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-500" title="Set Link Drive"
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-blue-400 hover:bg-transparent hover:text-blue-500" title="Set Link Drive"
                                                         onClick={() => { setDriveLinkInput(""); setDriveLinkPopup({ open: true, booking }); }}>
                                                         <Link2 className="w-4 h-4" />
                                                     </Button>
                                                 )}
                                                 {/* 4. Detail */}
                                                 <Link href={`/bookings/${booking.id}`}>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-slate-700" title={tb("detail")}>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tb("detail")}>
                                                         <Info className="w-4 h-4" />
                                                     </Button>
                                                 </Link>
                                                 {/* 5. Status */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-500 hover:text-orange-600" title={tb("changeStatusBtn")}
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-orange-500 hover:bg-transparent hover:text-orange-600" title={tb("changeStatusBtn")}
                                                     onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
                                                     <RefreshCcw className="w-4 h-4" />
                                                 </Button>
                                                 {/* 6. Edit */}
                                                 <Link href={`/bookings/${booking.id}/edit`}>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-600" title={tb("editBtn")}>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-blue-500 hover:bg-transparent hover:text-blue-600" title={tb("editBtn")}>
                                                         <Edit2 className="w-4 h-4" />
                                                     </Button>
                                                 </Link>
                                                 {/* 7. Hapus */}
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600" title={tb("deleteBtn")}
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-red-500 hover:bg-transparent hover:text-red-600" title={tb("deleteBtn")}
                                                     onClick={() => setDeleteModal({ open: true, booking })}>
                                                     <Trash2 className="w-4 h-4" />
                                                 </Button>

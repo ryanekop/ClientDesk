@@ -322,20 +322,20 @@ export default function TeamPage() {
 
                     {/* Desktop Table */}
                     <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="text-xs uppercase bg-muted/50 border-b">
+                        <div className="relative overflow-x-auto">
+                            <table className="min-w-[860px] w-full text-sm text-left">
+                                <thead className="text-xs uppercase bg-card border-b">
                                     <tr>
                                         <th className="px-6 py-4 font-medium text-muted-foreground">{t("nama")}</th>
                                         <th className="px-6 py-4 font-medium text-muted-foreground">{t("peran")}</th>
                                         <th className="px-6 py-4 font-medium text-muted-foreground">{t("whatsapp")}</th>
                                         <th className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>
-                                        <th className="px-6 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>
+                                        <th className="min-w-[120px] px-6 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
                                     {paginateArray(filteredMembers, currentPage, itemsPerPage).map((member) => (
-                                        <tr key={member.id} className="hover:bg-muted/50 transition-colors">
+                                        <tr key={member.id} className="group hover:bg-muted/50 transition-colors">
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-sm shrink-0">
@@ -368,9 +368,9 @@ export default function TeamPage() {
                                                     {member.status === "active" ? t("aktif") : t("nonaktif")}
                                                 </button>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
+                                            <td className="min-w-[120px] px-6 py-4 whitespace-nowrap text-right">
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)} className="p-0 text-green-600 transition-colors hover:text-green-700 cursor-pointer dark:text-green-400 dark:hover:text-green-300">
                                                         <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                                                     </button>
                                                     <button title="Edit" onClick={() => {
@@ -380,10 +380,10 @@ export default function TeamPage() {
                                                         const match = COUNTRY_CODES.find(c => wa.startsWith(c.code));
                                                         setEditCountryCode(match ? match.code : "+62");
                                                         setIsEditOpen(true);
-                                                    }} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
+                                                    }} className="p-0 transition-colors hover:text-foreground cursor-pointer">
                                                         <Edit2 className="w-4 h-4 text-muted-foreground" />
                                                     </button>
-                                                    <button title="Hapus" onClick={() => handleDelete(member.id)} className="p-1.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer">
+                                                    <button title="Hapus" onClick={() => handleDelete(member.id)} className="p-0 transition-colors hover:text-red-600 cursor-pointer">
                                                         <Trash2 className="w-4 h-4 text-red-500" />
                                                     </button>
                                                 </div>

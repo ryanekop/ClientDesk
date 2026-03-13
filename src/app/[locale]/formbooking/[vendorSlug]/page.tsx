@@ -25,6 +25,7 @@ type RawVendor = {
   custom_event_types: string[] | null;
   form_show_location: boolean | null;
   form_show_notes: boolean | null;
+  form_show_addons: boolean | null;
   form_show_proof: boolean | null;
   form_terms_enabled: boolean | null;
   form_terms_agreement_text: string | null;
@@ -87,7 +88,7 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
     .select(
       "id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, " +
         "avatar_url, invoice_logo_url, form_brand_color, form_greeting, " +
-        "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_proof, " +
+        "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_addons, form_show_proof, " +
         "form_terms_enabled, form_terms_agreement_text, form_terms_link_text, form_terms_suffix_text, form_terms_content, " +
         "form_sections, form_payment_methods, qris_image_url, qris_drive_file_id, bank_accounts",
     )
@@ -135,6 +136,7 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
     custom_event_types: (vendor.custom_event_types as string[]) ?? [],
     form_show_location: vendor.form_show_location ?? true,
     form_show_notes: vendor.form_show_notes ?? true,
+    form_show_addons: vendor.form_show_addons ?? true,
     form_show_proof: vendor.form_show_proof ?? true,
     form_terms_enabled: vendor.form_terms_enabled ?? false,
     form_terms_agreement_text: vendor.form_terms_agreement_text ?? null,

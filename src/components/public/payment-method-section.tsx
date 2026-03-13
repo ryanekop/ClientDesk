@@ -3,7 +3,9 @@
 import * as React from "react";
 import {
   Banknote,
-  CheckCircle2,
+  Check,
+  ClipboardCheck,
+  Copy,
   CreditCard,
   QrCode,
 } from "lucide-react";
@@ -30,6 +32,9 @@ type PaymentMethodSectionProps = {
     bankEmpty: string;
     qrisLabel: string;
     cashNote: string;
+    accountNumberLabel: string;
+    copyLabel: string;
+    copiedLabel: string;
     bankDescriptions: Record<PaymentMethod, string>;
   };
 };
@@ -45,11 +50,33 @@ export function PaymentMethodSection({
   brandColor,
   labels,
 }: PaymentMethodSectionProps) {
+  const [copiedAccount, setCopiedAccount] = React.useState<string | null>(null);
+  const desktopGridClass =
+    methods.length <= 1
+      ? "md:grid-cols-1"
+      : methods.length === 2
+        ? "md:grid-cols-2"
+        : "md:grid-cols-3";
+
+  async function handleCopyAccountNumber(accountNumber: string) {
+    try {
+      await navigator.clipboard.writeText(accountNumber);
+      setCopiedAccount(accountNumber);
+      window.setTimeout(() => {
+        setCopiedAccount((current) =>
+          current === accountNumber ? null : current,
+        );
+      }, 1500);
+    } catch {
+      setCopiedAccount(null);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="space-y-3">
         <label className="text-sm font-medium">{labels.methodLabel}</label>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className={`grid grid-cols-1 gap-3 ${desktopGridClass}`}>
           {methods.map((method) => {
             const Icon =
               method === "bank"
@@ -68,7 +95,7 @@ export function PaymentMethodSection({
                 type="button"
                 disabled={disabled}
                 onClick={() => onSelectMethod(method)}
-                className={`rounded-2xl border p-4 text-left transition-all ${
+                className={`rounded-2xl border p-4 text-left transition-all md:h-full ${
                   active ? "shadow-sm" : "hover:bg-muted/40"
                 } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                 style={
@@ -82,13 +109,11 @@ export function PaymentMethodSection({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    <div
-                      className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
-                        active ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
+                    <Icon
+                      className={`mt-0.5 h-5 w-5 shrink-0 ${
+                        active ? "text-foreground" : "text-muted-foreground"
                       }`}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </div>
+                    />
                     <div className="min-w-0">
                       <p className="text-base font-semibold">
                         {getPaymentMethodLabel(method)}
@@ -98,14 +123,14 @@ export function PaymentMethodSection({
                       </p>
                     </div>
                   </div>
-                  {active ? (
-                    <CheckCircle2
-                      className="mt-1 h-5 w-5 shrink-0"
-                      style={{ color: brandColor || "currentColor" }}
-                    />
-                  ) : (
-                    <div className="mt-1 h-5 w-5 rounded-full border border-muted-foreground/30" />
-                  )}
+                  <div
+                    className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                      active ? "border-transparent" : "border-muted-foreground/30"
+                    }`}
+                    style={active ? { backgroundColor: brandColor || "#000000" } : undefined}
+                  >
+                    {active ? <Check className="h-3.5 w-3.5 text-white" /> : null}
+                  </div>
                 </div>
               </button>
             );
@@ -149,12 +174,14 @@ export function PaymentMethodSection({
                           Transfer via {bank.bank_name}
                         </p>
                       </div>
-                      {active ? (
-                        <CheckCircle2
-                          className="h-5 w-5 shrink-0"
-                          style={{ color: brandColor || "currentColor" }}
-                        />
-                      ) : null}
+                      <div
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                          active ? "border-transparent" : "border-muted-foreground/30"
+                        }`}
+                        style={active ? { backgroundColor: brandColor || "#000000" } : undefined}
+                      >
+                        {active ? <Check className="h-3.5 w-3.5 text-white" /> : null}
+                      </div>
                     </div>
                   </button>
                 );
@@ -172,15 +199,36 @@ export function PaymentMethodSection({
                     <CreditCard className="h-4 w-4" />
                     {selectedSource.bank_name}
                   </div>
-                  <div className="rounded-xl bg-background/90 p-4">
-                    <p className="font-mono text-2xl font-bold tracking-wide">
-                      {selectedSource.account_number}
-                    </p>
-                    {selectedSource.account_name ? (
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        a.n. {selectedSource.account_name}
-                      </p>
-                    ) : null}
+                  <div className="rounded-xl bg-background/90 p-4 sm:p-5">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                          {labels.accountNumberLabel}
+                        </p>
+                        <p className="mt-1 break-all text-lg font-semibold tracking-[0.04em] sm:text-xl">
+                          {selectedSource.account_number}
+                        </p>
+                        {selectedSource.account_name ? (
+                          <p className="mt-2 text-xs text-muted-foreground sm:text-sm">
+                            a.n. {selectedSource.account_name}
+                          </p>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyAccountNumber(selectedSource.account_number)}
+                        className="inline-flex items-center justify-center gap-1.5 self-start rounded-xl border px-4 py-2.5 text-sm font-medium hover:bg-muted"
+                      >
+                        {copiedAccount === selectedSource.account_number ? (
+                          <ClipboardCheck className="h-3.5 w-3.5" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                        {copiedAccount === selectedSource.account_number
+                          ? labels.copiedLabel
+                          : labels.copyLabel}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : null}

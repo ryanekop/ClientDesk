@@ -6,6 +6,7 @@ import {
     getRemainingFinalPayment,
     normalizeFinalAdjustments,
 } from "@/lib/final-settlement";
+import { shouldShowFinalInvoiceForClientStatus } from "@/lib/client-status";
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,16 +30,24 @@ export async function GET(request: NextRequest) {
     }
 
     // Get vendor name
-    const { data: profile } = await supabaseAdmin
+    const { data: bookingOwner } = await supabaseAdmin
         .from("bookings")
         .select("user_id")
         .eq("id", booking.id)
         .single();
 
     let vendorName = "";
-    if (profile?.user_id) {
-        const { data: v } = await supabaseAdmin.from("profiles").select("studio_name").eq("id", profile.user_id).single();
+    let customClientStatuses: string[] | null = null;
+    let finalInvoiceVisibleFromStatus: string | null = null;
+    if (bookingOwner?.user_id) {
+        const { data: v } = await supabaseAdmin
+            .from("profiles")
+            .select("studio_name, custom_client_statuses, final_invoice_visible_from_status")
+            .eq("id", bookingOwner.user_id)
+            .single();
         vendorName = v?.studio_name || "";
+        customClientStatuses = (v?.custom_client_statuses as string[] | null) || null;
+        finalInvoiceVisibleFromStatus = v?.final_invoice_visible_from_status || null;
     }
 
     const finalAdjustments = normalizeFinalAdjustments(booking.final_adjustments);
@@ -74,6 +83,11 @@ export async function GET(request: NextRequest) {
             }),
             finalInvoiceSentAt: booking.final_invoice_sent_at || null,
             location: booking.location || null,
+            showFinalInvoice: shouldShowFinalInvoiceForClientStatus({
+                statuses: customClientStatuses,
+                currentStatus: booking.client_status,
+                visibleFromStatus: finalInvoiceVisibleFromStatus,
+            }),
         },
         vendorName,
     });

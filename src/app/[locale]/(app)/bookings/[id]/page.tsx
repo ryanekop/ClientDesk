@@ -26,6 +26,11 @@ import {
     type FinalAdjustment,
     type SettlementStatus,
 } from "@/lib/final-settlement";
+import {
+    fillWhatsAppTemplate,
+    getWhatsAppTemplateContent,
+    normalizeWhatsAppNumber,
+} from "@/lib/whatsapp-template";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -190,6 +195,59 @@ function LocationValue({ address }: { address: string }) {
     );
 }
 
+function PaymentProofPanel({
+    title,
+    url,
+    driveFileId,
+    alt,
+    linkLabel,
+}: {
+    title: string;
+    url: string;
+    driveFileId: string | null;
+    alt: string;
+    linkLabel: string;
+}) {
+    const previewSrc = driveFileId ? buildDriveImageUrl(driveFileId) : url;
+    const [previewFailed, setPreviewFailed] = React.useState(false);
+
+    React.useEffect(() => {
+        setPreviewFailed(false);
+    }, [previewSrc]);
+
+    return (
+        <div className="rounded-xl border bg-card p-6 space-y-3">
+            <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                <ImageIcon className="w-4 h-4" /> {title}
+            </h3>
+            {!previewFailed ? (
+                <a href={url} target="_blank" rel="noopener noreferrer" className="block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                        src={previewSrc}
+                        alt={alt}
+                        onError={() => setPreviewFailed(true)}
+                        className="max-w-sm w-full rounded-lg border bg-muted/20 shadow-sm"
+                    />
+                </a>
+            ) : (
+                <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between gap-3 rounded-xl border bg-muted/20 px-4 py-3 transition-colors hover:bg-muted/40"
+                >
+                    <div className="min-w-0">
+                        <p className="text-sm font-medium">{linkLabel}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">{url}</p>
+                    </div>
+                    <ExternalLink className="w-4 h-4 shrink-0 text-muted-foreground" />
+                </a>
+            )}
+        </div>
+    );
+}
+
 function toEditableAdjustments(items: FinalAdjustment[]): EditableAdjustment[] {
     return items.map((item) => ({
         id: item.id,
@@ -247,6 +305,9 @@ export default function BookingDetailPage() {
     const [savingAdjustments, setSavingAdjustments] = React.useState(false);
     const [sendingFinalInvoice, setSendingFinalInvoice] = React.useState(false);
     const [markingFinalPaid, setMarkingFinalPaid] = React.useState(false);
+    const [editingDp, setEditingDp] = React.useState(false);
+    const [dpInput, setDpInput] = React.useState("");
+    const [savingDp, setSavingDp] = React.useState(false);
     const [customAddonOpen, setCustomAddonOpen] = React.useState(false);
     const [customAddonName, setCustomAddonName] = React.useState("");
     const [customAddonPrice, setCustomAddonPrice] = React.useState("");
@@ -260,6 +321,11 @@ export default function BookingDetailPage() {
     const [deleteFileModal, setDeleteFileModal] = React.useState<{ open: boolean; idx: number | null }>({ open: false, idx: null });
     const [waFreelancePopup, setWaFreelancePopup] = React.useState(false);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const currentDpValue = booking?.dp_paid ?? 0;
+
+    React.useEffect(() => {
+        setDpInput(String(currentDpValue));
+    }, [currentDpValue]);
 
     React.useEffect(() => {
         async function load() {
@@ -339,6 +405,42 @@ export default function BookingDetailPage() {
         setSavingStatus(false);
     }
 
+    async function handleSaveDp() {
+        if (!booking) return;
+        const nextDp = Number(dpInput);
+        if (!Number.isFinite(nextDp) || nextDp < 0) {
+            alert("Nominal DP harus 0 atau lebih.");
+            return;
+        }
+
+        setSavingDp(true);
+        const nextFinalPaymentAmount = booking.is_fully_paid
+            ? Math.max(getFinalInvoiceTotal(booking.total_price, booking.final_adjustments) - nextDp, 0)
+            : booking.final_payment_amount;
+
+        const { error } = await supabase
+            .from("bookings")
+            .update({
+                dp_paid: nextDp,
+                final_payment_amount: nextFinalPaymentAmount,
+            })
+            .eq("id", booking.id);
+
+        if (error) {
+            alert("Gagal menyimpan DP.");
+            setSavingDp(false);
+            return;
+        }
+
+        setBooking((prev) => prev ? {
+            ...prev,
+            dp_paid: nextDp,
+            final_payment_amount: nextFinalPaymentAmount,
+        } : prev);
+        setEditingDp(false);
+        setSavingDp(false);
+    }
+
     function copyTrackingLink() {
         if (!booking?.tracking_uuid) return;
         const url = `${window.location.origin}/${locale}/track/${booking.tracking_uuid}`;
@@ -357,33 +459,32 @@ export default function BookingDetailPage() {
 
     function sendWA(phone: string | null, name: string) {
         if (!phone) return;
-        const cleaned = phone.replace(/^0/, "62").replace(/[^0-9]/g, "");
+        const cleaned = normalizeWhatsAppNumber(phone);
         // Use client template if available
-        const template = savedTemplates.find(t => t.type === "whatsapp_client");
+        const content = getWhatsAppTemplateContent(
+            savedTemplates,
+            "whatsapp_client",
+            locale,
+        );
         let msg: string;
-        if (template) {
-            const content = locale === "en" ? (template.content_en || template.content) : template.content;
-            if (content.trim()) {
-                const vars: Record<string, string> = {
-                    client_name: booking?.client_name || name,
-                    booking_code: booking?.booking_code || "",
-                    session_date: booking?.session_date ? formatDate(booking.session_date) : "-",
-                    service_name: booking?.services?.name || "-",
-                    total_price: formatCurrency(finalInvoiceTotal || booking?.total_price || 0),
-                    dp_paid: formatCurrency(booking?.dp_paid || 0),
-                    studio_name: studioName || "",
-                    event_type: booking?.event_type || "-",
-                    location: booking?.location || "-",
-                    location_maps_url: booking?.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
-                    detail_location: booking?.location_detail || "-",
-                    notes: booking?.notes || "-",
-                    tracking_link: booking?.tracking_uuid ? `${window.location.origin}/${locale}/track/${booking.tracking_uuid}` : "-",
-                    invoice_url: `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking?.booking_code || "")}&lang=${locale}&stage=${activeInvoiceStage}`,
-                };
-                msg = content.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || `{{${key}}}`);
-            } else {
-                msg = `Halo ${name}, terima kasih telah booking di studio kami!`;
-            }
+        if (content.trim()) {
+            const vars: Record<string, string> = {
+                client_name: booking?.client_name || name,
+                booking_code: booking?.booking_code || "",
+                session_date: booking?.session_date ? formatDate(booking.session_date) : "-",
+                service_name: booking?.services?.name || "-",
+                total_price: formatCurrency(finalInvoiceTotal || booking?.total_price || 0),
+                dp_paid: formatCurrency(booking?.dp_paid || 0),
+                studio_name: studioName || "",
+                event_type: booking?.event_type || "-",
+                location: booking?.location || "-",
+                location_maps_url: booking?.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
+                detail_location: booking?.location_detail || "-",
+                notes: booking?.notes || "-",
+                tracking_link: trackingLink || "-",
+                invoice_url: `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking?.booking_code || "")}&lang=${locale}&stage=${activeInvoiceStage}`,
+            };
+            msg = fillWhatsAppTemplate(content, vars);
         } else {
             msg = `Halo ${name}, terima kasih telah booking di studio kami!`;
         }
@@ -392,38 +493,34 @@ export default function BookingDetailPage() {
 
     function sendWAFreelance(phone: string | null, fname: string) {
         if (!phone) { alert("Nomor Whatsapp freelance tidak tersedia."); return; }
-        const cleaned = phone.replace(/^0/, "62").replace(/[^0-9]/g, "");
+        const cleaned = normalizeWhatsAppNumber(phone);
         const sessionStr = booking?.session_date ? formatDate(booking.session_date) : "-";
         const sessionTime = booking?.session_date ? formatSessionTime(booking.session_date) : "-";
         // Use freelancer template if available
-        const template = savedTemplates.find(
-            (t) => t.type === "whatsapp_freelancer" && t.event_type === booking?.event_type,
-        ) || savedTemplates.find(
-            (t) => t.type === "whatsapp_freelancer" && (!t.event_type || t.event_type === "Umum"),
+        const content = getWhatsAppTemplateContent(
+            savedTemplates,
+            "whatsapp_freelancer",
+            locale,
+            booking?.event_type,
         );
         let msg: string;
-        if (template) {
-            const content = locale === "en" ? (template.content_en || template.content) : template.content;
-            if (content.trim()) {
-                const vars: Record<string, string> = {
-                    freelancer_name: fname,
-                    client_name: booking?.client_name || "",
-                    client_whatsapp: booking?.client_whatsapp || "",
-                    booking_code: booking?.booking_code || "",
-                    session_date: sessionStr,
-                    session_time: sessionTime,
-                    service_name: booking?.services?.name || "-",
-                    studio_name: studioName || "",
-                    event_type: booking?.event_type || "-",
-                    location: booking?.location || "-",
-                    location_maps_url: booking?.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
-                    detail_location: booking?.location_detail || "-",
-                    notes: booking?.notes || "-",
-                };
-                msg = content.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || `{{${key}}}`);
-            } else {
-                msg = `Halo ${fname}, kamu dijadwalkan sesi foto bersama klien ${booking?.client_name} (${booking?.booking_code}) pada ${sessionStr}. Mohon konfirmasi kehadiranmu. Terima kasih!`;
-            }
+        if (content.trim()) {
+            const vars: Record<string, string> = {
+                freelancer_name: fname,
+                client_name: booking?.client_name || "",
+                client_whatsapp: booking?.client_whatsapp || "",
+                booking_code: booking?.booking_code || "",
+                session_date: sessionStr,
+                session_time: sessionTime,
+                service_name: booking?.services?.name || "-",
+                studio_name: studioName || "",
+                event_type: booking?.event_type || "-",
+                location: booking?.location || "-",
+                location_maps_url: booking?.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
+                detail_location: booking?.location_detail || "-",
+                notes: booking?.notes || "-",
+            };
+            msg = fillWhatsAppTemplate(content, vars);
         } else {
             msg = `Halo ${fname}, kamu dijadwalkan sesi foto bersama klien ${booking?.client_name} (${booking?.booking_code}) pada ${sessionStr}. Mohon konfirmasi kehadiranmu. Terima kasih!`;
         }
@@ -690,18 +787,40 @@ export default function BookingDetailPage() {
         });
         const invoiceUrl = `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}&lang=${locale}&stage=final`;
         const settlementUrl = `${window.location.origin}/${locale}/settlement/${booking.tracking_uuid}`;
-        const cleaned = booking.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
-        const message =
-            `Halo ${booking.client_name}, invoice final untuk booking ${booking.booking_code} sudah kami siapkan.\n\n` +
-            `Paket: ${booking.services?.name || "-"}\n` +
-            `Total awal: ${formatCurrency(booking.total_price)}\n` +
-            `Add-on akhir: ${formatCurrency(getFinalAdjustmentsTotal(normalizedAdjustments))}\n` +
-            `Total final: ${formatCurrency(finalTotal)}\n` +
-            `DP terbayar: ${formatCurrency(booking.dp_paid)}\n` +
-            `Sisa pelunasan: ${formatCurrency(remainingFinal)}\n\n` +
-            `Invoice final: ${invoiceUrl}\n` +
-            `Form pelunasan: ${settlementUrl}\n\n` +
-            `Silakan lakukan pelunasan dan upload bukti bayar melalui link di atas. Terima kasih.`;
+        const cleaned = normalizeWhatsAppNumber(booking.client_whatsapp);
+        const templateContent = getWhatsAppTemplateContent(
+            savedTemplates,
+            "whatsapp_settlement_client",
+            locale,
+        );
+        const message = templateContent.trim()
+            ? fillWhatsAppTemplate(templateContent, {
+                client_name: booking.client_name,
+                booking_code: booking.booking_code,
+                session_date: booking.session_date ? formatDate(booking.session_date) : "-",
+                service_name: booking.services?.name || "-",
+                total_price: formatCurrency(booking.total_price),
+                dp_paid: formatCurrency(booking.dp_paid),
+                final_total: formatCurrency(finalTotal),
+                adjustments_total: formatCurrency(getFinalAdjustmentsTotal(normalizedAdjustments)),
+                remaining_payment: formatCurrency(remainingFinal),
+                studio_name: studioName || "",
+                event_type: booking.event_type || "-",
+                location: booking.location || "-",
+                tracking_link: booking.tracking_uuid ? `${window.location.origin}/${locale}/track/${booking.tracking_uuid}` : "-",
+                invoice_url: invoiceUrl,
+                settlement_link: settlementUrl,
+            })
+            : `Halo ${booking.client_name}, invoice final untuk booking ${booking.booking_code} sudah kami siapkan.\n\n` +
+                `Paket: ${booking.services?.name || "-"}\n` +
+                `Total awal: ${formatCurrency(booking.total_price)}\n` +
+                `Add-on akhir: ${formatCurrency(getFinalAdjustmentsTotal(normalizedAdjustments))}\n` +
+                `Total final: ${formatCurrency(finalTotal)}\n` +
+                `DP terbayar: ${formatCurrency(booking.dp_paid)}\n` +
+                `Sisa pelunasan: ${formatCurrency(remainingFinal)}\n\n` +
+                `Invoice final: ${invoiceUrl}\n` +
+                `Form pelunasan: ${settlementUrl}\n\n` +
+                `Silakan lakukan pelunasan dan upload bukti bayar melalui link di atas. Terima kasih.`;
 
         setBooking((prev) =>
             prev
@@ -790,6 +909,11 @@ export default function BookingDetailPage() {
     const finalAdjustmentsTotal = getFinalAdjustmentsTotal(finalAdjustments);
     const finalInvoiceTotal = getFinalInvoiceTotal(booking.total_price, finalAdjustments);
     const verifiedFinalPayment = booking.final_paid_at ? booking.final_payment_amount || 0 : 0;
+    const initialPaymentStatus = booking.is_fully_paid
+        ? "Lunas"
+        : booking.dp_paid > 0
+            ? "DP Dibayar"
+            : "Belum Dibayar";
     const remaining = getRemainingFinalPayment({
         total_price: booking.total_price,
         dp_paid: booking.dp_paid,
@@ -928,11 +1052,55 @@ export default function BookingDetailPage() {
 
             {/* Keuangan */}
             <div className="rounded-xl border bg-card p-6 space-y-3">
-                <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Keuangan</h3>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Keuangan</h3>
+                    <Link href="/finance">
+                        <Button variant="outline" size="sm" className="gap-1.5">
+                            <ExternalLink className="w-4 h-4" />
+                            Buka Keuangan
+                        </Button>
+                    </Link>
+                </div>
+                <InfoRow label="Status Pembayaran Awal" value={initialPaymentStatus} />
+                <InfoRow label="Status Pelunasan" value={getSettlementLabel(settlementStatus)} />
                 <InfoRow label="Total Awal" value={<span className="font-semibold">{formatCurrency(booking.total_price)}</span>} />
                 <InfoRow label="Addon Akhir" value={formatCurrency(finalAdjustmentsTotal)} />
                 <InfoRow label="Total Final" value={<span className="font-semibold">{formatCurrency(finalInvoiceTotal)}</span>} />
-                <InfoRow label="DP Dibayar" value={formatCurrency(booking.dp_paid)} />
+                <InfoRow
+                    label="DP Dibayar"
+                    value={editingDp ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                            <input
+                                type="number"
+                                min={0}
+                                value={dpInput}
+                                onChange={(e) => setDpInput(e.target.value)}
+                                className="h-9 w-40 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                            />
+                            <Button size="sm" onClick={() => { void handleSaveDp(); }} disabled={savingDp}>
+                                {savingDp ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                    setDpInput(String(booking.dp_paid || 0));
+                                    setEditingDp(false);
+                                }}
+                                disabled={savingDp}
+                            >
+                                Batal
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span>{formatCurrency(booking.dp_paid)}</span>
+                            <Button variant="outline" size="sm" className="h-8 px-2.5" onClick={() => setEditingDp(true)}>
+                                Edit DP
+                            </Button>
+                        </div>
+                    )}
+                />
                 <InfoRow label="Pelunasan Terverifikasi" value={formatCurrency(verifiedFinalPayment)} />
                 <InfoRow label="Metode Pembayaran" value={formatPaymentMethod(booking.payment_method)} />
                 <InfoRow label="Sumber Pembayaran" value={formatPaymentSource(booking.payment_source)} />
@@ -953,6 +1121,12 @@ export default function BookingDetailPage() {
                         <SettlementBadge status={settlementStatus} />
                     </div>
                     <div className="flex flex-wrap gap-2">
+                        <Link href="/finance">
+                            <Button variant="outline" size="sm" className="gap-1.5">
+                                <ExternalLink className="w-4 h-4" />
+                                Keuangan
+                            </Button>
+                        </Link>
                         <Button
                             variant="outline"
                             size="sm"
@@ -1106,47 +1280,23 @@ export default function BookingDetailPage() {
 
             {/* Bukti Pembayaran Awal */}
             {booking.payment_proof_url && (
-                <div className="rounded-xl border bg-card p-6 space-y-3">
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                        <ImageIcon className="w-4 h-4" /> Bukti Pembayaran Awal
-                    </h3>
-                    {booking.payment_proof_url.startsWith("http") ? (
-                        <a href={booking.payment_proof_url} target="_blank" rel="noopener noreferrer" className="block">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                                src={booking.payment_proof_drive_file_id ? buildDriveImageUrl(booking.payment_proof_drive_file_id) : booking.payment_proof_url}
-                                alt="Bukti Pembayaran"
-                                className="max-w-sm w-full rounded-lg border shadow-sm"
-                            />
-                        </a>
-                    ) : (
-                        <a href={booking.payment_proof_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1.5">
-                            <ExternalLink className="w-3.5 h-3.5" /> Lihat Bukti Pembayaran
-                        </a>
-                    )}
-                </div>
+                <PaymentProofPanel
+                    title="Bukti Pembayaran Awal"
+                    url={booking.payment_proof_url}
+                    driveFileId={booking.payment_proof_drive_file_id}
+                    alt="Bukti Pembayaran Awal"
+                    linkLabel="Buka bukti pembayaran awal"
+                />
             )}
 
             {booking.final_payment_proof_url && (
-                <div className="rounded-xl border bg-card p-6 space-y-3">
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                        <ImageIcon className="w-4 h-4" /> Bukti Pelunasan Final
-                    </h3>
-                    {booking.final_payment_proof_url.startsWith("http") ? (
-                        <a href={booking.final_payment_proof_url} target="_blank" rel="noopener noreferrer" className="block">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                                src={booking.final_payment_proof_drive_file_id ? buildDriveImageUrl(booking.final_payment_proof_drive_file_id) : booking.final_payment_proof_url}
-                                alt="Bukti Pelunasan Final"
-                                className="max-w-sm w-full rounded-lg border shadow-sm"
-                            />
-                        </a>
-                    ) : (
-                        <a href={booking.final_payment_proof_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1.5">
-                            <ExternalLink className="w-3.5 h-3.5" /> Lihat Bukti Pelunasan Final
-                        </a>
-                    )}
-                </div>
+                <PaymentProofPanel
+                    title="Bukti Pelunasan Final"
+                    url={booking.final_payment_proof_url}
+                    driveFileId={booking.final_payment_proof_drive_file_id}
+                    alt="Bukti Pelunasan Final"
+                    linkLabel="Buka bukti pelunasan final"
+                />
             )}
 
             {/* Catatan */}

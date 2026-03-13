@@ -67,6 +67,7 @@ export type Vendor = {
   custom_event_types: string[];
   form_show_location: boolean;
   form_show_notes: boolean;
+  form_show_addons: boolean;
   form_show_proof: boolean;
   form_terms_enabled: boolean;
   form_terms_agreement_text: string | null;
@@ -148,6 +149,7 @@ type PreviewVendorPayload = Partial<
     | "form_event_types"
     | "custom_event_types"
     | "form_show_notes"
+    | "form_show_addons"
     | "form_show_proof"
     | "form_terms_enabled"
     | "form_terms_agreement_text"
@@ -213,6 +215,22 @@ export function BookingFormClient({
       window.removeEventListener("message", handlePreviewMessage);
     };
   }, [previewMode, previewStorageKey]);
+
+  React.useEffect(() => {
+    if (!previewMode || typeof window === "undefined") return;
+
+    function handlePreviewLinkClick(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest("a");
+      const href = anchor?.getAttribute("href");
+      if (!anchor || !href) return;
+      event.preventDefault();
+      window.open(anchor.href, "_blank", "noopener,noreferrer");
+    }
+
+    document.addEventListener("click", handlePreviewLinkClick, true);
+    return () => document.removeEventListener("click", handlePreviewLinkClick, true);
+  }, [previewMode]);
 
   const effectiveVendor = React.useMemo<Vendor>(
     () => {
@@ -287,6 +305,12 @@ export function BookingFormClient({
   const [error, setError] = React.useState("");
 
   const autoDpAmountRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    if (effectiveVendor.form_show_addons === false && selectedAddons.size > 0) {
+      setSelectedAddons(new Set());
+    }
+  }, [effectiveVendor.form_show_addons, selectedAddons.size]);
 
   // ── Helpers ──
 
@@ -1132,7 +1156,7 @@ export function BookingFormClient({
           </div>
         );
       case "addon_packages":
-        if (addonServices.length === 0) return null;
+        if (effectiveVendor.form_show_addons === false || addonServices.length === 0) return null;
         return (
           <div key={item.id} className="space-y-2">
             <div className="flex items-center gap-2 pt-1">
@@ -1262,6 +1286,9 @@ export function BookingFormClient({
                 bankEmpty: t("paymentNoBank"),
                 qrisLabel: t("paymentSourceQris"),
                 cashNote: t("paymentCashNote"),
+                accountNumberLabel: t("accountNumberLabel"),
+                copyLabel: t("copyLabel"),
+                copiedLabel: t("copiedLabel"),
                 bankDescriptions: {
                   bank: t("paymentMethodBankDesc"),
                   qris: t("paymentMethodQrisDesc"),
@@ -1359,7 +1386,7 @@ export function BookingFormClient({
         backgroundImage: `linear-gradient(135deg, ${brandColor}18 0%, #ffffff 40%, #f8fafc 100%)`,
       }}
     >
-      <div className="mx-auto max-w-4xl space-y-6">
+      <div className="mx-auto max-w-3xl space-y-6">
         {/* Vendor Header */}
         <div className="text-center space-y-3">
           <div className="w-20 h-20 bg-background border-2 rounded-full mx-auto flex items-center justify-center font-bold text-2xl shadow-sm overflow-hidden">

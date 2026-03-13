@@ -28,13 +28,24 @@ async function getSettlementData(uuid: string) {
 
   if (!booking) return null;
 
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select(
-      "studio_name, form_payment_methods, settlement_form_brand_color, settlement_form_greeting, settlement_form_payment_methods, settlement_form_lang, qris_image_url, qris_drive_file_id, bank_accounts",
-    )
-    .eq("id", booking.user_id)
-    .single();
+  const [{ data: profile }, { data: templates }] = await Promise.all([
+    supabaseAdmin
+      .from("profiles")
+      .select(
+        "studio_name, whatsapp_number, form_payment_methods, settlement_form_brand_color, settlement_form_greeting, settlement_form_payment_methods, settlement_form_lang, qris_image_url, qris_drive_file_id, bank_accounts",
+      )
+      .eq("id", booking.user_id)
+      .single(),
+    supabaseAdmin
+      .from("templates")
+      .select("type, content, content_en")
+      .eq("user_id", booking.user_id)
+      .eq("type", "whatsapp_settlement_confirm"),
+  ]);
+
+  const settlementConfirmTemplate = Array.isArray(templates)
+    ? templates.find((template) => template.type === "whatsapp_settlement_confirm")
+    : null;
 
   return {
     booking: {
@@ -59,6 +70,7 @@ async function getSettlementData(uuid: string) {
     },
     vendor: {
       studioName: profile?.studio_name || "Studio",
+      whatsappNumber: profile?.whatsapp_number || null,
       brandColor: profile?.settlement_form_brand_color || "#10b981",
       greeting: profile?.settlement_form_greeting || null,
       formLang: profile?.settlement_form_lang || "id",
@@ -70,6 +82,8 @@ async function getSettlementData(uuid: string) {
         profile?.qris_drive_file_id || null,
       ),
       bankAccounts: normalizeBankAccounts(profile?.bank_accounts),
+      settlementConfirmTemplate: settlementConfirmTemplate?.content || "",
+      settlementConfirmTemplateEn: settlementConfirmTemplate?.content_en || "",
     },
   };
 }

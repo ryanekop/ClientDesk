@@ -8,11 +8,13 @@ import {
   CheckCircle2,
   Download,
   Loader2,
+  MessageCircle,
 } from "lucide-react";
 import { FileDropzone } from "@/components/public/file-dropzone";
 import { PaymentMethodSection } from "@/components/public/payment-method-section";
 import {
   getEnabledBankAccounts,
+  getPaymentMethodLabel,
   normalizePaymentMethods,
   type BankAccount,
   type PaymentMethod,
@@ -24,6 +26,10 @@ import {
   getRemainingFinalPayment,
   getSettlementStatus,
 } from "@/lib/final-settlement";
+import {
+  fillWhatsAppTemplate,
+  normalizeWhatsAppNumber,
+} from "@/lib/whatsapp-template";
 
 type BookingData = {
   bookingCode: string;
@@ -54,12 +60,15 @@ type BookingData = {
 
 type VendorData = {
   studioName: string;
+  whatsappNumber: string | null;
   brandColor: string;
   greeting: string | null;
   formLang: string;
   formPaymentMethods: PaymentMethod[];
   qrisImageUrl: string | null;
   bankAccounts: BankAccount[];
+  settlementConfirmTemplate: string;
+  settlementConfirmTemplateEn: string;
 };
 
 type PreviewVendorPayload = Partial<
@@ -123,6 +132,22 @@ export default function SettlementClient({
     };
   }, [previewMode, previewStorageKey]);
 
+  React.useEffect(() => {
+    if (!previewMode || typeof window === "undefined") return;
+
+    function handlePreviewLinkClick(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest("a");
+      const href = anchor?.getAttribute("href");
+      if (!anchor || !href) return;
+      event.preventDefault();
+      window.open(anchor.href, "_blank", "noopener,noreferrer");
+    }
+
+    document.addEventListener("click", handlePreviewLinkClick, true);
+    return () => document.removeEventListener("click", handlePreviewLinkClick, true);
+  }, [previewMode]);
+
   const effectiveVendor = React.useMemo<VendorData>(
     () => ({
       ...vendor,
@@ -182,6 +207,9 @@ export default function SettlementClient({
   const [uploadingProof, setUploadingProof] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [submitted, setSubmitted] = React.useState(settlementStatus === "submitted");
+  const [submittedPaymentMethod, setSubmittedPaymentMethod] = React.useState<PaymentMethod | null>(
+    (booking.finalPaymentMethod as PaymentMethod | null) ?? null,
+  );
   const [error, setError] = React.useState("");
 
   React.useEffect(() => {
@@ -295,6 +323,7 @@ export default function SettlementClient({
         setError(data.error || t("submitFailed"));
       } else {
         setSubmitted(true);
+        setSubmittedPaymentMethod(selectedPaymentMethod);
       }
     } catch {
       setError(t("submitFailed"));
@@ -307,6 +336,59 @@ export default function SettlementClient({
   const brandColor = effectiveVendor.brandColor || "#10b981";
   const topGreeting =
     effectiveVendor.greeting?.trim() || t("defaultGreeting");
+  const showAdminWhatsAppButton =
+    Boolean(effectiveVendor.whatsappNumber) &&
+    (submitted || settlementStatus === "submitted") &&
+    !booking.isFullyPaid;
+
+  function openAdminWhatsAppConfirmation() {
+    const whatsappNumber = normalizeWhatsAppNumber(effectiveVendor.whatsappNumber);
+    if (!whatsappNumber) return;
+
+    const invoiceUrl = `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(
+      booking.bookingCode,
+    )}&lang=${locale}&stage=final`;
+    const settlementUrl = booking.trackingUuid
+      ? `${window.location.origin}/${locale}/settlement/${booking.trackingUuid}`
+      : window.location.href;
+    const activePaymentMethod = submittedPaymentMethod || selectedPaymentMethod;
+    const paymentMethodLabel = activePaymentMethod
+      ? getPaymentMethodLabel(activePaymentMethod)
+      : "-";
+    const templateContent =
+      locale === "en"
+        ? effectiveVendor.settlementConfirmTemplateEn ||
+          effectiveVendor.settlementConfirmTemplate
+        : effectiveVendor.settlementConfirmTemplate ||
+          effectiveVendor.settlementConfirmTemplateEn;
+
+    const message = templateContent.trim()
+      ? fillWhatsAppTemplate(templateContent, {
+          client_name: booking.clientName,
+          booking_code: booking.bookingCode,
+          service_name: booking.serviceName || "-",
+          session_date: booking.sessionDate
+            ? new Date(booking.sessionDate).toLocaleString(
+                locale === "en" ? "en-US" : "id-ID",
+              )
+            : "-",
+          payment_method: paymentMethodLabel,
+          final_total: formatCurrency(finalInvoiceTotal),
+          remaining_payment: formatCurrency(remaining),
+          studio_name: effectiveVendor.studioName,
+          invoice_url: invoiceUrl,
+          settlement_link: settlementUrl,
+        })
+      : locale === "en"
+        ? `Hello ${effectiveVendor.studioName}, I am ${booking.clientName}. I have submitted the settlement payment for booking ${booking.bookingCode} via the online form using ${paymentMethodLabel}. Please help verify it. Final invoice: ${invoiceUrl}`
+        : `Halo ${effectiveVendor.studioName}, saya ${booking.clientName} sudah mengirim pelunasan untuk booking ${booking.bookingCode} melalui form online dengan metode ${paymentMethodLabel}. Mohon dibantu verifikasi ya. Invoice final: ${invoiceUrl}`;
+
+    window.open(
+      `https://api.whatsapp.com/send?phone=${whatsappNumber}&text=${encodeURIComponent(message)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  }
 
   return (
     <div
@@ -481,7 +563,19 @@ export default function SettlementClient({
           <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-800">
             <div className="flex items-start gap-3">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-              <p>{t("submittedInfo")}</p>
+              <div className="space-y-3">
+                <p>{t("submittedInfo")}</p>
+                {showAdminWhatsAppButton ? (
+                  <button
+                    type="button"
+                    onClick={openAdminWhatsAppConfirmation}
+                    className="inline-flex items-center gap-2 rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    {t("confirmViaWhatsApp")}
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
         ) : null}
@@ -520,6 +614,9 @@ export default function SettlementClient({
                 bankEmpty: t("bankEmpty"),
                 qrisLabel: t("qris"),
                 cashNote: t("cashInfo"),
+                accountNumberLabel: t("accountNumberLabel"),
+                copyLabel: t("copyLabel"),
+                copiedLabel: t("copiedLabel"),
                 bankDescriptions: {
                   bank: t("paymentMethodBankDesc"),
                   qris: t("paymentMethodQrisDesc"),
@@ -539,9 +636,7 @@ export default function SettlementClient({
                 removeLabel={t("removeFile")}
                 onFileSelect={handleProofFile}
               />
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("cashInfo")}</p>
-            )}
+            ) : null}
 
             {error ? (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

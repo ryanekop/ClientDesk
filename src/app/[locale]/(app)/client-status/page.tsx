@@ -231,15 +231,15 @@ export default function ClientStatusPage() {
 
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card shadow-sm overflow-hidden hidden md:block">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left border-collapse">
-                        <thead className="text-[11px] uppercase bg-muted/30 border-b">
+                <div className="relative overflow-x-auto">
+                    <table className="min-w-[900px] w-full text-sm text-left border-collapse">
+                        <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{locale === "en" ? "Client" : "Klien"}</th>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap hidden sm:table-cell">{locale === "en" ? "Package" : "Paket"}</th>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{locale === "en" ? "Status" : "Status"}</th>
                                 <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-center hidden sm:table-cell">{t("antrian")}</th>
-                                <th className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">{t("aksi")}</th>
+                                <th className="min-w-[96px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">{t("aksi")}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border/50">
@@ -251,7 +251,7 @@ export default function ClientStatusPage() {
                                 </tr>
                             ) : (
                                 paginateArray(filtered, currentPage, itemsPerPage).map(b => (
-                                    <tr key={b.id} className="hover:bg-muted/30 transition-colors">
+                                    <tr key={b.id} className="group hover:bg-muted/30 transition-colors">
                                         <td className="px-4 py-3">
                                             <Link href={`/bookings/${b.id}`} className="hover:underline">
                                                 <p className="text-sm font-medium leading-tight">{b.client_name}</p>
@@ -292,13 +292,13 @@ export default function ClientStatusPage() {
                                                 className={inputClass}
                                             />
                                         </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <div className="flex items-center justify-end gap-1">
+                                        <td className="min-w-[96px] px-4 py-3 text-right">
+                                            <div className="flex items-center justify-end gap-1.5">
                                                 {b.tracking_uuid && (
                                                     <>
                                                         <Button
                                                             variant="ghost" size="icon"
-                                                            className={`h-8 w-8 ${copiedId === b.id ? "text-green-500" : "text-slate-500 hover:text-slate-700"}`}
+                                                            className={`h-8 w-8 p-0 hover:bg-transparent ${copiedId === b.id ? "text-green-500" : "text-slate-500 hover:text-slate-700"}`}
                                                             title={t("salinLinkTracking")}
                                                             onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}
                                                         >
@@ -306,7 +306,7 @@ export default function ClientStatusPage() {
                                                         </Button>
                                                         <Button
                                                             variant="ghost" size="icon"
-                                                            className="h-8 w-8 text-blue-500 hover:text-blue-600"
+                                                            className="h-8 w-8 p-0 text-blue-500 hover:bg-transparent hover:text-blue-600"
                                                             title={t("bukaTracking")}
                                                             onClick={() => window.open(`/${locale}/track/${b.tracking_uuid}`, "_blank")}
                                                         >

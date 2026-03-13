@@ -26,6 +26,7 @@ type BookingData = {
     remainingFinalPayment: number;
     finalInvoiceSentAt: string | null;
     location: string | null;
+    showFinalInvoice: boolean;
 };
 
 const DEFAULT_STEPS = [
@@ -211,37 +212,39 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                     </button>
                 </div>
 
-                <div className="bg-background rounded-2xl shadow-lg border p-6">
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("finalInvoiceTitle")}</h3>
-                    <div className="space-y-2 text-sm border-b pb-3 mb-3">
-                        <div className="flex justify-between"><span className="text-muted-foreground">{t("baseTotal")}</span><span className="font-medium">Rp {(booking.totalPrice || 0).toLocaleString("id-ID")}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">{t("adjustments")}</span><span className="font-medium">Rp {(booking.finalAdjustmentsTotal || 0).toLocaleString("id-ID")}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">{t("finalTotal")}</span><span className="font-medium">Rp {(booking.finalInvoiceTotal || 0).toLocaleString("id-ID")}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">{t("remaining")}</span><span className="font-semibold">Rp {(booking.remainingFinalPayment || 0).toLocaleString("id-ID")}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className={`font-semibold ${booking.isFullyPaid ? "text-green-600" : booking.settlementStatus === "submitted" ? "text-blue-600" : "text-amber-600"}`}>{booking.isFullyPaid ? `✅ ${t("paid")}` : booking.settlementStatus === "submitted" ? t("awaitingVerification") : booking.settlementStatus === "draft" ? t("notReady") : `⏳ ${t("unpaid")}`}</span></div>
-                    </div>
-                    <div className="flex flex-wrap gap-3">
-                        <button
-                            onClick={() => window.open(`/api/public/invoice?code=${encodeURIComponent(booking.bookingCode)}&lang=${locale}&stage=final`, "_blank")}
-                            className="flex items-center gap-2 text-sm text-primary hover:underline cursor-pointer"
-                        >
-                            <Download className="w-4 h-4" />
-                            {t("downloadFinalInvoice")}
-                        </button>
-                        {booking.trackingUuid && (
-                            <a
-                                href={`/${locale}/settlement/${booking.trackingUuid}`}
-                                className="flex items-center gap-2 text-sm text-primary hover:underline"
+                {booking.showFinalInvoice && (
+                    <div className="bg-background rounded-2xl shadow-lg border p-6">
+                        <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("finalInvoiceTitle")}</h3>
+                        <div className="space-y-2 text-sm border-b pb-3 mb-3">
+                            <div className="flex justify-between"><span className="text-muted-foreground">{t("baseTotal")}</span><span className="font-medium">Rp {(booking.totalPrice || 0).toLocaleString("id-ID")}</span></div>
+                            <div className="flex justify-between"><span className="text-muted-foreground">{t("adjustments")}</span><span className="font-medium">Rp {(booking.finalAdjustmentsTotal || 0).toLocaleString("id-ID")}</span></div>
+                            <div className="flex justify-between"><span className="text-muted-foreground">{t("finalTotal")}</span><span className="font-medium">Rp {(booking.finalInvoiceTotal || 0).toLocaleString("id-ID")}</span></div>
+                            <div className="flex justify-between"><span className="text-muted-foreground">{t("remaining")}</span><span className="font-semibold">Rp {(booking.remainingFinalPayment || 0).toLocaleString("id-ID")}</span></div>
+                            <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className={`font-semibold ${booking.isFullyPaid ? "text-green-600" : booking.settlementStatus === "submitted" ? "text-blue-600" : "text-amber-600"}`}>{booking.isFullyPaid ? `✅ ${t("paid")}` : booking.settlementStatus === "submitted" ? t("awaitingVerification") : booking.settlementStatus === "draft" ? t("notReady") : `⏳ ${t("unpaid")}`}</span></div>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                            <button
+                                onClick={() => window.open(`/api/public/invoice?code=${encodeURIComponent(booking.bookingCode)}&lang=${locale}&stage=final`, "_blank")}
+                                className="flex items-center gap-2 text-sm text-primary hover:underline cursor-pointer"
                             >
-                                <ExternalLink className="w-4 h-4" />
-                                {t("openSettlementForm")}
-                            </a>
+                                <Download className="w-4 h-4" />
+                                {t("downloadFinalInvoice")}
+                            </button>
+                            {booking.trackingUuid && (
+                                <a
+                                    href={`/${locale}/settlement/${booking.trackingUuid}`}
+                                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                                >
+                                    <ExternalLink className="w-4 h-4" />
+                                    {t("openSettlementForm")}
+                                </a>
+                            )}
+                        </div>
+                        {booking.settlementStatus === "draft" && !booking.isFullyPaid && (
+                            <p className="mt-3 text-xs text-muted-foreground">{t("settlementNotOpened")}</p>
                         )}
                     </div>
-                    {booking.settlementStatus === "draft" && !booking.isFullyPaid && (
-                        <p className="mt-3 text-xs text-muted-foreground">{t("settlementNotOpened")}</p>
-                    )}
-                </div>
+                )}
 
                 <p className="text-center text-xs text-muted-foreground pb-4">
                     Powered by <span className="font-semibold">Client Desk</span>
