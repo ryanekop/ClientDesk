@@ -83,6 +83,18 @@ type BookingFilterField = {
 };
 
 const DEFAULT_STATUS_OPTS = getBookingStatusOptions(DEFAULT_CLIENT_STATUSES);
+const STATUS_COLOR_PALETTE = [
+    "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border-none",
+    "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400 border-none",
+    "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border-none",
+    "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400 border-none",
+    "bg-pink-100 text-pink-700 dark:bg-pink-500/10 dark:text-pink-400 border-none",
+    "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400 border-none",
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border-none",
+    "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-400 border-none",
+    "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400 border-none",
+    "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400 border-none",
+];
 const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
     { id: "name", label: "Nama", visible: true, locked: true },
     { id: "invoice", label: "Invoice", visible: true },
@@ -206,6 +218,16 @@ export default function BookingsPage() {
     const [driveLinkPopup, setDriveLinkPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [driveLinkInput, setDriveLinkInput] = React.useState("");
     const [savingDriveLink, setSavingDriveLink] = React.useState(false);
+    const statusColors = React.useMemo(() => {
+        const map: Record<string, string> = {};
+        statusOpts
+            .filter((status) => status.toLowerCase() !== "batal")
+            .forEach((status, index) => {
+                map[status] = STATUS_COLOR_PALETTE[index % STATUS_COLOR_PALETTE.length];
+            });
+        map.Batal = "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400 border-none";
+        return map;
+    }, [statusOpts]);
 
     // WA Freelancer popup
     const [waPopup, setWaPopup] = React.useState<{ open: boolean; freelancers: FreelancerInfo[]; booking: Booking | null }>({ open: false, freelancers: [], booking: null });
@@ -430,7 +452,7 @@ export default function BookingsPage() {
                     </td>
                 );
             case "status":
-                return <td key={column.id} className="px-4 py-3 whitespace-nowrap"><StatusBadge status={booking.status} /></td>;
+                return <td key={column.id} className="px-4 py-3 whitespace-nowrap"><StatusBadge status={booking.status} statusClass={statusColors[booking.status]} /></td>;
             case "freelancer":
                 return (
                     <td key={column.id} className="px-4 py-3 max-w-[130px] truncate text-muted-foreground" title={booking.booking_freelancers.length > 0 ? booking.booking_freelancers.map(f => f.name).join(", ") : "-"}>
@@ -825,7 +847,7 @@ export default function BookingsPage() {
                                     <p className="font-semibold">{booking.client_name}</p>
                                     <p className="text-xs text-muted-foreground">{booking.booking_code}</p>
                                 </div>
-                                <StatusBadge status={booking.status} />
+                                <StatusBadge status={booking.status} statusClass={statusColors[booking.status]} />
                             </div>
                             <div className="border-t pt-2 space-y-1.5 text-sm text-muted-foreground">
                                 {orderedVisibleColumns
@@ -919,10 +941,9 @@ export default function BookingsPage() {
                     <div className="py-2 grid grid-cols-3 gap-2">
                         {statusOpts.map((opt) => (
                             <button key={opt} onClick={() => setNewStatus(opt)}
-                                className={cn("flex flex-col items-center gap-1.5 p-3 rounded-lg border text-xs font-medium transition-all hover:bg-muted/50",
+                                className={cn("flex items-center justify-center p-3 rounded-lg border text-xs font-medium transition-all hover:bg-muted/50",
                                     newStatus === opt ? "border-foreground bg-foreground/5 dark:bg-foreground/10" : "border-border text-muted-foreground")}>
-                                <StatusBadge status={opt} className="scale-110 mb-0.5" />
-                                {opt}
+                                <StatusBadge status={opt} statusClass={statusColors[opt]} className="scale-110" />
                             </button>
                         ))}
                     </div>
@@ -1028,7 +1049,10 @@ export default function BookingsPage() {
     );
 }
 
-function StatusBadge({ status, className }: { status: string; className?: string }) {
+function StatusBadge({ status, className, statusClass }: { status: string; className?: string; statusClass?: string }) {
+    if (statusClass) {
+        return <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 font-medium rounded-full whitespace-nowrap border-none", statusClass, className)}>{status}</Badge>;
+    }
     let variant: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" = "default";
     let customClass = "";
     switch (status.toLowerCase()) {
