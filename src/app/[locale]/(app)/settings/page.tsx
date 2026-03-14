@@ -60,6 +60,7 @@ import {
 } from "@/components/form-builder/booking-form-layout";
 import { normalizeDriveFolderStructureSettings } from "@/lib/drive-folder-structure";
 import {
+  DEFAULT_CLIENT_STATUSES,
   getDefaultFinalInvoiceVisibleFromStatus,
   resolveFinalInvoiceVisibleFromStatus,
 } from "@/lib/client-status";
@@ -118,25 +119,6 @@ const templateTypes = [
   },
   { value: "whatsapp_freelancer", label: "Whatsapp ke Freelance" },
   { value: "invoice", label: "Invoice" },
-];
-
-const DEFAULT_BOOKING_STATUSES = [
-  "Pending",
-  "DP",
-  "Terjadwal",
-  "Selesai",
-  "Edit",
-  "Batal",
-];
-
-const DEFAULT_CLIENT_STATUSES = [
-  "Booking Confirmed",
-  "Sesi Foto / Acara",
-  "Antrian Edit",
-  "Proses Edit",
-  "Revisi",
-  "File Siap",
-  "Selesai",
 ];
 
 const DEFAULT_QUEUE_TRIGGER_STATUS = "Antrian Edit";
@@ -452,11 +434,6 @@ export default function SettingsPage() {
   const [dragOver, setDragOver] = React.useState(false);
   const logoInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Custom statuses
-  const [customStatuses, setCustomStatuses] = React.useState<string[]>(
-    DEFAULT_BOOKING_STATUSES,
-  );
-  const [newStatusName, setNewStatusName] = React.useState("");
   const [statusSaving, setStatusSaving] = React.useState(false);
   const [statusSaved, setStatusSaved] = React.useState(false);
 
@@ -536,14 +513,6 @@ export default function SettingsPage() {
         ),
       })),
     [eventTypeSettings],
-  );
-  const bookingStatusItems = React.useMemo<SortableConfigItem[]>(
-    () =>
-      customStatuses.map((status) => ({
-        id: status,
-        label: status,
-      })),
-    [customStatuses],
   );
   const clientStatusItems = React.useMemo<SortableConfigItem[]>(
     () =>
@@ -839,9 +808,6 @@ export default function SettingsPage() {
     } else {
       setFormSectionsByEventType({});
     }
-    if ((prof as any)?.custom_statuses) {
-      setCustomStatuses((prof as any).custom_statuses);
-    }
     if ((prof as any)?.custom_client_statuses) {
       setCustomClientStatuses((prof as any).custom_client_statuses);
     }
@@ -1133,7 +1099,7 @@ export default function SettingsPage() {
     );
     try {
       await saveProfilePatch({
-        custom_statuses: customStatuses,
+        custom_statuses: customClientStatuses,
         custom_client_statuses: customClientStatuses,
         queue_trigger_status: queueTriggerStatus,
         final_invoice_visible_from_status: nextVisibleFromStatus,
@@ -1222,16 +1188,14 @@ export default function SettingsPage() {
       DEFAULT_CLIENT_STATUSES,
       DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS,
     );
-    const nextBookingStatuses = [...DEFAULT_BOOKING_STATUSES];
     const nextClientStatuses = [...DEFAULT_CLIENT_STATUSES];
 
-    setCustomStatuses(nextBookingStatuses);
     setCustomClientStatuses(nextClientStatuses);
     setQueueTriggerStatus(DEFAULT_QUEUE_TRIGGER_STATUS);
     setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
 
     await saveProfilePatch({
-      custom_statuses: nextBookingStatuses,
+      custom_statuses: nextClientStatuses,
       custom_client_statuses: nextClientStatuses,
       queue_trigger_status: DEFAULT_QUEUE_TRIGGER_STATUS,
       final_invoice_visible_from_status: nextVisibleFromStatus,
@@ -2644,76 +2608,6 @@ export default function SettingsPage() {
         {activeTab === "status" && (
           <>
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-              <div className="px-6 py-4 border-b">
-                <h3 className="font-semibold">Status Booking</h3>
-                <p className="text-sm text-muted-foreground">
-                  Atur status booking sesuai alur kerja kamu. Drag untuk
-                  mengubah urutan.
-                </p>
-              </div>
-              <div className="p-6 space-y-4">
-                <SortableConfigList
-                  items={bookingStatusItems}
-                  onReorder={(items) =>
-                    reorderStringItems(items, setCustomStatuses)
-                  }
-                  onRename={(id, label) =>
-                    setCustomStatuses((prev) =>
-                      prev.map((status) => (status === id ? label : status)),
-                    )
-                  }
-                  onDelete={(id) => {
-                    if (customStatuses.length <= 2) {
-                      alert("Minimal 2 status harus ada.");
-                      return;
-                    }
-                    setCustomStatuses((prev) =>
-                      prev.filter((status) => status !== id),
-                    );
-                  }}
-                />
-
-                {/* Add new status */}
-                <div className="flex items-center gap-2">
-                  <input
-                    value={newStatusName}
-                    onChange={(e) => setNewStatusName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && newStatusName.trim()) {
-                        setCustomStatuses([
-                          ...customStatuses,
-                          newStatusName.trim(),
-                        ]);
-                        setNewStatusName("");
-                      }
-                    }}
-                    placeholder="Nama status baru..."
-                    className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={!newStatusName.trim()}
-                    onClick={() => {
-                      if (newStatusName.trim()) {
-                        setCustomStatuses([
-                          ...customStatuses,
-                          newStatusName.trim(),
-                        ]);
-                        setNewStatusName("");
-                      }
-                    }}
-                    className="gap-1"
-                  >
-                    <Plus className="w-4 h-4" /> Tambah
-                  </Button>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Client Status (Progress) */}
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm mt-4">
               <div className="px-6 py-4 border-b">
                 <h3 className="font-semibold">Status Klien (Progress)</h3>
                 <p className="text-sm text-muted-foreground">

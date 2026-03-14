@@ -39,6 +39,11 @@ import {
     type BookingServiceSelection,
 } from "@/lib/booking-services";
 import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
+import {
+    DEFAULT_CLIENT_STATUSES,
+    getBookingStatusOptions,
+    resolveUnifiedBookingStatus,
+} from "@/lib/client-status";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -308,7 +313,9 @@ export default function BookingDetailPage() {
     const [queuePos, setQueuePos] = React.useState<number | "">(0);
     const [savingStatus, setSavingStatus] = React.useState(false);
     const [statusSaved, setStatusSaved] = React.useState(false);
-    const [bookingStatuses, setBookingStatuses] = React.useState<string[]>(["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"]);
+    const [bookingStatuses, setBookingStatuses] = React.useState<string[]>(
+        getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
+    );
     const [copiedTrack, setCopiedTrack] = React.useState(false);
     const [studioName, setStudioName] = React.useState("");
     const [driveFolderPathHint, setDriveFolderPathHint] = React.useState("Data Booking Client Desk > {client_name} > File Client");
@@ -350,7 +357,7 @@ export default function BookingDetailPage() {
                 supabase.from("bookings")
                     .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
-                supabase.from("profiles").select("google_drive_access_token, studio_name, custom_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map").eq("id", user.id).single(),
+                supabase.from("profiles").select("google_drive_access_token, studio_name, custom_client_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map").eq("id", user.id).single(),
                 supabase.from("services")
                     .select("id, name, price, description, event_types")
                     .eq("user_id", user.id)
@@ -365,8 +372,17 @@ export default function BookingDetailPage() {
                 rawBooking?.booking_services,
                 rawBooking?.services || null,
             );
+            const statusOptions = getBookingStatusOptions((profile as any)?.custom_client_statuses as string[] | null | undefined);
+            setBookingStatuses(statusOptions);
+            const syncedStatus = resolveUnifiedBookingStatus({
+                status: rawBooking?.status,
+                clientStatus: rawBooking?.client_status,
+                statuses: statusOptions,
+            });
             const normalized = rawBooking ? {
                 ...rawBooking,
+                status: syncedStatus,
+                client_status: syncedStatus,
                 service_selections: serviceSelections,
                 service_label: getBookingServiceLabel(serviceSelections, {
                     kind: "main",
@@ -392,11 +408,10 @@ export default function BookingDetailPage() {
             );
             setAddonServices((addonServiceRows || []) as AddonService[]);
             if (rawBooking) {
-                const syncedStatus = rawBooking.status || rawBooking.client_status || "";
                 setClientStatus(syncedStatus);
                 setQueuePos(rawBooking.queue_position || "");
-                if (rawBooking.client_status !== syncedStatus) {
-                    await supabase.from("bookings").update({ client_status: syncedStatus }).eq("id", id);
+                if (rawBooking.client_status !== syncedStatus || rawBooking.status !== syncedStatus) {
+                    await supabase.from("bookings").update({ status: syncedStatus, client_status: syncedStatus }).eq("id", id);
                 }
                 // Generate tracking_uuid if not set
                 if (!rawBooking.tracking_uuid) {
@@ -407,9 +422,6 @@ export default function BookingDetailPage() {
             }
             if (profile?.google_drive_access_token) setIsDriveConnected(true);
             if (profile?.studio_name) setStudioName(profile.studio_name);
-            if (profile?.custom_statuses) {
-                setBookingStatuses(profile.custom_statuses as string[]);
-            }
             if (rawBooking) {
                 const folderPathSegments = buildDriveFolderPathSegments({
                     structureMap: (profile as any)?.drive_folder_structure_map,

@@ -23,13 +23,18 @@ import {
     getBuiltInEventTypes,
     normalizeEventTypeList,
 } from "@/lib/event-type-config";
+import {
+    DEFAULT_CLIENT_STATUSES,
+    getBookingStatusOptions,
+    getInitialBookingStatus,
+    resolveUnifiedBookingStatus,
+} from "@/lib/client-status";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
 const selectClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat pr-8";
 
 const EVENT_TYPES = getBuiltInEventTypes();
-const DEFAULT_STATUSES = ["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"];
 
 const COUNTRY_CODES = [
     { code: "+62", flag: "🇮🇩", name: "Indonesia" },
@@ -147,7 +152,12 @@ export default function EditBookingPage() {
     const [freelancerIds, setFreelancerIds] = React.useState<string[]>([]);
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
-    const [status, setStatus] = React.useState("Pending");
+    const [statusOptions, setStatusOptions] = React.useState<string[]>(
+        getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
+    );
+    const [status, setStatus] = React.useState(
+        getInitialBookingStatus(DEFAULT_CLIENT_STATUSES),
+    );
     const [notes, setNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
     const [portfolioUrl, setPortfolioUrl] = React.useState("");
@@ -169,7 +179,6 @@ export default function EditBookingPage() {
     const [customFreelancerWa, setCustomFreelancerWa] = React.useState("");
     const [customFreelancerRole, setCustomFreelancerRole] = React.useState("Photographer");
     const [savingCustomFreelancer, setSavingCustomFreelancer] = React.useState(false);
-    const [customStatuses, setCustomStatuses] = React.useState<string[]>(DEFAULT_STATUSES);
     const [customFreelancerCountryCode, setCustomFreelancerCountryCode] = React.useState("+62");
 
     React.useEffect(() => {
@@ -182,9 +191,10 @@ export default function EditBookingPage() {
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
                 supabase.from("booking_services").select("service_id, kind, sort_order").eq("booking_id", id).order("sort_order", { ascending: true }),
-                supabase.from("profiles").select("custom_statuses, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
+                supabase.from("profiles").select("custom_client_statuses, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
             ]);
-            if (prof?.custom_statuses) setCustomStatuses(prof.custom_statuses as string[]);
+            const nextStatusOptions = getBookingStatusOptions((prof as any)?.custom_client_statuses as string[] | null | undefined);
+            setStatusOptions(nextStatusOptions);
             setEventTypeOptions(getActiveEventTypes({
                 customEventTypes: normalizeEventTypeList((prof as any)?.custom_event_types),
                 activeEventTypes: (prof as any)?.form_event_types,
@@ -219,7 +229,13 @@ export default function EditBookingPage() {
                 setFreelancerIds(junctionIds.length > 0 ? junctionIds : booking.freelance_id ? [booking.freelance_id] : []);
                 setTotalPrice(booking.total_price || "");
                 setDpPaid(booking.dp_paid || "");
-                setStatus(booking.status || "Pending");
+                setStatus(
+                    resolveUnifiedBookingStatus({
+                        status: booking.status,
+                        clientStatus: booking.client_status,
+                        statuses: nextStatusOptions,
+                    }),
+                );
                 setNotes(booking.notes || "");
                 setDriveFolderUrl(booking.drive_folder_url || "");
                 setPortfolioUrl(booking.portfolio_url || "");
@@ -263,6 +279,12 @@ export default function EditBookingPage() {
         }
         setTotalPrice(selectedMainServices.reduce((sum, service) => sum + service.price, 0));
     }, [selectedMainServices]);
+
+    React.useEffect(() => {
+        if (!statusOptions.includes(status)) {
+            setStatus(getInitialBookingStatus(statusOptions));
+        }
+    }, [statusOptions, status]);
     const toggleFreelancer = (fid: string) => {
         setFreelancerIds(prev => {
             if (prev.includes(fid)) return prev.filter(f => f !== fid);
@@ -618,7 +640,7 @@ export default function EditBookingPage() {
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Status{reqMark}</label>
                             <select value={status} onChange={e => setStatus(e.target.value)} className={selectClass} required>
-                                {customStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
                         {eventType !== "Wedding" && (

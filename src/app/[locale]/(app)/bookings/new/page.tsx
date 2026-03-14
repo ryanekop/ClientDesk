@@ -22,6 +22,11 @@ import {
     getBuiltInEventTypes,
     normalizeEventTypeList,
 } from "@/lib/event-type-config";
+import {
+    DEFAULT_CLIENT_STATUSES,
+    getBookingStatusOptions,
+    getInitialBookingStatus,
+} from "@/lib/client-status";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -151,7 +156,12 @@ export default function NewBookingPage() {
     const [splitDates, setSplitDates] = React.useState(false);
     const [akadDate, setAkadDate] = React.useState("");
     const [resepsiDate, setResepsiDate] = React.useState("");
-    const [statusVal, setStatusVal] = React.useState("Pending");
+    const [statusOptions, setStatusOptions] = React.useState<string[]>(
+        getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
+    );
+    const [statusVal, setStatusVal] = React.useState(
+        getInitialBookingStatus(DEFAULT_CLIENT_STATUSES),
+    );
     const [notes, setNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
     const [portfolioUrl, setPortfolioUrl] = React.useState("");
@@ -170,7 +180,6 @@ export default function NewBookingPage() {
     const [customFreelancerWa, setCustomFreelancerWa] = React.useState("");
     const [customFreelancerRole, setCustomFreelancerRole] = React.useState("Photographer");
     const [savingCustomFreelancer, setSavingCustomFreelancer] = React.useState(false);
-    const [customStatuses, setCustomStatuses] = React.useState<string[]>(["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"]);
     const [customFreelancerCountryCode, setCustomFreelancerCountryCode] = React.useState("+62");
 
     React.useEffect(() => {
@@ -180,11 +189,13 @@ export default function NewBookingPage() {
             const [{ data: svcs }, { data: frees }, { data: prof }] = await Promise.all([
                 supabase.from("services").select("id, name, price, is_addon").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
-                supabase.from("profiles").select("custom_statuses, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
+                supabase.from("profiles").select("custom_client_statuses, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
             ]);
             setServices((svcs || []) as Service[]);
             setFreelancers((frees || []) as Freelance[]);
-            if (prof?.custom_statuses) setCustomStatuses(prof.custom_statuses as string[]);
+            const nextStatusOptions = getBookingStatusOptions((prof as any)?.custom_client_statuses as string[] | null | undefined);
+            setStatusOptions(nextStatusOptions);
+            setStatusVal((prev) => (nextStatusOptions.includes(prev) ? prev : getInitialBookingStatus(nextStatusOptions)));
             setEventTypeOptions(getActiveEventTypes({
                 customEventTypes: normalizeEventTypeList((prof as any)?.custom_event_types),
                 activeEventTypes: (prof as any)?.form_event_types,
@@ -230,6 +241,12 @@ export default function NewBookingPage() {
         }
         setTotalPrice(selectedMainServices.reduce((sum, service) => sum + service.price, 0));
     }, [selectedMainServices]);
+
+    React.useEffect(() => {
+        if (!statusOptions.includes(statusVal)) {
+            setStatusVal(getInitialBookingStatus(statusOptions));
+        }
+    }, [statusOptions, statusVal]);
 
     const activeCustomLayoutSections = React.useMemo(() => {
         const rawLayout =
@@ -597,7 +614,7 @@ export default function NewBookingPage() {
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Status{reqMark}</label>
                             <select value={statusVal} onChange={e => setStatusVal(e.target.value)} required className={selectClass}>
-                                {customStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
                         {eventType !== "Wedding" && (

@@ -13,6 +13,7 @@ import {
     type PaymentSource,
 } from "@/lib/payment-config";
 import { uploadPaymentProofToDrive } from "@/lib/payment-proof-drive";
+import { getInitialBookingStatus } from "@/lib/client-status";
 
 type VendorRecord = {
     id: string;
@@ -36,6 +37,7 @@ type VendorRecord = {
     qris_image_url: string | null;
     qris_drive_file_id: string | null;
     bank_accounts: unknown[] | null;
+    custom_client_statuses: string[] | null;
 };
 
 type BookingRequestBody = {
@@ -130,7 +132,7 @@ export async function POST(request: NextRequest) {
         // Find vendor by slug
         const { data: vendorData } = await supabaseAdmin
             .from("profiles")
-            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, calendar_event_format, calendar_event_format_map, calendar_event_description, calendar_event_description_map, form_payment_methods, form_show_proof, qris_image_url, qris_drive_file_id, bank_accounts")
+            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, calendar_event_format, calendar_event_format_map, calendar_event_description, calendar_event_description_map, form_payment_methods, form_show_proof, qris_image_url, qris_drive_file_id, bank_accounts, custom_client_statuses")
             .eq("vendor_slug", vendorSlug)
             .single();
         const vendor = vendorData as VendorRecord | null;
@@ -270,6 +272,7 @@ export async function POST(request: NextRequest) {
             .eq("user_id", vendor.id);
         const seq = String((bookingCount || 0) + 1).padStart(3, "0");
         const bookingCode = `INV-${dd}${mm}${yyyy}${seq}`;
+        const initialStatus = getInitialBookingStatus(vendor.custom_client_statuses);
 
         const { data: booking, error } = await supabaseAdmin
             .from("bookings")
@@ -291,8 +294,8 @@ export async function POST(request: NextRequest) {
                 payment_method: selectedPaymentMethod,
                 payment_source: normalizedPaymentSource,
                 instagram: instagram || null,
-                status: "Pending",
-                client_status: "Pending",
+                status: initialStatus,
+                client_status: initialStatus,
                 is_fully_paid: dpPaid >= computedTotalPrice,
             })
             .select("id, booking_code")

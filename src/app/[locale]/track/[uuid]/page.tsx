@@ -7,7 +7,10 @@ import {
     getRemainingFinalPayment,
     normalizeFinalAdjustments,
 } from "@/lib/final-settlement";
-import { shouldShowFinalInvoiceForClientStatus } from "@/lib/client-status";
+import {
+    resolveUnifiedBookingStatus,
+    shouldShowFinalInvoiceForClientStatus,
+} from "@/lib/client-status";
 
 // Admin client — runs server-side only, never exposed to browser
 const supabaseAdmin = createClient(
@@ -83,7 +86,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }
 
     const { booking, vendorName } = result;
-    const status = booking.status || booking.client_status || "Pending";
+    const status = resolveUnifiedBookingStatus({
+        status: booking.status,
+        clientStatus: booking.client_status,
+        statuses: result.customClientStatuses,
+    });
     const title = `${status} — ${booking.client_name} — ${booking.booking_code}`;
     const description = `Tracking booking ${booking.booking_code} untuk ${booking.client_name}${vendorName ? ` di ${vendorName}` : ""}`;
 
@@ -129,7 +136,11 @@ export default async function TrackingPage({ params }: PageProps) {
         is_fully_paid: booking.is_fully_paid || false,
     });
 
-    const effectiveClientStatus = booking.status || booking.client_status || "Pending";
+    const effectiveClientStatus = resolveUnifiedBookingStatus({
+        status: booking.status,
+        clientStatus: booking.client_status,
+        statuses: customClientStatuses,
+    });
 
     const bookingData = {
         bookingCode: booking.booking_code,

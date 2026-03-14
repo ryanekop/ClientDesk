@@ -25,6 +25,11 @@ import {
     type BookingServiceSelection,
 } from "@/lib/booking-services";
 import type { FormLayoutItem } from "@/components/form-builder/booking-form-layout";
+import {
+    CANCELLED_BOOKING_STATUS,
+    DEFAULT_CLIENT_STATUSES,
+    getBookingStatusOptions,
+} from "@/lib/client-status";
 
 type BookingStatus = {
     id: string;
@@ -43,10 +48,6 @@ type BookingStatus = {
     event_type?: string | null;
     extra_fields?: Record<string, unknown> | null;
 };
-
-const DEFAULT_CLIENT_STATUSES = [
-    "Booking Confirmed", "Sesi Foto / Acara", "Antrian Edit", "Proses Edit", "Revisi", "File Siap", "Selesai",
-];
 
 const STATUS_COLOR_PALETTE = [
     "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
@@ -90,6 +91,7 @@ export default function ClientStatusPage() {
     const statusColors = React.useMemo(() => {
         const map: Record<string, string> = {};
         clientStatuses.forEach((s, i) => { map[s] = STATUS_COLOR_PALETTE[i % STATUS_COLOR_PALETTE.length]; });
+        map[CANCELLED_BOOKING_STATUS] = "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400";
         return map;
     }, [clientStatuses]);
     React.useEffect(() => {
@@ -167,6 +169,7 @@ export default function ClientStatusPage() {
         const oldBooking = bookings.find(b => b.id === id);
         const wasQueue = queueTriggerStatus && oldBooking?.client_status === queueTriggerStatus;
         const isQueue = queueTriggerStatus && clientStatus === queueTriggerStatus;
+        const nextStatus = clientStatus || null;
 
         if (isQueue && !wasQueue) {
             // Auto-assign: get max queue_position for current queue bookings
@@ -174,11 +177,11 @@ export default function ClientStatusPage() {
                 .filter(b => b.client_status === queueTriggerStatus && b.queue_position != null)
                 .reduce((max, b) => Math.max(max, b.queue_position!), 0);
             const newPos = maxPos + 1;
-            await supabase.from("bookings").update({ client_status: clientStatus, queue_position: newPos }).eq("id", id);
-            setBookings(prev => prev.map(b => b.id === id ? { ...b, client_status: clientStatus, queue_position: newPos } : b));
+            await supabase.from("bookings").update({ status: nextStatus, client_status: nextStatus, queue_position: newPos }).eq("id", id);
+            setBookings(prev => prev.map(b => b.id === id ? { ...b, status: nextStatus || b.status, client_status: nextStatus, queue_position: newPos } : b));
         } else if (wasQueue && !isQueue) {
             // Auto-clear: remove position and re-number remaining
-            await supabase.from("bookings").update({ client_status: clientStatus || null, queue_position: null }).eq("id", id);
+            await supabase.from("bookings").update({ status: nextStatus, client_status: nextStatus, queue_position: null }).eq("id", id);
             const remaining = bookings
                 .filter(b => b.client_status === queueTriggerStatus && b.id !== id && b.queue_position != null)
                 .sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0));
@@ -186,15 +189,15 @@ export default function ClientStatusPage() {
                 await supabase.from("bookings").update({ queue_position: i + 1 }).eq("id", remaining[i].id);
             }
             setBookings(prev => {
-                let updated = prev.map(b => b.id === id ? { ...b, client_status: clientStatus || null, queue_position: null } : b);
+                let updated = prev.map(b => b.id === id ? { ...b, status: nextStatus || b.status, client_status: nextStatus, queue_position: null } : b);
                 remaining.forEach((r, i) => {
                     updated = updated.map(b => b.id === r.id ? { ...b, queue_position: i + 1 } : b);
                 });
                 return updated;
             });
         } else {
-            await supabase.from("bookings").update({ client_status: clientStatus || null }).eq("id", id);
-            setBookings(prev => prev.map(b => b.id === id ? { ...b, client_status: clientStatus || null } : b));
+            await supabase.from("bookings").update({ status: nextStatus, client_status: nextStatus }).eq("id", id);
+            setBookings(prev => prev.map(b => b.id === id ? { ...b, status: nextStatus || b.status, client_status: nextStatus } : b));
         }
         setSavingId(null);
     }
@@ -284,7 +287,7 @@ export default function ClientStatusPage() {
                             className={selectClass}
                         >
                             <option value="">{t("belumDiset")}</option>
-                            {clientStatuses.map(s => (
+                            {getBookingStatusOptions(clientStatuses).map(s => (
                                 <option key={s} value={s}>{s}</option>
                             ))}
                         </select>
@@ -397,7 +400,7 @@ export default function ClientStatusPage() {
                     className="h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer"
                 >
                     <option value="">Semua</option>
-                    {clientStatuses.map(s => (
+                    {getBookingStatusOptions(clientStatuses).map(s => (
                         <option key={s} value={s}>{s}</option>
                     ))}
                 </select>
@@ -445,7 +448,7 @@ export default function ClientStatusPage() {
                                 <label className="text-xs text-muted-foreground shrink-0 w-14">Status</label>
                                 <select value={b.client_status || ""} onChange={e => updateStatus(b.id, e.target.value)} disabled={savingId === b.id} className={`${selectClass} flex-1`}>
                                     <option value="">{t("belumDiset")}</option>
-                                    {clientStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                                    {getBookingStatusOptions(clientStatuses).map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
                             </div>
                             <div className="flex items-center gap-3">

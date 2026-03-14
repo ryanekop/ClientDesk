@@ -21,6 +21,7 @@ import { DashboardChangelogPopup } from "@/components/changelog-modal";
 import { getTranslations, getLocale } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import type { ChangelogEntry } from "@/lib/changelog";
+import { getInitialBookingStatus } from "@/lib/client-status";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -52,9 +53,18 @@ export default async function DashboardPage() {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const yearAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, studio_name, custom_client_statuses")
+    .eq("id", user!.id)
+    .single();
+  const initialBookingStatus = getInitialBookingStatus(
+    (profile as { custom_client_statuses?: string[] | null } | null)
+      ?.custom_client_statuses,
+  );
+
   // Dashboard data + changelog are fetched in parallel to keep the page snappy.
   const [
-    { data: profile },
     { count: totalBookings },
     { data: pendingPayments },
     { data: paidBookings },
@@ -67,11 +77,6 @@ export default async function DashboardPage() {
     { data: yearlyRaw },
     { data: changelogRaw },
   ] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("full_name, studio_name")
-      .eq("id", user!.id)
-      .single(),
     supabase
       .from("bookings")
       .select("*", { count: "exact", head: true })
@@ -101,7 +106,7 @@ export default async function DashboardPage() {
       .from("bookings")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user!.id)
-      .eq("status", "Pending"),
+      .eq("status", initialBookingStatus),
     supabase
       .from("bookings")
       .select(

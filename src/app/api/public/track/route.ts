@@ -6,7 +6,10 @@ import {
     getRemainingFinalPayment,
     normalizeFinalAdjustments,
 } from "@/lib/final-settlement";
-import { shouldShowFinalInvoiceForClientStatus } from "@/lib/client-status";
+import {
+    resolveUnifiedBookingStatus,
+    shouldShowFinalInvoiceForClientStatus,
+} from "@/lib/client-status";
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,7 +54,11 @@ export async function GET(request: NextRequest) {
     }
 
     const finalAdjustments = normalizeFinalAdjustments(booking.final_adjustments);
-    const effectiveClientStatus = booking.status || booking.client_status || "Pending";
+    const effectiveClientStatus = resolveUnifiedBookingStatus({
+        status: booking.status,
+        clientStatus: booking.client_status,
+        statuses: customClientStatuses,
+    });
 
     return NextResponse.json({
         success: true,

@@ -97,7 +97,7 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                                 ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
                                 : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
                                 }`}>
-                                {booking.clientStatus || booking.status || "Pending"}
+                                {booking.clientStatus || booking.status || steps[0]?.key || "Pending"}
                             </span>
                         </div>
                     </div>

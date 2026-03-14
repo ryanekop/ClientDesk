@@ -5,6 +5,11 @@ import { Zap, Download, Upload, Loader2, FileSpreadsheet, CheckCircle2, ArrowRig
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
+import {
+    DEFAULT_CLIENT_STATUSES,
+    getBookingStatusOptions,
+    getInitialBookingStatus,
+} from "@/lib/client-status";
 import * as XLSX from "xlsx";
 
 function generateBookingCode() {
@@ -28,7 +33,7 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
     function downloadTemplate() {
         const ws = XLSX.utils.aoa_to_sheet([
             ["Nama Klien *", "WhatsApp", "Tanggal Sesi (YYYY-MM-DD)", "Lokasi", "Harga Total", "DP Dibayar", "Status", "Catatan"],
-            ["Contoh: Tiara", "08123456789", "2026-04-01", "Jakarta", "5000000", "1000000", "Pending", "Info tambahan"],
+            ["Contoh: Tiara", "08123456789", "2026-04-01", "Jakarta", "5000000", "1000000", "Booking Confirmed", "Info tambahan"],
         ]);
 
         ws["!cols"] = [
@@ -69,6 +74,13 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
         setStep("confirm");
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { setImporting(false); return; }
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("custom_client_statuses")
+            .eq("id", user.id)
+            .single();
+        const statusOptions = getBookingStatusOptions((profile as { custom_client_statuses?: string[] | null } | null)?.custom_client_statuses || DEFAULT_CLIENT_STATUSES);
+        const initialStatus = getInitialBookingStatus(statusOptions);
 
         let success = 0;
         const errors: string[] = [];
@@ -84,7 +96,8 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
             const location = String(row["Lokasi"] || "").trim() || null;
             const totalPrice = parseFloat(String(row["Harga Total"] || "0").replace(/[^0-9.]/g, "")) || 0;
             const dpPaid = parseFloat(String(row["DP Dibayar"] || "0").replace(/[^0-9.]/g, "")) || 0;
-            const status = String(row["Status"] || "Pending").trim();
+            const requestedStatus = String(row["Status"] || "").trim();
+            const status = statusOptions.includes(requestedStatus) ? requestedStatus : initialStatus;
             const notes = String(row["Catatan"] || "").trim() || null;
 
             const { error } = await supabase.from("bookings").insert({
@@ -97,7 +110,8 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
                 total_price: totalPrice,
                 dp_paid: dpPaid,
                 is_fully_paid: dpPaid >= totalPrice && totalPrice > 0,
-                status: ["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"].includes(status) ? status : "Pending",
+                status,
+                client_status: status,
                 notes: notes,
             });
 
