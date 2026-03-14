@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink, Upload, FileText, Trash2, AlertCircle, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink, Upload, FileText, Trash2, AlertCircle, Image as ImageIcon, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -121,6 +121,13 @@ type AddonService = {
     price: number;
     description: string | null;
     event_types: string[] | null;
+};
+
+type DrivePathProfile = {
+    studio_name?: string | null;
+    drive_folder_format?: string | null;
+    drive_folder_format_map?: Record<string, string> | null;
+    drive_folder_structure_map?: Record<string, string[] | string> | null;
 };
 
 type EditableAdjustment = {
@@ -319,6 +326,7 @@ export default function BookingDetailPage() {
     const [copiedTrack, setCopiedTrack] = React.useState(false);
     const [studioName, setStudioName] = React.useState("");
     const [driveFolderPathHint, setDriveFolderPathHint] = React.useState("Data Booking Client Desk > {client_name} > File Client");
+    const [refreshingDrivePathHint, setRefreshingDrivePathHint] = React.useState(false);
     const [savedTemplates, setSavedTemplates] = React.useState<{ id: string; type: string; content: string; content_en: string; event_type: string | null }[]>([]);
     const [adjustmentItems, setAdjustmentItems] = React.useState<EditableAdjustment[]>([]);
     const [addonServices, setAddonServices] = React.useState<AddonService[]>([]);
@@ -343,6 +351,21 @@ export default function BookingDetailPage() {
     const [waFreelancePopup, setWaFreelancePopup] = React.useState(false);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const currentDpValue = booking?.dp_paid ?? 0;
+
+    const buildPathHint = React.useCallback((profile: DrivePathProfile | null | undefined, bookingValue: Pick<Booking, "booking_code" | "client_name" | "event_type" | "session_date" | "extra_fields">) => {
+        const folderPathSegments = buildDriveFolderPathSegments({
+            structureMap: profile?.drive_folder_structure_map,
+            legacyFormat: profile?.drive_folder_format,
+            legacyFormatMap: profile?.drive_folder_format_map,
+            studioName: profile?.studio_name,
+            bookingCode: bookingValue.booking_code,
+            clientName: bookingValue.client_name,
+            eventType: bookingValue.event_type,
+            sessionDate: bookingValue.session_date,
+            extraFields: bookingValue.extra_fields,
+        });
+        return ["Data Booking Client Desk", ...folderPathSegments, "File Client"].join(" > ");
+    }, []);
 
     React.useEffect(() => {
         setDpInput(String(currentDpValue));
@@ -423,20 +446,7 @@ export default function BookingDetailPage() {
             if (profile?.google_drive_access_token) setIsDriveConnected(true);
             if (profile?.studio_name) setStudioName(profile.studio_name);
             if (rawBooking) {
-                const folderPathSegments = buildDriveFolderPathSegments({
-                    structureMap: (profile as any)?.drive_folder_structure_map,
-                    legacyFormat: (profile as any)?.drive_folder_format,
-                    legacyFormatMap: (profile as any)?.drive_folder_format_map,
-                    studioName: profile?.studio_name,
-                    bookingCode: rawBooking.booking_code,
-                    clientName: rawBooking.client_name,
-                    eventType: rawBooking.event_type,
-                    sessionDate: rawBooking.session_date,
-                    extraFields: rawBooking.extra_fields,
-                });
-                setDriveFolderPathHint(
-                    ["Data Booking Client Desk", ...folderPathSegments, "File Client"].join(" > "),
-                );
+                setDriveFolderPathHint(buildPathHint(profile as DrivePathProfile | null, rawBooking));
             }
             setLoading(false);
         }
@@ -516,6 +526,25 @@ export default function BookingDetailPage() {
         navigator.clipboard.writeText(url);
         setCopiedTrack(true);
         setTimeout(() => setCopiedTrack(false), 2000);
+    }
+
+    async function handleRefreshDrivePathHint() {
+        if (!booking) return;
+        setRefreshingDrivePathHint(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const { data: profile } = await supabase
+                .from("profiles")
+                .select("studio_name, drive_folder_format, drive_folder_format_map, drive_folder_structure_map")
+                .eq("id", user.id)
+                .single();
+            setDriveFolderPathHint(buildPathHint(profile as DrivePathProfile | null, booking));
+        } catch {
+            alert("Gagal refresh path folder Drive.");
+        } finally {
+            setRefreshingDrivePathHint(false);
+        }
     }
 
     const formatDate = (d: string | null) => {
@@ -1459,9 +1488,23 @@ export default function BookingDetailPage() {
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                         <FileText className="w-4 h-4" /> File Klien
                     </h3>
-                    <p className="text-xs text-muted-foreground">
-                        📁 {driveFolderPathHint}
-                    </p>
+                    <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs text-muted-foreground break-words">
+                            📁 {driveFolderPathHint}
+                        </p>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 gap-1 text-[11px] shrink-0"
+                            onClick={() => void handleRefreshDrivePathHint()}
+                            disabled={refreshingDrivePathHint}
+                            title="Refresh path preview dari setting Drive terbaru"
+                        >
+                            {refreshingDrivePathHint ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
+                            Re-sync Path
+                        </Button>
+                    </div>
                     <div className="flex items-center gap-2">
                         <input
                             ref={fileInputRef}
