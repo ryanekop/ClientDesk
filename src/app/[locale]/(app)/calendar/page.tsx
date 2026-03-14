@@ -281,7 +281,10 @@ export default function CalendarPage() {
     }
 
     async function handleSyncToGoogle() {
-        if (events.filter(e => e.source === "booking").length === 0) return alert(t("tidakAdaBooking"));
+        const bookingIds = events
+            .filter((event) => event.source === "booking" && typeof event.bookingId === "string")
+            .map((event) => event.bookingId as string);
+        if (bookingIds.length === 0) return alert(t("tidakAdaBooking"));
         setSyncing(true);
 
         try {
@@ -289,12 +292,7 @@ export default function CalendarPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    events: events.filter(e => e.source === "booking").map((e) => ({
-                        summary: e.title,
-                        description: `Status: ${e.status} | Klien: ${e.clientName} | Layanan: ${e.serviceName}`,
-                        start: e.start?.toISOString(),
-                        end: e.end?.toISOString(),
-                    })),
+                    bookingIds,
                 }),
             });
             const result = await res.json();
@@ -514,22 +512,22 @@ export default function CalendarPage() {
 
             {/* Event Popup */}
             <Dialog open={eventPopupOpen} onOpenChange={setEventPopupOpen}>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent className="w-[calc(100vw-2rem)] max-w-[760px] p-0 overflow-hidden">
                     <DialogHeader>
-                        <DialogTitle className="text-lg">{selectedEvent?.clientName}</DialogTitle>
+                        <DialogTitle className="text-2xl px-6 pt-6">{selectedEvent?.clientName}</DialogTitle>
                     </DialogHeader>
                     {selectedEvent && (
-                        <div className="space-y-3 py-1">
-                            <div className="flex items-center gap-2 text-sm">
-                                <span className="text-muted-foreground w-20 shrink-0">Paket</span>
-                                <span className="font-medium">{selectedEvent.serviceName}</span>
+                        <div className="space-y-4 px-6 py-4">
+                            <div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-4 text-sm sm:text-base">
+                                <span className="text-muted-foreground shrink-0">Paket</span>
+                                <span className="font-semibold break-words">{selectedEvent.serviceName}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-sm">
-                                <span className="text-muted-foreground w-20 shrink-0">Jadwal</span>
-                                <span className="font-medium">{selectedEvent.start ? format(selectedEvent.start, "PPPp", { locale: id }) : "-"}</span>
+                            <div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-4 text-sm sm:text-base">
+                                <span className="text-muted-foreground shrink-0">Jadwal</span>
+                                <span className="font-semibold break-words">{selectedEvent.start ? format(selectedEvent.start, "PPPp", { locale: id }) : "-"}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-sm">
-                                <span className="text-muted-foreground w-20 shrink-0">Status</span>
+                            <div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-4 text-sm sm:text-base">
+                                <span className="text-muted-foreground shrink-0">Status</span>
                                 <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full",
                                     selectedEvent.status?.toLowerCase() === "pending" && "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
                                     selectedEvent.status?.toLowerCase() === "dp" && "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
@@ -541,18 +539,18 @@ export default function CalendarPage() {
                                 </span>
                             </div>
                             {selectedEvent.location && (
-                                <div className="flex items-start gap-2 text-sm">
-                                    <span className="text-muted-foreground w-20 shrink-0">Lokasi</span>
-                                    <span className="font-medium break-words">{selectedEvent.location}</span>
+                                <div className="grid grid-cols-[120px_minmax(0,1fr)] items-start gap-4 text-sm sm:text-base">
+                                    <span className="text-muted-foreground shrink-0">Lokasi</span>
+                                    <span className="font-semibold break-words">{selectedEvent.location}</span>
                                 </div>
                             )}
                         </div>
                     )}
-                    <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
-                        <Button variant="outline" className="flex-1 gap-2" onClick={openGoogleCalendarEvent}>
+                    <DialogFooter className="flex-col sm:flex-row gap-3 px-6 pb-6 pt-1">
+                        <Button variant="outline" className="flex-1 gap-2 h-12 text-base" onClick={openGoogleCalendarEvent}>
                             <ExternalLink className="w-4 h-4" /> Buka di Google Calendar
                         </Button>
-                        <Button className="flex-1 gap-2 bg-foreground text-background hover:bg-foreground/90" onClick={goToBookingDetail}>
+                        <Button className="flex-1 gap-2 h-12 text-base bg-foreground text-background hover:bg-foreground/90" onClick={goToBookingDetail}>
                             <Info className="w-4 h-4" /> Lihat Detail Booking
                         </Button>
                     </DialogFooter>
