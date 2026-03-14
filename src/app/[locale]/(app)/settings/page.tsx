@@ -473,6 +473,14 @@ export default function SettingsPage() {
         return null;
     });
 
+    const ensureProfileRecord = React.useEffectEvent(async () => {
+        const response = await fetch("/api/profile/ensure", { method: "POST" });
+        if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            throw new Error(payload?.error || "Gagal menyiapkan profil.");
+        }
+    });
+
     const fetchAll = React.useEffectEvent(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
@@ -489,7 +497,16 @@ export default function SettingsPage() {
                 .eq("user_id", user.id)
                 .order("created_at", { ascending: false }),
         ]);
-        const prof = (p ?? {
+        const profileData = p ?? (await (async () => {
+            try {
+                await ensureProfileRecord();
+                return await loadSettingsProfile(user.id);
+            } catch (error) {
+                console.error("Ensure profile failed:", error);
+                return null;
+            }
+        })());
+        const prof = (profileData ?? {
             id: user.id,
             full_name: String(user.user_metadata?.full_name || user.email?.split("@")[0] || ""),
             studio_name: null,
@@ -619,23 +636,14 @@ export default function SettingsPage() {
             throw new Error("User tidak ditemukan.");
         }
 
-        const fullName =
-            profile?.full_name ||
-            String(user.user_metadata?.full_name || user.email?.split("@")[0] || "");
+        await ensureProfileRecord();
         const nextPatch = { ...patch };
         for (const droppedColumn of unsupportedProfileColumnsRef.current) {
             delete nextPatch[droppedColumn];
         }
 
         for (let attempt = 0; attempt < 12; attempt += 1) {
-            const { error } = await supabase.from("profiles").upsert(
-                {
-                    id: user.id,
-                    full_name: fullName,
-                    ...nextPatch,
-                },
-                { onConflict: "id" },
-            );
+            const { error } = await supabase.from("profiles").update(nextPatch).eq("id", user.id);
 
             if (!error) {
                 return;
@@ -699,6 +707,9 @@ export default function SettingsPage() {
             setEventTypeSaved(true);
             setTimeout(() => setEventTypeSaved(false), 2000);
             void fetchAll();
+        } catch (error) {
+            console.error("Event type save error:", error);
+            alert("Gagal menyimpan jenis acara global.");
         } finally {
             setEventTypeSaving(false);
         }
@@ -1912,7 +1923,7 @@ export default function SettingsPage() {
                                     {eventTypeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                     Simpan
                                 </Button>
-                                {eventTypeSaved && <span className="text-sm text-green-600 dark:text-green-400">Tersimpan!</span>}
+                                {eventTypeSaved && <span className="text-sm text-green-600 dark:text-green-400">✅ Pengaturan berhasil disimpan</span>}
                             </div>
                         </div>
                     </div>

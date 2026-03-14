@@ -37,23 +37,22 @@ export default function ProfilePage() {
 
     React.useEffect(() => { fetchProfile(); }, []);
 
+    const ensureProfileRecord = React.useEffectEvent(async () => {
+        const response = await fetch("/api/profile/ensure", { method: "POST" });
+        if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            throw new Error(payload?.error || "Gagal menyiapkan profil.");
+        }
+    });
+
     const saveProfilePatch = React.useEffectEvent(async (patch: Record<string, unknown>) => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
             throw new Error("User tidak ditemukan.");
         }
 
-        const fallbackFullName =
-            fullName.trim() ||
-            String(user.user_metadata?.full_name || user.email?.split("@")[0] || "");
-        const { error } = await supabase.from("profiles").upsert(
-            {
-                id: user.id,
-                full_name: fallbackFullName,
-                ...patch,
-            },
-            { onConflict: "id" },
-        );
+        await ensureProfileRecord();
+        const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
 
         if (error) {
             throw error;
@@ -67,6 +66,8 @@ export default function ProfilePage() {
             setLoading(false);
             return;
         }
+
+        await ensureProfileRecord();
 
         setUserId(user.id);
         setEmail(user.email || "");
