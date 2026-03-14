@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   Save,
   Loader2,
+  RotateCcw,
   MessageSquare,
   Building2,
   Phone,
@@ -64,6 +65,7 @@ import {
 } from "@/lib/client-status";
 import {
   getActiveEventTypes,
+  getBuiltInEventTypes,
   getEventTypeSettings,
   mergeCustomEventTypes,
 } from "@/lib/event-type-config";
@@ -117,6 +119,29 @@ const templateTypes = [
   { value: "whatsapp_freelancer", label: "Whatsapp ke Freelance" },
   { value: "invoice", label: "Invoice" },
 ];
+
+const DEFAULT_BOOKING_STATUSES = [
+  "Pending",
+  "DP",
+  "Terjadwal",
+  "Selesai",
+  "Edit",
+  "Batal",
+];
+
+const DEFAULT_CLIENT_STATUSES = [
+  "Booking Confirmed",
+  "Sesi Foto / Acara",
+  "Antrian Edit",
+  "Proses Edit",
+  "Revisi",
+  "File Siap",
+  "Selesai",
+];
+
+const DEFAULT_QUEUE_TRIGGER_STATUS = "Antrian Edit";
+const DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS = "Sesi Foto / Acara";
+const SETTINGS_SAVED_MESSAGE = "✅ Pengaturan berhasil disimpan";
 
 const variableHints: Record<string, string[]> = {
   whatsapp_client: [
@@ -360,6 +385,7 @@ export default function SettingsPage() {
   const t = useTranslations("Settings");
   const tp = useTranslations("SettingsPage");
   const locale = useLocale();
+  const builtInEventTypes = React.useMemo(() => getBuiltInEventTypes(), []);
   const [profile, setProfile] = React.useState<Profile | null>(null);
   const [templates, setTemplates] = React.useState<Template[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -388,12 +414,12 @@ export default function SettingsPage() {
   const [templateContentsEn, setTemplateContentsEn] = React.useState<
     Record<string, string>
   >({});
-  const [templateSaving, setTemplateSaving] = React.useState<string | null>(
-    null,
-  );
-  const [templateSavedMsg, setTemplateSavedMsg] = React.useState<string | null>(
-    null,
-  );
+  const [templateSaving, setTemplateSaving] = React.useState(false);
+  const [templateSavedMsg, setTemplateSavedMsg] = React.useState("");
+  const templateBaselineRef = React.useRef<{
+    contents: Record<string, string>;
+    contentsEn: Record<string, string>;
+  }>({ contents: {}, contentsEn: {} });
 
   // Event type selector for freelancer template
   const [selectedEventType, setSelectedEventType] = React.useState("Umum");
@@ -427,14 +453,9 @@ export default function SettingsPage() {
   const logoInputRef = React.useRef<HTMLInputElement>(null);
 
   // Custom statuses
-  const [customStatuses, setCustomStatuses] = React.useState<string[]>([
-    "Pending",
-    "DP",
-    "Terjadwal",
-    "Selesai",
-    "Edit",
-    "Batal",
-  ]);
+  const [customStatuses, setCustomStatuses] = React.useState<string[]>(
+    DEFAULT_BOOKING_STATUSES,
+  );
   const [newStatusName, setNewStatusName] = React.useState("");
   const [statusSaving, setStatusSaving] = React.useState(false);
   const [statusSaved, setStatusSaved] = React.useState(false);
@@ -442,22 +463,12 @@ export default function SettingsPage() {
   // Custom client statuses (progress)
   const [customClientStatuses, setCustomClientStatuses] = React.useState<
     string[]
-  >([
-    "Booking Confirmed",
-    "Sesi Foto / Acara",
-    "Antrian Edit",
-    "Proses Edit",
-    "Revisi",
-    "File Siap",
-    "Selesai",
-  ]);
+  >(DEFAULT_CLIENT_STATUSES);
   const [newClientStatusName, setNewClientStatusName] = React.useState("");
-  const [clientStatusSaving, setClientStatusSaving] = React.useState(false);
-  const [clientStatusSaved, setClientStatusSaved] = React.useState(false);
   const [queueTriggerStatus, setQueueTriggerStatus] =
-    React.useState("Antrian Edit");
+    React.useState(DEFAULT_QUEUE_TRIGGER_STATUS);
   const [finalInvoiceVisibleFromStatus, setFinalInvoiceVisibleFromStatus] =
-    React.useState("Sesi Foto / Acara");
+    React.useState(DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS);
 
   // Default WA target
   const [defaultWaTarget, setDefaultWaTarget] = React.useState<
@@ -485,6 +496,11 @@ export default function SettingsPage() {
   const [selectedDriveEventType, setSelectedDriveEventType] =
     React.useState("Umum");
   const [newDriveSegment, setNewDriveSegment] = React.useState("");
+  const [resetModal, setResetModal] = React.useState<{
+    open: boolean;
+    scope: "umum" | "template" | "status" | "jenis-acara" | null;
+  }>({ open: false, scope: null });
+  const [resetSaving, setResetSaving] = React.useState(false);
   const unsupportedProfileColumnsRef = React.useRef<Set<string>>(new Set());
   const calendarFormatInputRef = React.useRef<HTMLInputElement>(null);
   const calendarDescriptionInputRef = React.useRef<HTMLTextAreaElement>(null);
@@ -887,6 +903,10 @@ export default function SettingsPage() {
     });
     setTemplateContents(contents);
     setTemplateContentsEn(contentsEn);
+    templateBaselineRef.current = {
+      contents: { ...contents },
+      contentsEn: { ...contentsEn },
+    };
     setLoading(false);
   });
 
@@ -936,8 +956,7 @@ export default function SettingsPage() {
     },
   );
 
-  async function handleSaveProfile(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function handleSaveGeneralSettings() {
     if (!profile) return;
     setSaving(true);
 
@@ -949,12 +968,22 @@ export default function SettingsPage() {
         whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
         vendor_slug: slug || null,
         default_wa_target: defaultWaTarget,
+        calendar_event_format:
+          calendarEventFormats.Umum || DEFAULT_CALENDAR_EVENT_FORMAT,
+        calendar_event_format_map: calendarEventFormats,
+        calendar_event_description:
+          calendarEventDescriptions.Umum || DEFAULT_CALENDAR_EVENT_DESCRIPTION,
+        calendar_event_description_map: calendarEventDescriptions,
+        drive_folder_format:
+          driveFolderFormats.Umum || DEFAULT_DRIVE_FOLDER_FORMAT,
+        drive_folder_format_map: driveFolderFormats,
+        drive_folder_structure_map: driveFolderStructures,
       });
 
       setVendorSlug(slug);
-      setSavedMsg(t("berhasilSimpan"));
+      setSavedMsg(SETTINGS_SAVED_MESSAGE);
       setTimeout(() => setSavedMsg(""), 3000);
-      void fetchAll(true); // silent: tidak tampilkan spinner, cukup refresh data di background
+      void fetchAll(true);
     } catch (error) {
       console.error("Settings save error:", error);
       setSavedMsg("Gagal menyimpan.");
@@ -970,20 +999,10 @@ export default function SettingsPage() {
       await saveProfilePatch({
         form_event_types: activeEventTypes,
         custom_event_types: customEventTypes,
-        calendar_event_format:
-          calendarEventFormats.Umum || DEFAULT_CALENDAR_EVENT_FORMAT,
-        calendar_event_format_map: calendarEventFormats,
-        calendar_event_description:
-          calendarEventDescriptions.Umum || DEFAULT_CALENDAR_EVENT_DESCRIPTION,
-        calendar_event_description_map: calendarEventDescriptions,
-        drive_folder_format:
-          driveFolderFormats.Umum || DEFAULT_DRIVE_FOLDER_FORMAT,
-        drive_folder_format_map: driveFolderFormats,
-        drive_folder_structure_map: driveFolderStructures,
       });
       setEventTypeSaved(true);
-      setTimeout(() => setEventTypeSaved(false), 2000);
-      void fetchAll(true); // silent: tidak tampilkan spinner, cukup refresh data di background
+      setTimeout(() => setEventTypeSaved(false), 3000);
+      void fetchAll(true);
     } catch (error) {
       console.error("Event type save error:", error);
       alert("Gagal menyimpan jenis acara global.");
@@ -992,85 +1011,270 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleSaveTemplate(type: string, eventType?: string) {
+  function resolveTemplateTargetFromKey(key: string) {
+    if (key.startsWith("whatsapp_freelancer__")) {
+      const eventType = key.slice("whatsapp_freelancer__".length) || "Umum";
+      return { type: "whatsapp_freelancer", eventType };
+    }
+    return { type: key, eventType: undefined };
+  }
+
+  async function handleSaveAllTemplates() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
-    const saveKey = eventType ? `${type}__${eventType}` : type;
-    setTemplateSaving(saveKey);
-
-    const content = templateContents[saveKey] || "";
-    const contentEn = templateContentsEn[saveKey] || "";
-    const existing = templates.find(
-      (t) =>
-        resolveTemplateType(t) === type &&
-        (eventType
-          ? (t.event_type || "Umum") === eventType
-          : !t.event_type || t.event_type === null),
-    );
-    const storedType = getStoredTemplateType(type);
-    const storedName = getStoredTemplateName(
-      type,
-      templateTypes.find((tt) => tt.value === type)?.label || type,
-    );
-
-    let nextTemplate: Template | null = null;
-    if (existing) {
-      const { data, error } = await supabase
-        .from("templates")
-        .update({
-          type: storedType,
-          name: storedName,
-          content,
-          content_en: contentEn,
-        })
-        .eq("id", existing.id)
-        .select("id, type, name, content, content_en, is_default, event_type")
-        .single();
-      if (error) {
-        setTemplateSaving(null);
-        alert(error.message || "Gagal menyimpan template.");
-        return;
-      }
-      nextTemplate = data as Template;
-    } else if (content.trim() || contentEn.trim()) {
-      const { data, error } = await supabase
-        .from("templates")
-        .insert({
-          user_id: user.id,
-          type: storedType,
-          name: storedName,
-          content,
-          content_en: contentEn,
-          is_default: true,
-          event_type: eventType || null,
-        })
-        .select("id, type, name, content, content_en, is_default, event_type")
-        .single();
-      if (error) {
-        setTemplateSaving(null);
-        alert(error.message || "Gagal menyimpan template.");
-        return;
-      }
-      nextTemplate = data as Template;
+    if (!user) {
+      alert("User tidak ditemukan.");
+      return;
     }
-
-    if (nextTemplate) {
-      setTemplates((prev) => {
-        const exists = prev.some((item) => item.id === nextTemplate?.id);
-        if (exists) {
-          return prev.map((item) =>
-            item.id === nextTemplate?.id ? nextTemplate! : item,
-          );
-        }
-        return [...prev, nextTemplate!];
+    setTemplateSaving(true);
+    try {
+      const keys = Array.from(
+        new Set([
+          ...Object.keys(templateBaselineRef.current.contents),
+          ...Object.keys(templateBaselineRef.current.contentsEn),
+          ...Object.keys(templateContents),
+          ...Object.keys(templateContentsEn),
+        ]),
+      );
+      const changedKeys = keys.filter((key) => {
+        const currentId = templateContents[key] || "";
+        const currentEn = templateContentsEn[key] || "";
+        const baselineId = templateBaselineRef.current.contents[key] || "";
+        const baselineEn = templateBaselineRef.current.contentsEn[key] || "";
+        return currentId !== baselineId || currentEn !== baselineEn;
       });
+
+      if (changedKeys.length === 0) {
+        setTemplateSavedMsg(SETTINGS_SAVED_MESSAGE);
+        setTimeout(() => setTemplateSavedMsg(""), 3000);
+        return;
+      }
+
+      let nextTemplates = [...templates];
+
+      for (const key of changedKeys) {
+        const { type, eventType } = resolveTemplateTargetFromKey(key);
+        const content = templateContents[key] || "";
+        const contentEn = templateContentsEn[key] || "";
+        const existing = nextTemplates.find(
+          (item) =>
+            resolveTemplateType(item) === type &&
+            (eventType
+              ? (item.event_type || "Umum") === eventType
+              : !item.event_type || item.event_type === null),
+        );
+        const storedType = getStoredTemplateType(type);
+        const storedName = getStoredTemplateName(
+          type,
+          templateTypes.find((tt) => tt.value === type)?.label || type,
+        );
+
+        if (existing) {
+          const { data, error } = await supabase
+            .from("templates")
+            .update({
+              type: storedType,
+              name: storedName,
+              content,
+              content_en: contentEn,
+            })
+            .eq("id", existing.id)
+            .select(
+              "id, type, name, content, content_en, is_default, event_type",
+            )
+            .single();
+          if (error) throw error;
+          nextTemplates = nextTemplates.map((item) =>
+            item.id === existing.id ? (data as Template) : item,
+          );
+          continue;
+        }
+
+        if (content.trim() || contentEn.trim()) {
+          const { data, error } = await supabase
+            .from("templates")
+            .insert({
+              user_id: user.id,
+              type: storedType,
+              name: storedName,
+              content,
+              content_en: contentEn,
+              is_default: true,
+              event_type: eventType || null,
+            })
+            .select(
+              "id, type, name, content, content_en, is_default, event_type",
+            )
+            .single();
+          if (error) throw error;
+          nextTemplates = [...nextTemplates, data as Template];
+        }
+      }
+
+      setTemplates(nextTemplates);
+      setTemplateSavedMsg(SETTINGS_SAVED_MESSAGE);
+      setTimeout(() => setTemplateSavedMsg(""), 3000);
+      void fetchAll(true);
+    } catch (error) {
+      console.error("Template save error:", error);
+      alert("Gagal menyimpan template.");
+    } finally {
+      setTemplateSaving(false);
+    }
+  }
+
+  async function handleSaveStatuses() {
+    if (!profile) return;
+    setStatusSaving(true);
+    const nextVisibleFromStatus = resolveFinalInvoiceVisibleFromStatus(
+      customClientStatuses,
+      finalInvoiceVisibleFromStatus,
+    );
+    try {
+      await saveProfilePatch({
+        custom_statuses: customStatuses,
+        custom_client_statuses: customClientStatuses,
+        queue_trigger_status: queueTriggerStatus,
+        final_invoice_visible_from_status: nextVisibleFromStatus,
+      });
+      setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
+      setStatusSaved(true);
+      setTimeout(() => setStatusSaved(false), 3000);
+    } catch (error) {
+      console.error("Status save error:", error);
+      alert("Gagal menyimpan status.");
+    } finally {
+      setStatusSaving(false);
+    }
+  }
+
+  async function resetGeneralToDefaultAndSave() {
+    const defaultCalendarFormats = normalizeTemplateFormatMap(
+      null,
+      DEFAULT_CALENDAR_EVENT_FORMAT,
+    );
+    const defaultCalendarDescriptions = normalizeTemplateFormatMap(
+      null,
+      DEFAULT_CALENDAR_EVENT_DESCRIPTION,
+    );
+    const defaultDriveFormats = normalizeTemplateFormatMap(
+      null,
+      DEFAULT_DRIVE_FOLDER_FORMAT,
+    );
+    const defaultDriveStructures = normalizeDriveFolderStructureSettings(null);
+
+    setCalendarEventFormats(defaultCalendarFormats);
+    setCalendarEventDescriptions(defaultCalendarDescriptions);
+    setDriveFolderFormats(defaultDriveFormats);
+    setDriveFolderStructures(defaultDriveStructures);
+
+    await saveProfilePatch({
+      calendar_event_format:
+        defaultCalendarFormats.Umum || DEFAULT_CALENDAR_EVENT_FORMAT,
+      calendar_event_format_map: defaultCalendarFormats,
+      calendar_event_description:
+        defaultCalendarDescriptions.Umum || DEFAULT_CALENDAR_EVENT_DESCRIPTION,
+      calendar_event_description_map: defaultCalendarDescriptions,
+      drive_folder_format:
+        defaultDriveFormats.Umum || DEFAULT_DRIVE_FOLDER_FORMAT,
+      drive_folder_format_map: defaultDriveFormats,
+      drive_folder_structure_map: defaultDriveStructures,
+    });
+    setSavedMsg(SETTINGS_SAVED_MESSAGE);
+    setTimeout(() => setSavedMsg(""), 3000);
+    void fetchAll(true);
+  }
+
+  async function resetTemplatesToDefaultAndSave() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new Error("User tidak ditemukan.");
+
+    const managedTemplateTypes = new Set(templateTypes.map((item) => item.value));
+    const managedTemplateIds = templates
+      .filter((item) => managedTemplateTypes.has(resolveTemplateType(item)))
+      .map((item) => item.id);
+
+    if (managedTemplateIds.length > 0) {
+      const { error } = await supabase
+        .from("templates")
+        .delete()
+        .eq("user_id", user.id)
+        .in("id", managedTemplateIds);
+      if (error) throw error;
     }
 
-    setTemplateSaving(null);
-    setTemplateSavedMsg(saveKey);
-    setTimeout(() => setTemplateSavedMsg(null), 3000);
+    setTemplates((prev) =>
+      prev.filter((item) => !managedTemplateTypes.has(resolveTemplateType(item))),
+    );
+    setTemplateContents({});
+    setTemplateContentsEn({});
+    templateBaselineRef.current = { contents: {}, contentsEn: {} };
+    setTemplateSavedMsg(SETTINGS_SAVED_MESSAGE);
+    setTimeout(() => setTemplateSavedMsg(""), 3000);
+    void fetchAll(true);
+  }
+
+  async function resetStatusesToDefaultAndSave() {
+    const nextVisibleFromStatus = resolveFinalInvoiceVisibleFromStatus(
+      DEFAULT_CLIENT_STATUSES,
+      DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS,
+    );
+    const nextBookingStatuses = [...DEFAULT_BOOKING_STATUSES];
+    const nextClientStatuses = [...DEFAULT_CLIENT_STATUSES];
+
+    setCustomStatuses(nextBookingStatuses);
+    setCustomClientStatuses(nextClientStatuses);
+    setQueueTriggerStatus(DEFAULT_QUEUE_TRIGGER_STATUS);
+    setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
+
+    await saveProfilePatch({
+      custom_statuses: nextBookingStatuses,
+      custom_client_statuses: nextClientStatuses,
+      queue_trigger_status: DEFAULT_QUEUE_TRIGGER_STATUS,
+      final_invoice_visible_from_status: nextVisibleFromStatus,
+    });
+    setStatusSaved(true);
+    setTimeout(() => setStatusSaved(false), 3000);
+  }
+
+  async function resetEventTypesToDefaultAndSave() {
+    const nextBuiltInEventTypes = [...builtInEventTypes];
+    setCustomEventTypes([]);
+    setActiveEventTypes(nextBuiltInEventTypes);
+    setNewCustomEventType("");
+
+    await saveProfilePatch({
+      form_event_types: nextBuiltInEventTypes,
+      custom_event_types: [],
+    });
+    setEventTypeSaved(true);
+    setTimeout(() => setEventTypeSaved(false), 3000);
+    void fetchAll(true);
+  }
+
+  async function handleConfirmReset() {
+    if (!resetModal.scope) return;
+    setResetSaving(true);
+    try {
+      if (resetModal.scope === "umum") {
+        await resetGeneralToDefaultAndSave();
+      } else if (resetModal.scope === "template") {
+        await resetTemplatesToDefaultAndSave();
+      } else if (resetModal.scope === "status") {
+        await resetStatusesToDefaultAndSave();
+      } else if (resetModal.scope === "jenis-acara") {
+        await resetEventTypesToDefaultAndSave();
+      }
+      setResetModal({ open: false, scope: null });
+    } catch (error) {
+      console.error("Reset settings error:", error);
+      alert("Gagal mengembalikan ke default.");
+    } finally {
+      setResetSaving(false);
+    }
   }
 
   async function handleDisconnect() {
@@ -1105,6 +1309,8 @@ export default function SettingsPage() {
 
   const inputClass =
     "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
+  const unifiedSaveButtonClass = "h-11 min-w-[190px] gap-2 px-6 text-sm";
+  const unifiedResetButtonClass = "h-11 gap-2 px-5";
 
   function insertIntoInput(
     ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>,
@@ -1225,6 +1431,31 @@ export default function SettingsPage() {
     { key: "jenis-acara", label: tp("tabEventTypes") },
     { key: "telegram", label: tp("tabTelegram") },
   ];
+  const resetDialogMeta: Record<
+    NonNullable<(typeof resetModal)["scope"]>,
+    { title: string; description: string }
+  > = {
+    umum: {
+      title: "Balikkan Pengaturan Umum ke Default?",
+      description:
+        "Format Google Calendar dan Google Drive akan dikembalikan ke default dan langsung disimpan.",
+    },
+    template: {
+      title: "Balikkan Template ke Default?",
+      description:
+        "Semua template custom (WhatsApp + Invoice) akan dihapus dan langsung disimpan.",
+    },
+    status: {
+      title: "Balikkan Status Booking ke Default?",
+      description:
+        "Status Booking dan Status Klien akan kembali ke nilai bawaan dan langsung disimpan.",
+    },
+    "jenis-acara": {
+      title: "Balikkan Jenis Acara ke Default?",
+      description:
+        "Semua jenis acara custom akan dihapus dan jenis acara bawaan akan diaktifkan kembali.",
+    },
+  };
 
   const previewData: Record<string, string> = {
     client_name: "Budi",
@@ -1569,33 +1800,6 @@ export default function SettingsPage() {
             </pre>
           </div>
 
-          {/* Save */}
-          <div className="flex items-center gap-3">
-            <Button
-              type="button"
-              size="sm"
-              className="gap-2"
-              onClick={() =>
-                handleSaveTemplate(
-                  tt.value,
-                  isFreelancer ? selectedEventType : undefined,
-                )
-              }
-              disabled={templateSaving === contentKey}
-            >
-              {templateSaving === contentKey ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Save className="w-3.5 h-3.5" />
-              )}
-              {t("simpanProfil").split(" ")[0] || "Simpan"}
-            </Button>
-            {templateSavedMsg === contentKey && (
-              <span className="text-sm text-green-600 dark:text-green-400">
-                ✅ Pengaturan berhasil disimpan
-              </span>
-            )}
-          </div>
         </div>
       </div>
     );
@@ -1643,7 +1847,7 @@ export default function SettingsPage() {
                   {t("infoStudio")}
                 </p>
               </div>
-              <form onSubmit={handleSaveProfile} className="p-6 space-y-4">
+              <div className="p-6 space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-sm font-medium flex items-center gap-1.5">
@@ -1847,22 +2051,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 pt-2">
-                  <Button type="submit" disabled={saving} className="gap-2">
-                    {saving ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Save className="w-4 h-4" />
-                    )}
-                    {t("simpanProfil")}
-                  </Button>
-                  {savedMsg && (
-                    <span className="text-sm text-green-600 dark:text-green-400">
-                      {savedMsg}
-                    </span>
-                  )}
-                </div>
-              </form>
+              </div>
             </div>
 
             {/* Google Integration Section */}
@@ -2375,6 +2564,38 @@ export default function SettingsPage() {
                 )}
               </div>
             </div>
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleSaveGeneralSettings}
+                  className={unifiedSaveButtonClass}
+                >
+                  {saving ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Simpan Semua
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={unifiedResetButtonClass}
+                  onClick={() => setResetModal({ open: true, scope: "umum" })}
+                  disabled={resetSaving}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Balik ke Default
+                </Button>
+                {savedMsg && (
+                  <span className="text-sm text-green-600 dark:text-green-400">
+                    {savedMsg}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -2382,6 +2603,40 @@ export default function SettingsPage() {
         {activeTab === "template" && (
           <div className="space-y-6">
             {templateTypes.map((tt) => renderTemplateCard(tt))}
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  disabled={templateSaving}
+                  onClick={handleSaveAllTemplates}
+                  className={unifiedSaveButtonClass}
+                >
+                  {templateSaving ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Simpan Semua
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={unifiedResetButtonClass}
+                  onClick={() =>
+                    setResetModal({ open: true, scope: "template" })
+                  }
+                  disabled={resetSaving}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Balik ke Default
+                </Button>
+                {templateSavedMsg && (
+                  <span className="text-sm text-green-600 dark:text-green-400">
+                    {templateSavedMsg}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -2454,39 +2709,6 @@ export default function SettingsPage() {
                   </Button>
                 </div>
 
-                {/* Save button */}
-                <div className="flex items-center gap-3 pt-2">
-                  <Button
-                    size="sm"
-                    disabled={statusSaving}
-                    onClick={async () => {
-                      if (!profile) return;
-                      setStatusSaving(true);
-                      try {
-                        await saveProfilePatch({
-                          custom_statuses: customStatuses,
-                        });
-                        setStatusSaved(true);
-                        setTimeout(() => setStatusSaved(false), 2000);
-                      } finally {
-                        setStatusSaving(false);
-                      }
-                    }}
-                    className="gap-1.5"
-                  >
-                    {statusSaving ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Save className="w-4 h-4" />
-                    )}
-                    Simpan Status
-                  </Button>
-                  {statusSaved && (
-                    <span className="text-xs text-green-600 dark:text-green-400">
-                      Tersimpan!
-                    </span>
-                  )}
-                </div>
               </div>
             </div>
 
@@ -2556,48 +2778,6 @@ export default function SettingsPage() {
                   </Button>
                 </div>
 
-                <div className="flex items-center gap-3 pt-2">
-                  <Button
-                    size="sm"
-                    disabled={clientStatusSaving}
-                    onClick={async () => {
-                      if (!profile) return;
-                      setClientStatusSaving(true);
-                      const nextVisibleFromStatus =
-                        resolveFinalInvoiceVisibleFromStatus(
-                          customClientStatuses,
-                          finalInvoiceVisibleFromStatus,
-                        );
-                      try {
-                        await saveProfilePatch({
-                          custom_client_statuses: customClientStatuses,
-                          queue_trigger_status: queueTriggerStatus,
-                          final_invoice_visible_from_status:
-                            nextVisibleFromStatus,
-                        });
-                        setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
-                        setClientStatusSaved(true);
-                        setTimeout(() => setClientStatusSaved(false), 2000);
-                      } finally {
-                        setClientStatusSaving(false);
-                      }
-                    }}
-                    className="gap-1.5"
-                  >
-                    {clientStatusSaving ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Save className="w-4 h-4" />
-                    )}
-                    Simpan Status Klien
-                  </Button>
-                  {clientStatusSaved && (
-                    <span className="text-xs text-green-600 dark:text-green-400">
-                      Tersimpan!
-                    </span>
-                  )}
-                </div>
-
                 {/* Queue trigger setting */}
                 <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
                   <p className="text-sm font-medium">Trigger Auto-Queue</p>
@@ -2657,81 +2837,130 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  disabled={statusSaving}
+                  onClick={handleSaveStatuses}
+                  className={unifiedSaveButtonClass}
+                >
+                  {statusSaving ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Simpan Semua
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={unifiedResetButtonClass}
+                  onClick={() => setResetModal({ open: true, scope: "status" })}
+                  disabled={resetSaving}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Balik ke Default
+                </Button>
+                {statusSaved && (
+                  <span className="text-sm text-green-600 dark:text-green-400">
+                    {SETTINGS_SAVED_MESSAGE}
+                  </span>
+                )}
+              </div>
+            </div>
           </>
         )}
 
         {/* ═══ TAB: Jenis Acara ═══ */}
         {activeTab === "jenis-acara" && (
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-            <div className="px-6 py-4 border-b">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Globe className="w-4 h-4" /> Jenis Acara Global
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Kelola urutan, aktif/nonaktif, dan custom jenis acara dari sini.
-                Berlaku untuk form booking, paket, template, dan filter.
-              </p>
-            </div>
-            <div className="p-6 space-y-4">
-              <SortableConfigList
-                items={eventTypeItems}
-                onReorder={reorderEventTypes}
-                onRename={renameEventType}
-                onToggleActive={toggleEventTypeActive}
-                onDelete={removeEventType}
-              />
-              <div className="flex items-center gap-2">
-                <input
-                  value={newCustomEventType}
-                  onChange={(e) => setNewCustomEventType(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
-                    e.preventDefault();
-                    const value = newCustomEventType.trim();
-                    if (!value || availableEventTypes.includes(value)) return;
-                    setCustomEventTypes((prev) => [...prev, value]);
-                    setActiveEventTypes((prev) => [...prev, value]);
-                    setNewCustomEventType("");
-                  }}
-                  placeholder="Tambah jenis acara custom..."
-                  className={inputClass}
+          <div className="space-y-6">
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+              <div className="px-6 py-4 border-b">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <Globe className="w-4 h-4" /> Jenis Acara Global
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Kelola urutan, aktif/nonaktif, dan custom jenis acara dari
+                  sini. Berlaku untuk form booking, paket, template, dan
+                  filter.
+                </p>
+              </div>
+              <div className="p-6 space-y-4">
+                <SortableConfigList
+                  items={eventTypeItems}
+                  onReorder={reorderEventTypes}
+                  onRename={renameEventType}
+                  onToggleActive={toggleEventTypeActive}
+                  onDelete={removeEventType}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    const value = newCustomEventType.trim();
-                    if (!value || availableEventTypes.includes(value)) return;
-                    setCustomEventTypes((prev) => [...prev, value]);
-                    setActiveEventTypes((prev) => [...prev, value]);
-                    setNewCustomEventType("");
-                  }}
-                >
-                  Tambah
-                </Button>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={newCustomEventType}
+                    onChange={(e) => setNewCustomEventType(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      const value = newCustomEventType.trim();
+                      if (!value || availableEventTypes.includes(value)) return;
+                      setCustomEventTypes((prev) => [...prev, value]);
+                      setActiveEventTypes((prev) => [...prev, value]);
+                      setNewCustomEventType("");
+                    }}
+                    placeholder="Tambah jenis acara custom..."
+                    className={inputClass}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const value = newCustomEventType.trim();
+                      if (!value || availableEventTypes.includes(value)) return;
+                      setCustomEventTypes((prev) => [...prev, value]);
+                      setActiveEventTypes((prev) => [...prev, value]);
+                      setNewCustomEventType("");
+                    }}
+                  >
+                    Tambah
+                  </Button>
+                </div>
+                <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                  Jenis acara bawaan bisa diurutkan dan
+                  diaktifkan/nonaktifkan. Jenis acara custom bisa ditambah,
+                  diubah nama, dihapus, dan diurutkan.
+                </div>
               </div>
-              <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                Jenis acara bawaan bisa diurutkan dan diaktifkan/nonaktifkan.
-                Jenis acara custom bisa ditambah, diubah nama, dihapus, dan
-                diurutkan.
-              </div>
-              <div className="flex items-center gap-3 pt-1">
+            </div>
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-4">
+              <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
                   disabled={eventTypeSaving}
                   onClick={handleSaveEventTypes}
-                  className="gap-2"
+                  className={unifiedSaveButtonClass}
                 >
                   {eventTypeSaving ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <Save className="w-4 h-4" />
                   )}
-                  Simpan
+                  Simpan Semua
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={unifiedResetButtonClass}
+                  onClick={() =>
+                    setResetModal({ open: true, scope: "jenis-acara" })
+                  }
+                  disabled={resetSaving}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Balik ke Default
                 </Button>
                 {eventTypeSaved && (
                   <span className="text-sm text-green-600 dark:text-green-400">
-                    ✅ Pengaturan berhasil disimpan
+                    {SETTINGS_SAVED_MESSAGE}
                   </span>
                 )}
               </div>
@@ -2759,6 +2988,55 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+
+        {/* Reset Confirmation Modal */}
+        <Dialog
+          open={resetModal.open}
+          onOpenChange={(open) =>
+            !open && !resetSaving && setResetModal({ open: false, scope: null })
+          }
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader className="items-center text-center">
+              <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center mb-2">
+                <RotateCcw className="w-6 h-6 text-amber-600" />
+              </div>
+              <DialogTitle className="text-xl">
+                {resetModal.scope
+                  ? resetDialogMeta[resetModal.scope].title
+                  : "Balik ke Default?"}
+              </DialogTitle>
+              <DialogDescription>
+                {resetModal.scope
+                  ? resetDialogMeta[resetModal.scope].description
+                  : "Pengaturan akan dikembalikan ke default."}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="sm:justify-center gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setResetModal({ open: false, scope: null })}
+                disabled={resetSaving}
+              >
+                Batal
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                onClick={handleConfirmReset}
+                disabled={resetSaving}
+              >
+                {resetSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                )}
+                Balik ke Default
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Disconnect Confirmation Modal */}
         <Dialog
