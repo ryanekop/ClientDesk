@@ -1,4 +1,4 @@
-import { google } from "googleapis";
+import { google, type calendar_v3 } from "googleapis";
 import type { GoogleCalendarDateTime } from "@/utils/google/template";
 import { GOOGLE_TEMPLATE_TIMEZONE } from "@/utils/google/template";
 
@@ -30,40 +30,102 @@ export async function getCalendarClient(accessToken: string, refreshToken: strin
     return google.calendar({ version: "v3", auth: oauth2Client });
 }
 
-export async function pushEventToCalendar(
-    accessToken: string,
-    refreshToken: string,
-    event: {
-        summary: string;
-        description?: string;
-        start: GoogleCalendarDateTime;
-        end: GoogleCalendarDateTime;
-        attendees?: string[]; // email addresses to invite
-    }
-) {
-    const calendar = await getCalendarClient(accessToken, refreshToken);
+type CalendarEventPayload = {
+    summary: string;
+    description?: string;
+    start: GoogleCalendarDateTime;
+    end: GoogleCalendarDateTime;
+    attendees?: string[];
+};
 
-    const attendeesList = (event.attendees || [])
+function normalizeAttendees(attendees?: string[]) {
+    return (attendees || [])
         .filter(email => email && email.includes("@"))
         .map(email => ({ email }));
+}
+
+function buildEventRequestBody(event: CalendarEventPayload) {
+    const attendeesList = normalizeAttendees(event.attendees);
+
+    return {
+        summary: event.summary,
+        description: event.description || "",
+        start: {
+            dateTime: event.start.dateTime,
+            timeZone: event.start.timeZone || GOOGLE_TEMPLATE_TIMEZONE,
+        },
+        end: {
+            dateTime: event.end.dateTime,
+            timeZone: event.end.timeZone || GOOGLE_TEMPLATE_TIMEZONE,
+        },
+        attendees: attendeesList,
+    };
+}
+
+export async function createCalendarEvent(
+    accessToken: string,
+    refreshToken: string,
+    event: CalendarEventPayload,
+) {
+    const calendar = await getCalendarClient(accessToken, refreshToken);
+    const attendeesList = normalizeAttendees(event.attendees);
 
     const res = await calendar.events.insert({
         calendarId: "primary",
         sendUpdates: attendeesList.length > 0 ? "all" : "none",
-        requestBody: {
-            summary: event.summary,
-            description: event.description || "",
-            start: {
-                dateTime: event.start.dateTime,
-                timeZone: event.start.timeZone || GOOGLE_TEMPLATE_TIMEZONE,
-            },
-            end: {
-                dateTime: event.end.dateTime,
-                timeZone: event.end.timeZone || GOOGLE_TEMPLATE_TIMEZONE,
-            },
-            ...(attendeesList.length > 0 ? { attendees: attendeesList } : {}),
-        },
+        requestBody: buildEventRequestBody(event),
     });
 
     return res.data;
+}
+
+export async function updateCalendarEvent(
+    accessToken: string,
+    refreshToken: string,
+    eventId: string,
+    event: CalendarEventPayload,
+) {
+    const calendar = await getCalendarClient(accessToken, refreshToken);
+    const attendeesList = normalizeAttendees(event.attendees);
+
+    const res = await calendar.events.update({
+        calendarId: "primary",
+        eventId,
+        sendUpdates: attendeesList.length > 0 ? "all" : "none",
+        requestBody: buildEventRequestBody(event),
+    });
+
+    return res.data;
+}
+
+export async function upsertCalendarEvent(
+    accessToken: string,
+    refreshToken: string,
+    event: CalendarEventPayload & { eventId?: string },
+): Promise<calendar_v3.Schema$Event> {
+    if (event.eventId) {
+        try {
+            return await updateCalendarEvent(
+                accessToken,
+                refreshToken,
+                event.eventId,
+                event,
+            );
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "";
+            if (!message.includes("Not Found")) {
+                throw error;
+            }
+        }
+    }
+
+    return createCalendarEvent(accessToken, refreshToken, event);
+}
+
+export async function pushEventToCalendar(
+    accessToken: string,
+    refreshToken: string,
+    event: CalendarEventPayload,
+) {
+    return createCalendarEvent(accessToken, refreshToken, event);
 }

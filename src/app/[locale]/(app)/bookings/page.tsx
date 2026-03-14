@@ -320,7 +320,7 @@ export default function BookingsPage() {
     async function handleUpdateStatus() {
         if (!statusModal.booking || !newStatus) return;
         setIsUpdatingStatus(true);
-        const { error } = await supabase.from("bookings").update({ status: newStatus }).eq("id", statusModal.booking.id);
+        const { error } = await supabase.from("bookings").update({ status: newStatus, client_status: newStatus }).eq("id", statusModal.booking.id);
         if (!error) {
             setBookings(prev => prev.map(b => b.id === statusModal.booking?.id ? { ...b, status: newStatus } : b));
             setStatusModal({ open: false, booking: null });
@@ -634,9 +634,9 @@ export default function BookingsPage() {
             return (a.created_at || "").localeCompare(b.created_at || "");
         }
         if (sortOrder === "session_newest") {
-            return (b.session_date || "").localeCompare(a.session_date || "");
+            return (a.session_date || "").localeCompare(b.session_date || "");
         }
-        return (a.session_date || "").localeCompare(b.session_date || "");
+        return (b.session_date || "").localeCompare(a.session_date || "");
     });
 
     return (
@@ -711,8 +711,8 @@ export default function BookingsPage() {
                         <select value={sortOrder} onChange={e => setSortOrder(e.target.value as typeof sortOrder)} className={selectFilterClass}>
                             <option value="booking_newest">Urutkan: Booking Terbaru</option>
                             <option value="booking_oldest">Urutkan: Booking Terlama</option>
-                            <option value="session_newest">Urutkan: Jadwal Sesi Terbaru</option>
-                            <option value="session_oldest">Urutkan: Jadwal Sesi Terlama</option>
+                            <option value="session_newest">Urutkan: Jadwal Sesi Terdekat</option>
+                            <option value="session_oldest">Urutkan: Jadwal Sesi Terjauh</option>
                         </select>
                         {(statusFilter !== "All" || packageFilter !== "All" || freelanceFilter !== "All" || eventTypeFilter !== "All" || dateFromFilter || dateToFilter || Object.values(extraFieldFilters).some(Boolean) || searchQuery || sortOrder !== "booking_newest") && (
                             <button

@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { pushEventToCalendar } from "@/utils/google/calendar";
+import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
 import {
     DEFAULT_CALENDAR_EVENT_FORMAT,
-    buildCalendarRangeFromLocalInput,
-    resolveTemplateByEventType,
-    applyCalendarTemplate,
-    buildCalendarTemplateVars,
 } from "@/utils/google/template";
-import { getBookingServiceLabel } from "@/lib/booking-services";
 import {
     createPaymentSourceFromBank,
     getEnabledBankAccounts,
@@ -34,6 +29,8 @@ type VendorRecord = {
     drive_folder_structure_map: Record<string, string[] | string> | null;
     calendar_event_format: string | null;
     calendar_event_format_map: Record<string, string> | null;
+    calendar_event_description: string | null;
+    calendar_event_description_map: Record<string, string> | null;
     form_payment_methods: PaymentMethod[] | null;
     form_show_proof: boolean | null;
     qris_image_url: string | null;
@@ -133,7 +130,7 @@ export async function POST(request: NextRequest) {
         // Find vendor by slug
         const { data: vendorData } = await supabaseAdmin
             .from("profiles")
-            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, calendar_event_format, calendar_event_format_map, form_payment_methods, form_show_proof, qris_image_url, qris_drive_file_id, bank_accounts")
+            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, calendar_event_format, calendar_event_format_map, calendar_event_description, calendar_event_description_map, form_payment_methods, form_show_proof, qris_image_url, qris_drive_file_id, bank_accounts")
             .eq("vendor_slug", vendorSlug)
             .single();
         const vendor = vendorData as VendorRecord | null;
@@ -294,6 +291,7 @@ export async function POST(request: NextRequest) {
                 payment_source: normalizedPaymentSource,
                 instagram: instagram || null,
                 status: "Pending",
+                client_status: "Pending",
                 is_fully_paid: dpPaid >= computedTotalPrice,
             })
             .select("id, booking_code")
@@ -358,45 +356,40 @@ export async function POST(request: NextRequest) {
         // Auto-sync to Google Calendar (fire-and-forget)
         if (vendor.google_access_token && vendor.google_refresh_token && sessionDate) {
             try {
-                const range = buildCalendarRangeFromLocalInput(
-                    sessionDate,
-                    mainServices.reduce((sum, service) => sum + (service.duration_minutes || 0), 0) || 120,
-                );
-                // Build event summary from template
-                const eventFormat = resolveTemplateByEventType(
-                    vendor.calendar_event_format_map,
-                    eventType,
-                    vendor.calendar_event_format || DEFAULT_CALENDAR_EVENT_FORMAT,
-                );
-                const templateVars = buildCalendarTemplateVars({
-                    client_name: clientName,
-                    service_name: getBookingServiceLabel(
-                        mainServices.map((service, index) => ({
-                            id: service.id,
-                            kind: "main" as const,
+                const syncedEvent = await syncBookingCalendarEvent({
+                    profile: {
+                        accessToken: vendor.google_access_token,
+                        refreshToken: vendor.google_refresh_token,
+                        studioName: vendor.studio_name,
+                        eventFormat: vendor.calendar_event_format || DEFAULT_CALENDAR_EVENT_FORMAT,
+                        eventFormatMap: vendor.calendar_event_format_map,
+                        eventDescription: vendor.calendar_event_description,
+                        eventDescriptionMap: vendor.calendar_event_description_map,
+                    },
+                    booking: {
+                        id: booking.id,
+                        bookingCode,
+                        clientName,
+                        sessionDate,
+                        location,
+                        eventType,
+                        extraFields: sanitizedExtraData,
+                        services: mainServices[0] || null,
+                        bookingServices: mainServices.map((service, index) => ({
+                            id: `${booking.id}-main-${service.id}`,
+                            kind: "main",
                             sort_order: index,
                             service,
                         })),
-                        { fallback: eventType || "Sesi Foto" },
-                    ),
-                    event_type: eventType || "-",
-                    booking_code: bookingCode,
-                    studio_name: vendor.studio_name || "Client Desk",
-                    location: location || "-",
-                    ...range.templateVars,
-                }, sanitizedExtraData);
-                const summary = applyCalendarTemplate(eventFormat, templateVars);
+                    },
+                });
 
-                await pushEventToCalendar(
-                    vendor.google_access_token,
-                    vendor.google_refresh_token,
-                    {
-                        summary,
-                        description: `Kode: ${bookingCode}\nKlien: ${clientName}\nLokasi: ${location || "-"}\nTipe: ${eventType || "-"}`,
-                        start: range.start,
-                        end: range.end,
-                    }
-                );
+                if (syncedEvent.eventId) {
+                    await supabaseAdmin
+                        .from("bookings")
+                        .update({ google_calendar_event_id: syncedEvent.eventId })
+                        .eq("id", booking.id);
+                }
             } catch {
                 // Silently ignore — calendar may not be connected
             }

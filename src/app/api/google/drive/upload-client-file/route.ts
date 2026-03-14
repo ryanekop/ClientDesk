@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { findOrCreateNestedPath, uploadFileToDrive, applyFolderTemplate } from "@/utils/google/drive";
-import {
-    DEFAULT_DRIVE_FOLDER_FORMAT,
-    resolveTemplateByEventType,
-} from "@/utils/google/template";
+import { findOrCreateNestedPath, uploadFileToDrive } from "@/utils/google/drive";
+import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
 
 export async function POST(request: NextRequest) {
     try {
@@ -17,7 +14,7 @@ export async function POST(request: NextRequest) {
 
         const { data: profile } = await supabase
             .from("profiles")
-            .select("google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, studio_name")
+            .select("google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, studio_name")
             .eq("id", user.id)
             .single();
 
@@ -36,24 +33,31 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Data tidak lengkap." }, { status: 400 });
         }
 
-        // Apply folder name template
-        const folderFormat = resolveTemplateByEventType(
-            (profile as any).drive_folder_format_map,
-            eventType,
-            (profile as any).drive_folder_format || DEFAULT_DRIVE_FOLDER_FORMAT,
-        );
-        const clientFolderName = applyFolderTemplate(folderFormat, {
-            client_name: clientName || "Client",
-            booking_code: bookingCode || "",
-            event_type: eventType || "",
-            studio_name: (profile as any).studio_name || "Client Desk",
-        });
+        const { data: bookingRecord } = await supabase
+            .from("bookings")
+            .select("client_name, booking_code, event_type, session_date")
+            .eq("id", bookingId)
+            .single();
 
-        // Create nested path: Data Booking Client Desk > Client Folder > File Client
+        const baseSegments = buildDriveFolderPathSegments({
+            structureMap: (profile as any).drive_folder_structure_map,
+            legacyFormat: (profile as any).drive_folder_format,
+            legacyFormatMap: (profile as any).drive_folder_format_map,
+            studioName: (profile as any).studio_name || "Client Desk",
+            bookingCode: bookingRecord?.booking_code || bookingCode || "",
+            clientName: bookingRecord?.client_name || clientName || "Client",
+            eventType: bookingRecord?.event_type || eventType || null,
+            sessionDate: bookingRecord?.session_date || null,
+        });
+        const bookingFolderSegments = [
+            "Data Booking Client Desk",
+            ...baseSegments,
+        ];
+
         const folder = await findOrCreateNestedPath(
             profile.google_drive_access_token,
             profile.google_drive_refresh_token,
-            ["Data Booking Client Desk", clientFolderName, "File Client"]
+            [...bookingFolderSegments, "File Client"]
         );
 
         if (!folder.folderId) {
@@ -86,7 +90,7 @@ export async function POST(request: NextRequest) {
             const parentFolder = await findOrCreateNestedPath(
                 profile.google_drive_access_token,
                 profile.google_drive_refresh_token,
-                ["Data Booking Client Desk", clientFolderName]
+                bookingFolderSegments
             );
             if (parentFolder.folderUrl) {
                 await supabase

@@ -83,7 +83,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }
 
     const { booking, vendorName } = result;
-    const status = booking.client_status || booking.status || "Pending";
+    const status = booking.status || booking.client_status || "Pending";
     const title = `${status} — ${booking.client_name} — ${booking.booking_code}`;
     const description = `Tracking booking ${booking.booking_code} untuk ${booking.client_name}${vendorName ? ` di ${vendorName}` : ""}`;
 
@@ -129,13 +129,15 @@ export default async function TrackingPage({ params }: PageProps) {
         is_fully_paid: booking.is_fully_paid || false,
     });
 
+    const effectiveClientStatus = booking.status || booking.client_status || "Pending";
+
     const bookingData = {
         bookingCode: booking.booking_code,
         trackingUuid: booking.tracking_uuid,
         clientName: booking.client_name,
         sessionDate: booking.session_date,
         eventType: booking.event_type,
-        clientStatus: booking.client_status,
+        clientStatus: effectiveClientStatus,
         queuePosition: booking.queue_position,
         status: booking.status,
         serviceName: (booking.services as { name?: string } | null)?.name || null,
@@ -152,7 +154,7 @@ export default async function TrackingPage({ params }: PageProps) {
         location: booking.location || null,
         showFinalInvoice: shouldShowFinalInvoiceForClientStatus({
             statuses: customClientStatuses,
-            currentStatus: booking.client_status,
+            currentStatus: effectiveClientStatus,
             visibleFromStatus: finalInvoiceVisibleFromStatus,
         }),
     };

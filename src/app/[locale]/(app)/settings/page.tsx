@@ -10,6 +10,7 @@ import { useLocale } from "next-intl";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import {
     DRIVE_TEMPLATE_VARIABLES,
+    DEFAULT_CALENDAR_EVENT_DESCRIPTION,
     DEFAULT_CALENDAR_EVENT_FORMAT,
     DEFAULT_DRIVE_FOLDER_FORMAT,
     normalizeTemplateFormatMap,
@@ -63,6 +64,8 @@ type Profile = {
     custom_event_types?: string[] | null;
     drive_folder_structure_map?: Record<string, string[]> | null;
     form_sections?: Record<string, FormLayoutItem[]> | FormLayoutItem[] | null;
+    calendar_event_description?: string | null;
+    calendar_event_description_map?: Record<string, string> | null;
 };
 
 type Template = {
@@ -225,6 +228,9 @@ export default function SettingsPage() {
     const [calendarEventFormats, setCalendarEventFormats] = React.useState<Record<string, string>>(
         () => normalizeTemplateFormatMap(null, DEFAULT_CALENDAR_EVENT_FORMAT),
     );
+    const [calendarEventDescriptions, setCalendarEventDescriptions] = React.useState<Record<string, string>>(
+        () => normalizeTemplateFormatMap(null, DEFAULT_CALENDAR_EVENT_DESCRIPTION),
+    );
     const [selectedCalendarEventType, setSelectedCalendarEventType] = React.useState("Umum");
 
     // Drive folder format
@@ -237,6 +243,7 @@ export default function SettingsPage() {
     const [selectedDriveEventType, setSelectedDriveEventType] = React.useState("Umum");
     const [newDriveSegment, setNewDriveSegment] = React.useState("");
     const calendarFormatInputRef = React.useRef<HTMLInputElement>(null);
+    const calendarDescriptionInputRef = React.useRef<HTMLTextAreaElement>(null);
     const driveFormatInputRef = React.useRef<HTMLInputElement>(null);
     const eventTypeSettings = React.useMemo(
         () =>
@@ -303,6 +310,12 @@ export default function SettingsPage() {
             delete next[oldName];
             return next;
         });
+        setCalendarEventDescriptions((prev) => {
+            if (!(oldName in prev)) return prev;
+            const next = { ...prev, [nextName]: prev[oldName] };
+            delete next[oldName];
+            return next;
+        });
         setDriveFolderFormats((prev) => {
             if (!(oldName in prev)) return prev;
             const next = { ...prev, [nextName]: prev[oldName] };
@@ -337,6 +350,11 @@ export default function SettingsPage() {
         setCustomEventTypes((prev) => prev.filter((item) => item !== name));
         setActiveEventTypes((prev) => prev.filter((item) => item !== name));
         setCalendarEventFormats((prev) => {
+            const next = { ...prev };
+            delete next[name];
+            return next;
+        });
+        setCalendarEventDescriptions((prev) => {
             const next = { ...prev };
             delete next[name];
             return next;
@@ -391,7 +409,7 @@ export default function SettingsPage() {
 
         const { data: p } = await supabase
             .from("profiles")
-            .select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, calendar_event_format, calendar_event_format_map, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, invoice_logo_url, custom_statuses, custom_client_statuses, queue_trigger_status, default_wa_target, final_invoice_visible_from_status, form_event_types, custom_event_types, form_sections")
+            .select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, calendar_event_format, calendar_event_format_map, calendar_event_description, calendar_event_description_map, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, invoice_logo_url, custom_statuses, custom_client_statuses, queue_trigger_status, default_wa_target, final_invoice_visible_from_status, form_event_types, custom_event_types, form_sections")
             .eq("id", user.id)
             .single();
         const prof = p as Profile;
@@ -411,6 +429,12 @@ export default function SettingsPage() {
             normalizeTemplateFormatMap(
                 (prof as any)?.calendar_event_format_map,
                 (prof as any)?.calendar_event_format || DEFAULT_CALENDAR_EVENT_FORMAT,
+            ),
+        );
+        setCalendarEventDescriptions(
+            normalizeTemplateFormatMap(
+                (prof as any)?.calendar_event_description_map,
+                (prof as any)?.calendar_event_description || DEFAULT_CALENDAR_EVENT_DESCRIPTION,
             ),
         );
         setDriveFolderFormats(
@@ -519,6 +543,8 @@ export default function SettingsPage() {
             custom_event_types: customEventTypes,
             calendar_event_format: calendarEventFormats.Umum || DEFAULT_CALENDAR_EVENT_FORMAT,
             calendar_event_format_map: calendarEventFormats,
+            calendar_event_description: calendarEventDescriptions.Umum || DEFAULT_CALENDAR_EVENT_DESCRIPTION,
+            calendar_event_description_map: calendarEventDescriptions,
             drive_folder_format: driveFolderFormats.Umum || DEFAULT_DRIVE_FOLDER_FORMAT,
             drive_folder_format_map: driveFolderFormats,
             drive_folder_structure_map: driveFolderStructures,
@@ -528,7 +554,7 @@ export default function SettingsPage() {
         setSavedMsg(t("berhasilSimpan"));
         setTimeout(() => setSavedMsg(""), 3000);
         setSaving(false);
-        fetchAll();
+        void fetchAll();
     }
 
     async function handleSaveTemplate(type: string, eventType?: string) {
@@ -541,24 +567,55 @@ export default function SettingsPage() {
         const contentEn = templateContentsEn[saveKey] || "";
         const existing = templates.find(t => t.type === type && (eventType ? (t.event_type || "Umum") === eventType : !t.event_type || t.event_type === null));
 
+        let nextTemplate: Template | null = null;
         if (existing) {
-            await supabase.from("templates").update({ content, content_en: contentEn }).eq("id", existing.id);
+            const { data, error } = await supabase
+                .from("templates")
+                .update({ content, content_en: contentEn })
+                .eq("id", existing.id)
+                .select("id, type, name, content, content_en, is_default, event_type")
+                .single();
+            if (error) {
+                setTemplateSaving(null);
+                alert(error.message || "Gagal menyimpan template.");
+                return;
+            }
+            nextTemplate = data as Template;
         } else if (content.trim() || contentEn.trim()) {
-            await supabase.from("templates").insert({
-                user_id: user.id,
-                type,
-                name: templateTypes.find(tt => tt.value === type)?.label || type,
-                content,
-                content_en: contentEn,
-                is_default: true,
-                event_type: eventType || null,
+            const { data, error } = await supabase
+                .from("templates")
+                .insert({
+                    user_id: user.id,
+                    type,
+                    name: templateTypes.find(tt => tt.value === type)?.label || type,
+                    content,
+                    content_en: contentEn,
+                    is_default: true,
+                    event_type: eventType || null,
+                })
+                .select("id, type, name, content, content_en, is_default, event_type")
+                .single();
+            if (error) {
+                setTemplateSaving(null);
+                alert(error.message || "Gagal menyimpan template.");
+                return;
+            }
+            nextTemplate = data as Template;
+        }
+
+        if (nextTemplate) {
+            setTemplates((prev) => {
+                const exists = prev.some((item) => item.id === nextTemplate?.id);
+                if (exists) {
+                    return prev.map((item) => item.id === nextTemplate?.id ? nextTemplate! : item);
+                }
+                return [...prev, nextTemplate!];
             });
         }
 
         setTemplateSaving(null);
         setTemplateSavedMsg(saveKey);
         setTimeout(() => setTemplateSavedMsg(null), 3000);
-        fetchAll();
     }
 
     async function handleDisconnect() {
@@ -581,7 +638,7 @@ export default function SettingsPage() {
     const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 
     function insertIntoInput(
-        ref: React.RefObject<HTMLInputElement | null>,
+        ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>,
         token: string,
         currentValue: string,
         onChange: (value: string) => void,
@@ -605,6 +662,10 @@ export default function SettingsPage() {
 
     function updateCalendarFormat(eventType: string, value: string) {
         setCalendarEventFormats((prev) => ({ ...prev, [eventType]: value }));
+    }
+
+    function updateCalendarDescription(eventType: string, value: string) {
+        setCalendarEventDescriptions((prev) => ({ ...prev, [eventType]: value }));
     }
 
     function updateDriveFormat(eventType: string, value: string) {
@@ -722,19 +783,41 @@ export default function SettingsPage() {
         ...previewData,
         event_type: selectedCalendarEventType,
         ...getEventExtraFieldPreviewVars(selectedCalendarEventType),
+        ...getCustomFieldPreviewVars(
+            formSectionsByEventType[selectedCalendarEventType] || formSectionsByEventType.Umum || [],
+            selectedCalendarEventType,
+        ),
     };
     const drivePreviewVars = {
         ...previewData,
         event_type: selectedDriveEventType,
     };
     const currentCalendarFormat = calendarEventFormats[selectedCalendarEventType] || "";
+    const currentCalendarDescription = calendarEventDescriptions[selectedCalendarEventType] || "";
     const currentDriveFormat = driveFolderFormats[selectedDriveEventType] || "";
-    const calendarTemplateVariables = getCalendarTemplateVariables(selectedCalendarEventType);
+    const calendarTemplateVariables = Array.from(
+        new Set([
+            ...getCalendarTemplateVariables(selectedCalendarEventType),
+            ...getCustomFieldTemplateTokens(
+                formSectionsByEventType[selectedCalendarEventType] || formSectionsByEventType.Umum || [],
+                selectedCalendarEventType,
+                "calendar",
+            ),
+        ]),
+    );
     const calendarEventPreview = applyCalendarTemplate(
         resolveTemplateByEventType(
             calendarEventFormats,
             selectedCalendarEventType,
             DEFAULT_CALENDAR_EVENT_FORMAT,
+        ),
+        calendarPreviewVars,
+    );
+    const calendarDescriptionPreview = applyCalendarTemplate(
+        resolveTemplateByEventType(
+            calendarEventDescriptions,
+            selectedCalendarEventType,
+            DEFAULT_CALENDAR_EVENT_DESCRIPTION,
         ),
         calendarPreviewVars,
     );
@@ -913,11 +996,11 @@ export default function SettingsPage() {
 
                     {/* Save */}
                     <div className="flex items-center gap-3">
-                        <Button size="sm" className="gap-2" onClick={() => handleSaveTemplate(tt.value, isFreelancer ? selectedEventType : undefined)} disabled={templateSaving === contentKey}>
+                        <Button type="button" size="sm" className="gap-2" onClick={() => handleSaveTemplate(tt.value, isFreelancer ? selectedEventType : undefined)} disabled={templateSaving === contentKey}>
                             {templateSaving === contentKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                             {t("simpanProfil").split(" ")[0] || "Simpan"}
                         </Button>
-                        {templateSavedMsg === contentKey && <span className="text-sm text-green-600 dark:text-green-400">{tp("saved")}</span>}
+                        {templateSavedMsg === contentKey && <span className="text-sm text-green-600 dark:text-green-400">Tersimpan di database</span>}
                     </div>
                 </div>
             </div>
@@ -1213,6 +1296,41 @@ export default function SettingsPage() {
                                         <div className="rounded-md border bg-background/80 px-4 py-3">
                                             <p className="text-xs font-medium text-muted-foreground mb-1">Preview Event Calendar</p>
                                             <p className="text-sm text-foreground/90">{calendarEventPreview}</p>
+                                        </div>
+                                        <div className="space-y-2 rounded-lg border bg-background/80 p-4">
+                                            <div>
+                                                <p className="text-sm font-medium">Deskripsi Event Calendar</p>
+                                                <p className="text-xs text-muted-foreground">Deskripsi ini dipakai saat event kalender dibuat dan saat tim di-update.</p>
+                                            </div>
+                                            <textarea
+                                                ref={calendarDescriptionInputRef}
+                                                value={currentCalendarDescription}
+                                                onChange={e => updateCalendarDescription(selectedCalendarEventType, e.target.value)}
+                                                rows={5}
+                                                className="placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-y"
+                                                placeholder={DEFAULT_CALENDAR_EVENT_DESCRIPTION}
+                                            />
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {calendarTemplateVariables.map((token) => (
+                                                    <button
+                                                        key={`description-${token}`}
+                                                        type="button"
+                                                        onClick={() => insertIntoInput(
+                                                            calendarDescriptionInputRef,
+                                                            token,
+                                                            currentCalendarDescription,
+                                                            (value) => updateCalendarDescription(selectedCalendarEventType, value),
+                                                        )}
+                                                        className="text-[11px] px-2 py-1 rounded-md border bg-muted/50 text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+                                                    >
+                                                        {token.replace(/\{\{|\}\}/g, "")}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <div className="rounded-md border bg-muted/20 px-4 py-3">
+                                                <p className="text-xs font-medium text-muted-foreground mb-1">Preview Deskripsi Calendar</p>
+                                                <pre className="whitespace-pre-wrap text-sm text-foreground/90 font-sans">{calendarDescriptionPreview}</pre>
+                                            </div>
                                         </div>
                                     </div>
                                 )}

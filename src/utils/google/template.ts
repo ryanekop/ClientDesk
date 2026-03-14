@@ -54,6 +54,8 @@ const MONTHS_ID = [
 const DAYS_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
 export const DEFAULT_CALENDAR_EVENT_FORMAT = "📸 {{client_name}} — {{service_name}}";
+export const DEFAULT_CALENDAR_EVENT_DESCRIPTION =
+    "Klien: {{client_name}}\nBooking: {{booking_code}}\nPaket: {{service_name}}\nTanggal: {{session_date}}\nJam: {{session_time}} - {{end_time}}\nLokasi: {{location}}";
 export const DEFAULT_DRIVE_FOLDER_FORMAT = "{client_name}";
 export const DEFAULT_DRIVE_FOLDER_STRUCTURE = [DEFAULT_DRIVE_FOLDER_FORMAT];
 
@@ -135,6 +137,7 @@ export function buildCalendarTemplateVars(
     return {
         ...baseVars,
         ...buildExtraFieldTemplateVars(extraFields),
+        ...buildCalendarCustomFieldTemplateVars(extraFields),
     };
 }
 
@@ -322,4 +325,48 @@ function getDayName(parts: DateParts): string {
 
 function pad(value: number): string {
     return String(value).padStart(2, "0");
+}
+
+function buildCalendarCustomFieldTemplateVars(
+    raw: unknown,
+): Record<string, string> {
+    if (!raw || typeof raw !== "object") return {};
+
+    const customFields = (raw as Record<string, unknown>).custom_fields;
+    if (!Array.isArray(customFields)) return {};
+
+    return Object.fromEntries(
+        customFields
+            .filter(
+                (item): item is { id?: unknown; value?: unknown } =>
+                    Boolean(item) && typeof item === "object" && !Array.isArray(item),
+            )
+            .map((item) => {
+                const id = typeof item.id === "string" ? item.id.trim() : "";
+                const value = stringifyCalendarTemplateValue(item.value);
+                return [id, value] as const;
+            })
+            .filter(([id, value]) => id.length > 0 && value.length > 0),
+    ) as Record<string, string>;
+}
+
+function stringifyCalendarTemplateValue(value: unknown): string {
+    if (value == null) return "";
+    if (typeof value === "string") return value.trim();
+    if (typeof value === "number" || typeof value === "boolean") {
+        return String(value);
+    }
+    if (Array.isArray(value)) {
+        return value
+            .map((item) => stringifyCalendarTemplateValue(item))
+            .filter(Boolean)
+            .join(", ");
+    }
+    if (typeof value === "object") {
+        return Object.values(value as Record<string, unknown>)
+            .map((item) => stringifyCalendarTemplateValue(item))
+            .filter(Boolean)
+            .join(", ");
+    }
+    return "";
 }

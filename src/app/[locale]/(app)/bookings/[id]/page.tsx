@@ -38,6 +38,7 @@ import {
     normalizeBookingServiceSelections,
     type BookingServiceSelection,
 } from "@/lib/booking-services";
+import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -307,14 +308,17 @@ export default function BookingDetailPage() {
     const [queuePos, setQueuePos] = React.useState<number | "">(0);
     const [savingStatus, setSavingStatus] = React.useState(false);
     const [statusSaved, setStatusSaved] = React.useState(false);
+    const [bookingStatuses, setBookingStatuses] = React.useState<string[]>(["Pending", "DP", "Terjadwal", "Selesai", "Edit", "Batal"]);
     const [copiedTrack, setCopiedTrack] = React.useState(false);
     const [studioName, setStudioName] = React.useState("");
+    const [driveFolderPathHint, setDriveFolderPathHint] = React.useState("Data Booking Client Desk > {client_name} > File Client");
     const [savedTemplates, setSavedTemplates] = React.useState<{ id: string; type: string; content: string; content_en: string; event_type: string | null }[]>([]);
     const [adjustmentItems, setAdjustmentItems] = React.useState<EditableAdjustment[]>([]);
     const [addonServices, setAddonServices] = React.useState<AddonService[]>([]);
     const [savingAdjustments, setSavingAdjustments] = React.useState(false);
     const [sendingFinalInvoice, setSendingFinalInvoice] = React.useState(false);
     const [markingFinalPaid, setMarkingFinalPaid] = React.useState(false);
+    const [markingFinalUnpaid, setMarkingFinalUnpaid] = React.useState(false);
     const [editingDp, setEditingDp] = React.useState(false);
     const [dpInput, setDpInput] = React.useState("");
     const [savingDp, setSavingDp] = React.useState(false);
@@ -346,7 +350,7 @@ export default function BookingDetailPage() {
                 supabase.from("bookings")
                     .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
-                supabase.from("profiles").select("google_drive_access_token, studio_name").eq("id", user.id).single(),
+                supabase.from("profiles").select("google_drive_access_token, studio_name, custom_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map").eq("id", user.id).single(),
                 supabase.from("services")
                     .select("id, name, price, description, event_types")
                     .eq("user_id", user.id)
@@ -388,8 +392,12 @@ export default function BookingDetailPage() {
             );
             setAddonServices((addonServiceRows || []) as AddonService[]);
             if (rawBooking) {
-                setClientStatus(rawBooking.client_status || "");
+                const syncedStatus = rawBooking.status || rawBooking.client_status || "";
+                setClientStatus(syncedStatus);
                 setQueuePos(rawBooking.queue_position || "");
+                if (rawBooking.client_status !== syncedStatus) {
+                    await supabase.from("bookings").update({ client_status: syncedStatus }).eq("id", id);
+                }
                 // Generate tracking_uuid if not set
                 if (!rawBooking.tracking_uuid) {
                     const uuid = crypto.randomUUID();
@@ -399,6 +407,24 @@ export default function BookingDetailPage() {
             }
             if (profile?.google_drive_access_token) setIsDriveConnected(true);
             if (profile?.studio_name) setStudioName(profile.studio_name);
+            if (profile?.custom_statuses) {
+                setBookingStatuses(profile.custom_statuses as string[]);
+            }
+            if (rawBooking) {
+                const folderPathSegments = buildDriveFolderPathSegments({
+                    structureMap: (profile as any)?.drive_folder_structure_map,
+                    legacyFormat: (profile as any)?.drive_folder_format,
+                    legacyFormatMap: (profile as any)?.drive_folder_format_map,
+                    studioName: profile?.studio_name,
+                    bookingCode: rawBooking.booking_code,
+                    clientName: rawBooking.client_name,
+                    eventType: rawBooking.event_type,
+                    sessionDate: rawBooking.session_date,
+                });
+                setDriveFolderPathHint(
+                    ["Data Booking Client Desk", ...folderPathSegments, "File Client"].join(" > "),
+                );
+            }
             setLoading(false);
         }
 
@@ -416,9 +442,20 @@ export default function BookingDetailPage() {
         if (!booking) return;
         setSavingStatus(true);
         await supabase.from("bookings").update({
-            client_status: clientStatus || null,
+            status: clientStatus || booking.status,
+            client_status: clientStatus || booking.status,
             queue_position: queuePos === "" ? null : Number(queuePos),
         }).eq("id", booking.id);
+        setBooking((prev) =>
+            prev
+                ? {
+                    ...prev,
+                    status: clientStatus || prev.status,
+                    client_status: clientStatus || prev.status,
+                    queue_position: queuePos === "" ? null : Number(queuePos),
+                }
+                : prev,
+        );
         setStatusSaved(true);
         setTimeout(() => setStatusSaved(false), 2000);
         setSavingStatus(false);
@@ -915,6 +952,40 @@ export default function BookingDetailPage() {
         setAdjustmentItems(toEditableAdjustments(normalizedAdjustments));
     }
 
+    async function handleMarkFinalUnpaid() {
+        if (!booking) return;
+
+        setMarkingFinalUnpaid(true);
+        const nextSettlementStatus = booking.final_invoice_sent_at ? "sent" : "draft";
+        const { error } = await supabase
+            .from("bookings")
+            .update({
+                is_fully_paid: false,
+                settlement_status: nextSettlementStatus,
+                final_payment_amount: 0,
+                final_paid_at: null,
+            })
+            .eq("id", booking.id);
+        setMarkingFinalUnpaid(false);
+
+        if (error) {
+            alert("Gagal membatalkan status lunas.");
+            return;
+        }
+
+        setBooking((prev) =>
+            prev
+                ? {
+                    ...prev,
+                    is_fully_paid: false,
+                    settlement_status: nextSettlementStatus,
+                    final_payment_amount: 0,
+                    final_paid_at: null,
+                }
+                : prev,
+        );
+    }
+
     if (loading) return (
         <div className="flex items-center justify-center py-24">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -1269,10 +1340,17 @@ export default function BookingDetailPage() {
                         {sendingFinalInvoice ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
                         Kirim Invoice Final
                     </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={handleMarkFinalPaid} disabled={markingFinalPaid || booking.is_fully_paid}>
-                        {markingFinalPaid ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
-                        Tandai Lunas
-                    </Button>
+                    {booking.is_fully_paid ? (
+                        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleMarkFinalUnpaid} disabled={markingFinalUnpaid}>
+                            {markingFinalUnpaid ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
+                            Batal Tandai Lunas
+                        </Button>
+                    ) : (
+                        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleMarkFinalPaid} disabled={markingFinalPaid}>
+                            {markingFinalPaid ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
+                            Tandai Lunas
+                        </Button>
+                    )}
                 </div>
 
                 {booking.final_invoice_sent_at && (
@@ -1369,7 +1447,7 @@ export default function BookingDetailPage() {
                         <FileText className="w-4 h-4" /> File Klien
                     </h3>
                     <p className="text-xs text-muted-foreground">
-                        📁 Data Booking Client Desk &gt; {booking.client_name} &gt; File Client
+                        📁 {driveFolderPathHint}
                     </p>
                     <div className="flex items-center gap-2">
                         <input
@@ -1429,20 +1507,16 @@ export default function BookingDetailPage() {
 
                 <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">Progress</label>
+                        <label className="text-xs font-medium text-muted-foreground">Status Booking & Klien</label>
                         <select
                             value={clientStatus}
                             onChange={e => setClientStatus(e.target.value)}
                             className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] cursor-pointer"
                         >
                             <option value="">Pilih status...</option>
-                            <option value="Booking Confirmed">Booking Confirmed</option>
-                            <option value="Sesi Foto / Acara">Sesi Foto / Acara</option>
-                            <option value="Antrian Edit">Antrian Edit</option>
-                            <option value="Proses Edit">Proses Edit</option>
-                            <option value="Revisi">Revisi</option>
-                            <option value="File Siap">File Siap</option>
-                            <option value="Selesai">Selesai</option>
+                            {bookingStatuses.map((statusOption) => (
+                                <option key={statusOption} value={statusOption}>{statusOption}</option>
+                            ))}
                         </select>
                     </div>
                     <div className="space-y-1.5">

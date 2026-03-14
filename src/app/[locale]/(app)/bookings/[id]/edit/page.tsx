@@ -382,6 +382,7 @@ export default function EditBookingPage() {
             dp_paid: dPaid,
             is_fully_paid: dPaid >= tPrice && tPrice > 0,
             status,
+            client_status: status,
             notes: notes || null,
             drive_folder_url: driveFolderUrl || null,
             portfolio_url: portfolioUrl || null,
@@ -413,43 +414,41 @@ export default function EditBookingPage() {
                 await supabase.from("booking_freelance").insert(
                     freelancerIds.map(fid => ({ booking_id: id, freelance_id: fid }))
                 );
+            }
 
-                // Send calendar invites to assigned freelancers
+            if (finalSessionDate) {
                 try {
                     const selectedFreelancerEmails = freelancers
                         .filter(f => freelancerIds.includes(f.id))
                         .map(f => (f as any).google_email)
                         .filter(Boolean);
-                    if (!sessionDate) {
-                        setCalendarWarning("⚠️ Calendar invite tidak terkirim: jadwal sesi belum diisi");
+                    const noEmailNames = freelancers
+                        .filter(f => freelancerIds.includes(f.id) && !(f as any).google_email)
+                        .map(f => f.name);
+
+                    const res = await fetch("/api/google/calendar-invite", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            bookingId: id,
+                            attendeeEmails: selectedFreelancerEmails,
+                        }),
+                    });
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        setCalendarWarning(`⚠️ Calendar booking gagal: ${err.error || "Google Calendar belum terkoneksi"}`);
                         setTimeout(() => setCalendarWarning(null), 5000);
-                    } else if (selectedFreelancerEmails.length === 0) {
-                        const noEmailNames = freelancers
-                            .filter(f => freelancerIds.includes(f.id) && !(f as any).google_email)
-                            .map(f => f.name);
-                        if (noEmailNames.length > 0) {
-                            setCalendarWarning(`⚠️ Calendar invite tidak terkirim: ${noEmailNames.join(", ")} belum punya Google Email`);
-                            setTimeout(() => setCalendarWarning(null), 5000);
-                        }
-                    } else {
-                        const res = await fetch("/api/google/calendar-invite", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                bookingId: id,
-                                attendeeEmails: selectedFreelancerEmails,
-                            }),
-                        });
-                        if (!res.ok) {
-                            const err = await res.json().catch(() => ({}));
-                            setCalendarWarning(`⚠️ Calendar invite gagal: ${err.error || "Google Calendar belum terkoneksi"}`);
-                            setTimeout(() => setCalendarWarning(null), 5000);
-                        }
+                    } else if (noEmailNames.length > 0) {
+                        setCalendarWarning(`⚠️ Invite tim belum lengkap: ${noEmailNames.join(", ")} belum punya Google Email`);
+                        setTimeout(() => setCalendarWarning(null), 5000);
                     }
                 } catch {
-                    setCalendarWarning("⚠️ Calendar invite gagal terkirim");
+                    setCalendarWarning("⚠️ Calendar booking gagal tersinkron");
                     setTimeout(() => setCalendarWarning(null), 5000);
                 }
+            } else if (freelancerIds.length > 0) {
+                setCalendarWarning("⚠️ Calendar invite tidak terkirim: jadwal sesi belum diisi");
+                setTimeout(() => setCalendarWarning(null), 5000);
             }
             router.push(`/${locale}/bookings/${id}`);
         }

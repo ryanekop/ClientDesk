@@ -18,13 +18,6 @@ import {
     type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
 import {
-    DEFAULT_CALENDAR_EVENT_FORMAT,
-    applyCalendarTemplate,
-    buildCalendarRangeFromLocalInput,
-    buildCalendarTemplateVars,
-    resolveTemplateByEventType,
-} from "@/utils/google/template";
-import {
     getActiveEventTypes,
     getBuiltInEventTypes,
     normalizeEventTypeList,
@@ -138,9 +131,6 @@ export default function NewBookingPage() {
     const supabase = createClient();
     const [saving, setSaving] = React.useState(false);
     const [calendarWarning, setCalendarWarning] = React.useState<string | null>(null);
-    const [calendarEventFormat, setCalendarEventFormat] = React.useState(DEFAULT_CALENDAR_EVENT_FORMAT);
-    const [calendarEventFormatMap, setCalendarEventFormatMap] = React.useState<Record<string, string>>({});
-    const [studioName, setStudioName] = React.useState("");
     const [services, setServices] = React.useState<Service[]>([]);
     const [freelancers, setFreelancers] = React.useState<Freelance[]>([]);
     const [eventTypeOptions, setEventTypeOptions] = React.useState<string[]>(EVENT_TYPES);
@@ -190,16 +180,11 @@ export default function NewBookingPage() {
             const [{ data: svcs }, { data: frees }, { data: prof }] = await Promise.all([
                 supabase.from("services").select("id, name, price, is_addon").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
-                supabase.from("profiles").select("custom_statuses, calendar_event_format, calendar_event_format_map, studio_name, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
+                supabase.from("profiles").select("custom_statuses, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
             ]);
             setServices((svcs || []) as Service[]);
             setFreelancers((frees || []) as Freelance[]);
             if (prof?.custom_statuses) setCustomStatuses(prof.custom_statuses as string[]);
-            if ((prof as any)?.calendar_event_format) setCalendarEventFormat((prof as any).calendar_event_format);
-            if ((prof as any)?.calendar_event_format_map && typeof (prof as any).calendar_event_format_map === "object") {
-                setCalendarEventFormatMap((prof as any).calendar_event_format_map);
-            }
-            if ((prof as any)?.studio_name) setStudioName((prof as any).studio_name);
             setEventTypeOptions(getActiveEventTypes({
                 customEventTypes: normalizeEventTypeList((prof as any)?.custom_event_types),
                 activeEventTypes: (prof as any)?.form_event_types,
@@ -367,6 +352,7 @@ export default function NewBookingPage() {
             total_price: parseFloat(totalPrice.toString()) || 0,
             dp_paid: parseFloat(dpPaid.toString()) || 0,
             status: statusVal,
+            client_status: statusVal,
             notes: notes || null,
             drive_folder_url: driveFolderUrl || null,
             portfolio_url: portfolioUrl || null,
@@ -397,83 +383,47 @@ export default function NewBookingPage() {
                 await supabase.from("booking_freelance").insert(
                     selectedFreelancerIds.map(fid => ({ booking_id: booking.id, freelance_id: fid }))
                 );
+            }
 
-                // Send calendar invites to assigned freelancers
+            if (sessionDate) {
                 try {
                     const selectedFreelancerEmails = freelancers
                         .filter(f => selectedFreelancerIds.includes(f.id))
                         .map(f => (f as any).google_email)
                         .filter(Boolean);
-                    if (!sessionDate) {
-                        setCalendarWarning("⚠️ Calendar invite tidak terkirim: jadwal sesi belum diisi");
+                    const noEmailNames = freelancers
+                        .filter(f => selectedFreelancerIds.includes(f.id) && !(f as any).google_email)
+                        .map(f => f.name);
+
+                    const res = await fetch("/api/google/calendar-invite", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            bookingId: booking.id,
+                            attendeeEmails: selectedFreelancerEmails,
+                        }),
+                    });
+
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        setCalendarWarning(`⚠️ Calendar booking gagal: ${err.error || "Google Calendar belum terkoneksi"}`);
                         setTimeout(() => setCalendarWarning(null), 5000);
-                    } else if (selectedFreelancerEmails.length === 0) {
-                        const noEmailNames = freelancers
-                            .filter(f => selectedFreelancerIds.includes(f.id) && !(f as any).google_email)
-                            .map(f => f.name);
-                        if (noEmailNames.length > 0) {
-                            setCalendarWarning(`⚠️ Calendar invite tidak terkirim: ${noEmailNames.join(", ")} belum punya Google Email`);
-                            setTimeout(() => setCalendarWarning(null), 5000);
-                        }
-                    } else {
-                        const res = await fetch("/api/google/calendar-invite", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                bookingId: booking.id,
-                                attendeeEmails: selectedFreelancerEmails,
-                            }),
-                        });
-                        if (!res.ok) {
-                            const err = await res.json().catch(() => ({}));
-                            setCalendarWarning(`⚠️ Calendar invite gagal: ${err.error || "Google Calendar belum terkoneksi"}`);
-                            setTimeout(() => setCalendarWarning(null), 5000);
-                        }
+                    } else if (noEmailNames.length > 0) {
+                        setCalendarWarning(`⚠️ Invite tim belum lengkap: ${noEmailNames.join(", ")} belum punya Google Email`);
+                        setTimeout(() => setCalendarWarning(null), 5000);
                     }
                 } catch {
-                    setCalendarWarning("⚠️ Calendar invite gagal terkirim");
+                    setCalendarWarning("⚠️ Calendar booking gagal tersinkron");
                     setTimeout(() => setCalendarWarning(null), 5000);
                 }
-            }
-
-            // Auto-sync to Google Calendar (fire-and-forget)
-            if (sessionDate) {
-                const svc = selectedMainServices[0] || null;
-                const durationMinutes = 120;
-                const range = buildCalendarRangeFromLocalInput(sessionDate, durationMinutes);
-                // Build summary from calendar_event_format template
-                const selectedFormat = resolveTemplateByEventType(
-                    calendarEventFormatMap,
-                    eventType,
-                    calendarEventFormat || DEFAULT_CALENDAR_EVENT_FORMAT,
-                );
-                const templateVars = buildCalendarTemplateVars({
-                    client_name: clientName,
-                    service_name: svc?.name || eventType || "Sesi Foto",
-                    event_type: eventType || "-",
-                    booking_code: invoiceCode,
-                    studio_name: studioName || "Client Desk",
-                    location: location || "-",
-                    ...range.templateVars,
-                }, extraFields);
-                const summary = applyCalendarTemplate(selectedFormat, templateVars);
-
-                fetch("/api/google/sync", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        events: [{
-                            summary,
-                            description: `Kode: ${invoiceCode}\nKlien: ${clientName}\nLokasi: ${location || "-"}\nTipe: ${eventType || "-"}`,
-                            startLocal: range.start.dateTime,
-                            endLocal: range.end.dateTime,
-                        }],
-                    }),
-                }).catch(() => { }); // silently ignore if calendar not connected
+            } else if (selectedFreelancerIds.length > 0) {
+                setCalendarWarning("⚠️ Calendar invite tidak terkirim: jadwal sesi belum diisi");
+                setTimeout(() => setCalendarWarning(null), 5000);
             }
 
             router.push(`/${locale}/bookings/${booking.id}`);
-        } else { console.error(error); alert("Gagal menyimpan booking."); }
+        }
+        else { alert("Gagal menyimpan booking"); }
     }
 
     const currentExtraFields = EXTRA_FIELDS[eventType] || [];

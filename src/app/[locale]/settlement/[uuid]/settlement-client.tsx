@@ -396,6 +396,7 @@ export default function SettlementClient({
       className="min-h-screen px-4 py-8 sm:py-12"
       style={{
         backgroundImage: `linear-gradient(135deg, ${brandColor}18 0%, #ffffff 40%, #ecfdf5 100%)`,
+        color: "#0f172a",
       }}
     >
       <div className="mx-auto max-w-3xl space-y-6">
@@ -406,22 +407,22 @@ export default function SettlementClient({
           >
             {t("title")}
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
             {effectiveVendor.studioName}
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-slate-600">
             {t("title")} - {booking.clientName}
           </p>
-          <p className="mx-auto max-w-xl text-sm text-foreground/80">
+          <p className="mx-auto max-w-xl text-sm text-slate-700">
             {topGreeting}
           </p>
         </div>
 
-        <div className="rounded-2xl border bg-background p-6 shadow-sm space-y-4">
-          <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 space-y-4 text-slate-900">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4">
             <div>
               <h2 className="text-lg font-bold">{t("finalInvoice")}</h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-slate-600">
                 {t("bookingCode")}{" "}
                 <span className="font-semibold" style={{ color: brandColor }}>
                   {booking.bookingCode}
@@ -451,24 +452,24 @@ export default function SettlementClient({
 
           <div className="space-y-3 text-sm">
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">{t("clientName")}</span>
+              <span className="text-slate-500">{t("clientName")}</span>
               <span className="font-medium text-right">{booking.clientName}</span>
             </div>
             {booking.serviceName ? (
               <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">{t("service")}</span>
+                <span className="text-slate-500">{t("service")}</span>
                 <span className="font-medium text-right">{booking.serviceName}</span>
               </div>
             ) : null}
             {booking.eventType ? (
               <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">{t("eventType")}</span>
+                <span className="text-slate-500">{t("eventType")}</span>
                 <span className="font-medium text-right">{booking.eventType}</span>
               </div>
             ) : null}
             {booking.sessionDate ? (
               <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">{t("schedule")}</span>
+                <span className="text-slate-500">{t("schedule")}</span>
                 <span className="font-medium text-right">
                   {new Date(booking.sessionDate).toLocaleString(
                     locale === "en" ? "en-US" : "id-ID",
@@ -477,32 +478,32 @@ export default function SettlementClient({
               </div>
             ) : null}
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">{t("baseTotal")}</span>
+              <span className="text-slate-500">{t("baseTotal")}</span>
               <span className="font-medium">{formatCurrency(booking.totalPrice)}</span>
             </div>
           </div>
 
-          <div className="rounded-xl border border-dashed bg-muted/20 p-4 space-y-3">
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <h3 className="font-semibold">{t("adjustmentsTitle")}</h3>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-slate-500">
                 {booking.finalAdjustments.length} {t("items")}
               </span>
             </div>
             {booking.finalAdjustments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("noAdjustments")}</p>
+              <p className="text-sm text-slate-500">{t("noAdjustments")}</p>
             ) : (
               <div className="space-y-2">
                 {booking.finalAdjustments.map((item) => (
                   <div
                     key={item.id}
-                    className="rounded-lg border bg-background px-3 py-2 text-sm"
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="font-medium">{item.label}</p>
                         {item.reason ? (
-                          <p className="text-xs text-muted-foreground">{item.reason}</p>
+                          <p className="text-xs text-slate-500">{item.reason}</p>
                         ) : null}
                       </div>
                       <span className="font-semibold">{formatCurrency(item.amount)}</span>
@@ -513,20 +514,20 @@ export default function SettlementClient({
             )}
           </div>
 
-          <div className="space-y-2 border-t pt-4 text-sm">
+          <div className="space-y-2 border-t border-slate-200 pt-4 text-sm">
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">{t("adjustmentsTotal")}</span>
+              <span className="text-slate-500">{t("adjustmentsTotal")}</span>
               <span className="font-medium">{formatCurrency(totalAdjustments)}</span>
             </div>
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">{t("finalTotal")}</span>
+              <span className="text-slate-500">{t("finalTotal")}</span>
               <span className="font-medium">{formatCurrency(finalInvoiceTotal)}</span>
             </div>
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">{t("dpPaid")}</span>
+              <span className="text-slate-500">{t("dpPaid")}</span>
               <span className="font-medium">- {formatCurrency(booking.dpPaid)}</span>
             </div>
-            <div className="flex justify-between gap-4 border-t pt-2">
+            <div className="flex justify-between gap-4 border-t border-slate-200 pt-2">
               <span className="font-semibold">{t("remaining")}</span>
               <span className="text-lg font-bold text-amber-600">
                 {formatCurrency(remaining)}
@@ -552,7 +553,7 @@ export default function SettlementClient({
         </div>
 
         {settlementStatus === "draft" && !booking.isFullyPaid ? (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800 shadow-sm">
             <div className="flex items-start gap-3">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <p>{t("notOpened")}</p>
@@ -561,7 +562,7 @@ export default function SettlementClient({
         ) : null}
 
         {(submitted || settlementStatus === "submitted") && !booking.isFullyPaid ? (
-          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-800">
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-800 shadow-sm">
             <div className="flex items-start gap-3">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="space-y-3">
@@ -582,7 +583,7 @@ export default function SettlementClient({
         ) : null}
 
         {(booking.isFullyPaid || settlementStatus === "paid") ? (
-          <div className="rounded-2xl border border-green-200 bg-green-50 p-5 text-sm text-green-800">
+          <div className="rounded-2xl border border-green-200 bg-green-50 p-5 text-sm text-green-800 shadow-sm">
             <div className="flex items-start gap-3">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
               <p>{t("paidInfo")}</p>
@@ -593,11 +594,11 @@ export default function SettlementClient({
         {!submitted && !booking.isFullyPaid && canSubmit && remaining > 0 ? (
           <form
             onSubmit={handleSubmit}
-            className="rounded-2xl border bg-background p-6 shadow-sm space-y-5"
+            className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/50 space-y-5 text-slate-900"
           >
             <div>
               <h2 className="text-lg font-bold">{t("paymentFormTitle")}</h2>
-              <p className="text-sm text-muted-foreground">{t("paymentFormDesc")}</p>
+              <p className="text-sm text-slate-600">{t("paymentFormDesc")}</p>
             </div>
 
             <PaymentMethodSection
