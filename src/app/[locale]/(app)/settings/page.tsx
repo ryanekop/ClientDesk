@@ -687,39 +687,26 @@ export default function SettingsPage() {
   ]);
 
   const loadSettingsProfile = React.useEffectEvent(async (userId: string) => {
-    const selectColumns = [...PROFILE_SETTINGS_SELECT_COLUMNS];
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
 
-    while (selectColumns.length > 0) {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(selectColumns.join(", "))
-        .eq("id", userId)
-        .single();
-
-      if (!error) {
-        return data;
-      }
-
-      const missingColumn = extractMissingColumnFromSupabaseError(error);
-      if (
-        missingColumn &&
-        selectColumns.includes(
-          missingColumn as (typeof PROFILE_SETTINGS_SELECT_COLUMNS)[number],
-        )
-      ) {
-        unsupportedProfileColumnsRef.current.add(missingColumn);
-        const nextColumns = selectColumns.filter(
-          (column) => column !== missingColumn,
-        );
-        selectColumns.splice(0, selectColumns.length, ...nextColumns);
-        continue;
-      }
-
+    if (error) {
       console.warn("Failed to load profile settings:", error.message);
       return null;
     }
 
-    return null;
+    if (data && typeof data === "object") {
+      PROFILE_SETTINGS_SELECT_COLUMNS.forEach((column) => {
+        if (!Object.prototype.hasOwnProperty.call(data, column)) {
+          unsupportedProfileColumnsRef.current.add(column);
+        }
+      });
+    }
+
+    return data;
   });
 
   const ensureProfileRecord = React.useEffectEvent(async () => {
