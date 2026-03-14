@@ -15,6 +15,11 @@ import { useLocale } from "next-intl";
 import { cn } from "@/lib/utils";
 import { getSessionDateUTC, formatSessionDate } from "@/utils/format-date";
 import {
+    CANCELLED_BOOKING_STATUS,
+    DEFAULT_CLIENT_STATUSES,
+    getBookingStatusOptions,
+} from "@/lib/client-status";
+import {
     DEFAULT_CALENDAR_EVENT_FORMAT,
     applyCalendarTemplate,
     buildCalendarRangeFromStoredSession,
@@ -27,6 +32,12 @@ const locales = { "id-ID": id };
 const localizer = dateFnsLocalizer({
     format, parse, startOfWeek, getDay, locales,
 });
+
+type StatusVisual = {
+    eventBackground: string;
+    eventBorder: string;
+    badgeClass: string;
+};
 
 type CalendarEvent = Event & {
     bookingId?: string;
@@ -42,6 +53,59 @@ type CalendarEvent = Event & {
 type FreelancerCal = { id: string; name: string; google_email: string };
 
 const FREELANCER_COLORS = ["#8b5cf6", "#ec4899", "#f97316", "#06b6d4", "#84cc16"];
+const STATUS_VISUAL_PALETTE: StatusVisual[] = [
+    {
+        eventBackground: "#3b82f6",
+        eventBorder: "#2563eb",
+        badgeClass: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+    },
+    {
+        eventBackground: "#a855f7",
+        eventBorder: "#9333ea",
+        badgeClass: "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400",
+    },
+    {
+        eventBackground: "#f59e0b",
+        eventBorder: "#d97706",
+        badgeClass: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
+    },
+    {
+        eventBackground: "#f97316",
+        eventBorder: "#ea580c",
+        badgeClass: "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400",
+    },
+    {
+        eventBackground: "#ec4899",
+        eventBorder: "#db2777",
+        badgeClass: "bg-pink-100 text-pink-700 dark:bg-pink-500/10 dark:text-pink-400",
+    },
+    {
+        eventBackground: "#10b981",
+        eventBorder: "#059669",
+        badgeClass: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
+    },
+    {
+        eventBackground: "#10b981",
+        eventBorder: "#059669",
+        badgeClass: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
+    },
+    {
+        eventBackground: "#06b6d4",
+        eventBorder: "#0891b2",
+        badgeClass: "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-400",
+    },
+    {
+        eventBackground: "#6366f1",
+        eventBorder: "#4f46e5",
+        badgeClass: "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400",
+    },
+    {
+        eventBackground: "#f43f5e",
+        eventBorder: "#e11d48",
+        badgeClass: "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400",
+    },
+];
+const DEFAULT_STATUS_OPTIONS = getBookingStatusOptions(DEFAULT_CLIENT_STATUSES);
 
 /* ─── Custom Toolbar ─── */
 function CustomToolbar({ onNavigate, onView, view, label }: ToolbarProps<CalendarEvent, object>) {
@@ -100,6 +164,7 @@ export default function CalendarPage() {
     const [calendarEventFormat, setCalendarEventFormat] = React.useState(DEFAULT_CALENDAR_EVENT_FORMAT);
     const [calendarEventFormatMap, setCalendarEventFormatMap] = React.useState<Record<string, string>>({});
     const [studioName, setStudioName] = React.useState("Client Desk");
+    const [statusOptions, setStatusOptions] = React.useState<string[]>(DEFAULT_STATUS_OPTIONS);
     const [calendarWarningDismissed, setCalendarWarningDismissed] = React.useState(() => {
         if (typeof window !== "undefined") return localStorage.getItem("dismiss_calendar_warning") === "1";
         return false;
@@ -114,6 +179,32 @@ export default function CalendarPage() {
     // Event popup
     const [selectedEvent, setSelectedEvent] = React.useState<CalendarEvent | null>(null);
     const [eventPopupOpen, setEventPopupOpen] = React.useState(false);
+
+    const { statusVisuals, statusVisualsLowercase } = React.useMemo(() => {
+        const map: Record<string, StatusVisual> = {};
+        statusOptions
+            .filter((status) => status.toLowerCase() !== CANCELLED_BOOKING_STATUS.toLowerCase())
+            .forEach((status, index) => {
+                map[status] = STATUS_VISUAL_PALETTE[index % STATUS_VISUAL_PALETTE.length];
+            });
+        map[CANCELLED_BOOKING_STATUS] = {
+            eventBackground: "#ef4444",
+            eventBorder: "#dc2626",
+            badgeClass: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+        };
+
+        const lowerMap: Record<string, StatusVisual> = {};
+        Object.entries(map).forEach(([status, visual]) => {
+            lowerMap[status.toLowerCase()] = visual;
+        });
+
+        return { statusVisuals: map, statusVisualsLowercase: lowerMap };
+    }, [statusOptions]);
+
+    const resolveStatusVisual = React.useCallback((status?: string | null) => {
+        if (!status) return null;
+        return statusVisuals[status] || statusVisualsLowercase[status.toLowerCase()] || null;
+    }, [statusVisuals, statusVisualsLowercase]);
 
     React.useEffect(() => {
         fetchBookings();
@@ -185,7 +276,7 @@ export default function CalendarPage() {
 
         const { data: profile } = await supabase
             .from("profiles")
-            .select("google_access_token, google_refresh_token, calendar_event_format, calendar_event_format_map, studio_name")
+            .select("google_access_token, google_refresh_token, calendar_event_format, calendar_event_format_map, studio_name, custom_client_statuses")
             .eq("id", user.id)
             .single();
 
@@ -201,6 +292,7 @@ export default function CalendarPage() {
         if ((profile as any)?.studio_name) {
             setStudioName((profile as any).studio_name);
         }
+        setStatusOptions(getBookingStatusOptions((profile as any)?.custom_client_statuses as string[] | null | undefined));
     }
 
     async function fetchBookings() {
@@ -340,15 +432,9 @@ export default function CalendarPage() {
                 }
             };
         }
-        let backgroundColor = "#64748b";
-        let borderColor = "#475569";
-        switch (event.status?.toLowerCase()) {
-            case "pending": backgroundColor = "#64748b"; borderColor = "#475569"; break;
-            case "dp": backgroundColor = "#f59e0b"; borderColor = "#d97706"; break;
-            case "terjadwal": backgroundColor = "#3b82f6"; borderColor = "#2563eb"; break;
-            case "selesai": backgroundColor = "#10b981"; borderColor = "#059669"; break;
-            case "batal": backgroundColor = "#ef4444"; borderColor = "#dc2626"; break;
-        }
+        const visual = resolveStatusVisual(event.status);
+        const backgroundColor = visual?.eventBackground || "#64748b";
+        const borderColor = visual?.eventBorder || "#475569";
         return {
             style: {
                 backgroundColor, borderColor, color: "white",
@@ -357,11 +443,6 @@ export default function CalendarPage() {
                 cursor: "pointer",
             }
         };
-    };
-
-    const statusLabel: Record<string, string> = {
-        pending: "Pending", dp: "DP", terjadwal: "Terjadwal",
-        selesai: "Selesai", batal: "Batal",
     };
 
     return (
@@ -458,11 +539,15 @@ export default function CalendarPage() {
 
             {/* Legend */}
             <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#64748b]"></span> {t("pending")}</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#f59e0b]"></span> {t("dp")}</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#3b82f6]"></span> {t("terjadwal")}</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#10b981]"></span> {t("selesai")}</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#ef4444]"></span> {t("batal")}</span>
+                {statusOptions.map((status) => {
+                    const visual = resolveStatusVisual(status);
+                    return (
+                        <span key={status} className="flex items-center gap-1.5">
+                            <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: visual?.eventBackground || "#64748b" }}></span>
+                            {status}
+                        </span>
+                    );
+                })}
                 {freelancerCals.map((f, i) => activeFreelancers.has(f.id) && (
                     <span key={f.id} className="flex items-center gap-1.5">
                         <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: FREELANCER_COLORS[i % FREELANCER_COLORS.length] }}></span>
@@ -512,45 +597,42 @@ export default function CalendarPage() {
 
             {/* Event Popup */}
             <Dialog open={eventPopupOpen} onOpenChange={setEventPopupOpen}>
-                <DialogContent className="w-[calc(100vw-2rem)] max-w-[760px] p-0 overflow-hidden">
+                <DialogContent className="w-[calc(100vw-2rem)] max-w-[760px] overflow-hidden">
                     <DialogHeader>
-                        <DialogTitle className="text-2xl px-6 pt-6">{selectedEvent?.clientName}</DialogTitle>
+                        <DialogTitle className="text-lg">{selectedEvent?.clientName}</DialogTitle>
                     </DialogHeader>
                     {selectedEvent && (
-                        <div className="space-y-4 px-6 py-4">
-                            <div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-4 text-sm sm:text-base">
-                                <span className="text-muted-foreground shrink-0">Paket</span>
-                                <span className="font-semibold break-words">{selectedEvent.serviceName}</span>
+                        <div className="space-y-3 py-1">
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground w-20 shrink-0">Paket</span>
+                                <span className="font-medium break-words">{selectedEvent.serviceName}</span>
                             </div>
-                            <div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-4 text-sm sm:text-base">
-                                <span className="text-muted-foreground shrink-0">Jadwal</span>
-                                <span className="font-semibold break-words">{selectedEvent.start ? format(selectedEvent.start, "PPPp", { locale: id }) : "-"}</span>
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground w-20 shrink-0">Jadwal</span>
+                                <span className="font-medium break-words">{selectedEvent.start ? format(selectedEvent.start, "PPPp", { locale: id }) : "-"}</span>
                             </div>
-                            <div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-4 text-sm sm:text-base">
-                                <span className="text-muted-foreground shrink-0">Status</span>
-                                <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full",
-                                    selectedEvent.status?.toLowerCase() === "pending" && "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-                                    selectedEvent.status?.toLowerCase() === "dp" && "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-                                    selectedEvent.status?.toLowerCase() === "terjadwal" && "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-                                    selectedEvent.status?.toLowerCase() === "selesai" && "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
-                                    selectedEvent.status?.toLowerCase() === "batal" && "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground w-20 shrink-0">Status</span>
+                                <span className={cn(
+                                    "text-xs font-medium px-2 py-0.5 rounded-full",
+                                    resolveStatusVisual(selectedEvent.status)?.badgeClass || "bg-muted text-muted-foreground",
                                 )}>
-                                    {statusLabel[selectedEvent.status?.toLowerCase() || ""] || selectedEvent.status}
+                                    {selectedEvent.status || "-"}
                                 </span>
                             </div>
                             {selectedEvent.location && (
-                                <div className="grid grid-cols-[120px_minmax(0,1fr)] items-start gap-4 text-sm sm:text-base">
-                                    <span className="text-muted-foreground shrink-0">Lokasi</span>
-                                    <span className="font-semibold break-words">{selectedEvent.location}</span>
+                                <div className="flex items-start gap-2 text-sm">
+                                    <span className="text-muted-foreground w-20 shrink-0">Lokasi</span>
+                                    <span className="font-medium break-words">{selectedEvent.location}</span>
                                 </div>
                             )}
                         </div>
                     )}
-                    <DialogFooter className="flex-col sm:flex-row gap-3 px-6 pb-6 pt-1">
-                        <Button variant="outline" className="flex-1 gap-2 h-12 text-base" onClick={openGoogleCalendarEvent}>
+                    <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
+                        <Button variant="outline" className="flex-1 gap-2" onClick={openGoogleCalendarEvent}>
                             <ExternalLink className="w-4 h-4" /> Buka di Google Calendar
                         </Button>
-                        <Button className="flex-1 gap-2 h-12 text-base bg-foreground text-background hover:bg-foreground/90" onClick={goToBookingDetail}>
+                        <Button className="flex-1 gap-2 bg-foreground text-background hover:bg-foreground/90" onClick={goToBookingDetail}>
                             <Info className="w-4 h-4" /> Lihat Detail Booking
                         </Button>
                     </DialogFooter>
