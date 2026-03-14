@@ -29,6 +29,10 @@ BEGIN
   IF client_statuses_type IS NOT NULL AND client_statuses_type <> 'jsonb' THEN
     EXECUTE '
       ALTER TABLE public.profiles
+      ALTER COLUMN custom_client_statuses DROP DEFAULT
+    ';
+    EXECUTE '
+      ALTER TABLE public.profiles
       ALTER COLUMN custom_client_statuses TYPE jsonb
       USING to_jsonb(custom_client_statuses)
     ';
@@ -44,11 +48,21 @@ BEGIN
   IF booking_statuses_type IS NOT NULL AND booking_statuses_type <> 'jsonb' THEN
     EXECUTE '
       ALTER TABLE public.profiles
+      ALTER COLUMN custom_statuses DROP DEFAULT
+    ';
+    EXECUTE '
+      ALTER TABLE public.profiles
       ALTER COLUMN custom_statuses TYPE jsonb
       USING to_jsonb(custom_statuses)
     ';
   END IF;
 END $$;
+
+ALTER TABLE public.profiles
+ALTER COLUMN custom_client_statuses SET DEFAULT '["Booking Confirmed","Sesi Foto / Acara","Antrian Edit","Proses Edit","Revisi","File Siap","Selesai"]'::jsonb;
+
+ALTER TABLE public.profiles
+ALTER COLUMN custom_statuses SET DEFAULT '["Booking Confirmed","Sesi Foto / Acara","Antrian Edit","Proses Edit","Revisi","File Siap","Selesai"]'::jsonb;
 
 WITH normalized_profiles AS (
   SELECT
