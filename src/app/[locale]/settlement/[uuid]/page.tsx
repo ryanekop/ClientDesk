@@ -7,6 +7,7 @@ import {
   resolveDriveImageUrl,
 } from "@/lib/payment-config";
 import { normalizeFinalAdjustments } from "@/lib/final-settlement";
+import { resolveTemplateType } from "@/lib/whatsapp-template";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,13 +39,12 @@ async function getSettlementData(uuid: string) {
       .single(),
     supabaseAdmin
       .from("templates")
-      .select("type, content, content_en")
-      .eq("user_id", booking.user_id)
-      .eq("type", "whatsapp_settlement_confirm"),
+      .select("type, name, content, content_en")
+      .eq("user_id", booking.user_id),
   ]);
 
   const settlementConfirmTemplate = Array.isArray(templates)
-    ? templates.find((template) => template.type === "whatsapp_settlement_confirm")
+    ? templates.find((template) => resolveTemplateType(template) === "whatsapp_settlement_confirm")
     : null;
 
   return {

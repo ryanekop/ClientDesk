@@ -69,7 +69,14 @@ CREATE TABLE bookings (
 CREATE TABLE templates (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('whatsapp_client', 'whatsapp_freelancer', 'invoice')),
+  type TEXT NOT NULL CHECK (type IN (
+    'whatsapp_client',
+    'whatsapp_booking_confirm',
+    'whatsapp_settlement_client',
+    'whatsapp_settlement_confirm',
+    'whatsapp_freelancer',
+    'invoice'
+  )),
   name TEXT NOT NULL,
   content TEXT NOT NULL, -- The text format containing variables like {{client_name}}
   is_default BOOLEAN DEFAULT false,

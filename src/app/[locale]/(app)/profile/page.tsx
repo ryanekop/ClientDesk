@@ -8,6 +8,12 @@ import { useTranslations, useLocale } from "next-intl";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import Link from "next/link";
 
+function extractMissingColumnFromSupabaseError(error: { message?: string } | null) {
+    const message = error?.message || "";
+    const match = message.match(/Could not find the '([^']+)' column/i);
+    return match?.[1] || null;
+}
+
 export default function ProfilePage() {
     const supabase = createClient();
     const t = useTranslations("Profile");
@@ -65,35 +71,46 @@ export default function ProfilePage() {
         setUserId(user.id);
         setEmail(user.email || "");
 
-        // Fetch full_name first (always exists)
-        const { data: profile } = await supabase
-            .from("profiles")
-            .select("full_name")
-            .eq("id", user.id)
-            .single();
+        const loadProfilePromise = (async () => {
+            const selectColumns = ["full_name", "avatar_url"];
 
-        setFullName(profile?.full_name || String(user.user_metadata?.full_name || user.email?.split("@")[0] || ""));
+            while (selectColumns.length > 0) {
+                const { data, error } = await supabase
+                    .from("profiles")
+                    .select(selectColumns.join(", "))
+                    .eq("id", user.id)
+                    .single();
 
-        // Try fetching avatar_url separately (column may not exist yet)
-        try {
-            const { data: avatarData } = await supabase
-                .from("profiles")
-                .select("avatar_url")
-                .eq("id", user.id)
-                .single();
-            if (avatarData?.avatar_url) {
-                setAvatarUrl(avatarData.avatar_url);
+                if (!error) {
+                    return data as { full_name?: string | null; avatar_url?: string | null } | null;
+                }
+
+                const missingColumn = extractMissingColumnFromSupabaseError(error);
+                if (missingColumn && selectColumns.includes(missingColumn)) {
+                    const nextColumns = selectColumns.filter((column) => column !== missingColumn);
+                    selectColumns.splice(0, selectColumns.length, ...nextColumns);
+                    continue;
+                }
+
+                return null;
             }
-        } catch {
-            // avatar_url column doesn't exist yet — ignore
-        }
 
-        // Fetch subscription
-        const { data: sub } = await supabase
+            return null;
+        })();
+
+        const subscriptionPromise = supabase
             .from("subscriptions")
             .select("tier, status, end_date, trial_end_date")
             .eq("user_id", user.id)
             .single();
+
+        const [profile, { data: sub }] = await Promise.all([
+            loadProfilePromise,
+            subscriptionPromise,
+        ]);
+
+        setFullName(profile?.full_name || String(user.user_metadata?.full_name || user.email?.split("@")[0] || ""));
+        setAvatarUrl(profile?.avatar_url || null);
         setSubscription(sub);
 
         setLoading(false);

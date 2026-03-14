@@ -90,7 +90,7 @@ export default function FinancePage() {
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [studioName, setStudioName] = React.useState("");
     const [savedTemplates, setSavedTemplates] = React.useState<
-        { id: string; type: string; content: string; content_en: string; event_type: string | null }[]
+        { id: string; type: string; name?: string | null; content: string; content_en: string; event_type: string | null }[]
     >([]);
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_FINANCE_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
@@ -110,7 +110,7 @@ export default function FinancePage() {
                 .order("created_at", { ascending: false }),
             supabase
                 .from("templates")
-                .select("id, type, content, content_en, event_type")
+                .select("id, type, name, content, content_en, event_type")
                 .eq("user_id", user.id),
             supabase.from("profiles").select("studio_name, table_column_preferences, form_sections").eq("id", user.id).single(),
         ]);

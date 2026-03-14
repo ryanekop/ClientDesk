@@ -432,7 +432,7 @@ export default function BookingDetailPage() {
         async function fetchTemplates() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
-            const { data } = await supabase.from("templates").select("id, type, content, content_en, event_type").eq("user_id", user.id);
+            const { data } = await supabase.from("templates").select("id, type, name, content, content_en, event_type").eq("user_id", user.id);
             setSavedTemplates((data || []) as { id: string; type: string; content: string; content_en: string; event_type: string | null }[]);
         }
         load();

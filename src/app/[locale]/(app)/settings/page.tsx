@@ -20,6 +20,11 @@ import {
     getCalendarTemplateVariables,
 } from "@/utils/google/template";
 import {
+    getStoredTemplateName,
+    getStoredTemplateType,
+    resolveTemplateType,
+} from "@/lib/whatsapp-template";
+import {
     getEventExtraFieldPreviewVars,
     getEventExtraFieldTemplateTokens,
 } from "@/utils/form-extra-fields";
@@ -127,6 +132,34 @@ function extractMissingColumnFromSupabaseError(error: { message?: string } | nul
     const match = message.match(/Could not find the '([^']+)' column/i);
     return match?.[1] || null;
 }
+
+const PROFILE_SETTINGS_SELECT_COLUMNS = [
+    "id",
+    "full_name",
+    "studio_name",
+    "whatsapp_number",
+    "vendor_slug",
+    "google_access_token",
+    "google_refresh_token",
+    "google_drive_access_token",
+    "google_drive_refresh_token",
+    "calendar_event_format",
+    "calendar_event_format_map",
+    "calendar_event_description",
+    "calendar_event_description_map",
+    "drive_folder_format",
+    "drive_folder_format_map",
+    "drive_folder_structure_map",
+    "invoice_logo_url",
+    "custom_statuses",
+    "custom_client_statuses",
+    "queue_trigger_status",
+    "default_wa_target",
+    "final_invoice_visible_from_status",
+    "form_event_types",
+    "custom_event_types",
+    "form_sections",
+] as const;
 
 // Google Calendar SVG Logo (official 2020)
 function GoogleCalendarLogo({ className }: { className?: string }) {
@@ -411,6 +444,35 @@ export default function SettingsPage() {
         }
     }, [availableEventTypes, selectedCalendarEventType, selectedDriveEventType, selectedEventType]);
 
+    const loadSettingsProfile = React.useEffectEvent(async (userId: string) => {
+        const selectColumns = [...PROFILE_SETTINGS_SELECT_COLUMNS];
+
+        while (selectColumns.length > 0) {
+            const { data, error } = await supabase
+                .from("profiles")
+                .select(selectColumns.join(", "))
+                .eq("id", userId)
+                .single();
+
+            if (!error) {
+                return data;
+            }
+
+            const missingColumn = extractMissingColumnFromSupabaseError(error);
+            if (missingColumn && selectColumns.includes(missingColumn as typeof PROFILE_SETTINGS_SELECT_COLUMNS[number])) {
+                unsupportedProfileColumnsRef.current.add(missingColumn);
+                const nextColumns = selectColumns.filter((column) => column !== missingColumn);
+                selectColumns.splice(0, selectColumns.length, ...nextColumns);
+                continue;
+            }
+
+            console.warn("Failed to load profile settings:", error.message);
+            return null;
+        }
+
+        return null;
+    });
+
     const fetchAll = React.useEffectEvent(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
@@ -419,14 +481,14 @@ export default function SettingsPage() {
             return;
         }
 
-        const { data: p, error: profileError } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", user.id)
-            .single();
-        if (profileError) {
-            console.warn("Failed to load full profile settings:", profileError.message);
-        }
+        const [p, templatesResponse] = await Promise.all([
+            loadSettingsProfile(user.id),
+            supabase
+                .from("templates")
+                .select("id, type, name, content, content_en, is_default, event_type")
+                .eq("user_id", user.id)
+                .order("created_at", { ascending: false }),
+        ]);
         const prof = (p ?? {
             id: user.id,
             full_name: String(user.user_metadata?.full_name || user.email?.split("@")[0] || ""),
@@ -519,8 +581,7 @@ export default function SettingsPage() {
         }
         setVendorSlug(prof?.vendor_slug || "");
 
-        const { data: tData } = await supabase.from("templates").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-        const allTemplates = (tData || []) as Template[];
+        const allTemplates = (templatesResponse.data || []) as Template[];
         setTemplates(allTemplates);
 
         // Initialize template contents from existing templates
@@ -535,12 +596,12 @@ export default function SettingsPage() {
                 // Initialize per event type
                 templateEventTypes.forEach(et => {
                     const key = `${tt.value}__${et}`;
-                    const existing = allTemplates.find((tmpl: any) => tmpl.type === tt.value && (tmpl.event_type || "Umum") === et);
+                    const existing = allTemplates.find((tmpl: Template) => resolveTemplateType(tmpl) === tt.value && (tmpl.event_type || "Umum") === et);
                     contents[key] = existing?.content || "";
                     contentsEn[key] = existing?.content_en || "";
                 });
             } else {
-                const existing = allTemplates.find((tmpl: any) => tmpl.type === tt.value);
+                const existing = allTemplates.find((tmpl: Template) => resolveTemplateType(tmpl) === tt.value);
                 contents[tt.value] = existing?.content || "";
                 contentsEn[tt.value] = existing?.content_en || "";
             }
@@ -651,13 +712,21 @@ export default function SettingsPage() {
 
         const content = templateContents[saveKey] || "";
         const contentEn = templateContentsEn[saveKey] || "";
-        const existing = templates.find(t => t.type === type && (eventType ? (t.event_type || "Umum") === eventType : !t.event_type || t.event_type === null));
+        const existing = templates.find((t) =>
+            resolveTemplateType(t) === type &&
+            (eventType ? (t.event_type || "Umum") === eventType : !t.event_type || t.event_type === null),
+        );
+        const storedType = getStoredTemplateType(type);
+        const storedName = getStoredTemplateName(
+            type,
+            templateTypes.find((tt) => tt.value === type)?.label || type,
+        );
 
         let nextTemplate: Template | null = null;
         if (existing) {
             const { data, error } = await supabase
                 .from("templates")
-                .update({ content, content_en: contentEn })
+                .update({ type: storedType, name: storedName, content, content_en: contentEn })
                 .eq("id", existing.id)
                 .select("id, type, name, content, content_en, is_default, event_type")
                 .single();
@@ -672,8 +741,8 @@ export default function SettingsPage() {
                 .from("templates")
                 .insert({
                     user_id: user.id,
-                    type,
-                    name: templateTypes.find(tt => tt.value === type)?.label || type,
+                    type: storedType,
+                    name: storedName,
                     content,
                     content_en: contentEn,
                     is_default: true,

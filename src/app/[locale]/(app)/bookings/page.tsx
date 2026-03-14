@@ -39,6 +39,7 @@ import {
     buildBookingMetadataColumns,
     getBookingMetadataValue,
 } from "@/lib/booking-table-columns";
+import { resolveTemplateType } from "@/lib/whatsapp-template";
 import * as XLSX from "xlsx";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
@@ -93,6 +94,7 @@ const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
 type SavedTemplate = {
     id: string;
     type: string;
+    name?: string | null;
     content: string;
     content_en: string;
     event_type: string | null;
@@ -133,9 +135,9 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
     if (freelancerName) {
         // Look for whatsapp_freelancer template
         const template = savedTemplates.find(
-            (t) => t.type === "whatsapp_freelancer" && t.event_type === booking.event_type,
+            (t) => resolveTemplateType(t) === "whatsapp_freelancer" && t.event_type === booking.event_type,
         ) || savedTemplates.find(
-            (t) => t.type === "whatsapp_freelancer" && (!t.event_type || t.event_type === "Umum"),
+            (t) => resolveTemplateType(t) === "whatsapp_freelancer" && (!t.event_type || t.event_type === "Umum"),
         );
         if (template) {
             const content = locale === "en" ? (template.content_en || template.content) : template.content;
@@ -146,7 +148,7 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
     }
 
     // Look for whatsapp_client template
-    const template = savedTemplates.find(t => t.type === "whatsapp_client");
+    const template = savedTemplates.find((t) => resolveTemplateType(t) === "whatsapp_client");
     if (template) {
         const content = locale === "en" ? (template.content_en || template.content) : template.content;
         if (content.trim()) return applyVars(content);
@@ -207,7 +209,7 @@ export default function BookingsPage() {
     const fetchTemplates = React.useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const { data } = await supabase.from("templates").select("id, type, content, content_en, event_type").eq("user_id", user.id);
+        const { data } = await supabase.from("templates").select("id, type, name, content, content_en, event_type").eq("user_id", user.id);
         setSavedTemplates((data || []) as SavedTemplate[]);
     }, [supabase]);
 
