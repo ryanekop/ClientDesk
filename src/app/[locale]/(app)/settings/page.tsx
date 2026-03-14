@@ -2564,7 +2564,7 @@ export default function SettingsPage() {
                 )}
               </div>
             </div>
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-4">
+            <div className="pt-1">
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
@@ -2603,7 +2603,7 @@ export default function SettingsPage() {
         {activeTab === "template" && (
           <div className="space-y-6">
             {templateTypes.map((tt) => renderTemplateCard(tt))}
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-4">
+            <div className="pt-1">
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
@@ -2837,7 +2837,7 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-4">
+            <div className="pt-1">
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
@@ -2931,7 +2931,7 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-4">
+            <div className="pt-1">
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
