@@ -701,7 +701,7 @@ export default function BookingsPage() {
                             className="h-9 w-full rounded-md border border-input bg-background/50 pl-9 pr-3 text-sm focus-visible:ring-1 focus-visible:ring-ring outline-none transition-all"
                         />
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
                         <Button
                             variant="outline"
                             className="h-9 gap-2"
@@ -737,54 +737,54 @@ export default function BookingsPage() {
                     </div>
                 </div>
                 {showFilterPanel && (
-                    <div className="rounded-xl border bg-card p-4 shadow-sm">
-                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                            <div className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">Tanggal dari</label>
-                                <input type="date" value={dateFromFilter} onChange={e => setDateFromFilter(e.target.value)} className={selectFilterClass} />
+                    <div className="rounded-xl border bg-card p-5 shadow-sm">
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Tanggal dari</label>
+                                <input type="date" value={dateFromFilter} onChange={e => setDateFromFilter(e.target.value)} className={`${selectFilterClass} w-full`} />
                             </div>
-                            <div className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">Tanggal sampai</label>
-                                <input type="date" value={dateToFilter} onChange={e => setDateToFilter(e.target.value)} className={selectFilterClass} />
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Tanggal sampai</label>
+                                <input type="date" value={dateToFilter} onChange={e => setDateToFilter(e.target.value)} className={`${selectFilterClass} w-full`} />
                             </div>
-                            <div className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">Jenis acara</label>
-                                <select value={eventTypeFilter} onChange={e => setEventTypeFilter(e.target.value)} className={selectFilterClass}>
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Jenis acara</label>
+                                <select value={eventTypeFilter} onChange={e => setEventTypeFilter(e.target.value)} className={`${selectFilterClass} w-full`}>
                                     <option value="All">Semua Acara</option>
                                     {Array.from(new Set(bookings.map(b => b.event_type).filter(Boolean))).sort().map(t => (
                                         <option key={t} value={t!}>{t}</option>
                                     ))}
                                 </select>
                             </div>
-                            <div className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">Status</label>
-                                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={selectFilterClass}>
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Status</label>
+                                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={`${selectFilterClass} w-full`}>
                                     <option value="All">{tb("allStatus")}</option>
                                     {statusOpts.map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
                             </div>
-                            <div className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">Paket</label>
-                                <select value={packageFilter} onChange={e => setPackageFilter(e.target.value)} className={selectFilterClass}>
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Paket</label>
+                                <select value={packageFilter} onChange={e => setPackageFilter(e.target.value)} className={`${selectFilterClass} w-full`}>
                                     <option value="All">{tb("allPackages")}</option>
                                     {packages.map(p => <option key={p} value={p}>{p}</option>)}
                                 </select>
                             </div>
-                            <div className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">Freelance</label>
-                                <select value={freelanceFilter} onChange={e => setFreelanceFilter(e.target.value)} className={selectFilterClass}>
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Freelance</label>
+                                <select value={freelanceFilter} onChange={e => setFreelanceFilter(e.target.value)} className={`${selectFilterClass} w-full`}>
                                     <option value="All">{tb("allFreelance")}</option>
                                     {freelancerNames.map(f => <option key={f} value={f}>{f}</option>)}
                                 </select>
                             </div>
                             {activeExtraFilterFields.map((field) => (
-                                <div key={field.key} className="space-y-1.5 sm:space-y-0 sm:flex sm:items-center sm:gap-4">
-                                    <label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">{field.label}</label>
+                                <div key={field.key} className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                    <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{field.label}</label>
                                     {field.mode === "exact" ? (
                                         <select
                                             value={extraFieldFilters[field.key] || ""}
                                             onChange={e => setExtraFieldFilters(prev => ({ ...prev, [field.key]: e.target.value }))}
-                                            className={selectFilterClass}
+                                            className={`${selectFilterClass} w-full`}
                                         >
                                             <option value="">Semua</option>
                                             {(field.options || []).map((option) => (
@@ -797,7 +797,7 @@ export default function BookingsPage() {
                                             value={extraFieldFilters[field.key] || ""}
                                             onChange={e => setExtraFieldFilters(prev => ({ ...prev, [field.key]: e.target.value }))}
                                             placeholder={`Filter ${field.label.toLowerCase()}...`}
-                                            className={selectFilterClass}
+                                            className={`${selectFilterClass} w-full`}
                                         />
                                     )}
                                 </div>

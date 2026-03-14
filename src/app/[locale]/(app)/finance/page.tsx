@@ -685,33 +685,36 @@ export default function FinancePage() {
             </div>
 
             {/* Filters */}
-            <div className="flex gap-2">
-                {(["all", "pending", "paid"] as const).map((f) => (
+            <div className="space-y-2 sm:space-y-0 sm:flex sm:items-center sm:justify-between">
+                <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0">
+                    {(["all", "pending", "paid"] as const).map((f) => (
+                        <button
+                            key={f}
+                            onClick={() => setFilter(f)}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${filter === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+                        >
+                            {f === "all" ? t("semua") : f === "paid" ? t("lunas") : t("belumLunas")}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     <button
-                        key={f}
-                        onClick={() => setFilter(f)}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${filter === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+                        onClick={exportFinance}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-md border border-input bg-card text-foreground hover:bg-accent transition-colors cursor-pointer"
                     >
-                        {f === "all" ? t("semua") : f === "paid" ? t("lunas") : t("belumLunas")}
+                        <Download className="w-4 h-4" /> Export Excel
                     </button>
-                ))}
-                <div className="flex-1" />
-                <button
-                    onClick={exportFinance}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors cursor-pointer"
-                >
-                    <Download className="w-4 h-4" /> Export Excel
-                </button>
-                <TableColumnManager
-                    title="Kelola Kolom Keuangan"
-                    description="Atur kolom yang tampil di tabel keuangan. Kolom Nama dan Aksi selalu terkunci."
-                    columns={columns}
-                    open={columnManagerOpen}
-                    onOpenChange={setColumnManagerOpen}
-                    onChange={setColumns}
-                    onSave={() => saveColumnPreferences(columns)}
-                    saving={savingColumns}
-                />
+                    <TableColumnManager
+                        title="Kelola Kolom Keuangan"
+                        description="Atur kolom yang tampil di tabel keuangan. Kolom Nama dan Aksi selalu terkunci."
+                        columns={columns}
+                        open={columnManagerOpen}
+                        onOpenChange={setColumnManagerOpen}
+                        onChange={setColumns}
+                        onSave={() => saveColumnPreferences(columns)}
+                        saving={savingColumns}
+                    />
+                </div>
             </div>
 
             {/* Mobile Cards */}
@@ -772,10 +775,10 @@ export default function FinancePage() {
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500" title={tf("openFinalInvoice")} onClick={() => openInvoice(b, "final")}>
                                     <Download className="w-4 h-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300" title={tf("sendInitialInvoiceWA")} disabled={!b.client_whatsapp} onClick={() => sendInitialInvoiceWhatsApp(b)}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-emerald-600 hover:bg-transparent hover:text-emerald-700 dark:text-emerald-400" title={tf("sendInitialInvoiceWA")} disabled={!b.client_whatsapp} onClick={() => sendInitialInvoiceWhatsApp(b)}>
                                     <MessageCircle className="w-4 h-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300" title={tf("sendFinalInvoiceWA")} disabled={!b.client_whatsapp || !b.tracking_uuid} onClick={() => { void sendFinalInvoiceWhatsApp(b); }}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-orange-500 hover:bg-transparent hover:text-orange-600 dark:text-orange-400" title={tf("sendFinalInvoiceWA")} disabled={!b.client_whatsapp || !b.tracking_uuid} onClick={() => { void sendFinalInvoiceWhatsApp(b); }}>
                                     <MessageCircle className="w-4 h-4" />
                                 </Button>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-sky-500" title={tf("openSettlementLink")} disabled={!b.tracking_uuid} onClick={() => window.open(getSettlementLink(b), "_blank")}>
