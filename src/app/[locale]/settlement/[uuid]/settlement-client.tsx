@@ -30,7 +30,7 @@ import {
   fillWhatsAppTemplate,
   normalizeWhatsAppNumber,
 } from "@/lib/whatsapp-template";
-import { formatTemplateSessionDate } from "@/utils/format-date";
+import { formatSessionDate, formatTemplateSessionDate } from "@/utils/format-date";
 
 type BookingData = {
   bookingCode: string;
@@ -471,9 +471,10 @@ export default function SettlementClient({
               <div className="flex justify-between gap-4">
                 <span className="text-slate-500">{t("schedule")}</span>
                 <span className="font-medium text-right">
-                  {new Date(booking.sessionDate).toLocaleString(
-                    locale === "en" ? "en-US" : "id-ID",
-                  )}
+                  {formatSessionDate(booking.sessionDate, {
+                    locale: locale === "en" ? "en" : "id",
+                    withDay: false,
+                  })}
                 </span>
               </div>
             ) : null}

@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   Copy,
   CreditCard,
+  Eye,
   ExternalLink,
   Globe,
   Loader2,
@@ -13,6 +14,7 @@ import {
   QrCode,
   RefreshCw,
   Banknote,
+  Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
@@ -69,6 +71,9 @@ export default function SettlementFormPage() {
   const [sampleBookingCode, setSampleBookingCode] = React.useState("");
   const [lastSavedSnapshot, setLastSavedSnapshot] = React.useState<string | null>(null);
   const [iframeKey, setIframeKey] = React.useState(0);
+  const [mobileTab, setMobileTab] = React.useState<"settings" | "preview">(
+    "settings",
+  );
 
   const [brandColor, setBrandColor] = React.useState(DEFAULTS.brandColor);
   const [greeting, setGreeting] = React.useState(DEFAULTS.greeting);
@@ -284,7 +289,7 @@ export default function SettlementFormPage() {
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 items-start">
-        <div className="space-y-6">
+        <div className={`space-y-6 ${mobileTab === "preview" ? "hidden lg:block" : ""}`}>
           <div className="rounded-xl border bg-card shadow-sm">
             <div className="border-b px-6 py-4">
               <h3 className="font-semibold flex items-center gap-2">
@@ -442,7 +447,10 @@ export default function SettlementFormPage() {
           </div>
         </div>
 
-        <div className="sticky top-4 flex" style={{ height: "calc(100vh - 12rem)", maxHeight: "calc(100vh - 12rem)" }}>
+        <div
+          className={`sticky top-4 ${mobileTab === "settings" ? "hidden lg:flex" : "flex"}`}
+          style={{ height: "calc(100vh - 12rem)", maxHeight: "calc(100vh - 12rem)" }}
+        >
           <div className="flex w-full flex-col">
             <div className="mb-3 flex items-center justify-between shrink-0">
               <div>
@@ -518,6 +526,29 @@ export default function SettlementFormPage() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Mobile Bottom Tab Bar */}
+      <div className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-md border-t z-40 lg:hidden">
+        <div className="flex">
+          <button
+            onClick={() => setMobileTab("settings")}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${mobileTab === "settings" ? "text-primary" : "text-muted-foreground"}`}
+          >
+            <Settings2 className="w-5 h-5" />
+            Settings
+          </button>
+          <button
+            onClick={() => {
+              setMobileTab("preview");
+              setIframeKey((prev) => prev + 1);
+            }}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors cursor-pointer ${mobileTab === "preview" ? "text-primary" : "text-muted-foreground"}`}
+          >
+            <Eye className="w-5 h-5" />
+            Preview
+          </button>
         </div>
       </div>
     </div>
