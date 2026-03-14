@@ -8,10 +8,28 @@ import { useTranslations, useLocale } from "next-intl";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import Link from "next/link";
 
-function extractMissingColumnFromSupabaseError(error: { message?: string } | null) {
-    const message = error?.message || "";
-    const match = message.match(/Could not find the '([^']+)' column/i);
-    return match?.[1] || null;
+function extractMissingColumnFromSupabaseError(
+    error: { message?: string; details?: string; hint?: string } | null,
+) {
+    const messages = [error?.message, error?.details, error?.hint].filter(
+        (value): value is string => Boolean(value),
+    );
+
+    for (const message of messages) {
+        const schemaCacheMatch = message.match(/Could not find the '([^']+)' column/i);
+        if (schemaCacheMatch?.[1]) {
+            return schemaCacheMatch[1];
+        }
+
+        const postgresMatch = message.match(
+            /column\s+["']?(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)["']?\s+does not exist/i,
+        );
+        if (postgresMatch?.[1]) {
+            return postgresMatch[1];
+        }
+    }
+
+    return null;
 }
 
 export default function ProfilePage() {

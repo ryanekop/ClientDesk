@@ -211,11 +211,34 @@ function slugify(str: string) {
 }
 
 function extractMissingColumnFromSupabaseError(
-  error: { message?: string } | null,
+  error: { message?: string; details?: string; hint?: string } | null,
 ) {
-  const message = error?.message || "";
-  const match = message.match(/Could not find the '([^']+)' column/i);
-  return match?.[1] || null;
+  const messages = [error?.message, error?.details, error?.hint].filter(
+    (value): value is string => Boolean(value),
+  );
+
+  for (const message of messages) {
+    // PostgREST schema cache format:
+    // "Could not find the 'calendar_event_description' column ..."
+    const schemaCacheMatch = message.match(
+      /Could not find the '([^']+)' column/i,
+    );
+    if (schemaCacheMatch?.[1]) {
+      return schemaCacheMatch[1];
+    }
+
+    // Postgres format:
+    // "column profiles.calendar_event_description does not exist"
+    // or    "column \"calendar_event_description\" does not exist"
+    const postgresMatch = message.match(
+      /column\s+["']?(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)["']?\s+does not exist/i,
+    );
+    if (postgresMatch?.[1]) {
+      return postgresMatch[1];
+    }
+  }
+
+  return null;
 }
 
 const PROFILE_SETTINGS_SELECT_COLUMNS = [
