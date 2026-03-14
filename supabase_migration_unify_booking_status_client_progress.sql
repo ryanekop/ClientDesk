@@ -14,6 +14,42 @@ ADD COLUMN IF NOT EXISTS custom_statuses jsonb;
 ALTER TABLE public.bookings
 ADD COLUMN IF NOT EXISTS client_status text;
 
+DO $$
+DECLARE
+  client_statuses_type text;
+  booking_statuses_type text;
+BEGIN
+  SELECT data_type
+  INTO client_statuses_type
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'profiles'
+    AND column_name = 'custom_client_statuses';
+
+  IF client_statuses_type IS NOT NULL AND client_statuses_type <> 'jsonb' THEN
+    EXECUTE '
+      ALTER TABLE public.profiles
+      ALTER COLUMN custom_client_statuses TYPE jsonb
+      USING to_jsonb(custom_client_statuses)
+    ';
+  END IF;
+
+  SELECT data_type
+  INTO booking_statuses_type
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'profiles'
+    AND column_name = 'custom_statuses';
+
+  IF booking_statuses_type IS NOT NULL AND booking_statuses_type <> 'jsonb' THEN
+    EXECUTE '
+      ALTER TABLE public.profiles
+      ALTER COLUMN custom_statuses TYPE jsonb
+      USING to_jsonb(custom_statuses)
+    ';
+  END IF;
+END $$;
+
 WITH normalized_profiles AS (
   SELECT
     id,
