@@ -27,12 +27,32 @@ export function normalizeEventTypeList(value: unknown): string[] {
   return result;
 }
 
+export function mergeCustomEventTypes(
+  customEventTypes: unknown,
+  activeEventTypes?: unknown,
+): string[] {
+  const normalizedCustom = normalizeEventTypeList(customEventTypes);
+  if (typeof activeEventTypes === "undefined") {
+    return normalizedCustom;
+  }
+  const inferredFromActive = normalizeEventTypeList(activeEventTypes).filter(
+    (item) => !BUILT_IN_EVENT_TYPE_SET.has(item),
+  );
+  return Array.from(new Set([...normalizedCustom, ...inferredFromActive]));
+}
+
 export function getBuiltInEventTypes(): string[] {
   return [...BUILT_IN_EVENT_TYPES];
 }
 
-export function getAllEventTypes(customEventTypes: unknown): string[] {
-  const normalizedCustom = normalizeEventTypeList(customEventTypes);
+export function getAllEventTypes(
+  customEventTypes: unknown,
+  activeEventTypes?: unknown,
+): string[] {
+  const normalizedCustom = mergeCustomEventTypes(
+    customEventTypes,
+    activeEventTypes,
+  );
   return Array.from(new Set([...BUILT_IN_EVENT_TYPES, ...normalizedCustom]));
 }
 
@@ -49,8 +69,8 @@ export function getEventTypeSettings({
   customEventTypes: unknown;
   activeEventTypes: unknown;
 }): EventTypeSetting[] {
-  const allEventTypes = getAllEventTypes(customEventTypes);
   const normalizedActive = normalizeEventTypeList(activeEventTypes);
+  const allEventTypes = getAllEventTypes(customEventTypes, normalizedActive);
   const activeOrder =
     normalizedActive.length > 0
       ? normalizedActive.filter((item) => allEventTypes.includes(item))

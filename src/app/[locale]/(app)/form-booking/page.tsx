@@ -55,7 +55,7 @@ import {
   getActiveEventTypes,
   getAllEventTypes,
   getBuiltInEventTypes,
-  normalizeEventTypeList,
+  mergeCustomEventTypes,
 } from "@/lib/event-type-config";
 const ALL_EVENT_TYPES = getBuiltInEventTypes();
 
@@ -232,8 +232,8 @@ export default function FormBookingPage() {
 
   // Merged event types: built-in + custom
   const allEventTypes = React.useMemo(
-    () => getAllEventTypes(customEventTypes),
-    [customEventTypes],
+    () => getAllEventTypes(customEventTypes, selectedEventTypes),
+    [customEventTypes, selectedEventTypes],
   );
 
   // Custom Form Builder
@@ -424,7 +424,10 @@ export default function FormBookingPage() {
         const loadedGreeting = p.form_greeting || DEFAULTS.greeting;
         setBrandColor(loadedBrandColor);
         setGreeting(loadedGreeting);
-        const loadedCustomEventTypes = normalizeEventTypeList(p.custom_event_types);
+        const loadedCustomEventTypes = mergeCustomEventTypes(
+          p.custom_event_types,
+          p.form_event_types,
+        );
         const loadedSelectedEventTypes = getActiveEventTypes({
           customEventTypes: loadedCustomEventTypes,
           activeEventTypes: p.form_event_types,

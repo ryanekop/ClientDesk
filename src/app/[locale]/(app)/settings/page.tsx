@@ -65,7 +65,7 @@ import {
 import {
   getActiveEventTypes,
   getEventTypeSettings,
-  normalizeEventTypeList,
+  mergeCustomEventTypes,
 } from "@/lib/event-type-config";
 import {
   SortableConfigList,
@@ -747,8 +747,9 @@ export default function SettingsPage() {
       vendor_slug: null,
     }) as Profile;
     setProfile(prof);
-    const loadedCustomEventTypes = normalizeEventTypeList(
+    const loadedCustomEventTypes = mergeCustomEventTypes(
       (prof as any)?.custom_event_types,
+      (prof as any)?.form_event_types,
     );
     const loadedActiveEventTypes = getActiveEventTypes({
       customEventTypes: loadedCustomEventTypes,
