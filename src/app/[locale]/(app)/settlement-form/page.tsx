@@ -443,7 +443,7 @@ export default function SettlementFormPage() {
         </div>
 
         <div className="sticky top-4 flex" style={{ height: "calc(100vh - 12rem)", maxHeight: "calc(100vh - 12rem)" }}>
-          <div className="public-light-theme flex w-full flex-col">
+          <div className="flex w-full flex-col">
             <div className="mb-3 flex items-center justify-between shrink-0">
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground">Preview</h3>
@@ -488,7 +488,7 @@ export default function SettlementFormPage() {
 
             {previewPath ? (
               <div className="flex flex-1 min-h-0 justify-center">
-                <div className="flex w-full max-w-[380px] min-h-0 flex-col">
+                <div className="public-light-theme flex w-full max-w-[380px] min-h-0 flex-col">
                   <div className="flex items-center gap-2 rounded-t-2xl border border-b-0 bg-muted/80 px-4 py-2.5 shrink-0">
                     <div className="flex gap-1">
                       <div className="h-2.5 w-2.5 rounded-full bg-red-400/60" />
