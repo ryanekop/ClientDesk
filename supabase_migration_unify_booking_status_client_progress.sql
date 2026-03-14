@@ -15,6 +15,21 @@ ALTER TABLE public.bookings
 ADD COLUMN IF NOT EXISTS client_status text;
 
 DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.table_constraints
+    WHERE table_schema = 'public'
+      AND table_name = 'bookings'
+      AND constraint_name = 'bookings_status_check'
+      AND constraint_type = 'CHECK'
+  ) THEN
+    ALTER TABLE public.bookings
+    DROP CONSTRAINT bookings_status_check;
+  END IF;
+END $$;
+
+DO $$
 DECLARE
   client_statuses_type text;
   booking_statuses_type text;
