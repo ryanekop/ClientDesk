@@ -685,8 +685,8 @@ export default function FinancePage() {
             </div>
 
             {/* Filters */}
-            <div className="space-y-2 sm:space-y-0 sm:flex sm:items-center sm:justify-between">
-                <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="order-2 flex gap-2 overflow-x-auto pb-1 sm:order-1 sm:pb-0">
                     {(["all", "pending", "paid"] as const).map((f) => (
                         <button
                             key={f}
@@ -697,13 +697,15 @@ export default function FinancePage() {
                         </button>
                     ))}
                 </div>
-                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                    <button
+                <div className="order-1 flex flex-wrap items-center gap-2 sm:order-2 sm:justify-end">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="h-9 gap-2"
                         onClick={exportFinance}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-md border border-input bg-card text-foreground hover:bg-accent transition-colors cursor-pointer"
                     >
                         <Download className="w-4 h-4" /> Export Excel
-                    </button>
+                    </Button>
                     <TableColumnManager
                         title="Kelola Kolom Keuangan"
                         description="Atur kolom yang tampil di tabel keuangan. Kolom Nama dan Aksi selalu terkunci."
