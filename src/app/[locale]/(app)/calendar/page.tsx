@@ -189,7 +189,7 @@ export default function CalendarPage() {
             .eq("id", user.id)
             .single();
 
-        if (profile?.google_access_token && profile?.google_refresh_token) {
+        if ((profile as any)?.google_access_token || (profile as any)?.google_refresh_token) {
             setIsGoogleConnected(true);
         }
         if ((profile as any)?.calendar_event_format) {

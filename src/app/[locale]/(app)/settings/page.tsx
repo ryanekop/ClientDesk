@@ -122,6 +122,12 @@ function slugify(str: string) {
     return str.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 
+function extractMissingColumnFromSupabaseError(error: { message?: string } | null) {
+    const message = error?.message || "";
+    const match = message.match(/Could not find the '([^']+)' column/i);
+    return match?.[1] || null;
+}
+
 // Google Calendar SVG Logo (official 2020)
 function GoogleCalendarLogo({ className }: { className?: string }) {
     return (
@@ -168,6 +174,8 @@ export default function SettingsPage() {
     const [customEventTypes, setCustomEventTypes] = React.useState<string[]>([]);
     const [activeEventTypes, setActiveEventTypes] = React.useState<string[]>([]);
     const [newCustomEventType, setNewCustomEventType] = React.useState("");
+    const [eventTypeSaving, setEventTypeSaving] = React.useState(false);
+    const [eventTypeSaved, setEventTypeSaved] = React.useState(false);
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
 
     // Controlled fields for profile
@@ -242,6 +250,7 @@ export default function SettingsPage() {
     );
     const [selectedDriveEventType, setSelectedDriveEventType] = React.useState("Umum");
     const [newDriveSegment, setNewDriveSegment] = React.useState("");
+    const unsupportedProfileColumnsRef = React.useRef<Set<string>>(new Set());
     const calendarFormatInputRef = React.useRef<HTMLInputElement>(null);
     const calendarDescriptionInputRef = React.useRef<HTMLTextAreaElement>(null);
     const driveFormatInputRef = React.useRef<HTMLInputElement>(null);
@@ -405,13 +414,19 @@ export default function SettingsPage() {
     const fetchAll = React.useEffectEvent(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) {
+            setLoading(false);
+            return;
+        }
 
-        const { data: p } = await supabase
+        const { data: p, error: profileError } = await supabase
             .from("profiles")
-            .select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, calendar_event_format, calendar_event_format_map, calendar_event_description, calendar_event_description_map, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, invoice_logo_url, custom_statuses, custom_client_statuses, queue_trigger_status, default_wa_target, final_invoice_visible_from_status, form_event_types, custom_event_types, form_sections")
+            .select("*")
             .eq("id", user.id)
             .single();
+        if (profileError) {
+            console.warn("Failed to load full profile settings:", profileError.message);
+        }
         const prof = (p ?? {
             id: user.id,
             full_name: String(user.user_metadata?.full_name || user.email?.split("@")[0] || ""),
@@ -428,8 +443,12 @@ export default function SettingsPage() {
         setCustomEventTypes(loadedCustomEventTypes);
         setActiveEventTypes(loadedActiveEventTypes);
         setStudioName(prof?.studio_name || "");
-        setIsCalendarConnected(!!(prof as any)?.google_access_token);
-        setIsDriveConnected(!!(prof as any)?.google_drive_access_token);
+        setIsCalendarConnected(
+            Boolean((prof as any)?.google_access_token || (prof as any)?.google_refresh_token),
+        );
+        setIsDriveConnected(
+            Boolean((prof as any)?.google_drive_access_token || (prof as any)?.google_drive_refresh_token),
+        );
         setLogoUrl((prof as any)?.invoice_logo_url || null);
         setCalendarEventFormats(
             normalizeTemplateFormatMap(
@@ -542,18 +561,36 @@ export default function SettingsPage() {
         const fullName =
             profile?.full_name ||
             String(user.user_metadata?.full_name || user.email?.split("@")[0] || "");
-        const { error } = await supabase.from("profiles").upsert(
-            {
-                id: user.id,
-                full_name: fullName,
-                ...patch,
-            },
-            { onConflict: "id" },
-        );
+        const nextPatch = { ...patch };
+        for (const droppedColumn of unsupportedProfileColumnsRef.current) {
+            delete nextPatch[droppedColumn];
+        }
 
-        if (error) {
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+            const { error } = await supabase.from("profiles").upsert(
+                {
+                    id: user.id,
+                    full_name: fullName,
+                    ...nextPatch,
+                },
+                { onConflict: "id" },
+            );
+
+            if (!error) {
+                return;
+            }
+
+            const missingColumn = extractMissingColumnFromSupabaseError(error);
+            if (missingColumn && Object.prototype.hasOwnProperty.call(nextPatch, missingColumn)) {
+                unsupportedProfileColumnsRef.current.add(missingColumn);
+                delete nextPatch[missingColumn];
+                continue;
+            }
+
             throw error;
         }
+
+        throw new Error("Gagal menyimpan profil.");
     });
 
     async function handleSaveProfile(e: React.FormEvent<HTMLFormElement>) {
@@ -569,15 +606,6 @@ export default function SettingsPage() {
                 whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
                 vendor_slug: slug || null,
                 default_wa_target: defaultWaTarget,
-                form_event_types: activeEventTypes,
-                custom_event_types: customEventTypes,
-                calendar_event_format: calendarEventFormats.Umum || DEFAULT_CALENDAR_EVENT_FORMAT,
-                calendar_event_format_map: calendarEventFormats,
-                calendar_event_description: calendarEventDescriptions.Umum || DEFAULT_CALENDAR_EVENT_DESCRIPTION,
-                calendar_event_description_map: calendarEventDescriptions,
-                drive_folder_format: driveFolderFormats.Umum || DEFAULT_DRIVE_FOLDER_FORMAT,
-                drive_folder_format_map: driveFolderFormats,
-                drive_folder_structure_map: driveFolderStructures,
             });
 
             setVendorSlug(slug);
@@ -590,6 +618,28 @@ export default function SettingsPage() {
             setTimeout(() => setSavedMsg(""), 3000);
         } finally {
             setSaving(false);
+        }
+    }
+
+    async function handleSaveEventTypes() {
+        setEventTypeSaving(true);
+        try {
+            await saveProfilePatch({
+                form_event_types: activeEventTypes,
+                custom_event_types: customEventTypes,
+                calendar_event_format: calendarEventFormats.Umum || DEFAULT_CALENDAR_EVENT_FORMAT,
+                calendar_event_format_map: calendarEventFormats,
+                calendar_event_description: calendarEventDescriptions.Umum || DEFAULT_CALENDAR_EVENT_DESCRIPTION,
+                calendar_event_description_map: calendarEventDescriptions,
+                drive_folder_format: driveFolderFormats.Umum || DEFAULT_DRIVE_FOLDER_FORMAT,
+                drive_folder_format_map: driveFolderFormats,
+                drive_folder_structure_map: driveFolderStructures,
+            });
+            setEventTypeSaved(true);
+            setTimeout(() => setEventTypeSaved(false), 2000);
+            void fetchAll();
+        } finally {
+            setEventTypeSaving(false);
         }
     }
 
@@ -779,6 +829,7 @@ export default function SettingsPage() {
         { key: "umum", label: tp("tabGeneral") },
         { key: "template", label: tp("tabTemplates") },
         { key: "status", label: "Status Booking" },
+        { key: "jenis-acara", label: tp("tabEventTypes") },
         { key: "telegram", label: tp("tabTelegram") },
     ];
 
@@ -1197,53 +1248,6 @@ export default function SettingsPage() {
                                             className={`px-4 py-1.5 text-xs font-medium transition-colors cursor-pointer ${defaultWaTarget === "freelancer" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}>
                                             Freelancer
                                         </button>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-4 pt-2 border-t">
-                                    <div>
-                                        <label className="text-sm font-medium flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> Jenis Acara Global</label>
-                                        <p className="text-xs text-muted-foreground mt-0.5">Kelola urutan, aktif/nonaktif, dan custom jenis acara dari sini. Berlaku untuk form booking, paket, template, dan filter.</p>
-                                    </div>
-                                    <SortableConfigList
-                                        items={eventTypeItems}
-                                        onReorder={reorderEventTypes}
-                                        onRename={renameEventType}
-                                        onToggleActive={toggleEventTypeActive}
-                                        onDelete={removeEventType}
-                                    />
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            value={newCustomEventType}
-                                            onChange={e => setNewCustomEventType(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key !== "Enter") return;
-                                                e.preventDefault();
-                                                const value = newCustomEventType.trim();
-                                                if (!value || availableEventTypes.includes(value)) return;
-                                                setCustomEventTypes((prev) => [...prev, value]);
-                                                setActiveEventTypes((prev) => [...prev, value]);
-                                                setNewCustomEventType("");
-                                            }}
-                                            placeholder="Tambah jenis acara custom..."
-                                            className={inputClass}
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={() => {
-                                                const value = newCustomEventType.trim();
-                                                if (!value || availableEventTypes.includes(value)) return;
-                                                setCustomEventTypes((prev) => [...prev, value]);
-                                                setActiveEventTypes((prev) => [...prev, value]);
-                                                setNewCustomEventType("");
-                                            }}
-                                        >
-                                            Tambah
-                                        </Button>
-                                    </div>
-                                    <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                                        Jenis acara bawaan bisa diurutkan dan diaktifkan/nonaktifkan. Jenis acara custom bisa ditambah, diubah nama, dihapus, dan diurutkan.
                                     </div>
                                 </div>
 
@@ -1779,6 +1783,70 @@ export default function SettingsPage() {
                         </div>
                     </div>
                     </>
+                )}
+
+                {/* ═══ TAB: Jenis Acara ═══ */}
+                {activeTab === "jenis-acara" && (
+                    <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                        <div className="px-6 py-4 border-b">
+                            <h3 className="font-semibold flex items-center gap-2"><Globe className="w-4 h-4" /> Jenis Acara Global</h3>
+                            <p className="text-sm text-muted-foreground">Kelola urutan, aktif/nonaktif, dan custom jenis acara dari sini. Berlaku untuk form booking, paket, template, dan filter.</p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <SortableConfigList
+                                items={eventTypeItems}
+                                onReorder={reorderEventTypes}
+                                onRename={renameEventType}
+                                onToggleActive={toggleEventTypeActive}
+                                onDelete={removeEventType}
+                            />
+                            <div className="flex items-center gap-2">
+                                <input
+                                    value={newCustomEventType}
+                                    onChange={e => setNewCustomEventType(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key !== "Enter") return;
+                                        e.preventDefault();
+                                        const value = newCustomEventType.trim();
+                                        if (!value || availableEventTypes.includes(value)) return;
+                                        setCustomEventTypes((prev) => [...prev, value]);
+                                        setActiveEventTypes((prev) => [...prev, value]);
+                                        setNewCustomEventType("");
+                                    }}
+                                    placeholder="Tambah jenis acara custom..."
+                                    className={inputClass}
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        const value = newCustomEventType.trim();
+                                        if (!value || availableEventTypes.includes(value)) return;
+                                        setCustomEventTypes((prev) => [...prev, value]);
+                                        setActiveEventTypes((prev) => [...prev, value]);
+                                        setNewCustomEventType("");
+                                    }}
+                                >
+                                    Tambah
+                                </Button>
+                            </div>
+                            <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                                Jenis acara bawaan bisa diurutkan dan diaktifkan/nonaktifkan. Jenis acara custom bisa ditambah, diubah nama, dihapus, dan diurutkan.
+                            </div>
+                            <div className="flex items-center gap-3 pt-1">
+                                <Button
+                                    type="button"
+                                    disabled={eventTypeSaving}
+                                    onClick={handleSaveEventTypes}
+                                    className="gap-2"
+                                >
+                                    {eventTypeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    Simpan
+                                </Button>
+                                {eventTypeSaved && <span className="text-sm text-green-600 dark:text-green-400">Tersimpan!</span>}
+                            </div>
+                        </div>
+                    </div>
                 )}
 
                 {/* ═══ TAB: Bot Telegram ═══ */}

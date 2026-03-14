@@ -45,14 +45,20 @@ export async function GET(request: NextRequest) {
             );
         }
 
+        const { data: existingProfile } = await supabaseAdmin
+            .from("profiles")
+            .select("google_access_token, google_refresh_token")
+            .eq("id", user.id)
+            .maybeSingle();
+
         // Store tokens in profiles table
         const { error: dbError } = await supabaseAdmin
             .from("profiles")
             .upsert({
                 id: user.id,
                 full_name: String(user.user_metadata?.full_name || user.email?.split("@")[0] || ""),
-                google_access_token: tokens.access_token,
-                google_refresh_token: tokens.refresh_token,
+                google_access_token: tokens.access_token ?? existingProfile?.google_access_token ?? null,
+                google_refresh_token: tokens.refresh_token ?? existingProfile?.google_refresh_token ?? null,
                 google_token_expiry: tokens.expiry_date
                     ? new Date(tokens.expiry_date).toISOString()
                     : null,

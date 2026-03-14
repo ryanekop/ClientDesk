@@ -494,8 +494,9 @@ export default function FormBookingPage() {
         if (p.vendor_slug) {
           setVendorSlug(p.vendor_slug);
         }
-        const driveOk = !!(p as Record<string, unknown>)
-          .google_drive_access_token;
+        const driveOk =
+          Boolean((p as Record<string, unknown>).google_drive_access_token) ||
+          Boolean((p as Record<string, unknown>).google_drive_refresh_token);
         setIsDriveConnected(driveOk);
         const loadedShowProof = driveOk
           ? (p.form_show_proof ?? DEFAULTS.showProof)

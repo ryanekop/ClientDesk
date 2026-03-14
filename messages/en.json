@@ -283,7 +283,7 @@
         "infoStudio": "Basic information about your vendor/studio.",
         "namaStudio": "Vendor/Studio Name",
         "nomorWA": "Studio WhatsApp Number",
-        "simpanProfil": "Save Profile",
+        "simpanProfil": "Save",
         "berhasilSimpan": "Profile saved successfully!",
         "templatePesan": "Message Templates",
         "templateDesc": "WhatsApp and Invoice templates. Use variables for dynamic data.",
@@ -635,6 +635,7 @@
     "SettingsPage": {
         "tabGeneral": "General",
         "tabTemplates": "Message Templates",
+        "tabEventTypes": "Event Types",
         "tabTelegram": "Telegram Bot",
         "vendorStudioName": "Vendor/Studio Name",
         "vendorNamePlaceholder": "e.g.: Memori Studio",

@@ -283,7 +283,7 @@
         "infoStudio": "Informasi dasar vendor/studio Anda.",
         "namaStudio": "Nama Vendor/Studio",
         "nomorWA": "Nomor WhatsApp Studio",
-        "simpanProfil": "Simpan Profil",
+        "simpanProfil": "Simpan",
         "berhasilSimpan": "Profil berhasil disimpan!",
         "templatePesan": "Template Pesan",
         "templateDesc": "Template WhatsApp dan Invoice. Gunakan variabel untuk data dinamis.",
@@ -635,6 +635,7 @@
     "SettingsPage": {
         "tabGeneral": "Umum",
         "tabTemplates": "Template Pesan",
+        "tabEventTypes": "Jenis Acara",
         "tabTelegram": "Bot Telegram",
         "vendorStudioName": "Nama Vendor/Studio",
         "vendorNamePlaceholder": "Misal: Memori Studio",
