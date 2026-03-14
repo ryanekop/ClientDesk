@@ -488,7 +488,7 @@ export default function SettlementFormPage() {
 
             {previewPath ? (
               <div className="flex flex-1 min-h-0 justify-center">
-                <div className="public-light-theme flex w-full max-w-[380px] min-h-0 flex-col">
+                <div className="flex w-full max-w-[380px] min-h-0 flex-col">
                   <div className="flex items-center gap-2 rounded-t-2xl border border-b-0 bg-muted/80 px-4 py-2.5 shrink-0">
                     <div className="flex gap-1">
                       <div className="h-2.5 w-2.5 rounded-full bg-red-400/60" />

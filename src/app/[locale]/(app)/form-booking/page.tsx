@@ -1827,7 +1827,7 @@ export default function FormBookingPage() {
             {vendorSlug ? (
               <div className="flex justify-center flex-1 min-h-0">
                 {/* Linktree-style phone preview */}
-                <div className="public-light-theme w-full max-w-[380px] flex flex-col min-h-0">
+                <div className="w-full max-w-[380px] flex flex-col min-h-0">
                   {/* URL Bar */}
                   <div className="rounded-t-2xl border border-b-0 bg-muted/80 px-4 py-2.5 flex items-center gap-2 shrink-0">
                     <div className="flex gap-1">
