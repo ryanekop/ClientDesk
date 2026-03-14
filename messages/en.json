@@ -284,7 +284,7 @@
         "namaStudio": "Vendor/Studio Name",
         "nomorWA": "Studio WhatsApp Number",
         "simpanProfil": "Save",
-        "berhasilSimpan": "Profile saved successfully!",
+        "berhasilSimpan": "✅ Settings saved successfully",
         "templatePesan": "Message Templates",
         "templateDesc": "WhatsApp and Invoice templates. Use variables for dynamic data.",
         "tambah": "Add",
