@@ -443,7 +443,7 @@ export default function SettlementFormPage() {
         </div>
 
         <div className="sticky top-4 flex" style={{ height: "calc(100vh - 12rem)", maxHeight: "calc(100vh - 12rem)" }}>
-          <div className="flex w-full flex-col">
+          <div className="public-light-theme flex w-full flex-col">
             <div className="mb-3 flex items-center justify-between shrink-0">
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground">Preview</h3>
@@ -501,7 +501,7 @@ export default function SettlementFormPage() {
                       </span>
                     </div>
                   </div>
-                  <div className="min-h-0 flex-1 overflow-hidden rounded-b-2xl border border-t-0 bg-white dark:bg-background">
+                  <div className="min-h-0 flex-1 overflow-hidden rounded-b-2xl border border-t-0 bg-background">
                     <iframe
                       ref={iframeRef}
                       key={iframeKey}

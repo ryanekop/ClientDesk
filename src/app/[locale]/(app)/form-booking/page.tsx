@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { useLocale } from "next-intl";
 import {
   ExternalLink,
@@ -1289,11 +1290,14 @@ export default function FormBookingPage() {
                     {qrisImageUrl ? (
                       <div className="rounded-xl border bg-background p-4 space-y-3">
                         <div className="rounded-lg border bg-muted/30 p-4 flex items-center justify-center min-h-48">
-                          <img
+                          <Image
                             src={qrisImageUrl}
                             alt="QRIS"
                             referrerPolicy="no-referrer"
-                            className="max-h-72 w-full object-contain"
+                            unoptimized
+                            width={1024}
+                            height={1024}
+                            className="max-h-72 h-auto w-full object-contain"
                           />
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -1775,7 +1779,7 @@ export default function FormBookingPage() {
             maxHeight: "calc(100vh - 12rem)",
           }}
         >
-          <div className="flex flex-col w-full">
+          <div className="public-light-theme flex w-full flex-col">
             {/* Preview Header with Buttons */}
             <div className="flex items-center justify-between mb-3 shrink-0">
               <h3 className="text-sm font-semibold text-muted-foreground">
@@ -1825,7 +1829,7 @@ export default function FormBookingPage() {
                 {/* Linktree-style phone preview */}
                 <div className="w-full max-w-[380px] flex flex-col min-h-0">
                   {/* URL Bar */}
-                  <div className="bg-muted/80 dark:bg-muted/40 rounded-t-2xl px-4 py-2.5 flex items-center gap-2 border border-b-0 shrink-0">
+                  <div className="rounded-t-2xl border border-b-0 bg-muted/80 px-4 py-2.5 flex items-center gap-2 shrink-0">
                     <div className="flex gap-1">
                       <div className="w-2.5 h-2.5 rounded-full bg-red-400/60" />
                       <div className="w-2.5 h-2.5 rounded-full bg-yellow-400/60" />
@@ -1841,7 +1845,7 @@ export default function FormBookingPage() {
                   </div>
 
                   {/* iframe content — fills remaining space */}
-                  <div className="rounded-b-2xl overflow-hidden border border-t-0 bg-white dark:bg-background flex-1 min-h-0">
+                  <div className="rounded-b-2xl overflow-hidden border border-t-0 bg-background flex-1 min-h-0">
                     {previewSrc ? (
                       <iframe
                         ref={iframeRef}
