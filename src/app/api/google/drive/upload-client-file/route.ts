@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
         const { data: bookingRecord } = await supabase
             .from("bookings")
-            .select("client_name, booking_code, event_type, session_date")
+            .select("client_name, booking_code, event_type, session_date, extra_fields")
             .eq("id", bookingId)
             .single();
 
@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
             clientName: bookingRecord?.client_name || clientName || "Client",
             eventType: bookingRecord?.event_type || eventType || null,
             sessionDate: bookingRecord?.session_date || null,
+            extraFields: bookingRecord?.extra_fields,
         });
         const bookingFolderSegments = [
             "Data Booking Client Desk",

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { getDriveOAuth2Client } from "@/utils/google/drive";
 import { createClient } from "@/utils/supabase/server";
+
+const supabaseAdmin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+);
 
 export async function GET(request: NextRequest) {
     const url = new URL(request.url);
@@ -34,16 +41,27 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        await supabase
+        const { error: dbError } = await supabaseAdmin
             .from("profiles")
-            .update({
+            .upsert({
+                id: user.id,
+                full_name: String(user.user_metadata?.full_name || user.email?.split("@")[0] || ""),
                 google_drive_access_token: tokens.access_token,
                 google_drive_refresh_token: tokens.refresh_token,
                 google_drive_token_expiry: tokens.expiry_date
                     ? new Date(tokens.expiry_date).toISOString()
                     : null,
-            })
-            .eq("id", user.id);
+            }, { onConflict: "id" });
+
+        if (dbError) {
+            return new NextResponse(
+                `<!DOCTYPE html><html><body><script>
+                    window.opener?.postMessage({ type: "GOOGLE_DRIVE_ERROR", error: "db_error" }, "*");
+                    window.close();
+                </script></body></html>`,
+                { headers: { "Content-Type": "text/html" } }
+            );
+        }
 
         return new NextResponse(
             `<!DOCTYPE html>
@@ -62,7 +80,7 @@ export async function GET(request: NextRequest) {
             </html>`,
             { headers: { "Content-Type": "text/html" } }
         );
-    } catch (err: any) {
+    } catch {
         return new NextResponse(
             `<!DOCTYPE html><html><body><script>
                 window.opener?.postMessage({ type: "GOOGLE_DRIVE_ERROR", error: "token_exchange_failed" }, "*");

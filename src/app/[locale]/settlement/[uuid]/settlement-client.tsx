@@ -393,7 +393,7 @@ export default function SettlementClient({
 
   return (
     <div
-      className="min-h-screen px-4 py-8 sm:py-12"
+      className="public-light-theme min-h-screen px-4 py-8 sm:py-12"
       style={{
         backgroundImage: `linear-gradient(135deg, ${brandColor}18 0%, #ffffff 40%, #ecfdf5 100%)`,
         color: "#0f172a",

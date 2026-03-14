@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { getOAuth2Client } from "@/utils/google/calendar";
 import { createClient } from "@/utils/supabase/server";
+
+const supabaseAdmin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+);
 
 export async function GET(request: NextRequest) {
     const url = new URL(request.url);
@@ -39,16 +46,17 @@ export async function GET(request: NextRequest) {
         }
 
         // Store tokens in profiles table
-        const { error: dbError } = await supabase
+        const { error: dbError } = await supabaseAdmin
             .from("profiles")
-            .update({
+            .upsert({
+                id: user.id,
+                full_name: String(user.user_metadata?.full_name || user.email?.split("@")[0] || ""),
                 google_access_token: tokens.access_token,
                 google_refresh_token: tokens.refresh_token,
                 google_token_expiry: tokens.expiry_date
                     ? new Date(tokens.expiry_date).toISOString()
                     : null,
-            })
-            .eq("id", user.id);
+            }, { onConflict: "id" });
 
         if (dbError) {
             return new NextResponse(
@@ -84,7 +92,7 @@ export async function GET(request: NextRequest) {
             </html>`,
             { headers: { "Content-Type": "text/html" } }
         );
-    } catch (err: any) {
+    } catch {
         return new NextResponse(
             `<!DOCTYPE html>
             <html><body><script>

@@ -15,6 +15,7 @@ type UploadPaymentProofArgs = {
   clientName: string;
   eventType: string | null;
   sessionDate: string | null;
+  extraFields?: unknown;
   fileName: string;
   mimeType: string;
   fileBuffer: Buffer;
@@ -36,6 +37,7 @@ export async function uploadPaymentProofToDrive({
   clientName,
   eventType,
   sessionDate,
+  extraFields,
   fileName,
   mimeType,
   fileBuffer,
@@ -52,6 +54,7 @@ export async function uploadPaymentProofToDrive({
     clientName,
     eventType,
     sessionDate,
+    extraFields,
   });
   const folder = await findOrCreateNestedPath(accessToken, refreshToken, [
     "Data Booking Client Desk",

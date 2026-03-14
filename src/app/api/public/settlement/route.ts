@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     const { data: booking } = await supabaseAdmin
       .from("bookings")
       .select(
-        "id, booking_code, client_name, event_type, session_date, user_id, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments",
+        "id, booking_code, client_name, event_type, session_date, user_id, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, extra_fields",
       )
       .eq("tracking_uuid", trackingUuid)
       .single();
@@ -225,6 +225,7 @@ export async function POST(request: NextRequest) {
         clientName: booking.client_name,
         eventType: booking.event_type,
         sessionDate: booking.session_date,
+        extraFields: booking.extra_fields,
         fileName: paymentProofFile.name || `${booking.booking_code}_final_payment_proof`,
         mimeType: paymentProofFile.type || "application/octet-stream",
         fileBuffer,

@@ -3,6 +3,7 @@ import {
   DEFAULT_DRIVE_FOLDER_STRUCTURE,
   applyDriveTemplate,
   buildCalendarRangeFromLocalInput,
+  buildDriveTemplateVars,
   normalizeDriveFolderStructureMap,
   resolveDriveFolderStructureByEventType,
   resolveTemplateByEventType,
@@ -17,6 +18,7 @@ type BuildDrivePathArgs = {
   clientName: string;
   eventType?: string | null;
   sessionDate?: string | null;
+  extraFields?: unknown;
 };
 
 export function normalizeDriveFolderStructureSettings(
@@ -47,16 +49,20 @@ export function buildDriveFolderTemplateVars({
   clientName,
   eventType,
   sessionDate,
+  extraFields,
 }: Omit<BuildDrivePathArgs, "structureMap" | "legacyFormat" | "legacyFormatMap">) {
-  return {
-    client_name: clientName,
-    booking_code: bookingCode,
-    event_type: eventType || "",
-    studio_name: studioName || "Client Desk",
-    ...(sessionDate
-      ? buildCalendarRangeFromLocalInput(sessionDate, 0).templateVars
-      : {}),
-  };
+  return buildDriveTemplateVars(
+    {
+      client_name: clientName,
+      booking_code: bookingCode,
+      event_type: eventType || "",
+      studio_name: studioName || "Client Desk",
+      ...(sessionDate
+        ? buildCalendarRangeFromLocalInput(sessionDate, 0).templateVars
+        : {}),
+    },
+    extraFields,
+  );
 }
 
 export function buildDriveFolderPathSegments({
@@ -68,6 +74,7 @@ export function buildDriveFolderPathSegments({
   clientName,
   eventType,
   sessionDate,
+  extraFields,
 }: BuildDrivePathArgs): string[] {
   const normalized = normalizeDriveFolderStructureSettings(
     structureMap,
@@ -85,6 +92,7 @@ export function buildDriveFolderPathSegments({
     clientName,
     eventType,
     sessionDate,
+    extraFields,
   });
 
   return rawSegments

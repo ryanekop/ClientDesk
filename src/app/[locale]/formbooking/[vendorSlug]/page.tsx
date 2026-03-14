@@ -98,7 +98,7 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
   // Vendor tidak ditemukan — render langsung di server, tidak perlu client state
   if (!vendor) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+      <div className="public-light-theme min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
         <div className="text-center space-y-4 max-w-md mx-auto px-6">
           <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto text-4xl">
             🔍

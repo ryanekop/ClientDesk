@@ -108,7 +108,7 @@ export default async function SettlementPage({ params }: PageProps) {
 
   if (!result) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 px-4">
+      <div className="public-light-theme min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 px-4">
         <div className="text-center space-y-4 max-w-md mx-auto">
           <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto text-4xl">
             $

@@ -420,6 +420,7 @@ export default function BookingDetailPage() {
                     clientName: rawBooking.client_name,
                     eventType: rawBooking.event_type,
                     sessionDate: rawBooking.session_date,
+                    extraFields: rawBooking.extra_fields,
                 });
                 setDriveFolderPathHint(
                     ["Data Booking Client Desk", ...folderPathSegments, "File Client"].join(" > "),

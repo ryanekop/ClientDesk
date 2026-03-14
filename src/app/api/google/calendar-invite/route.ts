@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
         // Get booking details including service duration
         const { data: booking } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, session_date, location, event_type, extra_fields, google_calendar_event_id, services(id, name, duration_minutes, is_addon), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon))")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, location, location_detail, notes, event_type, extra_fields, google_calendar_event_id, services(id, name, duration_minutes, is_addon), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon))")
             .eq("id", bookingId)
             .eq("user_id", user.id)
             .single();
@@ -51,9 +51,12 @@ export async function POST(req: NextRequest) {
                 id: booking.id,
                 bookingCode: booking.booking_code,
                 clientName: booking.client_name,
+                clientWhatsapp: booking.client_whatsapp,
                 sessionDate: booking.session_date,
                 location: booking.location,
+                locationDetail: booking.location_detail,
                 eventType: booking.event_type,
+                notes: booking.notes,
                 extraFields: (booking as any).extra_fields,
                 googleCalendarEventId: (booking as any).google_calendar_event_id,
                 services: booking.services,

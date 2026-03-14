@@ -55,12 +55,13 @@ const DAYS_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"]
 
 export const DEFAULT_CALENDAR_EVENT_FORMAT = "📸 {{client_name}} — {{service_name}}";
 export const DEFAULT_CALENDAR_EVENT_DESCRIPTION =
-    "Klien: {{client_name}}\nBooking: {{booking_code}}\nPaket: {{service_name}}\nTanggal: {{session_date}}\nJam: {{session_time}} - {{end_time}}\nLokasi: {{location}}";
+    "Klien: {{client_name}}\nWhatsApp: {{client_whatsapp}}\nBooking: {{booking_code}}\nPaket: {{service_name}}\nTanggal: {{session_date}}\nJam: {{session_time}} - {{end_time}}\nJenis Acara: {{event_type}}\nLokasi: {{location}}\nMaps: {{location_maps_url}}\nDetail Lokasi: {{detail_location}}\nCatatan: {{notes}}";
 export const DEFAULT_DRIVE_FOLDER_FORMAT = "{client_name}";
 export const DEFAULT_DRIVE_FOLDER_STRUCTURE = [DEFAULT_DRIVE_FOLDER_FORMAT];
 
 export const CALENDAR_TEMPLATE_VARIABLES = [
     "{{client_name}}",
+    "{{client_whatsapp}}",
     "{{service_name}}",
     "{{event_type}}",
     "{{booking_code}}",
@@ -70,6 +71,9 @@ export const CALENDAR_TEMPLATE_VARIABLES = [
     "{{end_time}}",
     "{{day_name}}",
     "{{location}}",
+    "{{location_maps_url}}",
+    "{{detail_location}}",
+    "{{notes}}",
 ] as const;
 
 export const DRIVE_TEMPLATE_VARIABLES = [
@@ -126,6 +130,15 @@ export function getCalendarTemplateVariables(eventType: string | null | undefine
     );
 }
 
+export function getDriveTemplateVariables(eventType: string | null | undefined): string[] {
+    return Array.from(
+        new Set([
+            ...DRIVE_TEMPLATE_VARIABLES,
+            ...getEventExtraFieldTemplateTokens(eventType, "drive"),
+        ]),
+    );
+}
+
 export function applyCalendarTemplate(template: string, vars: Record<string, string | null | undefined>): string {
     return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => vars[key] || `{{${key}}}`);
 }
@@ -137,7 +150,18 @@ export function buildCalendarTemplateVars(
     return {
         ...baseVars,
         ...buildExtraFieldTemplateVars(extraFields),
-        ...buildCalendarCustomFieldTemplateVars(extraFields),
+        ...buildGoogleCustomFieldTemplateVars(extraFields),
+    };
+}
+
+export function buildDriveTemplateVars(
+    baseVars: Record<string, string | null | undefined>,
+    extraFields?: unknown,
+): Record<string, string | null | undefined> {
+    return {
+        ...baseVars,
+        ...buildExtraFieldTemplateVars(extraFields),
+        ...buildGoogleCustomFieldTemplateVars(extraFields),
     };
 }
 
@@ -327,7 +351,7 @@ function pad(value: number): string {
     return String(value).padStart(2, "0");
 }
 
-function buildCalendarCustomFieldTemplateVars(
+function buildGoogleCustomFieldTemplateVars(
     raw: unknown,
 ): Record<string, string> {
     if (!raw || typeof raw !== "object") return {};

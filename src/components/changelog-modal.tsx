@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -79,11 +78,6 @@ export function DashboardChangelogPopup({
                 {locale === "en" ? "What’s new in Client Desk" : "Log perubahan terbaru"}
               </DialogTitle>
             </div>
-            <DialogDescription>
-              {locale === "en"
-                ? "This popup appears on the dashboard and can be hidden using browser storage."
-                : "Popup ini muncul di dashboard awal dan bisa disembunyikan dari browser tanpa menyimpan ke database."}
-            </DialogDescription>
           </DialogHeader>
 
           <div className="max-h-[58vh] overflow-y-auto pr-1">

@@ -9,10 +9,10 @@ import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import {
-    DRIVE_TEMPLATE_VARIABLES,
     DEFAULT_CALENDAR_EVENT_DESCRIPTION,
     DEFAULT_CALENDAR_EVENT_FORMAT,
     DEFAULT_DRIVE_FOLDER_FORMAT,
+    getDriveTemplateVariables,
     normalizeTemplateFormatMap,
     resolveTemplateByEventType,
     applyCalendarTemplate,
@@ -412,7 +412,13 @@ export default function SettingsPage() {
             .select("id, full_name, studio_name, whatsapp_number, vendor_slug, google_access_token, google_drive_access_token, calendar_event_format, calendar_event_format_map, calendar_event_description, calendar_event_description_map, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, invoice_logo_url, custom_statuses, custom_client_statuses, queue_trigger_status, default_wa_target, final_invoice_visible_from_status, form_event_types, custom_event_types, form_sections")
             .eq("id", user.id)
             .single();
-        const prof = p as Profile;
+        const prof = (p ?? {
+            id: user.id,
+            full_name: String(user.user_metadata?.full_name || user.email?.split("@")[0] || ""),
+            studio_name: null,
+            whatsapp_number: null,
+            vendor_slug: null,
+        }) as Profile;
         setProfile(prof);
         const loadedCustomEventTypes = normalizeEventTypeList((prof as any)?.custom_event_types);
         const loadedActiveEventTypes = getActiveEventTypes({
@@ -527,6 +533,29 @@ export default function SettingsPage() {
 
     React.useEffect(() => { void fetchAll(); }, []);
 
+    const saveProfilePatch = React.useEffectEvent(async (patch: Record<string, unknown>) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            throw new Error("User tidak ditemukan.");
+        }
+
+        const fullName =
+            profile?.full_name ||
+            String(user.user_metadata?.full_name || user.email?.split("@")[0] || "");
+        const { error } = await supabase.from("profiles").upsert(
+            {
+                id: user.id,
+                full_name: fullName,
+                ...patch,
+            },
+            { onConflict: "id" },
+        );
+
+        if (error) {
+            throw error;
+        }
+    });
+
     async function handleSaveProfile(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
         if (!profile) return;
@@ -534,27 +563,34 @@ export default function SettingsPage() {
 
         const slug = slugify(vendorSlug || studioName);
 
-        await supabase.from("profiles").update({
-            studio_name: studioName || null,
-            whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
-            vendor_slug: slug || null,
-            default_wa_target: defaultWaTarget,
-            form_event_types: activeEventTypes,
-            custom_event_types: customEventTypes,
-            calendar_event_format: calendarEventFormats.Umum || DEFAULT_CALENDAR_EVENT_FORMAT,
-            calendar_event_format_map: calendarEventFormats,
-            calendar_event_description: calendarEventDescriptions.Umum || DEFAULT_CALENDAR_EVENT_DESCRIPTION,
-            calendar_event_description_map: calendarEventDescriptions,
-            drive_folder_format: driveFolderFormats.Umum || DEFAULT_DRIVE_FOLDER_FORMAT,
-            drive_folder_format_map: driveFolderFormats,
-            drive_folder_structure_map: driveFolderStructures,
-        }).eq("id", profile.id);
+        try {
+            await saveProfilePatch({
+                studio_name: studioName || null,
+                whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
+                vendor_slug: slug || null,
+                default_wa_target: defaultWaTarget,
+                form_event_types: activeEventTypes,
+                custom_event_types: customEventTypes,
+                calendar_event_format: calendarEventFormats.Umum || DEFAULT_CALENDAR_EVENT_FORMAT,
+                calendar_event_format_map: calendarEventFormats,
+                calendar_event_description: calendarEventDescriptions.Umum || DEFAULT_CALENDAR_EVENT_DESCRIPTION,
+                calendar_event_description_map: calendarEventDescriptions,
+                drive_folder_format: driveFolderFormats.Umum || DEFAULT_DRIVE_FOLDER_FORMAT,
+                drive_folder_format_map: driveFolderFormats,
+                drive_folder_structure_map: driveFolderStructures,
+            });
 
-        setVendorSlug(slug);
-        setSavedMsg(t("berhasilSimpan"));
-        setTimeout(() => setSavedMsg(""), 3000);
-        setSaving(false);
-        void fetchAll();
+            setVendorSlug(slug);
+            setSavedMsg(t("berhasilSimpan"));
+            setTimeout(() => setSavedMsg(""), 3000);
+            void fetchAll();
+        } catch (error) {
+            console.error("Settings save error:", error);
+            setSavedMsg("Gagal menyimpan.");
+            setTimeout(() => setSavedMsg(""), 3000);
+        } finally {
+            setSaving(false);
+        }
     }
 
     async function handleSaveTemplate(type: string, eventType?: string) {
@@ -625,10 +661,10 @@ export default function SettingsPage() {
         if (!user) { setIsDisconnecting(false); return; }
 
         if (disconnectModal.service === "calendar") {
-            await supabase.from("profiles").update({ google_access_token: null, google_refresh_token: null, google_token_expiry: null }).eq("id", user.id);
+            await saveProfilePatch({ google_access_token: null, google_refresh_token: null, google_token_expiry: null });
             setIsCalendarConnected(false);
         } else {
-            await supabase.from("profiles").update({ google_drive_access_token: null, google_drive_refresh_token: null }).eq("id", user.id);
+            await saveProfilePatch({ google_drive_access_token: null, google_drive_refresh_token: null, google_drive_token_expiry: null });
             setIsDriveConnected(false);
         }
         setIsDisconnecting(false);
@@ -712,7 +748,7 @@ export default function SettingsPage() {
             const reader = new FileReader();
             reader.onload = async () => {
                 const base64 = reader.result as string;
-                await supabase.from("profiles").update({ invoice_logo_url: base64 }).eq("id", profile.id);
+                await saveProfilePatch({ invoice_logo_url: base64 });
                 setLogoUrl(base64);
                 setLogoUploading(false);
             };
@@ -725,7 +761,7 @@ export default function SettingsPage() {
 
     async function handleRemoveLogo() {
         if (!profile?.id) return;
-        await supabase.from("profiles").update({ invoice_logo_url: null }).eq("id", profile.id);
+        await saveProfilePatch({ invoice_logo_url: null });
         setLogoUrl(null);
     }
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "https://clientdesk.ryanekoapp.web.id";
@@ -791,6 +827,11 @@ export default function SettingsPage() {
     const drivePreviewVars = {
         ...previewData,
         event_type: selectedDriveEventType,
+        ...getEventExtraFieldPreviewVars(selectedDriveEventType),
+        ...getCustomFieldPreviewVars(
+            formSectionsByEventType[selectedDriveEventType] || formSectionsByEventType.Umum || [],
+            selectedDriveEventType,
+        ),
     };
     const currentCalendarFormat = calendarEventFormats[selectedCalendarEventType] || "";
     const currentCalendarDescription = calendarEventDescriptions[selectedCalendarEventType] || "";
@@ -833,6 +874,16 @@ export default function SettingsPage() {
         .map((segment) => applyDriveTemplate(segment, drivePreviewVars))
         .filter((segment) => segment.trim().length > 0)
         .join(" > ");
+    const driveTemplateVariables = Array.from(
+        new Set([
+            ...getDriveTemplateVariables(selectedDriveEventType),
+            ...getCustomFieldTemplateTokens(
+                formSectionsByEventType[selectedDriveEventType] || formSectionsByEventType.Umum || [],
+                selectedDriveEventType,
+                "drive",
+            ),
+        ]),
+    );
 
     function renderTemplateCard(tt: typeof templateTypes[0]) {
         const isFreelancer = tt.value === "whatsapp_freelancer";
@@ -1000,7 +1051,7 @@ export default function SettingsPage() {
                             {templateSaving === contentKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                             {t("simpanProfil").split(" ")[0] || "Simpan"}
                         </Button>
-                        {templateSavedMsg === contentKey && <span className="text-sm text-green-600 dark:text-green-400">Tersimpan di database</span>}
+                        {templateSavedMsg === contentKey && <span className="text-sm text-green-600 dark:text-green-400">✅ Pengaturan berhasil disimpan</span>}
                     </div>
                 </div>
             </div>
@@ -1395,7 +1446,7 @@ export default function SettingsPage() {
                                             className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                                         />
                                         <div className="flex flex-wrap gap-1.5">
-                                            {DRIVE_TEMPLATE_VARIABLES.map((token) => (
+                                            {driveTemplateVariables.map((token) => (
                                                 <button
                                                     key={token}
                                                     type="button"
@@ -1473,10 +1524,10 @@ export default function SettingsPage() {
                                                 ))}
                                             </div>
                                             <div className="flex flex-wrap gap-1.5">
-                                                {DRIVE_TEMPLATE_VARIABLES.map((token) => (
-                                                    <button
-                                                        key={`segment-${token}`}
-                                                        type="button"
+                                            {driveTemplateVariables.map((token) => (
+                                                <button
+                                                    key={`segment-${token}`}
+                                                    type="button"
                                                         onClick={() => setNewDriveSegment((prev) => `${prev}${token}`)}
                                                         className="text-[11px] px-2 py-1 rounded-md border bg-muted/50 text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
                                                     >
@@ -1587,10 +1638,13 @@ export default function SettingsPage() {
                                     onClick={async () => {
                                         if (!profile) return;
                                         setStatusSaving(true);
-                                        await supabase.from("profiles").update({ custom_statuses: customStatuses }).eq("id", profile.id);
-                                        setStatusSaving(false);
-                                        setStatusSaved(true);
-                                        setTimeout(() => setStatusSaved(false), 2000);
+                                        try {
+                                            await saveProfilePatch({ custom_statuses: customStatuses });
+                                            setStatusSaved(true);
+                                            setTimeout(() => setStatusSaved(false), 2000);
+                                        } finally {
+                                            setStatusSaving(false);
+                                        }
                                     }}
                                     className="gap-1.5"
                                 >
@@ -1666,15 +1720,18 @@ export default function SettingsPage() {
                                             customClientStatuses,
                                             finalInvoiceVisibleFromStatus,
                                         );
-                                        await supabase.from("profiles").update({
-                                            custom_client_statuses: customClientStatuses,
-                                            queue_trigger_status: queueTriggerStatus,
-                                            final_invoice_visible_from_status: nextVisibleFromStatus,
-                                        }).eq("id", profile.id);
-                                        setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
-                                        setClientStatusSaving(false);
-                                        setClientStatusSaved(true);
-                                        setTimeout(() => setClientStatusSaved(false), 2000);
+                                        try {
+                                            await saveProfilePatch({
+                                                custom_client_statuses: customClientStatuses,
+                                                queue_trigger_status: queueTriggerStatus,
+                                                final_invoice_visible_from_status: nextVisibleFromStatus,
+                                            });
+                                            setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
+                                            setClientStatusSaved(true);
+                                            setTimeout(() => setClientStatusSaved(false), 2000);
+                                        } finally {
+                                            setClientStatusSaving(false);
+                                        }
                                     }}
                                     className="gap-1.5"
                                 >

@@ -25,12 +25,18 @@ export async function POST(request: NextRequest) {
         const { bookingId, folderName, parentId, bookingCode, clientName } = await request.json();
 
         const resolvedFolderName = typeof folderName === "string" ? folderName.trim() : "";
-        let bookingContext: { bookingCode: string; clientName: string; eventType: string | null; sessionDate: string | null } | null = null;
+        let bookingContext: {
+            bookingCode: string;
+            clientName: string;
+            eventType: string | null;
+            sessionDate: string | null;
+            extraFields: unknown;
+        } | null = null;
 
         if (bookingId) {
             const { data: booking } = await supabase
                 .from("bookings")
-                .select("booking_code, client_name, event_type, session_date")
+                .select("booking_code, client_name, event_type, session_date, extra_fields")
                 .eq("id", bookingId)
                 .single();
             if (booking) {
@@ -39,6 +45,7 @@ export async function POST(request: NextRequest) {
                     clientName: booking.client_name,
                     eventType: booking.event_type,
                     sessionDate: booking.session_date,
+                    extraFields: booking.extra_fields,
                 };
             }
         }
@@ -62,6 +69,7 @@ export async function POST(request: NextRequest) {
                         clientName: bookingContext?.clientName || clientName,
                         eventType: bookingContext?.eventType || null,
                         sessionDate: bookingContext?.sessionDate || null,
+                        extraFields: bookingContext?.extraFields,
                     }),
                 ],
             )

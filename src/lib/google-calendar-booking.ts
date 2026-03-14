@@ -28,9 +28,12 @@ type CalendarBookingConfig = {
   id: string;
   bookingCode: string;
   clientName: string;
+  clientWhatsapp?: string | null;
   sessionDate: string | null;
   location?: string | null;
+  locationDetail?: string | null;
   eventType?: string | null;
+  notes?: string | null;
   extraFields?: unknown;
   googleCalendarEventId?: string | null;
   services?: unknown;
@@ -79,6 +82,7 @@ export async function syncBookingCalendarEvent({
   const templateVars = buildCalendarTemplateVars(
     {
       client_name: booking.clientName,
+      client_whatsapp: booking.clientWhatsapp || "-",
       service_name: getBookingServiceLabel(serviceSelections, {
         kind: "main",
         fallback: booking.eventType || "Sesi Foto",
@@ -87,6 +91,11 @@ export async function syncBookingCalendarEvent({
       booking_code: booking.bookingCode,
       studio_name: profile.studioName || "Client Desk",
       location: booking.location || "-",
+      location_maps_url: booking.location
+        ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}`
+        : "-",
+      detail_location: booking.locationDetail || "-",
+      notes: booking.notes || "-",
       ...range.templateVars,
     },
     booking.extraFields,

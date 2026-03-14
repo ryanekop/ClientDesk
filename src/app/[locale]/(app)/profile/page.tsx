@@ -31,10 +31,36 @@ export default function ProfilePage() {
 
     React.useEffect(() => { fetchProfile(); }, []);
 
+    const saveProfilePatch = React.useEffectEvent(async (patch: Record<string, unknown>) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            throw new Error("User tidak ditemukan.");
+        }
+
+        const fallbackFullName =
+            fullName.trim() ||
+            String(user.user_metadata?.full_name || user.email?.split("@")[0] || "");
+        const { error } = await supabase.from("profiles").upsert(
+            {
+                id: user.id,
+                full_name: fallbackFullName,
+                ...patch,
+            },
+            { onConflict: "id" },
+        );
+
+        if (error) {
+            throw error;
+        }
+    });
+
     async function fetchProfile() {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) {
+            setLoading(false);
+            return;
+        }
 
         setUserId(user.id);
         setEmail(user.email || "");
@@ -46,9 +72,7 @@ export default function ProfilePage() {
             .eq("id", user.id)
             .single();
 
-        if (profile) {
-            setFullName(profile.full_name || "");
-        }
+        setFullName(profile?.full_name || String(user.user_metadata?.full_name || user.email?.split("@")[0] || ""));
 
         // Try fetching avatar_url separately (column may not exist yet)
         try {
@@ -77,20 +101,19 @@ export default function ProfilePage() {
 
     async function handleSave() {
         setSaving(true);
-        const { error } = await supabase.from("profiles").update({
-            full_name: fullName,
-        }).eq("id", userId);
-
-        if (error) {
-            console.error("Save error:", error);
-            setSavedMsg("Gagal menyimpan.");
-        } else {
-            // Also update auth user metadata so it persists
+        try {
+            await saveProfilePatch({
+                full_name: fullName,
+            });
             await supabase.auth.updateUser({ data: { full_name: fullName } });
             setSavedMsg(t("berhasilSimpan"));
+        } catch (error) {
+            console.error("Save error:", error);
+            setSavedMsg("Gagal menyimpan.");
+        } finally {
+            setTimeout(() => setSavedMsg(""), 3000);
+            setSaving(false);
         }
-        setTimeout(() => setSavedMsg(""), 3000);
-        setSaving(false);
     }
 
     // When file selected, show crop modal
@@ -116,9 +139,9 @@ export default function ProfilePage() {
             const reader = new FileReader();
             reader.onload = async () => {
                 const base64 = reader.result as string;
-                await supabase.from("profiles").update({
+                await saveProfilePatch({
                     avatar_url: base64,
-                }).eq("id", userId);
+                });
                 setAvatarUrl(base64);
             };
             reader.readAsDataURL(blob);
@@ -128,9 +151,9 @@ export default function ProfilePage() {
     }
 
     async function handleRemoveAvatar() {
-        await supabase.from("profiles").update({
+        await saveProfilePatch({
             avatar_url: null,
-        }).eq("id", userId);
+        });
         setAvatarUrl(null);
     }
 

@@ -360,7 +360,7 @@ export function BookingFormClient({
       !phone ||
       !sessionDate ||
       selectedServiceIds.length === 0 ||
-      (!location && eventType !== "Wedding")
+      (!location && eventType !== "Wedding" && showsLocationField)
     ) {
       setError(t("errorWajib"));
       return;
@@ -594,6 +594,13 @@ export function BookingFormClient({
     normalizedActiveLayout,
     eventType || "Umum",
   );
+  const showsLocationField =
+    effectiveVendor.form_show_location !== false &&
+    normalizedActiveLayout.some(
+      (item) =>
+        item.kind === "builtin_field" &&
+        item.builtinId === "location",
+    );
   const availableEventTypes = React.useMemo(
     () =>
       getActiveEventTypes({
@@ -1385,9 +1392,9 @@ export function BookingFormClient({
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 px-4">
+      <div className="public-light-theme min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-50 px-4">
         <div className="text-center space-y-6 max-w-md mx-auto">
-          <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-500/10 flex items-center justify-center mx-auto">
+          <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-10 h-10 text-green-600" />
           </div>
           <div>
@@ -1414,7 +1421,7 @@ export function BookingFormClient({
 
   return (
     <div
-      className="min-h-screen px-4 py-8 sm:py-12"
+      className="public-light-theme min-h-screen px-4 py-8 sm:py-12"
       style={{
         backgroundImage: `linear-gradient(135deg, ${brandColor}18 0%, #ffffff 40%, #f8fafc 100%)`,
       }}
@@ -1515,7 +1522,7 @@ export function BookingFormClient({
 
           {/* Error */}
           {error && (
-            <div className="rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-3 text-sm text-red-600 dark:text-red-400">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
               {error}
             </div>
           )}

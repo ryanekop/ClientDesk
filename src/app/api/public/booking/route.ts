@@ -183,6 +183,7 @@ export async function POST(request: NextRequest) {
         if (
             proofEnabled &&
             selectedPaymentMethod !== "cash" &&
+            paymentProofFile &&
             (!vendor.google_drive_access_token || !vendor.google_drive_refresh_token)
         ) {
             return NextResponse.json(
@@ -334,6 +335,7 @@ export async function POST(request: NextRequest) {
                     clientName,
                     eventType,
                     sessionDate,
+                    extraFields: sanitizedExtraData,
                     fileName: paymentProofFile.name || `${booking.booking_code}_proof`,
                     mimeType: paymentProofFile.type || "application/octet-stream",
                     fileBuffer,
@@ -370,9 +372,12 @@ export async function POST(request: NextRequest) {
                         id: booking.id,
                         bookingCode,
                         clientName,
+                        clientWhatsapp,
                         sessionDate,
                         location,
+                        locationDetail,
                         eventType,
+                        notes,
                         extraFields: sanitizedExtraData,
                         services: mainServices[0] || null,
                         bookingServices: mainServices.map((service, index) => ({
