@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, Clock, PlayCircle, HardDrive, Edit3, Camera, Loader2, ExternalLink, Users, Download } from "lucide-react";
+import { Clock, HardDrive, ExternalLink, Download } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
 
@@ -30,19 +30,15 @@ type BookingData = {
 };
 
 const DEFAULT_STEPS = [
-    { key: "Pending", labelKey: "stepPending", icon: Clock },
-    { key: "Booking Confirmed", labelKey: "stepConfirmed", icon: CheckCircle2 },
-    { key: "Sesi Foto / Acara", labelKey: "stepSession", icon: Camera },
-    { key: "Antrian Edit", labelKey: "stepEditQueue", icon: Users },
-    { key: "Proses Edit", labelKey: "stepEditing", icon: Edit3 },
-    { key: "Revisi", labelKey: "stepRevision", icon: Edit3 },
-    { key: "File Siap", labelKey: "stepFileReady", icon: HardDrive },
-    { key: "Selesai", labelKey: "stepDone", icon: CheckCircle2 },
+    { key: "Pending", labelKey: "stepPending" },
+    { key: "Booking Confirmed", labelKey: "stepConfirmed" },
+    { key: "Sesi Foto / Acara", labelKey: "stepSession" },
+    { key: "Antrian Edit", labelKey: "stepEditQueue" },
+    { key: "Proses Edit", labelKey: "stepEditing" },
+    { key: "Revisi", labelKey: "stepRevision" },
+    { key: "File Siap", labelKey: "stepFileReady" },
+    { key: "Selesai", labelKey: "stepDone" },
 ];
-
-type DefaultStep = (typeof DEFAULT_STEPS)[number];
-
-const ICON_PALETTE = [CheckCircle2, Camera, Users, Edit3, PlayCircle, HardDrive, CheckCircle2, Clock, Edit3, Loader2];
 
 interface TrackingClientProps {
     booking: BookingData;
@@ -57,12 +53,11 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
     // Build steps from custom statuses or fallback to defaults
     const steps = React.useMemo(() => {
         if (!customStatuses || customStatuses.length === 0) return DEFAULT_STEPS;
-        return customStatuses.map((key, i) => {
+        return customStatuses.map((key) => {
             const defaultMatch = DEFAULT_STEPS.find(d => d.key === key);
             return {
                 key,
-                labelKey: defaultMatch?.labelKey || key,
-                icon: defaultMatch?.icon || ICON_PALETTE[i % ICON_PALETTE.length],
+                labelKey: defaultMatch?.labelKey,
             };
         });
     }, [customStatuses]);
@@ -134,25 +129,26 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                         {steps.map((step, idx) => {
                             const isDone = idx <= currentIdx;
                             const isCurrent = idx === currentIdx;
+                            const isPast = idx < currentIdx;
                             const isLast = idx === steps.length - 1;
-                            const Icon = step.icon;
-                            const defaultStep: DefaultStep | undefined = DEFAULT_STEPS.find((item) => item.key === step.key);
-                            const stepLabel = defaultStep ? t(defaultStep.labelKey as never) : step.key;
+                            const stepLabel = step.labelKey ? t(step.labelKey as never) : step.key;
 
                             return (
                                 <div key={step.key} className="relative flex gap-4">
                                     {/* Vertical Line */}
                                     {!isLast && (
-                                        <div className={`absolute top-10 bottom-0 left-[19px] w-[2px] ${isDone && !isCurrent ? "bg-primary" : "bg-border"}`} />
+                                        <div className={`absolute top-7 bottom-0 left-[19px] w-[2px] ${isPast ? "bg-primary" : "bg-border"}`} />
                                     )}
 
-                                    <div className={`relative z-10 flex shrink-0 items-center justify-center w-10 h-10 rounded-full border-2 transition-all ${isDone
-                                        ? "bg-primary border-primary text-primary-foreground"
-                                        : isCurrent
-                                            ? "bg-background border-primary text-primary ring-4 ring-primary/10"
-                                            : "bg-background border-border text-muted-foreground"
-                                        }`}>
-                                        <Icon className="w-4 h-4" />
+                                    <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center">
+                                        <span
+                                            className={`block h-3.5 w-3.5 rounded-full transition-all ${isCurrent
+                                                ? "bg-primary ring-4 ring-primary/15"
+                                                : isDone
+                                                    ? "bg-primary"
+                                                    : "border-2 border-border bg-background"
+                                                }`}
+                                        />
                                     </div>
 
                                     <div className={`flex flex-col pb-8 pt-2 ${!isDone && !isCurrent ? "opacity-40" : ""}`}>
