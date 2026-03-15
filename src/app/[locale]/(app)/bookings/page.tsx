@@ -46,6 +46,10 @@ import {
     DEFAULT_CLIENT_STATUSES,
     getBookingStatusOptions,
 } from "@/lib/client-status";
+import {
+    buildGoogleMapsQueryUrl,
+    buildGoogleMapsUrlOrFallback,
+} from "@/utils/location";
 import * as XLSX from "xlsx";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
@@ -65,6 +69,8 @@ type Booking = {
     dp_paid: number;
     drive_folder_url: string | null;
     location: string | null;
+    location_lat: number | null;
+    location_lng: number | null;
     notes: string | null;
     services: { id?: string; name: string; price?: number; is_addon?: boolean | null } | null;
     event_type: string | null;
@@ -139,7 +145,14 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
         freelancer_name: freelancerName || "",
         event_type: booking.event_type || "-",
         location: booking.location || "-",
-        location_maps_url: booking.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
+        location_maps_url: buildGoogleMapsUrlOrFallback(
+            {
+                address: booking.location,
+                lat: booking.location_lat,
+                lng: booking.location_lng,
+            },
+            "-",
+        ),
         detail_location: booking.location_detail || "-",
         notes: booking.notes || "-",
         tracking_link: booking.tracking_uuid ? `${siteUrl}/id/track/${booking.tracking_uuid}` : "-",
@@ -284,7 +297,7 @@ export default function BookingsPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, total_price, dp_paid, drive_folder_url, location, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, total_price, dp_paid, drive_folder_url, location, location_lat, location_lng, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
@@ -641,7 +654,16 @@ export default function BookingsPage() {
                         {booking.location ? (
                             <div className="flex items-center gap-1">
                                 <span className="truncate text-xs text-muted-foreground" title={booking.location}>{booking.location}</span>
-                                <button type="button" onClick={() => window.open(`https://maps.google.com/maps?q=${encodeURIComponent(booking.location!)}`, "_blank")}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const mapsUrl = buildGoogleMapsQueryUrl({
+                                            address: booking.location,
+                                            lat: booking.location_lat,
+                                            lng: booking.location_lng,
+                                        });
+                                        if (mapsUrl) window.open(mapsUrl, "_blank");
+                                    }}
                                     className="text-blue-500 hover:text-blue-600 transition-colors shrink-0">
                                     <MapPin className="w-3 h-3" />
                                 </button>

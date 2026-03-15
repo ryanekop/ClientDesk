@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
-import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
+import {
+    LocationAutocomplete,
+    type LocationSelectionMeta,
+} from "@/components/ui/location-autocomplete";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { BookingAdminCustomFields } from "@/components/form-builder/booking-admin-custom-fields";
@@ -29,6 +32,7 @@ import {
     getInitialBookingStatus,
 } from "@/lib/client-status";
 import { createBookingCode, isDuplicateBookingCodeError } from "@/lib/booking-code";
+import { resolvePreferredLocation } from "@/utils/location";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -98,6 +102,7 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string
 
 type Service = { id: string; name: string; price: number; is_addon?: boolean | null };
 type Freelance = { id: string; name: string };
+type LocationCoords = { lat: number | null; lng: number | null };
 
 function formatNumber(n: number | ""): string {
     if (n === "" || n === 0) return "";
@@ -131,7 +136,9 @@ export default function NewBookingPage() {
     const [clientName, setClientName] = React.useState("");
     const [eventType, setEventType] = React.useState("Umum");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
+    const [extraLocationCoords, setExtraLocationCoords] = React.useState<Record<string, LocationCoords>>({});
     const [location, setLocation] = React.useState("");
+    const [locationCoords, setLocationCoords] = React.useState<LocationCoords>({ lat: null, lng: null });
     const [locationDetail, setLocationDetail] = React.useState("");
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
@@ -346,13 +353,42 @@ export default function NewBookingPage() {
             eventType,
             customFieldValues,
         );
+        const resolvedLocation = resolvePreferredLocation(
+            eventType === "Wedding"
+                ? [
+                    {
+                        address: extraFields.tempat_akad,
+                        lat: extraLocationCoords.tempat_akad?.lat,
+                        lng: extraLocationCoords.tempat_akad?.lng,
+                    },
+                    {
+                        address: extraFields.tempat_resepsi,
+                        lat: extraLocationCoords.tempat_resepsi?.lat,
+                        lng: extraLocationCoords.tempat_resepsi?.lng,
+                    },
+                    {
+                        address: location,
+                        lat: locationCoords.lat,
+                        lng: locationCoords.lng,
+                    },
+                ]
+                : [
+                    {
+                        address: location,
+                        lat: locationCoords.lat,
+                        lng: locationCoords.lng,
+                    },
+                ],
+        );
 
         const bookingPayload = {
             user_id: user.id,
             client_name: clientName,
             client_whatsapp: fullPhone,
             session_date: finalSessionDate,
-            location: (eventType === "Wedding" ? (extraFields.tempat_akad || extraFields.tempat_resepsi || location) : location) || null,
+            location: resolvedLocation.location,
+            location_lat: resolvedLocation.locationLat,
+            location_lng: resolvedLocation.locationLng,
             location_detail: locationDetail || null,
             instagram: instagram || null,
             event_type: eventType,
@@ -525,7 +561,22 @@ export default function NewBookingPage() {
                                 <div key={f.key} className={`space-y-1.5 ${f.isLocation || f.fullWidth || currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
                                     <label className="text-xs font-medium text-muted-foreground">{locale === "id" ? f.label : f.labelEn}{f.required && <span className="text-red-500 ml-0.5">*</span>}</label>
                                     {f.isLocation ? (
-                                        <LocationAutocomplete value={extraFields[f.key] || ""} onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))} placeholder={`Cari lokasi ${f.label.toLowerCase()}...`} />
+                                        <LocationAutocomplete
+                                            value={extraFields[f.key] || ""}
+                                            onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))}
+                                            onLocationChange={(meta: LocationSelectionMeta) => {
+                                                setExtraLocationCoords((prev) => ({
+                                                    ...prev,
+                                                    [f.key]:
+                                                        meta.source === "manual" || meta.source === "clear"
+                                                            ? { lat: null, lng: null }
+                                                            : { lat: meta.lat, lng: meta.lng },
+                                                }));
+                                            }}
+                                            placeholder={`Cari lokasi ${f.label.toLowerCase()}...`}
+                                            initialLat={extraLocationCoords[f.key]?.lat ?? null}
+                                            initialLng={extraLocationCoords[f.key]?.lng ?? null}
+                                        />
                                     ) : f.isNumeric ? (
                                         <input placeholder={f.label} value={extraFields[f.key] || ""} onChange={e => {
                                             const raw = e.target.value.replace(/[^0-9]/g, "");
@@ -561,7 +612,7 @@ export default function NewBookingPage() {
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
-                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setCustomFieldValues({}); }} className={selectClass} required>
+                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setExtraLocationCoords({}); setCustomFieldValues({}); }} className={selectClass} required>
                                 {eventTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
@@ -637,7 +688,20 @@ export default function NewBookingPage() {
                         {eventType !== "Wedding" && (
                             <div className="col-span-full space-y-1.5">
                                 <label className="text-xs font-medium text-muted-foreground">Lokasi Utama</label>
-                                <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi sesi foto..." />
+                                <LocationAutocomplete
+                                    value={location}
+                                    onChange={setLocation}
+                                    onLocationChange={(meta: LocationSelectionMeta) => {
+                                        setLocationCoords(
+                                            meta.source === "manual" || meta.source === "clear"
+                                                ? { lat: null, lng: null }
+                                                : { lat: meta.lat, lng: meta.lng },
+                                        );
+                                    }}
+                                    placeholder="Cari lokasi sesi foto..."
+                                    initialLat={locationCoords.lat}
+                                    initialLng={locationCoords.lng}
+                                />
                             </div>
                         )}
                         <div className="col-span-full space-y-1.5">

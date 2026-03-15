@@ -41,6 +41,7 @@ import {
     getWhatsAppTemplateContent,
     normalizeWhatsAppNumber,
 } from "@/lib/whatsapp-template";
+import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
 type BookingFinance = {
     id: string;
     booking_code: string;
@@ -53,6 +54,8 @@ type BookingFinance = {
     session_date: string | null;
     event_type: string | null;
     location: string | null;
+    location_lat: number | null;
+    location_lng: number | null;
     tracking_uuid: string | null;
     client_status: string | null;
     settlement_status: string | null;
@@ -115,7 +118,7 @@ export default function FinancePage() {
         const [{ data }, { data: templates }, { data: profile }] = await Promise.all([
             supabase
                 .from("bookings")
-                .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, event_type, location, tracking_uuid, client_status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, payment_proof_url, payment_proof_drive_file_id, final_payment_proof_url, final_payment_proof_drive_file_id, extra_fields, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
+                .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, event_type, location, location_lat, location_lng, tracking_uuid, client_status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, payment_proof_url, payment_proof_drive_file_id, final_payment_proof_url, final_payment_proof_drive_file_id, extra_fields, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
                 .eq("user_id", user.id)
                 .neq("status", "Batal")
                 .order("created_at", { ascending: false }),
@@ -381,7 +384,14 @@ export default function FinancePage() {
                 studio_name: studioName || "",
                 event_type: booking.event_type || "-",
                 location: booking.location || "-",
-                location_maps_url: booking.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
+                location_maps_url: buildGoogleMapsUrlOrFallback(
+                    {
+                        address: booking.location,
+                        lat: booking.location_lat,
+                        lng: booking.location_lng,
+                    },
+                    "-",
+                ),
                 detail_location: "-",
                 notes: "-",
                 tracking_link: trackingLink || "-",

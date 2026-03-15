@@ -47,6 +47,11 @@ import {
     resolveUnifiedBookingStatus,
 } from "@/lib/client-status";
 import { isGoogleDriveConnected } from "@/utils/google/connection";
+import {
+    buildGoogleMapsDirectionUrl,
+    buildGoogleMapsQueryUrl,
+    buildGoogleMapsUrlOrFallback,
+} from "@/utils/location";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -93,6 +98,8 @@ type Booking = {
     drive_folder_url: string | null;
     portfolio_url: string | null;
     location: string | null;
+    location_lat: number | null;
+    location_lng: number | null;
     location_detail: string | null;
     instagram: string | null;
     event_type: string | null;
@@ -202,21 +209,33 @@ function groupCustomSnapshotsBySection(snapshots: CustomFieldSnapshot[]) {
     }, {});
 }
 
-function LocationValue({ address }: { address: string }) {
-    const mapsUrl = `https://maps.google.com/maps?q=${encodeURIComponent(address)}`;
-    const dirUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+function LocationValue({
+    address,
+    lat,
+    lng,
+}: {
+    address: string;
+    lat?: number | null;
+    lng?: number | null;
+}) {
+    const mapsUrl = buildGoogleMapsQueryUrl({ address, lat, lng });
+    const dirUrl = buildGoogleMapsDirectionUrl({ address, lat, lng });
     return (
         <span className="flex items-start gap-1.5">
             <span className="flex-1">{address}</span>
             <span className="flex gap-1 shrink-0 mt-0.5">
-                <button type="button" onClick={() => window.open(mapsUrl, "_blank")} title="Buka di Google Maps"
-                    className="text-blue-600 hover:text-blue-700 transition-colors inline-flex items-center justify-center w-6 h-6 rounded hover:bg-blue-50 dark:hover:bg-blue-500/10">
-                    <MapPin className="w-3.5 h-3.5" />
-                </button>
-                <button type="button" onClick={() => window.open(dirUrl, "_blank")} title="Direction"
-                    className="text-green-600 hover:text-green-700 transition-colors inline-flex items-center justify-center w-6 h-6 rounded hover:bg-green-50 dark:hover:bg-green-500/10">
-                    <Navigation className="w-3.5 h-3.5" />
-                </button>
+                {mapsUrl && (
+                    <button type="button" onClick={() => window.open(mapsUrl, "_blank")} title="Buka di Google Maps"
+                        className="text-blue-600 hover:text-blue-700 transition-colors inline-flex items-center justify-center w-6 h-6 rounded hover:bg-blue-50 dark:hover:bg-blue-500/10">
+                        <MapPin className="w-3.5 h-3.5" />
+                    </button>
+                )}
+                {dirUrl && (
+                    <button type="button" onClick={() => window.open(dirUrl, "_blank")} title="Direction"
+                        className="text-green-600 hover:text-green-700 transition-colors inline-flex items-center justify-center w-6 h-6 rounded hover:bg-green-50 dark:hover:bg-green-500/10">
+                        <Navigation className="w-3.5 h-3.5" />
+                    </button>
+                )}
             </span>
         </span>
     );
@@ -400,7 +419,7 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }, { data: addonServiceRows }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map").eq("id", user.id).single(),
                 supabase.from("services")
@@ -598,7 +617,14 @@ export default function BookingDetailPage() {
                 studio_name: studioName || "",
                 event_type: booking?.event_type || "-",
                 location: booking?.location || "-",
-                location_maps_url: booking?.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
+                location_maps_url: buildGoogleMapsUrlOrFallback(
+                    {
+                        address: booking?.location,
+                        lat: booking?.location_lat,
+                        lng: booking?.location_lng,
+                    },
+                    "-",
+                ),
                 detail_location: booking?.location_detail || "-",
                 notes: booking?.notes || "-",
                 tracking_link: trackingLink || "-",
@@ -636,7 +662,14 @@ export default function BookingDetailPage() {
                 studio_name: studioName || "",
                 event_type: booking?.event_type || "-",
                 location: booking?.location || "-",
-                location_maps_url: booking?.location ? `https://maps.google.com/maps?q=${encodeURIComponent(booking.location)}` : "-",
+                location_maps_url: buildGoogleMapsUrlOrFallback(
+                    {
+                        address: booking?.location,
+                        lat: booking?.location_lat,
+                        lng: booking?.location_lng,
+                    },
+                    "-",
+                ),
                 detail_location: booking?.location_detail || "-",
                 notes: booking?.notes || "-",
                 ...buildExtraFieldTemplateVars(booking?.extra_fields),
@@ -1257,7 +1290,16 @@ export default function BookingDetailPage() {
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Detail Sesi</h3>
                 <InfoRow label="Jadwal" value={formatDate(booking.session_date)} />
                 {booking.location && (
-                    <InfoRow label="Lokasi" value={<LocationValue address={booking.location} />} />
+                    <InfoRow
+                        label="Lokasi"
+                        value={
+                            <LocationValue
+                                address={booking.location}
+                                lat={booking.location_lat}
+                                lng={booking.location_lng}
+                            />
+                        }
+                    />
                 )}
                 {booking.location_detail && (
                     <InfoRow label="Detail Lokasi" value={booking.location_detail} />

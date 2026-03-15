@@ -27,6 +27,7 @@ import {
     createBookingCode,
     isDuplicateBookingCodeError,
 } from "@/lib/booking-code";
+import { normalizeCoordinate } from "@/utils/location";
 
 type VendorRecord = {
     id: string;
@@ -64,6 +65,8 @@ type BookingRequestBody = {
     serviceId: string;
     dpPaid: number;
     location: string | null;
+    locationLat?: number | string | null;
+    locationLng?: number | string | null;
     locationDetail: string | null;
     notes: string | null;
     extraData: Record<string, unknown> | null;
@@ -126,6 +129,10 @@ function normalizeStoredDateTime(value: unknown): string {
     const parsed = new Date(trimmed);
     if (Number.isNaN(parsed.getTime())) return "";
     return trimmed;
+}
+
+function normalizeStoredCoordinate(value: unknown): number | null {
+    return normalizeCoordinate(value);
 }
 
 function extractMissingColumnFromSupabaseError(
@@ -232,6 +239,12 @@ export async function POST(request: NextRequest) {
                 serviceId: String(formData.get("serviceId") || ""),
                 dpPaid: Number(formData.get("dpPaid") || 0),
                 location: formData.get("location") ? String(formData.get("location")) : null,
+                locationLat: formData.get("locationLat")
+                    ? String(formData.get("locationLat"))
+                    : null,
+                locationLng: formData.get("locationLng")
+                    ? String(formData.get("locationLng"))
+                    : null,
                 locationDetail: formData.get("locationDetail") ? String(formData.get("locationDetail")) : null,
                 notes: formData.get("notes") ? String(formData.get("notes")) : null,
                 extraData: formData.get("extraData")
@@ -266,6 +279,8 @@ export async function POST(request: NextRequest) {
             serviceId,
             dpPaid,
             location,
+            locationLat,
+            locationLng,
             locationDetail,
             notes,
             extraData,
@@ -277,6 +292,8 @@ export async function POST(request: NextRequest) {
 
         const normalizedClientName = (clientName || "").trim() || "Klien";
         const normalizedClientWhatsapp = (clientWhatsapp || "").trim();
+        const normalizedLocationLat = normalizeStoredCoordinate(locationLat);
+        const normalizedLocationLng = normalizeStoredCoordinate(locationLng);
         const rawExtraData =
             typeof extraData === "object" && extraData !== null
                 ? extraData as Record<string, unknown>
@@ -479,6 +496,8 @@ export async function POST(request: NextRequest) {
             total_price: computedTotalPrice,
             dp_paid: dpPaid,
             location: location || null,
+            location_lat: normalizedLocationLat,
+            location_lng: normalizedLocationLng,
             location_detail: locationDetail || null,
             notes: notes || null,
             extra_fields: Object.keys(sanitizedExtraData).length > 0 ? sanitizedExtraData : null,
@@ -640,6 +659,8 @@ export async function POST(request: NextRequest) {
                         clientWhatsapp: normalizedClientWhatsapp || null,
                         sessionDate: resolvedSessionDate || null,
                         location: location ?? null,
+                        locationLat: normalizedLocationLat,
+                        locationLng: normalizedLocationLng,
                         locationDetail,
                         eventType,
                         notes,

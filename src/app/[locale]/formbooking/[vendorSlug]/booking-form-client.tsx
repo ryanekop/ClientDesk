@@ -9,7 +9,10 @@ import {
   MessageCircle,
   FileText,
 } from "lucide-react";
-import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
+import {
+  LocationAutocomplete,
+  type LocationSelectionMeta,
+} from "@/components/ui/location-autocomplete";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +47,11 @@ import {
   PUBLIC_CUSTOM_EVENT_TYPE,
 } from "@/lib/event-type-config";
 import { fillWhatsAppTemplate } from "@/lib/whatsapp-template";
+import {
+  buildGoogleMapsUrlOrFallback,
+  resolvePreferredLocation,
+  type LocationCoordinates,
+} from "@/utils/location";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -284,11 +292,18 @@ export function BookingFormClient({
   const [selectedAddons, setSelectedAddons] = React.useState<Set<string>>(new Set());
   const [dpDisplay, setDpDisplay] = React.useState("");
   const [location, setLocation] = React.useState("");
+  const [locationCoords, setLocationCoords] = React.useState<LocationCoordinates>({
+    lat: null,
+    lng: null,
+  });
   const [locationDetail, setLocationDetail] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [instagram, setInstagram] = React.useState("");
   const [customFields, setCustomFields] = React.useState<Record<string, string>>({});
   const [extraData, setExtraData] = React.useState<Record<string, string>>({});
+  const [extraLocationCoords, setExtraLocationCoords] = React.useState<
+    Record<string, LocationCoordinates>
+  >({});
   const [splitDates, setSplitDates] = React.useState(false);
   const [akadDate, setAkadDate] = React.useState("");
   const [resepsiDate, setResepsiDate] = React.useState("");
@@ -429,10 +444,34 @@ export function BookingFormClient({
 
     const fullPhone = `${countryCode}${phone}`.replace(/[^0-9+]/g, "");
     const dpValue = parseFormatted(dpDisplay) || 0;
-    const finalLocation =
+    const resolvedLocation = resolvePreferredLocation(
       eventType === "Wedding"
-        ? extraData.tempat_akad || extraData.tempat_resepsi || location
-        : location;
+        ? [
+            {
+              address: extraData.tempat_akad,
+              lat: extraLocationCoords.tempat_akad?.lat,
+              lng: extraLocationCoords.tempat_akad?.lng,
+            },
+            {
+              address: extraData.tempat_resepsi,
+              lat: extraLocationCoords.tempat_resepsi?.lat,
+              lng: extraLocationCoords.tempat_resepsi?.lng,
+            },
+            {
+              address: location,
+              lat: locationCoords.lat,
+              lng: locationCoords.lng,
+            },
+          ]
+        : [
+            {
+              address: location,
+              lat: locationCoords.lat,
+              lng: locationCoords.lng,
+            },
+          ],
+    );
+    const finalLocation = resolvedLocation.location;
     const activeSelectedMainServices = (eventType
       ? services.filter(
           (service) =>
@@ -509,6 +548,8 @@ export function BookingFormClient({
       formData.append("serviceIds", JSON.stringify(selectedServiceIds));
       formData.append("dpPaid", String(dpValue));
       formData.append("location", finalLocation || "");
+      formData.append("locationLat", String(resolvedLocation.locationLat ?? ""));
+      formData.append("locationLng", String(resolvedLocation.locationLng ?? ""));
       formData.append("locationDetail", locationDetail || "");
       formData.append("notes", notes || "");
       formData.append(
@@ -575,6 +616,41 @@ export function BookingFormClient({
         })
       : "-";
     const dpVal = parseFormatted(dpDisplay) || 0;
+    const resolvedLocation = resolvePreferredLocation(
+      eventType === "Wedding"
+        ? [
+            {
+              address: extraData.tempat_akad,
+              lat: extraLocationCoords.tempat_akad?.lat,
+              lng: extraLocationCoords.tempat_akad?.lng,
+            },
+            {
+              address: extraData.tempat_resepsi,
+              lat: extraLocationCoords.tempat_resepsi?.lat,
+              lng: extraLocationCoords.tempat_resepsi?.lng,
+            },
+            {
+              address: location,
+              lat: locationCoords.lat,
+              lng: locationCoords.lng,
+            },
+          ]
+        : [
+            {
+              address: location,
+              lat: locationCoords.lat,
+              lng: locationCoords.lng,
+            },
+          ],
+    );
+    const mapsUrl = buildGoogleMapsUrlOrFallback(
+      {
+        address: resolvedLocation.location,
+        lat: resolvedLocation.locationLat,
+        lng: resolvedLocation.locationLng,
+      },
+      "-",
+    );
 
     const msg =
       (resultData.bookingConfirmTemplate || "").trim()
@@ -587,10 +663,8 @@ export function BookingFormClient({
             dp_paid: formatCurrency(dpVal),
             studio_name: resultData.vendorName || "Admin",
             event_type: eventType || "-",
-            location: location || "-",
-            location_maps_url: location
-              ? `https://maps.google.com/maps?q=${encodeURIComponent(location)}`
-              : "-",
+            location: resolvedLocation.location || "-",
+            location_maps_url: mapsUrl,
             detail_location: locationDetail || "-",
             notes: notes || "-",
             tracking_link: "-",
@@ -602,7 +676,7 @@ export function BookingFormClient({
           `Nama: ${clientName}\n` +
           `Paket: ${svcName}\n` +
           `Jadwal: ${dateStr}\n` +
-          (location ? `Lokasi: ${location}\n` : "") +
+          (resolvedLocation.location ? `Lokasi: ${resolvedLocation.location}\n` : "") +
           `\n💰 Total: ${formatCurrency(selectedBookingTotal)}\n` +
           `✅ DP: ${formatCurrency(dpVal)}\n` +
           `💳 Metode: ${selectedPaymentMethod ? getPaymentMethodLabel(selectedPaymentMethod) : "-"}\n` +
@@ -888,7 +962,18 @@ export function BookingFormClient({
             onChange={(value) =>
               setExtraData((prev) => ({ ...prev, [field.key]: value }))
             }
+            onLocationChange={(meta: LocationSelectionMeta) => {
+              setExtraLocationCoords((prev) => ({
+                ...prev,
+                [field.key]:
+                  meta.source === "manual" || meta.source === "clear"
+                    ? { lat: null, lng: null }
+                    : { lat: meta.lat, lng: meta.lng },
+              }));
+            }}
             placeholder={`Cari lokasi ${field.label.toLowerCase()}...`}
+            initialLat={extraLocationCoords[field.key]?.lat ?? null}
+            initialLng={extraLocationCoords[field.key]?.lng ?? null}
           />
         ) : field.isNumeric ? (
           <input
@@ -1008,6 +1093,7 @@ export function BookingFormClient({
               onChange={(e) => {
                 setEventType(e.target.value);
                 setExtraData({});
+                setExtraLocationCoords({});
                 setCustomFields({});
                 setSelectedServiceIds([]);
                 setSelectedAddons(new Set());
@@ -1154,7 +1240,16 @@ export function BookingFormClient({
             <LocationAutocomplete
               value={location}
               onChange={setLocation}
+              onLocationChange={(meta: LocationSelectionMeta) => {
+                setLocationCoords(
+                  meta.source === "manual" || meta.source === "clear"
+                    ? { lat: null, lng: null }
+                    : { lat: meta.lat, lng: meta.lng },
+                );
+              }}
               placeholder={t("cariLokasi")}
+              initialLat={locationCoords.lat}
+              initialLng={locationCoords.lng}
             />
           </div>
         );

@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
-import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
+import {
+    LocationAutocomplete,
+    type LocationSelectionMeta,
+} from "@/components/ui/location-autocomplete";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { BookingAdminCustomFields } from "@/components/form-builder/booking-admin-custom-fields";
@@ -30,6 +33,7 @@ import {
     getInitialBookingStatus,
     resolveUnifiedBookingStatus,
 } from "@/lib/client-status";
+import { resolvePreferredLocation } from "@/utils/location";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -99,6 +103,7 @@ const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: st
 
 type Service = { id: string; name: string; price: number; is_addon?: boolean | null };
 type Freelance = { id: string; name: string };
+type LocationCoords = { lat: number | null; lng: number | null };
 
 function formatNumber(n: number | ""): string {
     if (n === "" || n === 0) return "";
@@ -148,6 +153,7 @@ export default function EditBookingPage() {
     const [eventType, setEventType] = React.useState("Umum");
     const [sessionDate, setSessionDate] = React.useState("");
     const [location, setLocation] = React.useState("");
+    const [locationCoords, setLocationCoords] = React.useState<LocationCoords>({ lat: null, lng: null });
     const [locationDetail, setLocationDetail] = React.useState("");
     const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
     const [freelancerIds, setFreelancerIds] = React.useState<string[]>([]);
@@ -163,6 +169,7 @@ export default function EditBookingPage() {
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
     const [portfolioUrl, setPortfolioUrl] = React.useState("");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
+    const [extraLocationCoords, setExtraLocationCoords] = React.useState<Record<string, LocationCoords>>({});
     const [customFieldValues, setCustomFieldValues] = React.useState<Record<string, string>>({});
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
     const [splitDates, setSplitDates] = React.useState(false);
@@ -235,6 +242,10 @@ export default function EditBookingPage() {
                 setEventType(booking.event_type || "Umum");
                 setSessionDate(booking.session_date ? booking.session_date.slice(0, 16) : "");
                 setLocation(booking.location || "");
+                setLocationCoords({
+                    lat: typeof booking.location_lat === "number" ? booking.location_lat : null,
+                    lng: typeof booking.location_lng === "number" ? booking.location_lng : null,
+                });
                 setLocationDetail(booking.location_detail || "");
                 const selectedMainIds = ((bsRows || []) as Array<{ service_id: string; kind: string }>).filter((row) => row.kind === "main").map((row) => row.service_id);
                 setSelectedServiceIds(selectedMainIds.length > 0 ? selectedMainIds : booking.service_id ? [booking.service_id] : []);
@@ -253,9 +264,30 @@ export default function EditBookingPage() {
                 setNotes(booking.notes || "");
                 setDriveFolderUrl(booking.drive_folder_url || "");
                 setPortfolioUrl(booking.portfolio_url || "");
-                setExtraFields((booking.extra_fields ? Object.fromEntries(
+                const nextExtraFields = (booking.extra_fields ? Object.fromEntries(
                     Object.entries(booking.extra_fields).filter(([key, value]) => key !== "custom_fields" && typeof value === "string")
-                ) : {}) as Record<string, string>);
+                ) : {}) as Record<string, string>;
+                setExtraFields(nextExtraFields);
+                const seededExtraCoords: Record<string, LocationCoords> = {};
+                if (
+                    booking.location &&
+                    typeof booking.location_lat === "number" &&
+                    typeof booking.location_lng === "number"
+                ) {
+                    if (nextExtraFields.tempat_akad === booking.location) {
+                        seededExtraCoords.tempat_akad = {
+                            lat: booking.location_lat,
+                            lng: booking.location_lng,
+                        };
+                    }
+                    if (nextExtraFields.tempat_resepsi === booking.location) {
+                        seededExtraCoords.tempat_resepsi = {
+                            lat: booking.location_lat,
+                            lng: booking.location_lng,
+                        };
+                    }
+                }
+                setExtraLocationCoords(seededExtraCoords);
                 setCustomFieldValues(extractCustomFieldValueMap(booking.extra_fields));
                 // Pre-populate splitDates from extra_fields
                 if (booking.event_type === "Wedding" && booking.extra_fields?.tanggal_akad) {
@@ -403,6 +435,33 @@ export default function EditBookingPage() {
             eventType,
             customFieldValues,
         );
+        const resolvedLocation = resolvePreferredLocation(
+            eventType === "Wedding"
+                ? [
+                    {
+                        address: extraFields.tempat_akad,
+                        lat: extraLocationCoords.tempat_akad?.lat,
+                        lng: extraLocationCoords.tempat_akad?.lng,
+                    },
+                    {
+                        address: extraFields.tempat_resepsi,
+                        lat: extraLocationCoords.tempat_resepsi?.lat,
+                        lng: extraLocationCoords.tempat_resepsi?.lng,
+                    },
+                    {
+                        address: location,
+                        lat: locationCoords.lat,
+                        lng: locationCoords.lng,
+                    },
+                ]
+                : [
+                    {
+                        address: location,
+                        lat: locationCoords.lat,
+                        lng: locationCoords.lng,
+                    },
+                ],
+        );
 
         const { error } = await supabase.from("bookings").update({
             client_name: clientName,
@@ -410,7 +469,9 @@ export default function EditBookingPage() {
             instagram: instagram || null,
             event_type: eventType,
             session_date: finalSessionDate,
-            location: (eventType === "Wedding" ? (extraFields.tempat_akad || extraFields.tempat_resepsi || location) : location) || null,
+            location: resolvedLocation.location,
+            location_lat: resolvedLocation.locationLat,
+            location_lng: resolvedLocation.locationLng,
             location_detail: locationDetail || null,
             service_id: selectedServiceIds[0] || null,
             freelance_id: freelancerIds[0] || null,
@@ -549,7 +610,22 @@ export default function EditBookingPage() {
                                 <div key={f.key} className={`space-y-1.5 ${f.isLocation || f.fullWidth || currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
                                     <label className="text-xs font-medium text-muted-foreground">{locale === "id" ? f.label : f.labelEn}{f.required && <span className="text-red-500 ml-0.5">*</span>}</label>
                                     {f.isLocation ? (
-                                        <LocationAutocomplete value={extraFields[f.key] || ""} onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))} placeholder={`Cari lokasi ${f.label.toLowerCase()}...`} />
+                                        <LocationAutocomplete
+                                            value={extraFields[f.key] || ""}
+                                            onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))}
+                                            onLocationChange={(meta: LocationSelectionMeta) => {
+                                                setExtraLocationCoords((prev) => ({
+                                                    ...prev,
+                                                    [f.key]:
+                                                        meta.source === "manual" || meta.source === "clear"
+                                                            ? { lat: null, lng: null }
+                                                            : { lat: meta.lat, lng: meta.lng },
+                                                }));
+                                            }}
+                                            placeholder={`Cari lokasi ${f.label.toLowerCase()}...`}
+                                            initialLat={extraLocationCoords[f.key]?.lat ?? null}
+                                            initialLng={extraLocationCoords[f.key]?.lng ?? null}
+                                        />
                                     ) : f.isNumeric ? (
                                         <input placeholder={f.label} value={extraFields[f.key] || ""} onChange={e => {
                                             const raw = e.target.value.replace(/[^0-9]/g, "");
@@ -584,7 +660,7 @@ export default function EditBookingPage() {
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
-                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setCustomFieldValues({}); }} className={selectClass} required>
+                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setExtraLocationCoords({}); setCustomFieldValues({}); }} className={selectClass} required>
                                 {eventTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
@@ -660,7 +736,20 @@ export default function EditBookingPage() {
                         {eventType !== "Wedding" && (
                             <div className="col-span-full space-y-1.5">
                                 <label className="text-xs font-medium text-muted-foreground">Lokasi Utama</label>
-                                <LocationAutocomplete value={location} onChange={setLocation} placeholder="Cari lokasi sesi foto..." />
+                                <LocationAutocomplete
+                                    value={location}
+                                    onChange={setLocation}
+                                    onLocationChange={(meta: LocationSelectionMeta) => {
+                                        setLocationCoords(
+                                            meta.source === "manual" || meta.source === "clear"
+                                                ? { lat: null, lng: null }
+                                                : { lat: meta.lat, lng: meta.lng },
+                                        );
+                                    }}
+                                    placeholder="Cari lokasi sesi foto..."
+                                    initialLat={locationCoords.lat}
+                                    initialLng={locationCoords.lng}
+                                />
                             </div>
                         )}
                         <div className="col-span-full space-y-1.5">

@@ -17,6 +17,7 @@ import {
   type GoogleCalendarDateTime,
 } from "@/utils/google/template";
 import { deleteCalendarEvent, upsertCalendarEvent } from "@/utils/google/calendar";
+import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
 
 type CalendarProfileConfig = {
   accessToken: string;
@@ -35,6 +36,8 @@ type CalendarBookingConfig = {
   clientWhatsapp?: string | null;
   sessionDate: string | null;
   location?: string | null;
+  locationLat?: number | null;
+  locationLng?: number | null;
   locationDetail?: string | null;
   eventType?: string | null;
   notes?: string | null;
@@ -108,6 +111,13 @@ export async function syncBookingCalendarEvent({
   for (let index = 0; index < sessions.length; index++) {
     const session = sessions[index];
     const sessionLocation = session.location || booking.location || "-";
+    const primaryLocation = booking.location?.trim().toLowerCase();
+    const sessionLocationKey = sessionLocation.trim().toLowerCase();
+    const useBookingCoords = Boolean(
+      primaryLocation &&
+        sessionLocationKey &&
+        sessionLocationKey === primaryLocation,
+    );
     const range = buildCalendarRangeFromStoredSession(
       session.sessionDate,
       durationMinutes,
@@ -121,10 +131,14 @@ export async function syncBookingCalendarEvent({
         booking_code: booking.bookingCode,
         studio_name: profile.studioName || "Client Desk",
         location: sessionLocation,
-        location_maps_url:
-          sessionLocation && sessionLocation !== "-"
-            ? `https://maps.google.com/maps?q=${encodeURIComponent(sessionLocation)}`
-            : "-",
+        location_maps_url: buildGoogleMapsUrlOrFallback(
+          {
+            address: sessionLocation,
+            lat: useBookingCoords ? booking.locationLat : null,
+            lng: useBookingCoords ? booking.locationLng : null,
+          },
+          "-",
+        ),
         detail_location: booking.locationDetail || "-",
         notes: booking.notes || "-",
         ...range.templateVars,
