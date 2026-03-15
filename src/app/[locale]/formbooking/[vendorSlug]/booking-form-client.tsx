@@ -459,6 +459,7 @@ export function BookingFormClient({
       );
 
       const formData = new FormData();
+      formData.append("vendorId", vendor.id);
       formData.append("vendorSlug", slug);
       formData.append("clientName", clientName);
       formData.append("clientWhatsapp", fullPhone);

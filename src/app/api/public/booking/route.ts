@@ -42,6 +42,7 @@ type VendorRecord = {
 };
 
 type BookingRequestBody = {
+    vendorId?: string | null;
     vendorSlug: string;
     clientName: string;
     clientWhatsapp: string;
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
         if (contentType.includes("multipart/form-data")) {
             const formData = await request.formData();
             body = {
+                vendorId: formData.get("vendorId") ? String(formData.get("vendorId")) : null,
                 vendorSlug: String(formData.get("vendorSlug") || ""),
                 clientName: String(formData.get("clientName") || ""),
                 clientWhatsapp: String(formData.get("clientWhatsapp") || ""),
@@ -108,6 +110,7 @@ export async function POST(request: NextRequest) {
         }
 
         const {
+            vendorId,
             vendorSlug,
             clientName,
             clientWhatsapp,
@@ -126,20 +129,46 @@ export async function POST(request: NextRequest) {
             instagram,
         } = body;
 
-        if (!vendorSlug || !clientName || !clientWhatsapp || !sessionDate || (!serviceId && (!serviceIds || serviceIds.length === 0))) {
+        if ((!vendorId && !vendorSlug) || !clientName || !clientWhatsapp || !sessionDate || (!serviceId && (!serviceIds || serviceIds.length === 0))) {
             return NextResponse.json({ success: false, error: "Data tidak lengkap." }, { status: 400 });
         }
 
-        // Find vendor by slug
-        const { data: vendorData } = await supabaseAdmin
-            .from("profiles")
-            .select("id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, calendar_event_format, calendar_event_format_map, calendar_event_description, calendar_event_description_map, form_payment_methods, form_show_proof, qris_image_url, qris_drive_file_id, bank_accounts, custom_client_statuses")
-            .eq("vendor_slug", vendorSlug)
-            .single();
-        const vendor = vendorData as VendorRecord | null;
+        const vendorSelect =
+            "id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, calendar_event_format, calendar_event_format_map, calendar_event_description, calendar_event_description_map, form_payment_methods, form_show_proof, qris_image_url, qris_drive_file_id, bank_accounts, custom_client_statuses";
+
+        let vendor: VendorRecord | null = null;
+        const normalizedSlug = (vendorSlug || "").trim();
+        const normalizedSlugLower = normalizedSlug.toLowerCase();
+
+        if (vendorId) {
+            const { data: byId } = await supabaseAdmin
+                .from("profiles")
+                .select(vendorSelect)
+                .eq("id", vendorId)
+                .maybeSingle();
+            vendor = (byId as VendorRecord | null) || null;
+        }
+
+        if (!vendor && normalizedSlug) {
+            const { data: bySlug } = await supabaseAdmin
+                .from("profiles")
+                .select(vendorSelect)
+                .eq("vendor_slug", normalizedSlug)
+                .maybeSingle();
+            vendor = (bySlug as VendorRecord | null) || null;
+        }
+
+        if (!vendor && normalizedSlugLower && normalizedSlugLower !== normalizedSlug) {
+            const { data: bySlugLower } = await supabaseAdmin
+                .from("profiles")
+                .select(vendorSelect)
+                .eq("vendor_slug", normalizedSlugLower)
+                .maybeSingle();
+            vendor = (bySlugLower as VendorRecord | null) || null;
+        }
 
         if (!vendor) {
-            return NextResponse.json({ success: false, error: "Vendor tidak ditemukan." }, { status: 404 });
+            return NextResponse.json({ success: false, error: "Vendor tidak ditemukan. Pastikan link form adalah link terbaru." }, { status: 404 });
         }
 
         const availablePaymentMethods = normalizePaymentMethods(vendor.form_payment_methods);
