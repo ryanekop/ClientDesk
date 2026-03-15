@@ -28,6 +28,7 @@ import {
 } from "@/lib/final-settlement";
 import {
   fillWhatsAppTemplate,
+  getDefaultWhatsAppTemplate,
   normalizeWhatsAppNumber,
 } from "@/lib/whatsapp-template";
 import { formatSessionDate, formatTemplateSessionDate } from "@/utils/format-date";
@@ -337,14 +338,18 @@ export default function SettlementClient({
   const brandColor = effectiveVendor.brandColor || "#10b981";
   const topGreeting =
     effectiveVendor.greeting?.trim() || t("defaultGreeting");
+  const normalizedAdminWhatsapp = normalizeWhatsAppNumber(
+    effectiveVendor.whatsappNumber,
+  );
   const showAdminWhatsAppButton =
-    Boolean(effectiveVendor.whatsappNumber) &&
+    Boolean(normalizedAdminWhatsapp) &&
     (submitted || settlementStatus === "submitted") &&
     !booking.isFullyPaid;
+  const showSubmittedSuccess =
+    (submitted || settlementStatus === "submitted") && !booking.isFullyPaid;
 
   function openAdminWhatsAppConfirmation() {
-    const whatsappNumber = normalizeWhatsAppNumber(effectiveVendor.whatsappNumber);
-    if (!whatsappNumber) return;
+    if (!normalizedAdminWhatsapp) return;
 
     const invoiceUrl = `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(
       booking.bookingCode,
@@ -363,31 +368,81 @@ export default function SettlementClient({
         : effectiveVendor.settlementConfirmTemplate ||
           effectiveVendor.settlementConfirmTemplateEn;
 
-    const message = templateContent.trim()
-      ? fillWhatsAppTemplate(templateContent, {
-          client_name: booking.clientName,
-          booking_code: booking.bookingCode,
-          service_name: booking.serviceName || "-",
-          session_date: booking.sessionDate
-            ? formatTemplateSessionDate(booking.sessionDate, {
-                locale: locale === "en" ? "en" : "id",
-              })
-            : "-",
-          payment_method: paymentMethodLabel,
-          final_total: formatCurrency(finalInvoiceTotal),
-          remaining_payment: formatCurrency(remaining),
-          studio_name: effectiveVendor.studioName,
-          invoice_url: invoiceUrl,
-          settlement_link: settlementUrl,
-        })
-      : locale === "en"
-        ? `Hello ${effectiveVendor.studioName}, I am ${booking.clientName}. I have submitted the settlement payment for booking ${booking.bookingCode} via the online form using ${paymentMethodLabel}. Please help verify it. Final invoice: ${invoiceUrl}`
-        : `Halo ${effectiveVendor.studioName}, saya ${booking.clientName} sudah mengirim pelunasan untuk booking ${booking.bookingCode} melalui form online dengan metode ${paymentMethodLabel}. Mohon dibantu verifikasi ya. Invoice final: ${invoiceUrl}`;
+    const resolvedTemplate = templateContent.trim()
+      ? templateContent
+      : getDefaultWhatsAppTemplate("whatsapp_settlement_confirm", locale);
+    const message = fillWhatsAppTemplate(resolvedTemplate, {
+      client_name: booking.clientName,
+      booking_code: booking.bookingCode,
+      service_name: booking.serviceName || "-",
+      session_date: booking.sessionDate
+        ? formatTemplateSessionDate(booking.sessionDate, {
+            locale: locale === "en" ? "en" : "id",
+          })
+        : "-",
+      payment_method: paymentMethodLabel,
+      final_total: formatCurrency(finalInvoiceTotal),
+      remaining_payment: formatCurrency(remaining),
+      studio_name: effectiveVendor.studioName,
+      invoice_url: invoiceUrl,
+      settlement_link: settlementUrl,
+    });
 
     window.open(
-      `https://api.whatsapp.com/send?phone=${whatsappNumber}&text=${encodeURIComponent(message)}`,
+      `https://api.whatsapp.com/send?phone=${normalizedAdminWhatsapp}&text=${encodeURIComponent(message)}`,
       "_blank",
       "noopener,noreferrer",
+    );
+  }
+
+  if (showSubmittedSuccess) {
+    return (
+      <div className="public-light-theme min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-50 px-4">
+        <div className="text-center space-y-6 max-w-md mx-auto">
+          <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-10 h-10 text-green-600" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold mb-2">{t("statusSubmitted")}</h2>
+            <p className="text-muted-foreground text-sm">{t("bookingCode")}</p>
+            <p className="text-3xl font-bold text-primary mt-1">
+              {booking.bookingCode}
+            </p>
+          </div>
+          <p className="text-sm text-muted-foreground">{t("submittedInfo")}</p>
+          <p className="text-sm text-muted-foreground">
+            {t("confirmAdminInstruction")}
+          </p>
+          {showAdminWhatsAppButton ? (
+            <button
+              type="button"
+              onClick={openAdminWhatsAppConfirmation}
+              className="inline-flex items-center justify-center gap-2 w-full h-12 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 transition-colors shadow-lg shadow-green-600/20 cursor-pointer text-base"
+            >
+              <MessageCircle className="w-5 h-5" />
+              {t("confirmViaWhatsApp")}
+            </button>
+          ) : (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              {t("adminWhatsappNotAvailable")}
+            </div>
+          )}
+          <button
+            onClick={() =>
+              window.open(
+                `/api/public/invoice?code=${encodeURIComponent(
+                  booking.bookingCode,
+                )}&lang=${locale}&stage=final`,
+                "_blank",
+              )
+            }
+            className="inline-flex items-center justify-center gap-2 w-full h-11 rounded-lg border border-border bg-background text-foreground font-medium hover:bg-muted transition-colors"
+          >
+            <Download className="h-4 w-4" />
+            {t("downloadInvoice")}
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -558,27 +613,6 @@ export default function SettlementClient({
             <div className="flex items-start gap-3">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <p>{t("notOpened")}</p>
-            </div>
-          </div>
-        ) : null}
-
-        {(submitted || settlementStatus === "submitted") && !booking.isFullyPaid ? (
-          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-800 shadow-sm">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-              <div className="space-y-3">
-                <p>{t("submittedInfo")}</p>
-                {showAdminWhatsAppButton ? (
-                  <button
-                    type="button"
-                    onClick={openAdminWhatsAppConfirmation}
-                    className="inline-flex items-center gap-2 rounded-xl border border-blue-300 bg-white px-3 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                    {t("confirmViaWhatsApp")}
-                  </button>
-                ) : null}
-              </div>
             </div>
           </div>
         ) : null}

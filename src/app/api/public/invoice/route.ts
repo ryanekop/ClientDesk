@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { formatSessionDate } from "@/utils/format-date";
 import {
   getFinalAdjustmentsTotal,
@@ -28,6 +28,68 @@ function formatCurrency(n: number) {
   }).format(n);
 }
 
+function wrapTextLines(
+  text: string,
+  font: PDFFont,
+  size: number,
+  maxWidth: number,
+): string[] {
+  if (!text.trim()) return [];
+
+  const lines: string[] = [];
+  const paragraphs = text.replace(/\r/g, "").split("\n");
+
+  for (const paragraph of paragraphs) {
+    if (!paragraph.trim()) {
+      lines.push("");
+      continue;
+    }
+
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    let currentLine = "";
+
+    const pushLine = () => {
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = "";
+      }
+    };
+
+    for (const word of words) {
+      const candidate = currentLine ? `${currentLine} ${word}` : word;
+      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+        currentLine = candidate;
+        continue;
+      }
+
+      if (currentLine) {
+        pushLine();
+      }
+
+      if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+        currentLine = word;
+        continue;
+      }
+
+      let chunk = "";
+      for (const ch of word) {
+        const nextChunk = `${chunk}${ch}`;
+        if (font.widthOfTextAtSize(nextChunk, size) <= maxWidth) {
+          chunk = nextChunk;
+        } else {
+          if (chunk) lines.push(chunk);
+          chunk = ch;
+        }
+      }
+      currentLine = chunk;
+    }
+
+    pushLine();
+  }
+
+  return lines;
+}
+
 const labels: Record<string, Record<string, string>> = {
   id: {
     clientDetail: "DETAIL KLIEN",
@@ -35,6 +97,8 @@ const labels: Record<string, Record<string, string>> = {
     schedule: "Jadwal",
     status: "Status",
     total: "Total",
+    packageDescription: "Deskripsi Paket",
+    noDescription: "Tidak ada deskripsi paket.",
     subTotal: "Sub Total",
     dpPaid: "DP Dibayar",
     remainingPayment: "Sisa Pembayaran",
@@ -57,6 +121,8 @@ const labels: Record<string, Record<string, string>> = {
     schedule: "Schedule",
     status: "Status",
     total: "Total",
+    packageDescription: "Package Description",
+    noDescription: "No package description.",
     subTotal: "Sub Total",
     dpPaid: "DP Paid",
     remainingPayment: "Remaining Payment",
@@ -88,7 +154,7 @@ export async function GET(request: NextRequest) {
   const { data: booking, error } = await supabaseAdmin
     .from("bookings")
     .select(
-      "id, booking_code, client_name, client_whatsapp, session_date, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, user_id, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))",
+      "id, booking_code, client_name, client_whatsapp, session_date, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, user_id, services(id, name, price, description, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, description, is_addon))",
     )
     .eq("booking_code", code)
     .single();
@@ -143,6 +209,17 @@ export async function GET(request: NextRequest) {
     kind: "main",
     fallback: legacyService?.name || t.defaultServiceName,
   });
+  const mainServices = serviceSelections.filter((selection) => selection.kind === "main");
+  const mainServiceDescriptions = mainServices
+    .filter((selection) => Boolean(selection.service.description?.trim()))
+    .map((selection) => {
+      const description = selection.service.description?.trim() || "";
+      if (mainServices.length === 1) return description;
+      return `${selection.service.name}: ${description}`;
+    });
+  const serviceDescription =
+    mainServiceDescriptions.join("\n\n") || legacyService?.description?.trim() || "";
+
   const settlementStatus = getSettlementStatus(booking.settlement_status);
   const paymentStatus =
     isFinalStage && settlementStatus === "submitted"
@@ -152,7 +229,6 @@ export async function GET(request: NextRequest) {
         : t.unpaid;
 
   const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([595, 842]);
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
@@ -163,10 +239,84 @@ export async function GET(request: NextRequest) {
   const amber = rgb(0.85, 0.47, 0.02);
   const blue = rgb(0.11, 0.38, 0.87);
 
-  const w = 595;
-  const mx = 40;
-  const contentW = w - mx * 2;
-  let y = 802;
+  const PAGE_WIDTH = 595;
+  const PAGE_HEIGHT = 842;
+  const MARGIN_X = 40;
+  const TOP_Y = 802;
+  const BOTTOM_Y = 50;
+  const contentW = PAGE_WIDTH - MARGIN_X * 2;
+
+  let page: PDFPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+  let y = TOP_Y;
+
+  const addPage = () => {
+    page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    y = TOP_Y;
+  };
+
+  const ensureSpace = (requiredHeight: number) => {
+    if (y - requiredHeight < BOTTOM_Y) {
+      addPage();
+    }
+  };
+
+  const drawHorizontalLine = (
+    startX: number,
+    endX: number,
+    thickness: number,
+    color = lightGray,
+  ) => {
+    page.drawLine({
+      start: { x: startX, y },
+      end: { x: endX, y },
+      thickness,
+      color,
+    });
+  };
+
+  const drawWrappedText = (params: {
+    text: string;
+    x: number;
+    maxWidth: number;
+    font: PDFFont;
+    size: number;
+    color: ReturnType<typeof rgb>;
+    lineHeight: number;
+  }) => {
+    const lines = wrapTextLines(
+      params.text,
+      params.font,
+      params.size,
+      params.maxWidth,
+    );
+
+    if (lines.length === 0) {
+      ensureSpace(params.lineHeight);
+      page.drawText(t.noDescription, {
+        x: params.x,
+        y,
+        font: params.font,
+        size: params.size,
+        color: params.color,
+      });
+      y -= params.lineHeight;
+      return;
+    }
+
+    lines.forEach((line) => {
+      ensureSpace(params.lineHeight);
+      if (line) {
+        page.drawText(line, {
+          x: params.x,
+          y,
+          font: params.font,
+          size: params.size,
+          color: params.color,
+        });
+      }
+      y -= params.lineHeight;
+    });
+  };
 
   let logoDrawn = false;
   if (logoBase64) {
@@ -184,7 +334,12 @@ export async function GET(request: NextRequest) {
       const scale = Math.min(maxW / image.width, maxH / image.height, 1);
       const drawW = image.width * scale;
       const drawH = image.height * scale;
-      page.drawImage(image, { x: mx, y: y - drawH + 22, width: drawW, height: drawH });
+      page.drawImage(image, {
+        x: MARGIN_X,
+        y: y - drawH + 22,
+        width: drawW,
+        height: drawH,
+      });
       logoDrawn = true;
     } catch {
       logoDrawn = false;
@@ -192,10 +347,16 @@ export async function GET(request: NextRequest) {
   }
 
   if (!logoDrawn) {
-    page.drawText(studioName, { x: mx, y, font: helveticaBold, size: 18, color: black });
+    page.drawText(studioName, {
+      x: MARGIN_X,
+      y,
+      font: helveticaBold,
+      size: 18,
+      color: black,
+    });
   }
   page.drawText(invoiceTitle, {
-    x: w - mx - helveticaBold.widthOfTextAtSize(invoiceTitle, 22),
+    x: PAGE_WIDTH - MARGIN_X - helveticaBold.widthOfTextAtSize(invoiceTitle, 22),
     y,
     font: helveticaBold,
     size: 22,
@@ -204,11 +365,18 @@ export async function GET(request: NextRequest) {
 
   y -= 18;
   if (!logoDrawn) {
-    page.drawText(t.studioManagement, { x: mx, y, font: helvetica, size: 9, color: gray });
+    page.drawText(t.studioManagement, {
+      x: MARGIN_X,
+      y,
+      font: helvetica,
+      size: 9,
+      color: gray,
+    });
   }
+
   const codeW = helvetica.widthOfTextAtSize(booking.booking_code, 10);
   page.drawText(booking.booking_code, {
-    x: w - mx - codeW,
+    x: PAGE_WIDTH - MARGIN_X - codeW,
     y,
     font: helvetica,
     size: 10,
@@ -217,44 +385,94 @@ export async function GET(request: NextRequest) {
 
   y -= 14;
   const dateW = helvetica.widthOfTextAtSize(now, 9);
-  page.drawText(now, { x: w - mx - dateW, y, font: helvetica, size: 9, color: gray });
+  page.drawText(now, {
+    x: PAGE_WIDTH - MARGIN_X - dateW,
+    y,
+    font: helvetica,
+    size: 9,
+    color: gray,
+  });
 
   y -= 16;
-  page.drawLine({ start: { x: mx, y }, end: { x: w - mx, y }, thickness: 1, color: lightGray });
+  drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 1);
 
   y -= 24;
-  page.drawText(t.clientDetail, { x: mx, y, font: helveticaBold, size: 8, color: gray });
+  page.drawText(t.clientDetail, {
+    x: MARGIN_X,
+    y,
+    font: helveticaBold,
+    size: 8,
+    color: gray,
+  });
+
   y -= 18;
-  page.drawText(booking.client_name, { x: mx, y, font: helveticaBold, size: 12, color: black });
+  page.drawText(booking.client_name, {
+    x: MARGIN_X,
+    y,
+    font: helveticaBold,
+    size: 12,
+    color: black,
+  });
+
   y -= 16;
-  page.drawText(booking.client_whatsapp || "-", { x: mx, y, font: helvetica, size: 10, color: gray });
+  page.drawText(booking.client_whatsapp || "-", {
+    x: MARGIN_X,
+    y,
+    font: helvetica,
+    size: 10,
+    color: gray,
+  });
 
   y -= 30;
-  const colX = [mx, mx + 200, mx + 320, w - mx];
+  const colX = [MARGIN_X, MARGIN_X + 200, MARGIN_X + 320, PAGE_WIDTH - MARGIN_X];
   const headers = [t.service, t.schedule, t.status, t.total];
   page.drawRectangle({
-    x: mx,
+    x: MARGIN_X,
     y: y - 4,
     width: contentW,
     height: 28,
     color: rgb(0.976, 0.98, 0.984),
   });
+
   headers.forEach((header, index) => {
     const tx =
       index === 3
         ? colX[index] - helveticaBold.widthOfTextAtSize(header, 8)
         : colX[index] + 8;
-    page.drawText(header, { x: tx, y: y + 6, font: helveticaBold, size: 8, color: gray });
+    page.drawText(header, {
+      x: tx,
+      y: y + 6,
+      font: helveticaBold,
+      size: 8,
+      color: gray,
+    });
   });
 
   y -= 6;
-  page.drawLine({ start: { x: mx, y }, end: { x: w - mx, y }, thickness: 0.5, color: lightGray });
+  drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 0.5);
 
   y -= 20;
-  page.drawText(serviceName, { x: colX[0] + 8, y, font: helvetica, size: 10, color: black });
-  page.drawText(sessionDate, { x: colX[1] + 8, y, font: helvetica, size: 10, color: black });
+  page.drawText(serviceName, {
+    x: colX[0] + 8,
+    y,
+    font: helvetica,
+    size: 10,
+    color: black,
+  });
+  page.drawText(sessionDate, {
+    x: colX[1] + 8,
+    y,
+    font: helvetica,
+    size: 10,
+    color: black,
+  });
+
   const statusColor =
-    paymentStatus === t.paid ? green : paymentStatus === t.pendingVerification ? blue : amber;
+    paymentStatus === t.paid
+      ? green
+      : paymentStatus === t.pendingVerification
+        ? blue
+        : amber;
   page.drawText(paymentStatus, {
     x: colX[2] + 8,
     y,
@@ -262,6 +480,7 @@ export async function GET(request: NextRequest) {
     size: 10,
     color: statusColor,
   });
+
   const totalStr = formatCurrency(shownTotal);
   page.drawText(totalStr, {
     x: colX[3] - helvetica.widthOfTextAtSize(totalStr, 10),
@@ -272,45 +491,115 @@ export async function GET(request: NextRequest) {
   });
 
   y -= 14;
-  page.drawLine({
-    start: { x: mx, y },
-    end: { x: w - mx, y },
-    thickness: 0.5,
-    color: rgb(0.95, 0.96, 0.96),
+  drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 0.5, rgb(0.95, 0.96, 0.96));
+
+  y -= 20;
+  ensureSpace(32);
+  page.drawText(t.packageDescription, {
+    x: MARGIN_X,
+    y,
+    font: helveticaBold,
+    size: 10,
+    color: black,
   });
 
+  y -= 14;
+  if (serviceDescription.trim()) {
+    drawWrappedText({
+      text: serviceDescription,
+      x: MARGIN_X + 8,
+      maxWidth: contentW - 16,
+      font: helvetica,
+      size: 9,
+      color: gray,
+      lineHeight: 12,
+    });
+  } else {
+    ensureSpace(12);
+    page.drawText(t.noDescription, {
+      x: MARGIN_X + 8,
+      y,
+      font: helvetica,
+      size: 9,
+      color: gray,
+    });
+    y -= 12;
+  }
+
+  y -= 8;
+  drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 0.5, rgb(0.95, 0.96, 0.96));
+
   if (isFinalStage) {
-    y -= 28;
-    page.drawText(t.adjustments, { x: mx, y, font: helveticaBold, size: 10, color: black });
+    y -= 22;
+    ensureSpace(28);
+    page.drawText(t.adjustments, {
+      x: MARGIN_X,
+      y,
+      font: helveticaBold,
+      size: 10,
+      color: black,
+    });
     y -= 14;
 
     if (adjustments.length === 0) {
-      page.drawText("-", { x: mx, y, font: helvetica, size: 10, color: gray });
-      y -= 8;
+      ensureSpace(12);
+      page.drawText("-", {
+        x: MARGIN_X,
+        y,
+        font: helvetica,
+        size: 10,
+        color: gray,
+      });
+      y -= 12;
     } else {
       adjustments.forEach((item) => {
-        const reason = item.reason || t.noReason;
-        page.drawText(item.label, { x: mx, y, font: helveticaBold, size: 10, color: black });
-        const amountText = formatCurrency(item.amount);
-        page.drawText(amountText, {
-          x: w - mx - helveticaBold.widthOfTextAtSize(amountText, 10),
+        ensureSpace(24);
+        page.drawText(item.label, {
+          x: MARGIN_X,
           y,
           font: helveticaBold,
           size: 10,
           color: black,
         });
+
+        const amountText = formatCurrency(item.amount);
+        page.drawText(amountText, {
+          x: PAGE_WIDTH - MARGIN_X - helveticaBold.widthOfTextAtSize(amountText, 10),
+          y,
+          font: helveticaBold,
+          size: 10,
+          color: black,
+        });
+
         y -= 14;
-        page.drawText(reason, { x: mx + 8, y, font: helvetica, size: 9, color: gray });
-        y -= 16;
+        const reason = item.reason || t.noReason;
+        drawWrappedText({
+          text: reason,
+          x: MARGIN_X + 8,
+          maxWidth: contentW - 16,
+          font: helvetica,
+          size: 9,
+          color: gray,
+          lineHeight: 12,
+        });
+        y -= 4;
       });
     }
   }
 
-  y -= 18;
-  const sumX = w - mx - 220;
-  const sumValX = w - mx;
+  y -= 14;
+  ensureSpace(isFinalStage ? 120 : 96);
 
-  page.drawText(t.subTotal, { x: sumX, y, font: helvetica, size: 10, color: black });
+  const sumX = PAGE_WIDTH - MARGIN_X - 220;
+  const sumValX = PAGE_WIDTH - MARGIN_X;
+
+  page.drawText(t.subTotal, {
+    x: sumX,
+    y,
+    font: helvetica,
+    size: 10,
+    color: black,
+  });
   const subTotalText = formatCurrency(booking.total_price);
   page.drawText(subTotalText, {
     x: sumValX - helvetica.widthOfTextAtSize(subTotalText, 10),
@@ -322,7 +611,13 @@ export async function GET(request: NextRequest) {
 
   if (isFinalStage) {
     y -= 22;
-    page.drawText(t.adjustmentTotal, { x: sumX, y, font: helvetica, size: 10, color: black });
+    page.drawText(t.adjustmentTotal, {
+      x: sumX,
+      y,
+      font: helvetica,
+      size: 10,
+      color: black,
+    });
     const adjText = formatCurrency(adjustmentsTotal);
     page.drawText(adjText, {
       x: sumValX - helvetica.widthOfTextAtSize(adjText, 10),
@@ -334,7 +629,13 @@ export async function GET(request: NextRequest) {
   }
 
   y -= 22;
-  page.drawText(t.dpPaid, { x: sumX, y, font: helvetica, size: 10, color: black });
+  page.drawText(t.dpPaid, {
+    x: sumX,
+    y,
+    font: helvetica,
+    size: 10,
+    color: black,
+  });
   const dpText = `- ${formatCurrency(booking.dp_paid)}`;
   page.drawText(dpText, {
     x: sumValX - helvetica.widthOfTextAtSize(dpText, 10),
@@ -345,10 +646,16 @@ export async function GET(request: NextRequest) {
   });
 
   y -= 14;
-  page.drawLine({ start: { x: sumX, y }, end: { x: sumValX, y }, thickness: 1.5, color: black });
+  drawHorizontalLine(sumX, sumValX, 1.5, black);
 
   y -= 20;
-  page.drawText(t.remainingPayment, { x: sumX, y, font: helveticaBold, size: 13, color: black });
+  page.drawText(t.remainingPayment, {
+    x: sumX,
+    y,
+    font: helveticaBold,
+    size: 13,
+    color: black,
+  });
   const remainingText = formatCurrency(remaining);
   page.drawText(remainingText, {
     x: sumValX - helveticaBold.widthOfTextAtSize(remainingText, 13),
@@ -358,13 +665,15 @@ export async function GET(request: NextRequest) {
     color: black,
   });
 
-  y -= 60;
-  page.drawLine({ start: { x: mx, y }, end: { x: w - mx, y }, thickness: 0.5, color: lightGray });
+  y -= 50;
+  ensureSpace(30);
+  drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 0.5);
+
   y -= 16;
   const footerText = t.footerText;
   const footerWidth = helvetica.widthOfTextAtSize(footerText, 9);
   page.drawText(footerText, {
-    x: (w - footerWidth) / 2,
+    x: (PAGE_WIDTH - footerWidth) / 2,
     y,
     font: helvetica,
     size: 9,

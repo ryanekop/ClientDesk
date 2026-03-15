@@ -16,6 +16,10 @@ import {
 import { uploadPaymentProofToDrive } from "@/lib/payment-proof-drive";
 import { getInitialBookingStatus } from "@/lib/client-status";
 import { getWhatsAppTemplateContent, type WhatsAppTemplate } from "@/lib/whatsapp-template";
+import {
+    createBookingCode,
+    isDuplicateBookingCodeError,
+} from "@/lib/booking-code";
 
 type VendorRecord = {
     id: string;
@@ -457,50 +461,63 @@ export async function POST(request: NextRequest) {
             delete sanitizedExtraData.addon_names;
         }
 
-        // Generate booking code with sequential number
-        const now = new Date();
-        const dd = String(now.getDate()).padStart(2, "0");
-        const mm = String(now.getMonth() + 1).padStart(2, "0");
-        const yyyy = now.getFullYear();
-
-        // Count existing bookings for this vendor to get sequential number
-        const { count: bookingCount } = await supabaseAdmin
-            .from("bookings")
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", vendor.id);
-        const seq = String((bookingCount || 0) + 1).padStart(3, "0");
-        const bookingCode = `INV-${dd}${mm}${yyyy}${seq}`;
         const initialStatus = getInitialBookingStatus(vendor.custom_client_statuses);
+        const bookingPayload = {
+            user_id: vendor.id,
+            client_name: normalizedClientName,
+            client_whatsapp: normalizedClientWhatsapp || null,
+            event_type: eventType || null,
+            session_date: resolvedSessionDate || null,
+            service_id: mainServices[0]?.id || null,
+            total_price: computedTotalPrice,
+            dp_paid: dpPaid,
+            location: location || null,
+            location_detail: locationDetail || null,
+            notes: notes || null,
+            extra_fields: Object.keys(sanitizedExtraData).length > 0 ? sanitizedExtraData : null,
+            payment_proof_url: normalizedPaymentProofUrl,
+            payment_method: selectedPaymentMethod,
+            payment_source: normalizedPaymentSource,
+            instagram: instagram || null,
+            status: initialStatus,
+            client_status: initialStatus,
+            is_fully_paid: dpPaid >= computedTotalPrice,
+        };
 
-        const { data: booking, error } = await supabaseAdmin
-            .from("bookings")
-            .insert({
-                user_id: vendor.id,
-                booking_code: bookingCode,
-                client_name: normalizedClientName,
-                client_whatsapp: normalizedClientWhatsapp || null,
-                event_type: eventType || null,
-                session_date: resolvedSessionDate || null,
-                service_id: mainServices[0]?.id || null,
-                total_price: computedTotalPrice,
-                dp_paid: dpPaid,
-                location: location || null,
-                location_detail: locationDetail || null,
-                notes: notes || null,
-                extra_fields: Object.keys(sanitizedExtraData).length > 0 ? sanitizedExtraData : null,
-                payment_proof_url: normalizedPaymentProofUrl,
-                payment_method: selectedPaymentMethod,
-                payment_source: normalizedPaymentSource,
-                instagram: instagram || null,
-                status: initialStatus,
-                client_status: initialStatus,
-                is_fully_paid: dpPaid >= computedTotalPrice,
-            })
-            .select("id, booking_code")
-            .single();
+        let booking: { id: string; booking_code: string } | null = null;
+        let bookingInsertError: { code?: string | null; message?: string | null } | null = null;
 
-        if (error) {
-            return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const { data, error } = await supabaseAdmin
+                .from("bookings")
+                .insert({
+                    ...bookingPayload,
+                    booking_code: createBookingCode(),
+                })
+                .select("id, booking_code")
+                .single();
+
+            if (!error && data) {
+                booking = data;
+                bookingInsertError = null;
+                break;
+            }
+
+            bookingInsertError = error;
+            if (isDuplicateBookingCodeError(error)) {
+                continue;
+            }
+            break;
+        }
+
+        if (!booking) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: bookingInsertError?.message || "Gagal menyimpan booking.",
+                },
+                { status: 500 },
+            );
         }
 
         await supabaseAdmin.from("booking_services").insert([
@@ -578,7 +595,7 @@ export async function POST(request: NextRequest) {
                     },
                     booking: {
                         id: booking.id,
-                        bookingCode,
+                        bookingCode: booking.booking_code,
                         clientName: normalizedClientName,
                         clientWhatsapp: normalizedClientWhatsapp || null,
                         sessionDate: resolvedSessionDate || null,

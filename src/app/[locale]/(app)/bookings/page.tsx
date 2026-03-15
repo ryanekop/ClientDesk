@@ -39,7 +39,7 @@ import {
     buildBookingMetadataColumns,
     getBookingMetadataValue,
 } from "@/lib/booking-table-columns";
-import { resolveTemplateType } from "@/lib/whatsapp-template";
+import { getWhatsAppTemplateContent } from "@/lib/whatsapp-template";
 import {
     DEFAULT_CLIENT_STATUSES,
     getBookingStatusOptions,
@@ -149,28 +149,21 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
     }
 
     if (freelancerName) {
-        // Look for whatsapp_freelancer template
-        const template = savedTemplates.find(
-            (t) => resolveTemplateType(t) === "whatsapp_freelancer" && t.event_type === booking.event_type,
-        ) || savedTemplates.find(
-            (t) => resolveTemplateType(t) === "whatsapp_freelancer" && (!t.event_type || t.event_type === "Umum"),
+        const content = getWhatsAppTemplateContent(
+            savedTemplates,
+            "whatsapp_freelancer",
+            locale,
+            booking.event_type,
         );
-        if (template) {
-            const content = locale === "en" ? (template.content_en || template.content) : template.content;
-            if (content.trim()) return applyVars(content);
-        }
-        // Fallback
-        return `Halo ${freelancerName}, kamu dijadwalkan untuk sesi foto bersama klien ${booking.client_name} (${booking.booking_code}) pada ${sessionStr}. Mohon konfirmasi kehadiranmu. Terima kasih!`;
+        return applyVars(content);
     }
 
-    // Look for whatsapp_client template
-    const template = savedTemplates.find((t) => resolveTemplateType(t) === "whatsapp_client");
-    if (template) {
-        const content = locale === "en" ? (template.content_en || template.content) : template.content;
-        if (content.trim()) return applyVars(content);
-    }
-    // Fallback
-    return `Halo ${booking.client_name}, terima kasih telah booking di studio kami! Detail booking Anda:\n\nKode: ${booking.booking_code}\nJadwal: ${sessionStr}\nPaket: ${serviceName}\n\nTerima kasih!`;
+    const content = getWhatsAppTemplateContent(
+        savedTemplates,
+        "whatsapp_client",
+        locale,
+    );
+    return applyVars(content);
 }
 
 export default function BookingsPage() {

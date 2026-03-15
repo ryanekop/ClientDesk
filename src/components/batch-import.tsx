@@ -10,14 +10,8 @@ import {
     getBookingStatusOptions,
     getInitialBookingStatus,
 } from "@/lib/client-status";
+import { createBookingCode, isDuplicateBookingCodeError } from "@/lib/booking-code";
 import * as XLSX from "xlsx";
-
-function generateBookingCode() {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ0123456789";
-    let code = "";
-    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
-    return code;
-}
 
 type Step = "upload" | "preview" | "confirm";
 
@@ -90,7 +84,6 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
             const clientName = String(row["Nama Klien *"] || "").trim();
             if (!clientName) { errors.push(`Baris ${i + 1}: Nama klien kosong`); continue; }
 
-            const bookingCode = `INV-${generateBookingCode()}`;
             const whatsapp = String(row["WhatsApp"] || "").trim() || null;
             const sessionDate = String(row["Tanggal Sesi (YYYY-MM-DD)"] || "").trim() || null;
             const location = String(row["Lokasi"] || "").trim() || null;
@@ -99,10 +92,8 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
             const requestedStatus = String(row["Status"] || "").trim();
             const status = statusOptions.includes(requestedStatus) ? requestedStatus : initialStatus;
             const notes = String(row["Catatan"] || "").trim() || null;
-
-            const { error } = await supabase.from("bookings").insert({
+            const bookingPayload = {
                 user_id: user.id,
-                booking_code: bookingCode,
                 client_name: clientName,
                 client_whatsapp: whatsapp,
                 session_date: sessionDate,
@@ -113,10 +104,35 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
                 status,
                 client_status: status,
                 notes: notes,
-            });
+            };
 
-            if (error) { errors.push(`Baris ${i + 1} (${clientName}): ${error.message}`); }
-            else { success++; }
+            let insertError: { code?: string | null; message?: string | null } | null = null;
+            let inserted = false;
+
+            for (let attempt = 0; attempt < 5; attempt++) {
+                const { error } = await supabase.from("bookings").insert({
+                    ...bookingPayload,
+                    booking_code: createBookingCode(),
+                });
+
+                if (!error) {
+                    inserted = true;
+                    insertError = null;
+                    break;
+                }
+
+                insertError = error;
+                if (isDuplicateBookingCodeError(error)) {
+                    continue;
+                }
+                break;
+            }
+
+            if (inserted) {
+                success++;
+            } else {
+                errors.push(`Baris ${i + 1} (${clientName}): ${insertError?.message || "Gagal menyimpan booking"}`);
+            }
         }
 
         setResult({ success, errors });

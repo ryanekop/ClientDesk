@@ -27,6 +27,7 @@ import {
     getBookingStatusOptions,
     getInitialBookingStatus,
 } from "@/lib/client-status";
+import { createBookingCode, isDuplicateBookingCodeError } from "@/lib/booking-code";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -114,20 +115,6 @@ function sanitizePhone(raw: string): string {
     if (cleaned.startsWith("62")) cleaned = cleaned.slice(2);
     if (cleaned.startsWith("0")) cleaned = cleaned.slice(1);
     return cleaned;
-}
-
-async function generateBookingCode(supabase: any, userId: string): Promise<string> {
-    const now = new Date();
-    const dd = String(now.getDate()).padStart(2, "0");
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const yyyy = now.getFullYear();
-    // Get sequential number from existing booking count
-    const { count } = await supabase
-        .from("bookings")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId);
-    const seq = String((count || 0) + 1).padStart(3, "0");
-    return `${dd}${mm}${yyyy}${seq}`;
 }
 
 export default function NewBookingPage() {
@@ -331,8 +318,6 @@ export default function NewBookingPage() {
             return;
         }
 
-        const bookingCode = await generateBookingCode(supabase, user.id);
-        const invoiceCode = `INV-${bookingCode}`;
         const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
 
         // Determine session_date: if split, use earliest; merge extra_fields with dates
@@ -354,9 +339,8 @@ export default function NewBookingPage() {
             customFieldValues,
         );
 
-        const { data: booking, error } = await supabase.from("bookings").insert({
+        const bookingPayload = {
             user_id: user.id,
-            booking_code: invoiceCode,
             client_name: clientName,
             client_whatsapp: fullPhone,
             session_date: finalSessionDate,
@@ -380,10 +364,36 @@ export default function NewBookingPage() {
                         ...(customFieldSnapshots.length > 0 ? { custom_fields: customFieldSnapshots } : {}),
                     }
                     : null,
-        }).select("id").single();
+        };
+
+        let booking: { id: string } | null = null;
+        let insertError: { code?: string | null; message?: string | null } | null = null;
+
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const { data, error } = await supabase
+                .from("bookings")
+                .insert({
+                    ...bookingPayload,
+                    booking_code: createBookingCode(),
+                })
+                .select("id")
+                .single();
+
+            if (!error && data) {
+                booking = data;
+                insertError = null;
+                break;
+            }
+
+            insertError = error;
+            if (isDuplicateBookingCodeError(error)) {
+                continue;
+            }
+            break;
+        }
 
         setSaving(false);
-        if (!error && booking) {
+        if (booking) {
             // Insert into junction table
             if (selectedServiceIds.length > 0) {
                 await supabase.from("booking_services").insert(
@@ -440,7 +450,7 @@ export default function NewBookingPage() {
 
             router.push(`/${locale}/bookings/${booking.id}`);
         }
-        else { alert("Gagal menyimpan booking"); }
+        else { alert(insertError?.message || "Gagal menyimpan booking"); }
     }
 
     const currentExtraFields = EXTRA_FIELDS[eventType] || [];

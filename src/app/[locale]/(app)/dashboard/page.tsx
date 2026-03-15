@@ -21,7 +21,11 @@ import { DashboardChangelogPopup } from "@/components/changelog-modal";
 import { getTranslations, getLocale } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import type { ChangelogEntry } from "@/lib/changelog";
-import { getInitialBookingStatus } from "@/lib/client-status";
+import {
+  getRemainingFinalPayment,
+  getTotalPaidAmount,
+  getVerifiedFinalPaymentAmount,
+} from "@/lib/final-settlement";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -49,70 +53,53 @@ export default async function DashboardPage() {
     now.getMonth(),
     now.getDate() + 1,
   ).toISOString();
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const yearAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, studio_name, custom_client_statuses")
+    .select("full_name, studio_name")
     .eq("id", user!.id)
     .single();
-  const initialBookingStatus = getInitialBookingStatus(
-    (profile as { custom_client_statuses?: string[] | null } | null)
-      ?.custom_client_statuses,
-  );
-
   // Dashboard data + changelog are fetched in parallel to keep the page snappy.
   const [
     { count: totalBookings },
-    { data: pendingPayments },
-    { data: paidBookings },
     { count: monthlyBookings },
     { count: todaySessions },
     { count: pendingCount },
     { data: recentBookings },
     { data: upcomingBooking },
-    { data: dailyRaw },
-    { data: yearlyRaw },
+    { data: financeRows },
     { data: changelogRaw },
   ] = await Promise.all([
     supabase
       .from("bookings")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user!.id),
-    supabase
-      .from("bookings")
-      .select("total_price, dp_paid")
       .eq("user_id", user!.id)
-      .eq("is_fully_paid", false)
       .neq("status", "Batal"),
-    supabase
-      .from("bookings")
-      .select("total_price, dp_paid")
-      .eq("user_id", user!.id),
     supabase
       .from("bookings")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user!.id)
-      .gte("created_at", startOfMonth),
+      .gte("created_at", startOfMonth)
+      .neq("status", "Batal"),
     supabase
       .from("bookings")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user!.id)
       .gte("session_date", todayStart)
-      .lt("session_date", todayEnd),
+      .lt("session_date", todayEnd)
+      .neq("status", "Batal"),
     supabase
       .from("bookings")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user!.id)
-      .eq("status", initialBookingStatus),
+      .eq("settlement_status", "submitted")
+      .neq("status", "Batal"),
     supabase
       .from("bookings")
       .select(
         "id, client_name, booking_code, session_date, status, total_price, created_at, services(name)",
       )
       .eq("user_id", user!.id)
+      .neq("status", "Batal")
       .order("created_at", { ascending: false })
       .limit(5),
     supabase
@@ -128,16 +115,11 @@ export default async function DashboardPage() {
       .maybeSingle(),
     supabase
       .from("bookings")
-      .select("total_price, dp_paid, created_at, is_fully_paid")
+      .select(
+        "total_price, dp_paid, created_at, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at",
+      )
       .eq("user_id", user!.id)
-      .gte("created_at", thirtyDaysAgo.toISOString())
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("bookings")
-      .select("total_price, dp_paid, created_at, is_fully_paid")
-      .eq("user_id", user!.id)
-      .gte("created_at", yearAgo.toISOString())
-      .order("created_at", { ascending: true }),
+      .neq("status", "Batal"),
     supabase
       .from("changelog")
       .select("id, version, title, description, badge, published_at")
@@ -145,20 +127,42 @@ export default async function DashboardPage() {
       .limit(50),
   ]);
 
-  const pendingAmount = (pendingPayments || []).reduce(
-    (sum, b) => sum + ((b.total_price || 0) - (b.dp_paid || 0)),
+  const pendingAmount = (financeRows || []).reduce(
+    (sum, booking) =>
+      sum +
+      getRemainingFinalPayment({
+        total_price: booking.total_price || 0,
+        dp_paid: booking.dp_paid || 0,
+        final_adjustments: booking.final_adjustments,
+        final_payment_amount: booking.final_payment_amount || 0,
+        final_paid_at: booking.final_paid_at,
+        settlement_status: booking.settlement_status,
+        is_fully_paid: booking.is_fully_paid,
+      }),
     0,
   );
-  const totalRevenue = (paidBookings || []).reduce(
-    (sum, b) => sum + (b.dp_paid || 0),
+  const totalRevenue = (financeRows || []).reduce(
+    (sum, booking) =>
+      sum +
+      getTotalPaidAmount({
+        total_price: booking.total_price || 0,
+        dp_paid: booking.dp_paid || 0,
+        final_adjustments: booking.final_adjustments,
+        final_payment_amount: booking.final_payment_amount || 0,
+        final_paid_at: booking.final_paid_at,
+        settlement_status: booking.settlement_status,
+        is_fully_paid: booking.is_fully_paid,
+      }),
     0,
   );
   const displayName = profile?.full_name || user?.email || "Admin";
   const dateLocale = locale === "en" ? "en-US" : "id-ID";
 
-  // --- Process 30-day daily chart data server-side ---
+  // --- Process 30-day + 12-month chart data server-side ---
   const toLocalKey = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate(),
+    ).padStart(2, "0")}`;
   const toLocalLabel = (d: Date) =>
     d.toLocaleDateString(dateLocale, { day: "numeric", month: "short" });
 
@@ -171,35 +175,61 @@ export default async function DashboardPage() {
     revenueByDate[key] = 0;
     dateLabelMap[key] = toLocalLabel(d);
   }
-  (dailyRaw || []).forEach((b) => {
-    const d = new Date(b.created_at);
-    const dateKey = toLocalKey(d);
-    const amount = b.is_fully_paid ? b.total_price || 0 : b.dp_paid || 0;
+
+  const revenueByMonth: Record<string, number> = {};
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+      2,
+      "0",
+    )}`;
+    revenueByMonth[key] = 0;
+  }
+
+  const recordRevenueTransaction = (
+    dateValue: string | null | undefined,
+    amount: number,
+  ) => {
+    if (!dateValue || amount <= 0) return;
+    const transactionDate = new Date(dateValue);
+    if (Number.isNaN(transactionDate.getTime())) return;
+
+    const dateKey = toLocalKey(transactionDate);
     if (revenueByDate[dateKey] !== undefined) {
       revenueByDate[dateKey] += amount;
     }
+
+    const monthKey = `${transactionDate.getFullYear()}-${String(
+      transactionDate.getMonth() + 1,
+    ).padStart(2, "0")}`;
+    if (revenueByMonth[monthKey] !== undefined) {
+      revenueByMonth[monthKey] += amount;
+    }
+  };
+
+  (financeRows || []).forEach((booking) => {
+    const input = {
+      total_price: booking.total_price || 0,
+      dp_paid: booking.dp_paid || 0,
+      final_adjustments: booking.final_adjustments,
+      final_payment_amount: booking.final_payment_amount || 0,
+      final_paid_at: booking.final_paid_at,
+      settlement_status: booking.settlement_status,
+      is_fully_paid: booking.is_fully_paid,
+    };
+    const dpAmount = Math.max(booking.dp_paid || 0, 0);
+    const finalPaidAmount = getVerifiedFinalPaymentAmount(input);
+
+    recordRevenueTransaction(booking.created_at, dpAmount);
+    recordRevenueTransaction(booking.final_paid_at, finalPaidAmount);
   });
+
   const dailyData = Object.entries(revenueByDate).map(([date, rev]) => ({
     name: dateLabelMap[date],
     dateLabel: dateLabelMap[date],
     revenue: rev,
   }));
 
-  // --- Process 12-month chart data server-side ---
-  const revenueByMonth: Record<string, number> = {};
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    revenueByMonth[key] = 0;
-  }
-  (yearlyRaw || []).forEach((b) => {
-    const d = new Date(b.created_at);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const amount = b.is_fully_paid ? b.total_price || 0 : b.dp_paid || 0;
-    if (revenueByMonth[key] !== undefined) {
-      revenueByMonth[key] += amount;
-    }
-  });
   const monthlyData = Object.entries(revenueByMonth).map(([key, val]) => {
     const [y, m] = key.split("-");
     const d = new Date(Number(y), Number(m) - 1, 1);
