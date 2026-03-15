@@ -1,4 +1,7 @@
+export const INITIAL_BOOKING_STATUS = "Pending";
+
 export const DEFAULT_CLIENT_STATUSES = [
+  INITIAL_BOOKING_STATUS,
   "Booking Confirmed",
   "Sesi Foto / Acara",
   "Antrian Edit",
@@ -18,27 +21,35 @@ function dedupeStatuses(statuses: string[]) {
   return Array.from(new Set(statuses));
 }
 
+function isInitialBookingStatus(status?: string | null) {
+  return normalizeStatusValue(status || "").toLowerCase() === INITIAL_BOOKING_STATUS.toLowerCase();
+}
+
 export function isCancelledBookingStatus(status?: string | null) {
   return normalizeStatusValue(status || "").toLowerCase() === CANCELLED_BOOKING_STATUS.toLowerCase();
 }
 
-export function getClientProgressStatuses(statuses?: string[] | null) {
-  const normalized = dedupeStatuses(
-    (statuses || [])
-      .map((item) => normalizeStatusValue(item))
-      .filter(Boolean)
-      .filter((item) => !isCancelledBookingStatus(item)),
+export function normalizeClientProgressStatuses(statuses?: string[] | null) {
+  const normalizedInput = dedupeStatuses(
+    (statuses || []).map((item) => normalizeStatusValue(item)).filter(Boolean),
   );
 
-  if (normalized.length > 0) {
-    return normalized;
-  }
+  const progressStatuses = (normalizedInput.length > 0
+    ? normalizedInput
+    : DEFAULT_CLIENT_STATUSES
+  ).filter((item) => !isCancelledBookingStatus(item));
 
-  return [...DEFAULT_CLIENT_STATUSES];
+  const withoutInitial = progressStatuses.filter((item) => !isInitialBookingStatus(item));
+  return [INITIAL_BOOKING_STATUS, ...withoutInitial];
+}
+
+export function getClientProgressStatuses(statuses?: string[] | null) {
+  const normalized = normalizeClientProgressStatuses(statuses);
+  return normalized.length > 0 ? normalized : [...DEFAULT_CLIENT_STATUSES];
 }
 
 export function getInitialBookingStatus(statuses?: string[] | null) {
-  return getClientProgressStatuses(statuses)[0] || DEFAULT_CLIENT_STATUSES[0];
+  return getClientProgressStatuses(statuses)[0] || INITIAL_BOOKING_STATUS;
 }
 
 export function getBookingStatusOptions(statuses?: string[] | null) {

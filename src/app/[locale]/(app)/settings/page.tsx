@@ -61,7 +61,9 @@ import {
 import { normalizeDriveFolderStructureSettings } from "@/lib/drive-folder-structure";
 import {
   DEFAULT_CLIENT_STATUSES,
+  INITIAL_BOOKING_STATUS,
   getDefaultFinalInvoiceVisibleFromStatus,
+  normalizeClientProgressStatuses,
   resolveFinalInvoiceVisibleFromStatus,
 } from "@/lib/client-status";
 import {
@@ -110,16 +112,73 @@ type Template = {
 };
 
 const templateTypes = [
-  { value: "whatsapp_client", label: "Whatsapp ke Klien" },
-  { value: "whatsapp_booking_confirm", label: "Whatsapp Konfirmasi Booking" },
-  { value: "whatsapp_settlement_client", label: "Whatsapp Invoice Pelunasan" },
+  {
+    value: "whatsapp_client",
+    label: "Kirim Detail Booking ke Klien (Admin → Klien).",
+  },
+  {
+    value: "whatsapp_freelancer",
+    label: "Kirim Detail Booking ke Freelance (Admin → Freelance).",
+  },
+  {
+    value: "whatsapp_booking_confirm",
+    label: "Kirim konfirmasi booking ke Admin (Klien → Admin).",
+  },
+  {
+    value: "invoice",
+    label: "Kirim Invoice ke Klien (Admin → Klien).",
+  },
+  {
+    value: "whatsapp_settlement_client",
+    label: "Kirim Invoice Pelunasan ke Klien (Admin → Klien).",
+  },
   {
     value: "whatsapp_settlement_confirm",
-    label: "Whatsapp Konfirmasi Pelunasan",
+    label: "Kirim Konfirmasi Pelunasan ke Admin (Klien → Admin).",
   },
-  { value: "whatsapp_freelancer", label: "Whatsapp ke Freelance" },
-  { value: "invoice", label: "Invoice" },
 ];
+
+const templateTitleKeyByType: Record<string, string> = {
+  whatsapp_client: "templateWAClient",
+  whatsapp_freelancer: "templateWAFreelancer",
+  whatsapp_booking_confirm: "templateBookingConfirm",
+  invoice: "templateInvoice",
+  whatsapp_settlement_client: "templateSettlementClient",
+  whatsapp_settlement_confirm: "templateSettlementConfirm",
+};
+
+const templateDescKeyByType: Record<string, string> = {
+  whatsapp_client: "templateWAClientDesc",
+  whatsapp_freelancer: "templateWAFreelancerDesc",
+  whatsapp_booking_confirm: "templateBookingConfirmDesc",
+  invoice: "templateInvoiceDesc",
+  whatsapp_settlement_client: "templateSettlementClientDesc",
+  whatsapp_settlement_confirm: "templateSettlementConfirmDesc",
+};
+
+const templateCardToneByType: Record<string, string> = {
+  whatsapp_client:
+    "border-amber-300/90 bg-amber-50/20 ring-1 ring-amber-200/70 dark:border-amber-500/50 dark:bg-amber-500/8 dark:ring-amber-500/30",
+  whatsapp_freelancer:
+    "border-amber-300/90 bg-amber-50/20 ring-1 ring-amber-200/70 dark:border-amber-500/50 dark:bg-amber-500/8 dark:ring-amber-500/30",
+  whatsapp_booking_confirm:
+    "border-sky-300/90 bg-sky-50/20 ring-1 ring-sky-200/70 dark:border-sky-500/50 dark:bg-sky-500/8 dark:ring-sky-500/30",
+  invoice:
+    "border-violet-300/90 bg-violet-50/20 ring-1 ring-violet-200/70 dark:border-violet-500/50 dark:bg-violet-500/8 dark:ring-violet-500/30",
+  whatsapp_settlement_client:
+    "border-emerald-300/90 bg-emerald-50/20 ring-1 ring-emerald-200/70 dark:border-emerald-500/50 dark:bg-emerald-500/8 dark:ring-emerald-500/30",
+  whatsapp_settlement_confirm:
+    "border-emerald-300/90 bg-emerald-50/20 ring-1 ring-emerald-200/70 dark:border-emerald-500/50 dark:bg-emerald-500/8 dark:ring-emerald-500/30",
+};
+
+const templateHeaderToneByType: Record<string, string> = {
+  whatsapp_client: "border-amber-200/80 dark:border-amber-500/30",
+  whatsapp_freelancer: "border-amber-200/80 dark:border-amber-500/30",
+  whatsapp_booking_confirm: "border-sky-200/80 dark:border-sky-500/30",
+  invoice: "border-violet-200/80 dark:border-violet-500/30",
+  whatsapp_settlement_client: "border-emerald-200/80 dark:border-emerald-500/30",
+  whatsapp_settlement_confirm: "border-emerald-200/80 dark:border-emerald-500/30",
+};
 
 const DEFAULT_QUEUE_TRIGGER_STATUS = "Antrian Edit";
 const DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS = "Sesi Foto / Acara";
@@ -440,7 +499,7 @@ export default function SettingsPage() {
   // Custom client statuses (progress)
   const [customClientStatuses, setCustomClientStatuses] = React.useState<
     string[]
-  >(DEFAULT_CLIENT_STATUSES);
+  >(normalizeClientProgressStatuses(DEFAULT_CLIENT_STATUSES));
   const [newClientStatusName, setNewClientStatusName] = React.useState("");
   const [queueTriggerStatus, setQueueTriggerStatus] =
     React.useState(DEFAULT_QUEUE_TRIGGER_STATUS);
@@ -519,6 +578,15 @@ export default function SettingsPage() {
       customClientStatuses.map((status) => ({
         id: status,
         label: status,
+        locked: status === INITIAL_BOOKING_STATUS,
+        editable: status !== INITIAL_BOOKING_STATUS,
+        removable: status !== INITIAL_BOOKING_STATUS,
+        badge:
+          status === INITIAL_BOOKING_STATUS ? (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              Wajib
+            </span>
+          ) : null,
       })),
     [customClientStatuses],
   );
@@ -618,11 +686,16 @@ export default function SettingsPage() {
     });
   }
 
-  function reorderStringItems(
-    items: SortableConfigItem[],
-    setter: React.Dispatch<React.SetStateAction<string[]>>,
+  function setNormalizedClientStatuses(
+    nextStatuses: string[] | ((prev: string[]) => string[]),
   ) {
-    setter(items.map((item) => item.id));
+    setCustomClientStatuses((prev) => {
+      const resolved =
+        typeof nextStatuses === "function"
+          ? nextStatuses(prev)
+          : nextStatuses;
+      return normalizeClientProgressStatuses(resolved);
+    });
   }
 
   // Listen for Google auth popup callbacks
@@ -808,12 +881,11 @@ export default function SettingsPage() {
     } else {
       setFormSectionsByEventType({});
     }
-    if ((prof as any)?.custom_client_statuses) {
-      setCustomClientStatuses((prof as any).custom_client_statuses);
-    }
-    const loadedClientStatuses =
+    const loadedClientStatuses = normalizeClientProgressStatuses(
       ((prof as any)?.custom_client_statuses as string[] | undefined) ||
-      customClientStatuses;
+        customClientStatuses,
+    );
+    setCustomClientStatuses(loadedClientStatuses);
     if ((prof as any)?.queue_trigger_status) {
       setQueueTriggerStatus((prof as any).queue_trigger_status);
     }
@@ -1093,17 +1165,21 @@ export default function SettingsPage() {
   async function handleSaveStatuses() {
     if (!profile) return;
     setStatusSaving(true);
-    const nextVisibleFromStatus = resolveFinalInvoiceVisibleFromStatus(
+    const normalizedClientStatuses = normalizeClientProgressStatuses(
       customClientStatuses,
+    );
+    const nextVisibleFromStatus = resolveFinalInvoiceVisibleFromStatus(
+      normalizedClientStatuses,
       finalInvoiceVisibleFromStatus,
     );
     try {
       await saveProfilePatch({
-        custom_statuses: customClientStatuses,
-        custom_client_statuses: customClientStatuses,
+        custom_statuses: normalizedClientStatuses,
+        custom_client_statuses: normalizedClientStatuses,
         queue_trigger_status: queueTriggerStatus,
         final_invoice_visible_from_status: nextVisibleFromStatus,
       });
+      setCustomClientStatuses(normalizedClientStatuses);
       setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
       setStatusSaved(true);
       setTimeout(() => setStatusSaved(false), 3000);
@@ -1184,11 +1260,13 @@ export default function SettingsPage() {
   }
 
   async function resetStatusesToDefaultAndSave() {
-    const nextVisibleFromStatus = resolveFinalInvoiceVisibleFromStatus(
+    const nextClientStatuses = normalizeClientProgressStatuses(
       DEFAULT_CLIENT_STATUSES,
+    );
+    const nextVisibleFromStatus = resolveFinalInvoiceVisibleFromStatus(
+      nextClientStatuses,
       DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS,
     );
-    const nextClientStatuses = [...DEFAULT_CLIENT_STATUSES];
 
     setCustomClientStatuses(nextClientStatuses);
     setQueueTriggerStatus(DEFAULT_QUEUE_TRIGGER_STATUS);
@@ -1546,6 +1624,13 @@ export default function SettingsPage() {
     const contentKey = isFreelancer
       ? `${tt.value}__${selectedEventType}`
       : tt.value;
+    const cardToneClass =
+      templateCardToneByType[tt.value] ||
+      "border-border bg-card ring-1 ring-border/50 dark:border-border dark:bg-card dark:ring-border/40";
+    const headerToneClass =
+      templateHeaderToneByType[tt.value] || "border-border/70";
+    const titleKey = templateTitleKeyByType[tt.value] || "templateInvoice";
+    const descKey = templateDescKeyByType[tt.value] || "templateInvoiceDesc";
     const currentLang = templateLang[contentKey] || "id";
     const content =
       currentLang === "id"
@@ -1585,35 +1670,14 @@ export default function SettingsPage() {
     return (
       <div
         key={tt.value}
-        className="rounded-xl border bg-card text-card-foreground shadow-sm"
+        className={`rounded-xl border text-card-foreground shadow-sm ${cardToneClass}`}
       >
-        <div className="px-6 py-4 border-b">
+        <div className={`px-6 py-4 border-b ${headerToneClass}`}>
           <h3 className="font-semibold flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
-            {tt.value === "whatsapp_client"
-              ? tp("templateWAClient")
-              : tt.value === "whatsapp_booking_confirm"
-                ? "Konfirmasi Booking"
-                : tt.value === "whatsapp_settlement_client"
-                  ? "Invoice Pelunasan ke Klien"
-                  : tt.value === "whatsapp_settlement_confirm"
-                    ? "Konfirmasi Pelunasan ke Admin"
-                    : tt.value === "whatsapp_freelancer"
-                      ? tp("templateWAFreelancer")
-                      : tp("templateInvoice")}
+            {tp(titleKey)}
           </h3>
-          <p className="text-sm text-muted-foreground">
-            {tt.value === "whatsapp_client" && tp("templateWAClientDesc")}
-            {tt.value === "whatsapp_booking_confirm" &&
-              "Template pesan konfirmasi setelah klien mengisi form booking."}
-            {tt.value === "whatsapp_settlement_client" &&
-              "Template pesan WhatsApp dari admin ke klien saat invoice pelunasan dikirim."}
-            {tt.value === "whatsapp_settlement_confirm" &&
-              "Template pesan WhatsApp dari klien ke admin setelah pelunasan dikirim."}
-            {tt.value === "whatsapp_freelancer" &&
-              tp("templateWAFreelancerDesc")}
-            {tt.value === "invoice" && tp("templateInvoiceDesc")}
-          </p>
+          <p className="text-sm text-muted-foreground">{tp(descKey)}</p>
         </div>
         <div className="p-6 space-y-4">
           {/* Event Type Selector for Freelancer */}
@@ -2619,10 +2683,10 @@ export default function SettingsPage() {
                 <SortableConfigList
                   items={clientStatusItems}
                   onReorder={(items) =>
-                    reorderStringItems(items, setCustomClientStatuses)
+                    setNormalizedClientStatuses(items.map((item) => item.id))
                   }
                   onRename={(id, label) =>
-                    setCustomClientStatuses((prev) =>
+                    setNormalizedClientStatuses((prev) =>
                       prev.map((status) => (status === id ? label : status)),
                     )
                   }
@@ -2631,7 +2695,7 @@ export default function SettingsPage() {
                       alert("Minimal 2 status harus ada.");
                       return;
                     }
-                    setCustomClientStatuses((prev) =>
+                    setNormalizedClientStatuses((prev) =>
                       prev.filter((status) => status !== id),
                     );
                   }}
@@ -2643,7 +2707,7 @@ export default function SettingsPage() {
                     onChange={(e) => setNewClientStatusName(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && newClientStatusName.trim()) {
-                        setCustomClientStatuses([
+                        setNormalizedClientStatuses([
                           ...customClientStatuses,
                           newClientStatusName.trim(),
                         ]);
@@ -2659,7 +2723,7 @@ export default function SettingsPage() {
                     disabled={!newClientStatusName.trim()}
                     onClick={() => {
                       if (newClientStatusName.trim()) {
-                        setCustomClientStatuses([
+                        setNormalizedClientStatuses([
                           ...customClientStatuses,
                           newClientStatusName.trim(),
                         ]);

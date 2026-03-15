@@ -146,8 +146,9 @@ export default function NewBookingPage() {
     const [statusOptions, setStatusOptions] = React.useState<string[]>(
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
     );
-    const [statusVal, setStatusVal] = React.useState(
-        getInitialBookingStatus(DEFAULT_CLIENT_STATUSES),
+    const initialBookingStatus = React.useMemo(
+        () => getInitialBookingStatus(statusOptions),
+        [statusOptions],
     );
     const [notes, setNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
@@ -182,7 +183,6 @@ export default function NewBookingPage() {
             setFreelancers((frees || []) as Freelance[]);
             const nextStatusOptions = getBookingStatusOptions((prof as any)?.custom_client_statuses as string[] | null | undefined);
             setStatusOptions(nextStatusOptions);
-            setStatusVal((prev) => (nextStatusOptions.includes(prev) ? prev : getInitialBookingStatus(nextStatusOptions)));
             setEventTypeOptions(getActiveEventTypes({
                 customEventTypes: normalizeEventTypeList((prof as any)?.custom_event_types),
                 activeEventTypes: (prof as any)?.form_event_types,
@@ -228,12 +228,6 @@ export default function NewBookingPage() {
         }
         setTotalPrice(selectedMainServices.reduce((sum, service) => sum + service.price, 0));
     }, [selectedMainServices]);
-
-    React.useEffect(() => {
-        if (!statusOptions.includes(statusVal)) {
-            setStatusVal(getInitialBookingStatus(statusOptions));
-        }
-    }, [statusOptions, statusVal]);
 
     const activeCustomLayoutSections = React.useMemo(() => {
         const rawLayout =
@@ -352,8 +346,8 @@ export default function NewBookingPage() {
             freelance_id: selectedFreelancerIds[0] || null,
             total_price: parseFloat(totalPrice.toString()) || 0,
             dp_paid: parseFloat(dpPaid.toString()) || 0,
-            status: statusVal,
-            client_status: statusVal,
+            status: initialBookingStatus,
+            client_status: initialBookingStatus,
             notes: notes || null,
             drive_folder_url: driveFolderUrl || null,
             portfolio_url: portfolioUrl || null,
@@ -622,10 +616,9 @@ export default function NewBookingPage() {
                         )}
 
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Status{reqMark}</label>
-                            <select value={statusVal} onChange={e => setStatusVal(e.target.value)} required className={selectClass}>
-                                {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
+                            <label className="text-xs font-medium text-muted-foreground">Status Awal</label>
+                            <input value={initialBookingStatus} readOnly className={inputClass} />
+                            <p className="text-[11px] text-muted-foreground">Status awal selalu Pending. Ubah status setelah booking dibuat.</p>
                         </div>
                         {eventType !== "Wedding" && (
                             <div className="col-span-full space-y-1.5">

@@ -30,6 +30,7 @@ type BookingData = {
 };
 
 const DEFAULT_STEPS = [
+    { key: "Pending", labelKey: "stepPending", icon: Clock },
     { key: "Booking Confirmed", labelKey: "stepConfirmed", icon: CheckCircle2 },
     { key: "Sesi Foto / Acara", labelKey: "stepSession", icon: Camera },
     { key: "Antrian Edit", labelKey: "stepEditQueue", icon: Users },
