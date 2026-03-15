@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
+import { hasBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import {
     DEFAULT_CALENDAR_EVENT_FORMAT,
 } from "@/utils/google/template";
@@ -358,8 +359,15 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        const shouldSyncCalendar = hasBookingCalendarSessions({
+            eventType,
+            sessionDate,
+            extraFields: sanitizedExtraData,
+            defaultLocation: location,
+        });
+
         // Auto-sync to Google Calendar (fire-and-forget)
-        if (vendor.google_access_token && vendor.google_refresh_token && sessionDate) {
+        if (vendor.google_access_token && vendor.google_refresh_token && shouldSyncCalendar) {
             try {
                 const syncedEvent = await syncBookingCalendarEvent({
                     profile: {
@@ -382,6 +390,7 @@ export async function POST(request: NextRequest) {
                         eventType,
                         notes,
                         extraFields: sanitizedExtraData,
+                        googleCalendarEventIds: null,
                         services: mainServices[0] || null,
                         bookingServices: mainServices.map((service, index) => ({
                             id: `${booking.id}-main-${service.id}`,
@@ -395,7 +404,10 @@ export async function POST(request: NextRequest) {
                 if (syncedEvent.eventId) {
                     await supabaseAdmin
                         .from("bookings")
-                        .update({ google_calendar_event_id: syncedEvent.eventId })
+                        .update({
+                            google_calendar_event_id: syncedEvent.eventId,
+                            google_calendar_event_ids: syncedEvent.eventIds,
+                        })
                         .eq("id", booking.id);
                 }
             } catch {

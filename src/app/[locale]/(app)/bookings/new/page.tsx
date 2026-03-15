@@ -402,7 +402,7 @@ export default function NewBookingPage() {
                 );
             }
 
-            if (sessionDate) {
+            if (finalSessionDate) {
                 try {
                     const selectedFreelancerEmails = freelancers
                         .filter(f => selectedFreelancerIds.includes(f.id))

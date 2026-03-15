@@ -98,6 +98,19 @@ export async function updateCalendarEvent(
     return res.data;
 }
 
+export async function deleteCalendarEvent(
+    accessToken: string,
+    refreshToken: string,
+    eventId: string,
+) {
+    const calendar = await getCalendarClient(accessToken, refreshToken);
+    await calendar.events.delete({
+        calendarId: "primary",
+        eventId,
+        sendUpdates: "none",
+    });
+}
+
 export async function upsertCalendarEvent(
     accessToken: string,
     refreshToken: string,

@@ -15,6 +15,12 @@ import { useLocale } from "next-intl";
 import { cn } from "@/lib/utils";
 import { getSessionDateUTC, formatSessionDate } from "@/utils/format-date";
 import {
+    getBookingServiceLabel,
+    getBookingServicesByKind,
+    normalizeBookingServiceSelections,
+} from "@/lib/booking-services";
+import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
+import {
     CANCELLED_BOOKING_STATUS,
     DEFAULT_CLIENT_STATUSES,
     getBookingStatusOptions,
@@ -44,6 +50,7 @@ type CalendarEvent = Event & {
     clientName?: string;
     status?: string;
     serviceName?: string;
+    sessionLabel?: string | null;
     location?: string;
     source: "booking" | "google" | "freelancer";
     freelancerName?: string;
@@ -302,41 +309,65 @@ export default function CalendarPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, session_date, status, location, event_type, extra_fields, services(name, duration_minutes)")
-            .eq("user_id", user.id)
-            .not("session_date", "is", null);
+            .select("id, booking_code, client_name, session_date, status, location, event_type, extra_fields, services(id, name, duration_minutes, is_addon), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon))")
+            .eq("user_id", user.id);
 
         if (data) {
-            const bookingEvents: CalendarEvent[] = data.map((booking: any) => {
-                const sessionDate = getSessionDateUTC(booking.session_date);
-                const durationMinutes = booking.services?.duration_minutes || 120;
-                const endDate = new Date(sessionDate.getTime() + durationMinutes * 60 * 1000);
-                const range = buildCalendarRangeFromStoredSession(booking.session_date, durationMinutes);
-                const eventFormat = resolveTemplateByEventType(
-                    calendarEventFormatMap,
-                    booking.event_type,
-                    calendarEventFormat || DEFAULT_CALENDAR_EVENT_FORMAT,
+            const bookingEvents: CalendarEvent[] = data.flatMap((booking: any) => {
+                const serviceSelections = normalizeBookingServiceSelections(
+                    booking.booking_services,
+                    booking.services,
                 );
-                const title = applyCalendarTemplate(eventFormat, buildCalendarTemplateVars({
-                    client_name: booking.client_name,
-                    service_name: booking.services?.name || booking.event_type || "Booking",
-                    event_type: booking.event_type || "-",
-                    booking_code: booking.booking_code || "",
-                    studio_name: studioName || "Client Desk",
-                    location: booking.location || "-",
-                    ...range.templateVars,
-                }, booking.extra_fields));
-                return {
-                    title,
-                    start: sessionDate,
-                    end: endDate,
-                    bookingId: booking.id,
-                    clientName: booking.client_name,
-                    status: booking.status,
-                    serviceName: booking.services?.name || "Layanan",
-                    location: booking.location || undefined,
-                    source: "booking" as const,
-                };
+                const mainServices = getBookingServicesByKind(serviceSelections, "main");
+                const durationMinutes =
+                    mainServices.reduce(
+                        (sum, selection) => sum + (selection.service.duration_minutes || 0),
+                        0,
+                    ) ||
+                    serviceSelections[0]?.service.duration_minutes ||
+                    120;
+                const serviceName = getBookingServiceLabel(serviceSelections, {
+                    kind: "main",
+                    fallback: booking.event_type || "Layanan",
+                });
+                const sessions = resolveBookingCalendarSessions({
+                    eventType: booking.event_type,
+                    sessionDate: booking.session_date,
+                    extraFields: booking.extra_fields,
+                    defaultLocation: booking.location,
+                });
+
+                return sessions.map((session) => {
+                    const sessionDate = getSessionDateUTC(session.sessionDate);
+                    const endDate = new Date(sessionDate.getTime() + durationMinutes * 60 * 1000);
+                    const range = buildCalendarRangeFromStoredSession(session.sessionDate, durationMinutes);
+                    const eventFormat = resolveTemplateByEventType(
+                        calendarEventFormatMap,
+                        booking.event_type,
+                        calendarEventFormat || DEFAULT_CALENDAR_EVENT_FORMAT,
+                    );
+                    const baseTitle = applyCalendarTemplate(eventFormat, buildCalendarTemplateVars({
+                        client_name: booking.client_name,
+                        service_name: serviceName || booking.event_type || "Booking",
+                        event_type: booking.event_type || "-",
+                        booking_code: booking.booking_code || "",
+                        studio_name: studioName || "Client Desk",
+                        location: session.location || booking.location || "-",
+                        ...range.templateVars,
+                    }, booking.extra_fields));
+                    return {
+                        title: session.titlePrefix ? `${session.titlePrefix} ${baseTitle}` : baseTitle,
+                        start: sessionDate,
+                        end: endDate,
+                        bookingId: booking.id,
+                        clientName: booking.client_name,
+                        status: booking.status,
+                        serviceName: serviceName,
+                        sessionLabel: session.label,
+                        location: session.location || booking.location || undefined,
+                        source: "booking" as const,
+                    };
+                });
             });
             setEvents(bookingEvents);
         }
@@ -599,10 +630,19 @@ export default function CalendarPage() {
             <Dialog open={eventPopupOpen} onOpenChange={setEventPopupOpen}>
                 <DialogContent className="w-[calc(100vw-2rem)] max-w-[760px] overflow-hidden">
                     <DialogHeader>
-                        <DialogTitle className="text-lg">{selectedEvent?.clientName}</DialogTitle>
+                        <DialogTitle className="text-lg">
+                            {selectedEvent?.sessionLabel ? `[${selectedEvent.sessionLabel}] ` : ""}
+                            {selectedEvent?.clientName}
+                        </DialogTitle>
                     </DialogHeader>
                     {selectedEvent && (
                         <div className="space-y-3 py-1">
+                            {selectedEvent.sessionLabel && (
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-muted-foreground w-20 shrink-0">Sesi</span>
+                                    <span className="font-medium break-words">{selectedEvent.sessionLabel}</span>
+                                </div>
+                            )}
                             <div className="flex items-center gap-2 text-sm">
                                 <span className="text-muted-foreground w-20 shrink-0">Paket</span>
                                 <span className="font-medium break-words">{selectedEvent.serviceName}</span>

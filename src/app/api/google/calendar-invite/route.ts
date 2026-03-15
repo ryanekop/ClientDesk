@@ -28,13 +28,13 @@ export async function POST(req: NextRequest) {
         // Get booking details including service duration
         const { data: booking } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, location, location_detail, notes, event_type, extra_fields, google_calendar_event_id, services(id, name, duration_minutes, is_addon), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon))")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, location, location_detail, notes, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon))")
             .eq("id", bookingId)
             .eq("user_id", user.id)
             .single();
 
-        if (!booking || !booking.session_date) {
-            return NextResponse.json({ error: "Booking not found or no session date" }, { status: 404 });
+        if (!booking) {
+            return NextResponse.json({ error: "Booking not found" }, { status: 404 });
         }
 
         const syncedEvent = await syncBookingCalendarEvent({
@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
                 notes: booking.notes,
                 extraFields: (booking as any).extra_fields,
                 googleCalendarEventId: (booking as any).google_calendar_event_id,
+                googleCalendarEventIds: (booking as any).google_calendar_event_ids,
                 services: booking.services,
                 bookingServices: (booking as any).booking_services,
             },
@@ -67,7 +68,10 @@ export async function POST(req: NextRequest) {
 
         await supabase
             .from("bookings")
-            .update({ google_calendar_event_id: syncedEvent.eventId })
+            .update({
+                google_calendar_event_id: syncedEvent.eventId,
+                google_calendar_event_ids: syncedEvent.eventIds,
+            })
             .eq("id", booking.id)
             .eq("user_id", user.id);
 
