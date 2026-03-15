@@ -454,7 +454,7 @@ export function getBuiltInFieldDefinitions(
   return [
     ...BASE_BUILT_IN_FIELDS,
     ...(eventType === "Wedding"
-      ? WEDDING_BUILT_IN_FIELDS
+      ? [...WEDDING_BUILT_IN_FIELDS, ...DEFAULT_SESSION_FIELDS]
       : DEFAULT_SESSION_FIELDS),
     ...extraFields,
     ...locationFields,

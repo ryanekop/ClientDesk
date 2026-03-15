@@ -15,6 +15,7 @@ import {
 } from "@/lib/payment-config";
 import { uploadPaymentProofToDrive } from "@/lib/payment-proof-drive";
 import { getInitialBookingStatus } from "@/lib/client-status";
+import { getWhatsAppTemplateContent, type WhatsAppTemplate } from "@/lib/whatsapp-template";
 
 type VendorRecord = {
     id: string;
@@ -611,12 +612,43 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        let bookingConfirmTemplate: string | null = null;
+        try {
+            const { data: templateRows } = await supabaseAdmin
+                .from("templates")
+                .select("type, name, content, content_en, event_type")
+                .eq("user_id", vendor.id)
+                .in("type", ["whatsapp_client", "whatsapp_booking_confirm"]);
+
+            const normalizedTemplates: WhatsAppTemplate[] = Array.isArray(templateRows)
+                ? templateRows
+                    .map((row: Record<string, unknown>) => ({
+                        type: String(row.type || ""),
+                        name: typeof row.name === "string" ? row.name : null,
+                        content: typeof row.content === "string" ? row.content : "",
+                        content_en: typeof row.content_en === "string" ? row.content_en : "",
+                        event_type: typeof row.event_type === "string" ? row.event_type : null,
+                    }))
+                : [];
+
+            const content = getWhatsAppTemplateContent(
+                normalizedTemplates,
+                "whatsapp_booking_confirm",
+                "id",
+                eventType,
+            );
+            bookingConfirmTemplate = content.trim() || null;
+        } catch {
+            bookingConfirmTemplate = null;
+        }
+
         return NextResponse.json({
             success: true,
             bookingCode: booking.booking_code,
             bookingId: booking.id,
             vendorWhatsapp: vendor.whatsapp_number,
             vendorName: vendor.studio_name,
+            bookingConfirmTemplate,
         });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Terjadi kesalahan saat memproses booking.";

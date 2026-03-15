@@ -43,6 +43,7 @@ import {
   normalizeEventTypeList,
   PUBLIC_CUSTOM_EVENT_TYPE,
 } from "@/lib/event-type-config";
+import { fillWhatsAppTemplate } from "@/lib/whatsapp-template";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -270,6 +271,7 @@ export function BookingFormClient({
     bookingCode?: string;
     vendorWhatsapp?: string;
     vendorName?: string;
+    bookingConfirmTemplate?: string | null;
   } | null>(null);
 
   // ── Form state ──
@@ -575,19 +577,38 @@ export function BookingFormClient({
     const dpVal = parseFormatted(dpDisplay) || 0;
 
     const msg =
-      `Halo ${resultData.vendorName || "Admin"}, saya baru saja booking melalui form online.\n\n` +
-      `📋 *Detail Booking*\n` +
-      `Kode: *${resultData.bookingCode}*\n` +
-      `Nama: ${clientName}\n` +
-      `Paket: ${svcName}\n` +
-      `Jadwal: ${dateStr}\n` +
-      (location ? `Lokasi: ${location}\n` : "") +
-      `\n💰 Total: ${formatCurrency(selectedBookingTotal)}\n` +
-      `✅ DP: ${formatCurrency(dpVal)}\n` +
-      `💳 Metode: ${selectedPaymentMethod ? getPaymentMethodLabel(selectedPaymentMethod) : "-"}\n` +
-      (proofFile ? "📎 Bukti transfer sudah diupload.\n" : "") +
-      (instagram ? `📸 Instagram: ${instagram}\n` : "") +
-      `\nMohon konfirmasi booking saya. Terima kasih! 🙏`;
+      (resultData.bookingConfirmTemplate || "").trim()
+        ? fillWhatsAppTemplate(resultData.bookingConfirmTemplate || "", {
+            client_name: clientName || "-",
+            booking_code: resultData.bookingCode || "-",
+            session_date: dateStr,
+            service_name: svcName,
+            total_price: formatCurrency(selectedBookingTotal),
+            dp_paid: formatCurrency(dpVal),
+            studio_name: resultData.vendorName || "Admin",
+            event_type: eventType || "-",
+            location: location || "-",
+            location_maps_url: location
+              ? `https://maps.google.com/maps?q=${encodeURIComponent(location)}`
+              : "-",
+            detail_location: locationDetail || "-",
+            notes: notes || "-",
+            tracking_link: "-",
+            invoice_url: "-",
+          })
+        : `Halo ${resultData.vendorName || "Admin"}, saya baru saja booking melalui form online.\n\n` +
+          `📋 *Detail Booking*\n` +
+          `Kode: *${resultData.bookingCode}*\n` +
+          `Nama: ${clientName}\n` +
+          `Paket: ${svcName}\n` +
+          `Jadwal: ${dateStr}\n` +
+          (location ? `Lokasi: ${location}\n` : "") +
+          `\n💰 Total: ${formatCurrency(selectedBookingTotal)}\n` +
+          `✅ DP: ${formatCurrency(dpVal)}\n` +
+          `💳 Metode: ${selectedPaymentMethod ? getPaymentMethodLabel(selectedPaymentMethod) : "-"}\n` +
+          (proofFile ? "📎 Bukti transfer sudah diupload.\n" : "") +
+          (instagram ? `📸 Instagram: ${instagram}\n` : "") +
+          `\nMohon konfirmasi booking saya. Terima kasih! 🙏`;
 
     window.open(
       `https://api.whatsapp.com/send?phone=${wa}&text=${encodeURIComponent(msg)}`,
