@@ -18,27 +18,26 @@ import { getInitialBookingStatus } from "@/lib/client-status";
 
 type VendorRecord = {
     id: string;
-    studio_name: string | null;
-    whatsapp_number: string | null;
-    min_dp_percent: number | null;
-    min_dp_map: Record<string, number | { mode?: string; value?: number }> | null;
-    google_access_token: string | null;
-    google_refresh_token: string | null;
-    google_drive_access_token: string | null;
-    google_drive_refresh_token: string | null;
-    drive_folder_format: string | null;
-    drive_folder_format_map: Record<string, string> | null;
-    drive_folder_structure_map: Record<string, string[] | string> | null;
-    calendar_event_format: string | null;
-    calendar_event_format_map: Record<string, string> | null;
-    calendar_event_description: string | null;
-    calendar_event_description_map: Record<string, string> | null;
-    form_payment_methods: PaymentMethod[] | null;
-    form_show_proof: boolean | null;
-    qris_image_url: string | null;
-    qris_drive_file_id: string | null;
-    bank_accounts: unknown[] | null;
-    custom_client_statuses: string[] | null;
+    studio_name?: string | null;
+    whatsapp_number?: string | null;
+    min_dp_percent?: number | null;
+    min_dp_map?: Record<string, number | { mode?: string; value?: number }> | null;
+    google_access_token?: string | null;
+    google_refresh_token?: string | null;
+    google_drive_access_token?: string | null;
+    google_drive_refresh_token?: string | null;
+    drive_folder_format?: string | null;
+    drive_folder_format_map?: Record<string, string> | null;
+    drive_folder_structure_map?: Record<string, string[] | string> | null;
+    calendar_event_format?: string | null;
+    calendar_event_format_map?: Record<string, string> | null;
+    calendar_event_description_map?: Record<string, string> | null;
+    form_payment_methods?: PaymentMethod[] | null;
+    form_show_proof?: boolean | null;
+    qris_image_url?: string | null;
+    qris_drive_file_id?: string | null;
+    bank_accounts?: unknown[] | null;
+    custom_client_statuses?: string[] | null;
 };
 
 type BookingRequestBody = {
@@ -117,6 +116,83 @@ function normalizeStoredDateTime(value: unknown): string {
     return trimmed;
 }
 
+function extractMissingColumnFromSupabaseError(
+    error: { message?: string; details?: string; hint?: string } | null,
+) {
+    const messages = [error?.message, error?.details, error?.hint].filter(
+        (value): value is string => Boolean(value),
+    );
+
+    for (const message of messages) {
+        const schemaCacheMatch = message.match(/Could not find the '([^']+)' column/i);
+        if (schemaCacheMatch?.[1]) {
+            return schemaCacheMatch[1];
+        }
+
+        const postgresMatch = message.match(
+            /column\s+["']?(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)["']?\s+does not exist/i,
+        );
+        if (postgresMatch?.[1]) {
+            return postgresMatch[1];
+        }
+    }
+
+    return null;
+}
+
+const VENDOR_SELECT_COLUMNS = [
+    "id",
+    "studio_name",
+    "whatsapp_number",
+    "min_dp_percent",
+    "min_dp_map",
+    "google_access_token",
+    "google_refresh_token",
+    "google_drive_access_token",
+    "google_drive_refresh_token",
+    "drive_folder_format",
+    "drive_folder_format_map",
+    "drive_folder_structure_map",
+    "calendar_event_format",
+    "calendar_event_format_map",
+    "calendar_event_description_map",
+    "form_payment_methods",
+    "form_show_proof",
+    "qris_image_url",
+    "qris_drive_file_id",
+    "bank_accounts",
+    "custom_client_statuses",
+] as const;
+
+async function fetchVendorByField(
+    field: "id" | "vendor_slug",
+    value: string,
+): Promise<VendorRecord | null> {
+    let selectColumns = [...VENDOR_SELECT_COLUMNS];
+
+    while (selectColumns.length > 0) {
+        const { data, error } = await supabaseAdmin
+            .from("profiles")
+            .select(selectColumns.join(", "))
+            .eq(field, value)
+            .maybeSingle();
+
+        if (!error) {
+            return (data as VendorRecord | null) || null;
+        }
+
+        const missingColumn = extractMissingColumnFromSupabaseError(error);
+        if (missingColumn && selectColumns.includes(missingColumn as (typeof VENDOR_SELECT_COLUMNS)[number])) {
+            selectColumns = selectColumns.filter((column) => column !== missingColumn);
+            continue;
+        }
+
+        return null;
+    }
+
+    return null;
+}
+
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -187,8 +263,8 @@ export async function POST(request: NextRequest) {
             instagram,
         } = body;
 
-        const normalizedClientName = clientName.trim();
-        const normalizedClientWhatsapp = clientWhatsapp.trim();
+        const normalizedClientName = (clientName || "").trim() || "Klien";
+        const normalizedClientWhatsapp = (clientWhatsapp || "").trim();
         const rawExtraData =
             typeof extraData === "object" && extraData !== null
                 ? extraData as Record<string, unknown>
@@ -204,13 +280,6 @@ export async function POST(request: NextRequest) {
                 .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0] ||
             "";
 
-        if ((!vendorId && !vendorSlug && !vendorSlugPath) || !normalizedClientName || !normalizedClientWhatsapp) {
-            return NextResponse.json({ success: false, error: "Data tidak lengkap." }, { status: 400 });
-        }
-
-        const vendorSelect =
-            "id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, calendar_event_format, calendar_event_format_map, calendar_event_description, calendar_event_description_map, form_payment_methods, form_show_proof, qris_image_url, qris_drive_file_id, bank_accounts, custom_client_statuses";
-
         let vendor: VendorRecord | null = null;
         const referer = request.headers.get("referer");
         const slugCandidates = Array.from(
@@ -221,12 +290,7 @@ export async function POST(request: NextRequest) {
         );
 
         if (isValidUuid(vendorId || "")) {
-            const { data: byId } = await supabaseAdmin
-                .from("profiles")
-                .select(vendorSelect)
-                .eq("id", vendorId)
-                .maybeSingle();
-            vendor = (byId as VendorRecord | null) || null;
+            vendor = await fetchVendorByField("id", vendorId!);
         }
 
         for (const candidate of slugCandidates) {
@@ -234,22 +298,12 @@ export async function POST(request: NextRequest) {
             const normalized = candidate.trim();
             if (!normalized) continue;
 
-            const { data: bySlug } = await supabaseAdmin
-                .from("profiles")
-                .select(vendorSelect)
-                .eq("vendor_slug", normalized)
-                .maybeSingle();
-            vendor = (bySlug as VendorRecord | null) || null;
+            vendor = await fetchVendorByField("vendor_slug", normalized);
 
             if (!vendor) {
                 const lower = normalized.toLowerCase();
                 if (lower !== normalized) {
-                    const { data: bySlugLower } = await supabaseAdmin
-                        .from("profiles")
-                        .select(vendorSelect)
-                        .eq("vendor_slug", lower)
-                        .maybeSingle();
-                    vendor = (bySlugLower as VendorRecord | null) || null;
+                    vendor = await fetchVendorByField("vendor_slug", lower);
                 }
             }
         }
@@ -423,7 +477,7 @@ export async function POST(request: NextRequest) {
                 user_id: vendor.id,
                 booking_code: bookingCode,
                 client_name: normalizedClientName,
-                client_whatsapp: normalizedClientWhatsapp,
+                client_whatsapp: normalizedClientWhatsapp || null,
                 event_type: eventType || null,
                 session_date: resolvedSessionDate || null,
                 service_id: mainServices[0]?.id || null,
@@ -473,10 +527,10 @@ export async function POST(request: NextRequest) {
                 const uploaded = await uploadPaymentProofToDrive({
                     accessToken: vendor.google_drive_access_token,
                     refreshToken: vendor.google_drive_refresh_token,
-                    driveFolderFormat: vendor.drive_folder_format,
-                    driveFolderFormatMap: vendor.drive_folder_format_map,
+                    driveFolderFormat: vendor.drive_folder_format ?? null,
+                    driveFolderFormatMap: vendor.drive_folder_format_map ?? null,
                     driveFolderStructureMap: vendor.drive_folder_structure_map,
-                    studioName: vendor.studio_name,
+                    studioName: vendor.studio_name ?? null,
                     bookingCode: booking.booking_code,
                     clientName: normalizedClientName,
                     eventType,
@@ -515,19 +569,19 @@ export async function POST(request: NextRequest) {
                     profile: {
                         accessToken: vendor.google_access_token,
                         refreshToken: vendor.google_refresh_token,
-                        studioName: vendor.studio_name,
+                        studioName: vendor.studio_name ?? null,
                         eventFormat: vendor.calendar_event_format || DEFAULT_CALENDAR_EVENT_FORMAT,
                         eventFormatMap: vendor.calendar_event_format_map,
-                        eventDescription: vendor.calendar_event_description,
-                        eventDescriptionMap: vendor.calendar_event_description_map,
+                        eventDescription: null,
+                        eventDescriptionMap: vendor.calendar_event_description_map ?? null,
                     },
                     booking: {
                         id: booking.id,
                         bookingCode,
                         clientName: normalizedClientName,
-                        clientWhatsapp: normalizedClientWhatsapp,
+                        clientWhatsapp: normalizedClientWhatsapp || null,
                         sessionDate: resolvedSessionDate || null,
-                        location,
+                        location: location ?? null,
                         locationDetail,
                         eventType,
                         notes,
