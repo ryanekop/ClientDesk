@@ -10,7 +10,6 @@ import {
   normalizeFinalAdjustments,
 } from "@/lib/final-settlement";
 import {
-  getBookingServiceLabel,
   normalizeLegacyServiceRecord,
   normalizeBookingServiceSelections,
 } from "@/lib/booking-services";
@@ -98,6 +97,7 @@ const labels: Record<string, Record<string, string>> = {
     status: "Status",
     total: "Total",
     packageDescription: "Deskripsi Paket",
+    reason: "Alasan",
     noDescription: "Tidak ada deskripsi paket.",
     subTotal: "Sub Total",
     dpPaid: "DP Dibayar",
@@ -122,6 +122,7 @@ const labels: Record<string, Record<string, string>> = {
     status: "Status",
     total: "Total",
     packageDescription: "Package Description",
+    reason: "Reason",
     noDescription: "No package description.",
     subTotal: "Sub Total",
     dpPaid: "DP Paid",
@@ -176,7 +177,6 @@ export async function GET(request: NextRequest) {
   const finalInvoiceTotal = getFinalInvoiceTotal(booking.total_price, adjustments);
   const isFinalStage = stage === "final";
   const invoiceTitle = isFinalStage ? t.finalInvoice : t.invoice;
-  const shownTotal = isFinalStage ? finalInvoiceTotal : booking.total_price;
   const remaining = isFinalStage
     ? getRemainingFinalPayment({
         total_price: booking.total_price,
@@ -205,20 +205,69 @@ export async function GET(request: NextRequest) {
     (booking as { booking_services?: unknown[] }).booking_services,
     booking.services,
   );
-  const serviceName = getBookingServiceLabel(serviceSelections, {
-    kind: "main",
-    fallback: legacyService?.name || t.defaultServiceName,
+  const mainServiceSelections = serviceSelections.filter(
+    (selection) => selection.kind === "main",
+  );
+  const serviceRows =
+    mainServiceSelections.length > 0
+      ? mainServiceSelections.map((selection) => ({
+          id: selection.id,
+          name: selection.service.name || t.defaultServiceName,
+          description: selection.service.description?.trim() || "",
+          price:
+            typeof selection.service.price === "number"
+              ? Math.max(selection.service.price, 0)
+              : 0,
+        }))
+      : [
+          {
+            id: legacyService?.id || "",
+            name: legacyService?.name || t.defaultServiceName,
+            description: legacyService?.description?.trim() || "",
+            price:
+              typeof legacyService?.price === "number"
+                ? Math.max(legacyService.price, 0)
+                : 0,
+          },
+        ];
+  const serviceDescriptionById: Record<string, string> = {};
+  serviceSelections.forEach((selection) => {
+    const serviceId = selection.service.id;
+    if (!serviceId) return;
+    const description = selection.service.description?.trim();
+    if (description) {
+      serviceDescriptionById[serviceId] = description;
+    }
   });
-  const mainServices = serviceSelections.filter((selection) => selection.kind === "main");
-  const mainServiceDescriptions = mainServices
-    .filter((selection) => Boolean(selection.service.description?.trim()))
-    .map((selection) => {
-      const description = selection.service.description?.trim() || "";
-      if (mainServices.length === 1) return description;
-      return `${selection.service.name}: ${description}`;
+  if (legacyService?.id && legacyService.description?.trim()) {
+    serviceDescriptionById[legacyService.id] = legacyService.description.trim();
+  }
+
+  const unresolvedAdjustmentServiceIds = Array.from(
+    new Set(
+      adjustments
+        .map((item) => item.service_id || "")
+        .filter((serviceId) => serviceId && !serviceDescriptionById[serviceId]),
+    ),
+  );
+  if (unresolvedAdjustmentServiceIds.length > 0) {
+    const { data: adjustmentServices } = await supabaseAdmin
+      .from("services")
+      .select("id, description")
+      .eq("user_id", booking.user_id)
+      .in("id", unresolvedAdjustmentServiceIds);
+
+    (adjustmentServices || []).forEach((service) => {
+      if (!service.id) return;
+      const description =
+        typeof service.description === "string"
+          ? service.description.trim()
+          : "";
+      if (description) {
+        serviceDescriptionById[service.id] = description;
+      }
     });
-  const serviceDescription =
-    mainServiceDescriptions.join("\n\n") || legacyService?.description?.trim() || "";
+  }
 
   const settlementStatus = getSettlementStatus(booking.settlement_status);
   const paymentStatus =
@@ -451,83 +500,80 @@ export async function GET(request: NextRequest) {
   y -= 6;
   drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 0.5);
 
-  y -= 20;
-  page.drawText(serviceName, {
-    x: colX[0] + 8,
-    y,
-    font: helvetica,
-    size: 10,
-    color: black,
-  });
-  page.drawText(sessionDate, {
-    x: colX[1] + 8,
-    y,
-    font: helvetica,
-    size: 10,
-    color: black,
-  });
-
   const statusColor =
     paymentStatus === t.paid
       ? green
       : paymentStatus === t.pendingVerification
         ? blue
         : amber;
-  page.drawText(paymentStatus, {
-    x: colX[2] + 8,
-    y,
-    font: helveticaBold,
-    size: 10,
-    color: statusColor,
-  });
 
-  const totalStr = formatCurrency(shownTotal);
-  page.drawText(totalStr, {
-    x: colX[3] - helvetica.widthOfTextAtSize(totalStr, 10),
-    y,
-    font: helvetica,
-    size: 10,
-    color: black,
-  });
+  serviceRows.forEach((serviceRow) => {
+    const normalizedDescription = serviceRow.description || t.noDescription;
+    const descriptionLines = wrapTextLines(
+      normalizedDescription,
+      helvetica,
+      9,
+      colX[1] - colX[0] - 16,
+    );
+    const detailLines = Math.max(descriptionLines.length, 1);
+    const rowHeight = 14 + detailLines * 12 + 8;
 
-  y -= 14;
-  drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 0.5, rgb(0.95, 0.96, 0.96));
+    ensureSpace(rowHeight + 4);
+    y -= 20;
 
-  y -= 20;
-  ensureSpace(32);
-  page.drawText(t.packageDescription, {
-    x: MARGIN_X,
-    y,
-    font: helveticaBold,
-    size: 10,
-    color: black,
-  });
-
-  y -= 14;
-  if (serviceDescription.trim()) {
-    drawWrappedText({
-      text: serviceDescription,
-      x: MARGIN_X + 8,
-      maxWidth: contentW - 16,
-      font: helvetica,
-      size: 9,
-      color: gray,
-      lineHeight: 12,
-    });
-  } else {
-    ensureSpace(12);
-    page.drawText(t.noDescription, {
-      x: MARGIN_X + 8,
+    page.drawText(serviceRow.name, {
+      x: colX[0] + 8,
       y,
       font: helvetica,
-      size: 9,
-      color: gray,
+      size: 10,
+      color: black,
     });
-    y -= 12;
-  }
+    page.drawText(sessionDate, {
+      x: colX[1] + 8,
+      y,
+      font: helvetica,
+      size: 10,
+      color: black,
+    });
+    page.drawText(paymentStatus, {
+      x: colX[2] + 8,
+      y,
+      font: helveticaBold,
+      size: 10,
+      color: statusColor,
+    });
 
-  y -= 8;
-  drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 0.5, rgb(0.95, 0.96, 0.96));
+    const totalStr = formatCurrency(serviceRow.price);
+    page.drawText(totalStr, {
+      x: colX[3] - helvetica.widthOfTextAtSize(totalStr, 10),
+      y,
+      font: helvetica,
+      size: 10,
+      color: black,
+    });
+
+    y -= 14;
+    descriptionLines.forEach((line, index) => {
+      const textLine = line || (index === 0 ? t.noDescription : "");
+      if (!textLine) return;
+      page.drawText(textLine, {
+        x: colX[0] + 8,
+        y,
+        font: helvetica,
+        size: 9,
+        color: gray,
+      });
+      y -= 12;
+    });
+
+    y -= 8;
+    drawHorizontalLine(
+      MARGIN_X,
+      PAGE_WIDTH - MARGIN_X,
+      0.5,
+      rgb(0.95, 0.96, 0.96),
+    );
+  });
 
   if (isFinalStage) {
     y -= 22;
@@ -572,9 +618,13 @@ export async function GET(request: NextRequest) {
         });
 
         y -= 14;
+        const serviceDescription =
+          (item.service_id && serviceDescriptionById[item.service_id]) || "-";
         const reason = item.reason || t.noReason;
         drawWrappedText({
-          text: reason,
+          text:
+            `${t.packageDescription}: ${serviceDescription}\n` +
+            `${t.reason}: ${reason}`,
           x: MARGIN_X + 8,
           maxWidth: contentW - 16,
           font: helvetica,
