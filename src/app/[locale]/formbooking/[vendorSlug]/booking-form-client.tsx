@@ -355,11 +355,33 @@ export function BookingFormClient({
     e.preventDefault();
     setError("");
 
+    const hasBuiltInField = (builtinId: string) =>
+      normalizedActiveLayout.some(
+        (item) => item.kind === "builtin_field" && item.builtinId === builtinId,
+      );
+    const hasExtraField = (key: string) =>
+      hasBuiltInField(`extra:${key}`);
+
+    const requiresClientName = hasBuiltInField("client_name");
+    const requiresClientWhatsapp = hasBuiltInField("client_whatsapp");
+    const requiresEventType = hasBuiltInField("event_type");
+    const requiresServicePackage = hasBuiltInField("service_package");
+    const requiresSessionDate =
+      hasBuiltInField("session_date") &&
+      !(eventType === "Wedding" && splitDates);
+    const requiresAkadDate =
+      hasBuiltInField("akad_date") && eventType === "Wedding" && splitDates;
+    const requiresResepsiDate =
+      hasBuiltInField("resepsi_date") && eventType === "Wedding" && splitDates;
+
     if (
-      !clientName ||
-      !phone ||
-      !sessionDate ||
-      selectedServiceIds.length === 0 ||
+      (requiresClientName && !clientName.trim()) ||
+      (requiresClientWhatsapp && !phone.trim()) ||
+      (requiresEventType && !eventType) ||
+      (requiresSessionDate && !sessionDate) ||
+      (requiresAkadDate && !akadDate) ||
+      (requiresResepsiDate && !resepsiDate) ||
+      (requiresServicePackage && selectedServiceIds.length === 0) ||
       (!location && eventType !== "Wedding" && showsLocationField)
     ) {
       setError(t("errorWajib"));
@@ -368,7 +390,8 @@ export function BookingFormClient({
 
     if (
       eventType === "Wedding" &&
-      (!extraData.tempat_akad || !extraData.tempat_resepsi)
+      ((hasExtraField("tempat_akad") && !extraData.tempat_akad) ||
+        (hasExtraField("tempat_resepsi") && !extraData.tempat_resepsi))
     ) {
       setError(t("errorLokasiWedding"));
       return;

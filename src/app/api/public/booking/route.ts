@@ -61,6 +61,52 @@ type BookingRequestBody = {
     instagram: string | null;
 };
 
+function isValidUuid(value: string | null | undefined) {
+    if (!value) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function normalizeSlugCandidate(value: string | null | undefined) {
+    if (!value) return "";
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    const withoutQuery = trimmed.split("?")[0];
+    const sanitized = withoutQuery.replace(/^\/+|\/+$/g, "");
+    if (!sanitized) return "";
+    const segments = sanitized.split("/").filter(Boolean);
+    return segments[segments.length - 1] || "";
+}
+
+function extractSlugCandidates(
+    vendorSlugRaw: string | null | undefined,
+    refererRaw: string | null,
+) {
+    const candidates = new Set<string>();
+    const direct = normalizeSlugCandidate(vendorSlugRaw);
+    if (direct) candidates.add(direct);
+
+    if (refererRaw) {
+        try {
+            const ref = new URL(refererRaw);
+            const parts = ref.pathname.split("/").filter(Boolean);
+            const formbookingIndex = parts.findIndex((part) => part === "formbooking");
+            if (formbookingIndex >= 0 && parts[formbookingIndex + 1]) {
+                candidates.add(parts[formbookingIndex + 1]);
+            }
+            const last = parts[parts.length - 1];
+            if (last) candidates.add(last);
+        } catch {
+            const fallback = normalizeSlugCandidate(refererRaw);
+            if (fallback) candidates.add(fallback);
+        }
+    }
+
+    const final = Array.from(candidates)
+        .map((value) => value.trim())
+        .filter(Boolean);
+    return final;
+}
+
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -137,10 +183,10 @@ export async function POST(request: NextRequest) {
             "id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, calendar_event_format, calendar_event_format_map, calendar_event_description, calendar_event_description_map, form_payment_methods, form_show_proof, qris_image_url, qris_drive_file_id, bank_accounts, custom_client_statuses";
 
         let vendor: VendorRecord | null = null;
-        const normalizedSlug = (vendorSlug || "").trim();
-        const normalizedSlugLower = normalizedSlug.toLowerCase();
+        const referer = request.headers.get("referer");
+        const slugCandidates = extractSlugCandidates(vendorSlug, referer);
 
-        if (vendorId) {
+        if (isValidUuid(vendorId || "")) {
             const { data: byId } = await supabaseAdmin
                 .from("profiles")
                 .select(vendorSelect)
@@ -149,22 +195,29 @@ export async function POST(request: NextRequest) {
             vendor = (byId as VendorRecord | null) || null;
         }
 
-        if (!vendor && normalizedSlug) {
+        for (const candidate of slugCandidates) {
+            if (vendor) break;
+            const normalized = candidate.trim();
+            if (!normalized) continue;
+
             const { data: bySlug } = await supabaseAdmin
                 .from("profiles")
                 .select(vendorSelect)
-                .eq("vendor_slug", normalizedSlug)
+                .eq("vendor_slug", normalized)
                 .maybeSingle();
             vendor = (bySlug as VendorRecord | null) || null;
-        }
 
-        if (!vendor && normalizedSlugLower && normalizedSlugLower !== normalizedSlug) {
-            const { data: bySlugLower } = await supabaseAdmin
-                .from("profiles")
-                .select(vendorSelect)
-                .eq("vendor_slug", normalizedSlugLower)
-                .maybeSingle();
-            vendor = (bySlugLower as VendorRecord | null) || null;
+            if (!vendor) {
+                const lower = normalized.toLowerCase();
+                if (lower !== normalized) {
+                    const { data: bySlugLower } = await supabaseAdmin
+                        .from("profiles")
+                        .select(vendorSelect)
+                        .eq("vendor_slug", lower)
+                        .maybeSingle();
+                    vendor = (bySlugLower as VendorRecord | null) || null;
+                }
+            }
         }
 
         if (!vendor) {
