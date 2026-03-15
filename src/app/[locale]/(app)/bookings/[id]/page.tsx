@@ -68,6 +68,7 @@ const EXTRA_FIELD_LABELS: Record<string, string> = {
 };
 
 const LOCATION_FIELDS = new Set(["tempat_akad", "tempat_resepsi"]);
+const HIDDEN_EXTRA_FIELD_KEYS = new Set(["terms_accepted", "terms_accepted_at"]);
 
 type FreelancerDetail = { id: string; name: string; whatsapp_number: string | null };
 type BookingRow = Booking & {
@@ -1145,12 +1146,15 @@ export default function BookingDetailPage() {
     const settlementLink = booking.tracking_uuid ? `${window.location.origin}/${locale}/settlement/${booking.tracking_uuid}` : "";
     const builtInExtraFields = extractBuiltInExtraFieldValues(booking.extra_fields);
     const extraEntries = Object.entries(builtInExtraFields);
-    const customFieldSnapshots = extractCustomFieldSnapshots(booking.extra_fields);
+    const customFieldSnapshots = extractCustomFieldSnapshots(booking.extra_fields)
+        .filter((field) => !HIDDEN_EXTRA_FIELD_KEYS.has(field.id));
     const customFieldsBySection = groupCustomSnapshotsBySection(customFieldSnapshots);
 
     // Separate nama_pasangan from other extra fields (show right after Nama for Wedding)
     const namaPasangan = builtInExtraFields.nama_pasangan;
-    const otherExtraEntries = extraEntries.filter(([key]) => key !== "nama_pasangan");
+    const otherExtraEntries = extraEntries.filter(
+        ([key]) => key !== "nama_pasangan" && !HIDDEN_EXTRA_FIELD_KEYS.has(key),
+    );
 
     return (
         <>
