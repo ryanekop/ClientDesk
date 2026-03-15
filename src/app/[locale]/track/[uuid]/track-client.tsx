@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Clock, HardDrive, ExternalLink, Download } from "lucide-react";
+import { Check, Clock, HardDrive, ExternalLink, Download } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
 
@@ -127,45 +127,60 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-6">{t("progress")}</h3>
                     <div className="space-y-0">
                         {steps.map((step, idx) => {
-                            const isDone = idx <= currentIdx;
                             const isCurrent = idx === currentIdx;
                             const isPast = idx < currentIdx;
+                            const isDone = idx <= currentIdx;
+                            const isFirst = idx === 0;
                             const isLast = idx === steps.length - 1;
+                            const topActive = idx <= currentIdx;
+                            const bottomActive = idx < currentIdx;
                             const stepLabel = step.labelKey ? t(step.labelKey as never) : step.key;
+                            const showQueuePosition = isCurrent && Boolean(booking.queuePosition && booking.queuePosition > 0);
 
                             return (
-                                <div key={step.key} className="relative flex gap-4">
-                                    {/* Vertical Line */}
-                                    {!isLast && (
-                                        <div className={`absolute top-7 bottom-0 left-[19px] w-[2px] ${isPast ? "bg-primary" : "bg-border"}`} />
-                                    )}
-
-                                    <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center">
+                                <div key={step.key} className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-2 sm:gap-3">
+                                    <div className="relative">
+                                        {!isFirst && (
+                                            <span
+                                                className={`absolute left-1/2 top-0 h-1/2 w-px -translate-x-1/2 ${topActive ? "bg-foreground/70" : "bg-border"}`}
+                                            />
+                                        )}
+                                        {!isLast && (
+                                            <span
+                                                className={`absolute left-1/2 bottom-0 h-1/2 w-px -translate-x-1/2 ${bottomActive ? "bg-foreground/70" : "bg-border"}`}
+                                            />
+                                        )}
                                         <span
-                                            className={`block h-3.5 w-3.5 rounded-full transition-all ${isCurrent
-                                                ? "bg-primary ring-4 ring-primary/15"
-                                                : isDone
-                                                    ? "bg-primary"
+                                            className={`absolute left-1/2 top-1/2 z-10 flex h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full transition-all ${isCurrent
+                                                ? "bg-foreground ring-4 ring-foreground/10"
+                                                : isPast
+                                                    ? "bg-foreground"
                                                     : "border-2 border-border bg-background"
                                                 }`}
-                                        />
+                                        >
+                                            {isPast && !isCurrent && <Check className="h-2.5 w-2.5 text-background" />}
+                                        </span>
                                     </div>
 
-                                    <div className={`flex flex-col pb-8 pt-2 ${!isDone && !isCurrent ? "opacity-40" : ""}`}>
-                                        <p className={`font-semibold text-sm ${isCurrent ? "text-primary" : ""}`}>
-                                            {stepLabel}
-                                            {isCurrent && booking.queuePosition && booking.queuePosition > 0 && step.key === "Antrian Edit" && (
-                                                <span className="text-xs font-normal text-muted-foreground ml-2">({t("position")} #{booking.queuePosition})</span>
-                                            )}
-                                        </p>
-                                        {isCurrent && (
-                                            <p className="text-xs text-primary mt-0.5 flex items-center gap-1">
-                                                <Clock className="w-3 h-3" /> {t("inProgress")}
+                                    <div className="py-3">
+                                        <div className={`rounded-lg px-3 py-2 ${isCurrent ? "border border-foreground/15 bg-muted/40" : "border border-transparent"}`}>
+                                            <p className={`text-sm font-semibold leading-5 ${isCurrent ? "text-foreground" : isDone ? "text-foreground/85" : "text-muted-foreground"}`}>
+                                                {stepLabel}
+                                                {showQueuePosition && (
+                                                    <span className="ml-2 text-xs font-medium text-muted-foreground">
+                                                        ({t("position")} #{booking.queuePosition})
+                                                    </span>
+                                                )}
                                             </p>
-                                        )}
-                                        {isDone && !isCurrent && (
-                                            <p className="text-xs text-muted-foreground mt-0.5">✓ {t("completed")}</p>
-                                        )}
+                                            {isCurrent && (
+                                                <p className="mt-1 flex items-center gap-1.5 text-xs text-foreground/75">
+                                                    <Clock className="h-3 w-3" /> {t("inProgress")}
+                                                </p>
+                                            )}
+                                            {isPast && (
+                                                <p className="mt-1 text-xs text-muted-foreground">✓ {t("completed")}</p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             );
