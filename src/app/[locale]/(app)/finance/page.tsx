@@ -42,6 +42,12 @@ import {
     normalizeWhatsAppNumber,
 } from "@/lib/whatsapp-template";
 import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
+import {
+    buildWhatsAppUrl,
+    closePreopenedWindow,
+    openWhatsAppUrl,
+    preopenWindowForDeferredNavigation,
+} from "@/utils/whatsapp-link";
 type BookingFinance = {
     id: string;
     booking_code: string;
@@ -441,7 +447,7 @@ export default function FinancePage() {
         }
         const cleaned = normalizeWhatsAppNumber(booking.client_whatsapp);
         const message = buildInitialInvoiceMessage(booking);
-        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(message)}`, "_blank");
+        openWhatsAppUrl(buildWhatsAppUrl(cleaned, message));
     }
 
     async function sendFinalInvoiceWhatsApp(booking: BookingFinance) {
@@ -450,12 +456,19 @@ export default function FinancePage() {
             return;
         }
 
+        const preOpenedWindow = preopenWindowForDeferredNavigation();
         const openedBooking = await ensureSettlementOpened(booking);
-        if (!openedBooking) return;
+        if (!openedBooking) {
+            closePreopenedWindow(preOpenedWindow);
+            return;
+        }
 
         const cleaned = normalizeWhatsAppNumber(openedBooking.client_whatsapp);
         const message = buildFinalInvoiceMessage(openedBooking);
-        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(message)}`, "_blank");
+        openWhatsAppUrl(buildWhatsAppUrl(cleaned, message), {
+            preOpenedWindow,
+            fallbackToSameTab: true,
+        });
     }
 
     function resolveInvoiceStageFromContext(booking: BookingFinance): "initial" | "final" {

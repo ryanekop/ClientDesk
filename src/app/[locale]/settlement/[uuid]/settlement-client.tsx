@@ -32,6 +32,7 @@ import {
   normalizeWhatsAppNumber,
 } from "@/lib/whatsapp-template";
 import { formatSessionDate, formatTemplateSessionDate } from "@/utils/format-date";
+import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
 
 type BookingData = {
   bookingCode: string;
@@ -397,11 +398,7 @@ export default function SettlementClient({
       settlement_link: settlementUrl,
     });
 
-    window.open(
-      `https://api.whatsapp.com/send?phone=${normalizedAdminWhatsapp}&text=${encodeURIComponent(message)}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
+    openWhatsAppUrl(buildWhatsAppUrl(normalizedAdminWhatsapp, message));
   }
 
   if (showSubmittedSuccess) {

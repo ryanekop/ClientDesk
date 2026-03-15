@@ -16,6 +16,7 @@ import {
     updateTableColumnPreferenceMap,
     type TableColumnPreference,
 } from "@/lib/table-column-prefs";
+import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
 
 
 type Freelancer = {
@@ -210,7 +211,7 @@ export default function TeamPage() {
     function sendWhatsApp(phone: string | null) {
         if (!phone) return;
         const cleaned = phone.replace(/^0/, "62").replace(/[^0-9]/g, "");
-        window.open(`https://api.whatsapp.com/send?phone=${cleaned}`, "_blank");
+        openWhatsAppUrl(buildWhatsAppUrl(cleaned));
     }
 
     const selectFilterClass = "h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer";

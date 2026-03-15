@@ -52,6 +52,7 @@ import {
   resolvePreferredLocation,
   type LocationCoordinates,
 } from "@/utils/location";
+import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -684,10 +685,7 @@ export function BookingFormClient({
           (instagram ? `📸 Instagram: ${instagram}\n` : "") +
           `\nMohon konfirmasi booking saya. Terima kasih! 🙏`;
 
-    window.open(
-      `https://api.whatsapp.com/send?phone=${wa}&text=${encodeURIComponent(msg)}`,
-      "_blank",
-    );
+    openWhatsAppUrl(buildWhatsAppUrl(wa, msg));
   }
 
   // ── Styles ──

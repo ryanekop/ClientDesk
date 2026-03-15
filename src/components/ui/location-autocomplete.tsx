@@ -541,7 +541,7 @@ function MapPickerModal({
               type="button"
               onClick={handleUseCurrentLocation}
               disabled={gpsLoading}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-input bg-background text-xs font-medium hover:bg-accent transition-colors disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium hover:bg-rose-100 hover:border-rose-300 transition-colors disabled:opacity-60 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-200 dark:hover:bg-rose-900/30"
               title="Gunakan lokasi saya"
             >
               {gpsLoading ? (

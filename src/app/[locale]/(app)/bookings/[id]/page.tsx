@@ -52,6 +52,12 @@ import {
     buildGoogleMapsQueryUrl,
     buildGoogleMapsUrlOrFallback,
 } from "@/utils/location";
+import {
+    buildWhatsAppUrl,
+    closePreopenedWindow,
+    openWhatsAppUrl,
+    preopenWindowForDeferredNavigation,
+} from "@/utils/whatsapp-link";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -634,7 +640,7 @@ export default function BookingDetailPage() {
         } else {
             msg = `Halo ${name}, terima kasih telah booking di studio kami!`;
         }
-        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(msg)}`, "_blank");
+        openWhatsAppUrl(buildWhatsAppUrl(cleaned, msg));
     }
 
     function sendWAFreelance(phone: string | null, fname: string) {
@@ -679,7 +685,7 @@ export default function BookingDetailPage() {
         } else {
             msg = `Halo ${fname}, kamu dijadwalkan sesi foto bersama klien ${booking?.client_name} (${booking?.booking_code}) pada ${sessionStr}. Mohon konfirmasi kehadiranmu. Terima kasih!`;
         }
-        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(msg)}`, "_blank");
+        openWhatsAppUrl(buildWhatsAppUrl(cleaned, msg));
     }
 
     async function handleCreateFolder() {
@@ -902,10 +908,12 @@ export default function BookingDetailPage() {
             return;
         }
 
+        const preOpenedWindow = preopenWindowForDeferredNavigation();
         setSendingFinalInvoice(true);
         const normalizedAdjustments = await saveFinalAdjustments("sent");
         if (!normalizedAdjustments) {
             setSendingFinalInvoice(false);
+            closePreopenedWindow(preOpenedWindow);
             return;
         }
 
@@ -929,6 +937,7 @@ export default function BookingDetailPage() {
 
         if (error) {
             showFeedback("Gagal mengirim invoice final.");
+            closePreopenedWindow(preOpenedWindow);
             return;
         }
 
@@ -995,10 +1004,10 @@ export default function BookingDetailPage() {
                 : prev,
         );
 
-        window.open(
-            `https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(message)}`,
-            "_blank",
-        );
+        openWhatsAppUrl(buildWhatsAppUrl(cleaned, message), {
+            preOpenedWindow,
+            fallbackToSameTab: true,
+        });
     }
 
     async function handleMarkFinalPaid() {
