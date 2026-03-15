@@ -377,10 +377,46 @@ export default function BookingsPage() {
     async function confirmDelete() {
         if (!deleteModal.booking) return;
         setIsDeleting(true);
-        const { error } = await supabase.from("bookings").delete().eq("id", deleteModal.booking.id);
+
+        let calendarDeleteWarning: string | null = null;
+        const bookingToDelete = deleteModal.booking;
+
+        try {
+            const calendarRes = await fetch("/api/google/calendar-delete-booking", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ bookingId: bookingToDelete.id }),
+            });
+            const calendarResult = await calendarRes.json().catch(() => null) as {
+                success?: boolean;
+                failedCount?: number;
+                errors?: string[];
+                error?: string;
+            } | null;
+
+            if (!calendarRes.ok) {
+                calendarDeleteWarning = locale === "en"
+                    ? `Booking deleted, but failed to remove Google Calendar event: ${calendarResult?.error || "Unknown error"}`
+                    : `Booking berhasil dihapus, tetapi event Google Calendar gagal dihapus: ${calendarResult?.error || "Unknown error"}`;
+            } else if (calendarResult && calendarResult.success === false) {
+                const firstError = Array.isArray(calendarResult.errors) ? calendarResult.errors[0] : null;
+                calendarDeleteWarning = locale === "en"
+                    ? `Booking deleted, but some Google Calendar events failed to delete.${firstError ? ` ${firstError}` : ""}`
+                    : `Booking berhasil dihapus, tetapi sebagian event Google Calendar gagal dihapus.${firstError ? ` ${firstError}` : ""}`;
+            }
+        } catch {
+            calendarDeleteWarning = locale === "en"
+                ? "Booking deleted, but failed to remove Google Calendar event."
+                : "Booking berhasil dihapus, tetapi event Google Calendar gagal dihapus.";
+        }
+
+        const { error } = await supabase.from("bookings").delete().eq("id", bookingToDelete.id);
         if (!error) {
-            setBookings(prev => prev.filter(b => b.id !== deleteModal.booking?.id));
+            setBookings(prev => prev.filter(b => b.id !== bookingToDelete.id));
             setDeleteModal({ open: false, booking: null });
+            if (calendarDeleteWarning) {
+                setFeedbackDialog({ open: true, message: calendarDeleteWarning });
+            }
         } else {
             setFeedbackDialog({ open: true, message: tb("failedDeleteBooking") });
         }

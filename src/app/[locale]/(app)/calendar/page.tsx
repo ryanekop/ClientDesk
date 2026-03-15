@@ -8,7 +8,9 @@ import "react-big-calendar/lib/css/react-big-calendar.css";
 import { createClient } from "@/utils/supabase/client";
 import { Loader2, Link2, Unlink, CalendarPlus, ChevronLeft, ChevronRight, CalendarDays, CalendarRange, Clock, List, ExternalLink, Info, Users, AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
+import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
@@ -32,6 +34,7 @@ import {
     buildCalendarTemplateVars,
     resolveTemplateByEventType,
 } from "@/utils/google/template";
+import { isGoogleCalendarConnected } from "@/utils/google/connection";
 
 const locales = { "id-ID": id };
 
@@ -186,6 +189,12 @@ export default function CalendarPage() {
     // Event popup
     const [selectedEvent, setSelectedEvent] = React.useState<CalendarEvent | null>(null);
     const [eventPopupOpen, setEventPopupOpen] = React.useState(false);
+    const [feedbackDialog, setFeedbackDialog] = React.useState<{
+        open: boolean;
+        title: string;
+        message: string;
+    }>({ open: false, title: "", message: "" });
+    const [disconnectConfirmOpen, setDisconnectConfirmOpen] = React.useState(false);
 
     const { statusVisuals, statusVisualsLowercase } = React.useMemo(() => {
         const map: Record<string, StatusVisual> = {};
@@ -213,6 +222,21 @@ export default function CalendarPage() {
         return statusVisuals[status] || statusVisualsLowercase[status.toLowerCase()] || null;
     }, [statusVisuals, statusVisualsLowercase]);
 
+    const isEnglish = locale === "en";
+    const feedbackTitle = isEnglish ? "Information" : "Informasi";
+    const confirmTitle = isEnglish ? "Confirmation" : "Konfirmasi";
+    const feedbackOkLabel = "OK";
+    const confirmCancelLabel = isEnglish ? "Cancel" : "Batal";
+    const disconnectConfirmLabel = isEnglish ? "Disconnect" : "Putuskan";
+
+    const showFeedback = React.useCallback((message: string, title?: string) => {
+        setFeedbackDialog({
+            open: true,
+            title: title || feedbackTitle,
+            message,
+        });
+    }, [feedbackTitle]);
+
     React.useEffect(() => {
         fetchBookings();
         checkGoogleConnection();
@@ -220,11 +244,23 @@ export default function CalendarPage() {
 
         const handleMessage = (event: MessageEvent) => {
             if (event.data?.type === "GOOGLE_AUTH_SUCCESS") {
-                setIsGoogleConnected(true);
+                void checkGoogleConnection();
             }
         };
+
+        let channel: BroadcastChannel | null = null;
+        try {
+            channel = new BroadcastChannel("clientdesk-google-auth");
+            channel.onmessage = handleMessage;
+        } catch {
+            /* BroadcastChannel tidak tersedia di browser ini */
+        }
+
         window.addEventListener("message", handleMessage);
-        return () => window.removeEventListener("message", handleMessage);
+        return () => {
+            window.removeEventListener("message", handleMessage);
+            channel?.close();
+        };
     }, []);
 
     React.useEffect(() => {
@@ -279,7 +315,10 @@ export default function CalendarPage() {
 
     async function checkGoogleConnection() {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) {
+            setIsGoogleConnected(false);
+            return;
+        }
 
         const { data: profile } = await supabase
             .from("profiles")
@@ -287,9 +326,7 @@ export default function CalendarPage() {
             .eq("id", user.id)
             .single();
 
-        if ((profile as any)?.google_access_token || (profile as any)?.google_refresh_token) {
-            setIsGoogleConnected(true);
-        }
+        setIsGoogleConnected(isGoogleCalendarConnected(profile));
         if ((profile as any)?.calendar_event_format) {
             setCalendarEventFormat((profile as any).calendar_event_format);
         }
@@ -386,8 +423,12 @@ export default function CalendarPage() {
         );
     }
 
-    async function handleDisconnectGoogle() {
-        if (!confirm(t("putuskanConfirm"))) return;
+    function handleDisconnectGoogle() {
+        setDisconnectConfirmOpen(true);
+    }
+
+    async function confirmDisconnectGoogle() {
+        setDisconnectConfirmOpen(false);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
@@ -407,7 +448,10 @@ export default function CalendarPage() {
         const bookingIds = events
             .filter((event) => event.source === "booking" && typeof event.bookingId === "string")
             .map((event) => event.bookingId as string);
-        if (bookingIds.length === 0) return alert(t("tidakAdaBooking"));
+        if (bookingIds.length === 0) {
+            showFeedback(t("tidakAdaBooking"));
+            return;
+        }
         setSyncing(true);
 
         try {
@@ -418,16 +462,74 @@ export default function CalendarPage() {
                     bookingIds,
                 }),
             });
-            const result = await res.json();
-            if (result.success) {
-                alert(t("berhasilSinkron", { count: result.count }));
-            } else {
-                alert(`Gagal: ${result.error}`);
+            const result = await res.json() as {
+                success?: boolean;
+                count?: number;
+                successCount?: number;
+                failedCount?: number;
+                skippedCount?: number;
+                errors?: string[];
+                skipped?: string[];
+                error?: string;
+            };
+
+            if (!res.ok) {
+                showFeedback(`Gagal: ${result.error || t("gagalSinkron")}`);
+                return;
             }
+
+            const successCount = Number(result.successCount ?? result.count ?? 0);
+            const failedCount = Number(
+                result.failedCount ?? (Array.isArray(result.errors) ? result.errors.length : 0),
+            );
+            const skippedCount = Number(
+                result.skippedCount ?? (Array.isArray(result.skipped) ? result.skipped.length : 0),
+            );
+            const failedItems = Array.isArray(result.errors) ? result.errors : [];
+            const skippedItems = Array.isArray(result.skipped) ? result.skipped : [];
+
+            if (successCount > 0 && failedCount === 0 && skippedCount === 0) {
+                showFeedback(t("berhasilSinkron", { count: successCount }));
+                return;
+            }
+
+            const lines: string[] = [];
+            if (successCount === 0) {
+                lines.push(
+                    isEnglish
+                        ? "Sync failed: no booking was successfully sent to Google Calendar."
+                        : "Sinkronisasi gagal: tidak ada booking yang berhasil dikirim ke Google Calendar.",
+                );
+            } else {
+                lines.push(
+                    isEnglish
+                        ? `Sync completed: ${successCount} succeeded, ${failedCount} failed, ${skippedCount} skipped.`
+                        : `Sinkronisasi selesai: ${successCount} berhasil, ${failedCount} gagal, ${skippedCount} dilewati.`,
+                );
+            }
+
+            if (failedItems.length > 0) {
+                lines.push("");
+                lines.push(isEnglish ? "Failed bookings:" : "Booking gagal:");
+                for (const item of failedItems) {
+                    lines.push(`- ${item}`);
+                }
+            }
+
+            if (skippedItems.length > 0) {
+                lines.push("");
+                lines.push(isEnglish ? "Skipped bookings:" : "Booking dilewati:");
+                for (const item of skippedItems) {
+                    lines.push(`- ${item}`);
+                }
+            }
+
+            showFeedback(lines.join("\n"));
         } catch {
-            alert(t("gagalSinkron"));
+            showFeedback(t("gagalSinkron"));
+        } finally {
+            setSyncing(false);
         }
-        setSyncing(false);
     }
 
     function handleSelectEvent(event: CalendarEvent) {
@@ -634,6 +736,11 @@ export default function CalendarPage() {
                             {selectedEvent?.sessionLabel ? `[${selectedEvent.sessionLabel}] ` : ""}
                             {selectedEvent?.clientName}
                         </DialogTitle>
+                        <DialogDescription className="sr-only">
+                            {isEnglish
+                                ? "Booking details and quick actions for the selected calendar event."
+                                : "Detail booking dan aksi cepat untuk event kalender yang dipilih."}
+                        </DialogDescription>
                     </DialogHeader>
                     {selectedEvent && (
                         <div className="space-y-3 py-1">
@@ -678,6 +785,25 @@ export default function CalendarPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <ActionFeedbackDialog
+                open={feedbackDialog.open}
+                onOpenChange={(open) => setFeedbackDialog((prev) => ({ ...prev, open }))}
+                title={feedbackDialog.title}
+                message={feedbackDialog.message}
+                confirmLabel={feedbackOkLabel}
+            />
+
+            <ActionConfirmDialog
+                open={disconnectConfirmOpen}
+                onOpenChange={setDisconnectConfirmOpen}
+                title={confirmTitle}
+                message={t("putuskanConfirm")}
+                cancelLabel={confirmCancelLabel}
+                confirmLabel={disconnectConfirmLabel}
+                confirmVariant="destructive"
+                onConfirm={confirmDisconnectGoogle}
+            />
         </div>
     );
 }

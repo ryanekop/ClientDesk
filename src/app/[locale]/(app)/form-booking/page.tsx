@@ -58,6 +58,7 @@ import {
   getBuiltInEventTypes,
   mergeCustomEventTypes,
 } from "@/lib/event-type-config";
+import { isGoogleDriveConnected } from "@/utils/google/connection";
 const ALL_EVENT_TYPES = getBuiltInEventTypes();
 
 type FormSectionsByEventType = Record<string, FormLayoutItem[]>;
@@ -365,6 +366,23 @@ export default function FormBookingPage() {
     lastSavedSnapshot !== null &&
     serializedDraftSnapshot !== lastSavedSnapshot;
 
+  const refreshDriveConnection = React.useEffectEvent(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setIsDriveConnected(false);
+      return;
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("google_drive_access_token, google_drive_refresh_token")
+      .eq("id", user.id)
+      .single();
+    setIsDriveConnected(isGoogleDriveConnected(profile));
+  });
+
   React.useEffect(() => {
     setSiteUrl(window.location.origin);
   }, [supabase]);
@@ -372,12 +390,23 @@ export default function FormBookingPage() {
   React.useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "GOOGLE_DRIVE_SUCCESS") {
-        setIsDriveConnected(true);
+        void refreshDriveConnection();
       }
     };
 
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel("clientdesk-google-auth");
+      channel.onmessage = handleMessage;
+    } catch {
+      /* BroadcastChannel tidak tersedia di browser ini */
+    }
+
     window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+      channel?.close();
+    };
   }, []);
 
   React.useEffect(() => {
@@ -498,9 +527,7 @@ export default function FormBookingPage() {
         if (p.vendor_slug) {
           setVendorSlug(p.vendor_slug);
         }
-        const driveOk =
-          Boolean((p as Record<string, unknown>).google_drive_access_token) ||
-          Boolean((p as Record<string, unknown>).google_drive_refresh_token);
+        const driveOk = isGoogleDriveConnected(p);
         setIsDriveConnected(driveOk);
         const loadedShowProof = driveOk
           ? (p.form_show_proof ?? DEFAULTS.showProof)

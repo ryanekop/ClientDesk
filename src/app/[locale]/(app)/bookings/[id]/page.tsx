@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink, Upload, FileText, Trash2, AlertCircle, Image as ImageIcon, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
+import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
@@ -44,6 +46,7 @@ import {
     getBookingStatusOptions,
     resolveUnifiedBookingStatus,
 } from "@/lib/client-status";
+import { isGoogleDriveConnected } from "@/utils/google/connection";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -309,9 +312,11 @@ function isAddonAvailableForEvent(service: AddonService, eventType: string | nul
 
 export default function BookingDetailPage() {
     const params = useParams();
+    const router = useRouter();
     const id = params.id as string;
     const supabase = createClient();
     const locale = useLocale();
+    const bookingsPath = `/${locale}/bookings`;
     const [booking, setBooking] = React.useState<Booking | null>(null);
     const [loading, setLoading] = React.useState(true);
     const [creatingFolder, setCreatingFolder] = React.useState(false);
@@ -349,8 +354,24 @@ export default function BookingDetailPage() {
     const [deletingFileIdx, setDeletingFileIdx] = React.useState<number | null>(null);
     const [deleteFileModal, setDeleteFileModal] = React.useState<{ open: boolean; idx: number | null }>({ open: false, idx: null });
     const [waFreelancePopup, setWaFreelancePopup] = React.useState(false);
+    const [deleteBookingModalOpen, setDeleteBookingModalOpen] = React.useState(false);
+    const [deletingBooking, setDeletingBooking] = React.useState(false);
+    const [pendingRedirect, setPendingRedirect] = React.useState<string | null>(null);
+    const [feedbackDialog, setFeedbackDialog] = React.useState<{
+        open: boolean;
+        title: string;
+        message: string;
+    }>({ open: false, title: "", message: "" });
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const currentDpValue = booking?.dp_paid ?? 0;
+
+    const showFeedback = React.useCallback((message: string, title?: string) => {
+        setFeedbackDialog({
+            open: true,
+            title: title || (locale === "en" ? "Information" : "Informasi"),
+            message,
+        });
+    }, [locale]);
 
     const buildPathHint = React.useCallback((profile: DrivePathProfile | null | undefined, bookingValue: Pick<Booking, "booking_code" | "client_name" | "event_type" | "session_date" | "extra_fields">) => {
         const folderPathSegments = buildDriveFolderPathSegments({
@@ -380,7 +401,7 @@ export default function BookingDetailPage() {
                 supabase.from("bookings")
                     .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
-                supabase.from("profiles").select("google_drive_access_token, studio_name, custom_client_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map").eq("id", user.id).single(),
+                supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map").eq("id", user.id).single(),
                 supabase.from("services")
                     .select("id, name, price, description, event_types")
                     .eq("user_id", user.id)
@@ -443,7 +464,7 @@ export default function BookingDetailPage() {
                     setBooking(prev => prev ? { ...prev, tracking_uuid: uuid } : prev);
                 }
             }
-            if (profile?.google_drive_access_token) setIsDriveConnected(true);
+            setIsDriveConnected(isGoogleDriveConnected(profile));
             if (profile?.studio_name) setStudioName(profile.studio_name);
             if (rawBooking) {
                 setDriveFolderPathHint(buildPathHint(profile as DrivePathProfile | null, rawBooking));
@@ -488,7 +509,7 @@ export default function BookingDetailPage() {
         if (!booking) return;
         const nextDp = Number(dpInput);
         if (!Number.isFinite(nextDp) || nextDp < 0) {
-            alert("Nominal DP harus 0 atau lebih.");
+            showFeedback("Nominal DP harus 0 atau lebih.");
             return;
         }
 
@@ -506,7 +527,7 @@ export default function BookingDetailPage() {
             .eq("id", booking.id);
 
         if (error) {
-            alert("Gagal menyimpan DP.");
+            showFeedback("Gagal menyimpan DP.");
             setSavingDp(false);
             return;
         }
@@ -541,7 +562,7 @@ export default function BookingDetailPage() {
                 .single();
             setDriveFolderPathHint(buildPathHint(profile as DrivePathProfile | null, booking));
         } catch {
-            alert("Gagal refresh path folder Drive.");
+            showFeedback("Gagal refresh path folder Drive.");
         } finally {
             setRefreshingDrivePathHint(false);
         }
@@ -590,7 +611,7 @@ export default function BookingDetailPage() {
     }
 
     function sendWAFreelance(phone: string | null, fname: string) {
-        if (!phone) { alert("Nomor Whatsapp freelance tidak tersedia."); return; }
+        if (!phone) { showFeedback("Nomor WhatsApp freelancer tidak tersedia."); return; }
         const cleaned = normalizeWhatsAppNumber(phone);
         const sessionStr = booking?.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-";
         const sessionTime = booking?.session_date ? formatSessionTime(booking.session_date) : "-";
@@ -640,7 +661,7 @@ export default function BookingDetailPage() {
             window.open(result.folderUrl, "_blank");
             setBooking(prev => prev ? { ...prev, drive_folder_url: result.folderUrl } : prev);
         } else {
-            alert(result.error || "Gagal membuat folder.");
+            showFeedback(result.error || "Gagal membuat folder.");
         }
         setCreatingFolder(false);
     }
@@ -668,10 +689,10 @@ export default function BookingDetailPage() {
                     setBooking(prev => prev ? { ...prev, drive_folder_url: result.folderUrl } : prev);
                 }
             } else {
-                alert(result.error || "Gagal upload file.");
+                showFeedback(result.error || "Gagal upload file.");
             }
         } catch {
-            alert("Gagal upload file.");
+            showFeedback("Gagal upload file.");
         }
         setUploadingFile(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -692,10 +713,10 @@ export default function BookingDetailPage() {
             if (result.success) {
                 setUploadedFiles(prev => prev.filter((_, i) => i !== idx));
             } else {
-                alert(result.error || "Gagal hapus file.");
+                showFeedback(result.error || "Gagal hapus file.");
             }
         } catch {
-            alert("Gagal hapus file.");
+            showFeedback("Gagal hapus file.");
         }
         setDeletingFileIdx(null);
     }
@@ -781,7 +802,7 @@ export default function BookingDetailPage() {
         setSavingAdjustments(false);
 
         if (error) {
-            alert("Gagal menyimpan add-on pelunasan.");
+            showFeedback("Gagal menyimpan add-on pelunasan.");
             return null;
         }
 
@@ -801,13 +822,13 @@ export default function BookingDetailPage() {
 
     async function handleCreateCustomAddon() {
         if (!booking || !customAddonName.trim() || Number(customAddonPrice) <= 0) {
-            alert("Isi nama dan harga add-on custom terlebih dahulu.");
+            showFeedback("Isi nama dan harga add-on custom terlebih dahulu.");
             return;
         }
 
         const { data: auth } = await supabase.auth.getUser();
         if (!auth.user) {
-            alert("Sesi login tidak ditemukan.");
+            showFeedback("Sesi login tidak ditemukan.");
             return;
         }
 
@@ -828,7 +849,7 @@ export default function BookingDetailPage() {
         setCreatingCustomAddon(false);
 
         if (error || !data) {
-            alert("Gagal membuat add-on custom.");
+            showFeedback("Gagal membuat add-on custom.");
             return;
         }
 
@@ -843,7 +864,7 @@ export default function BookingDetailPage() {
 
     async function handleSendFinalInvoice() {
         if (!booking?.tracking_uuid || !booking.client_whatsapp) {
-            alert("Booking ini belum punya tracking link atau nomor WhatsApp klien.");
+            showFeedback("Booking ini belum punya tracking link atau nomor WhatsApp klien.");
             return;
         }
 
@@ -873,7 +894,7 @@ export default function BookingDetailPage() {
         setSendingFinalInvoice(false);
 
         if (error) {
-            alert("Gagal mengirim invoice final.");
+            showFeedback("Gagal mengirim invoice final.");
             return;
         }
 
@@ -975,7 +996,7 @@ export default function BookingDetailPage() {
         setMarkingFinalPaid(false);
 
         if (error) {
-            alert("Gagal menandai booking sebagai lunas.");
+            showFeedback("Gagal menandai booking sebagai lunas.");
             return;
         }
 
@@ -1011,7 +1032,7 @@ export default function BookingDetailPage() {
         setMarkingFinalUnpaid(false);
 
         if (error) {
-            alert("Gagal membatalkan status lunas.");
+            showFeedback("Gagal membatalkan status lunas.");
             return;
         }
 
@@ -1026,6 +1047,60 @@ export default function BookingDetailPage() {
                 }
                 : prev,
         );
+    }
+
+    async function handleDeleteBooking() {
+        if (!booking) return;
+
+        setDeletingBooking(true);
+        let calendarDeleteWarning: string | null = null;
+
+        try {
+            const calendarRes = await fetch("/api/google/calendar-delete-booking", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ bookingId: booking.id }),
+            });
+            const calendarResult = await calendarRes.json().catch(() => null) as {
+                success?: boolean;
+                errors?: string[];
+                error?: string;
+            } | null;
+
+            if (!calendarRes.ok) {
+                calendarDeleteWarning = locale === "en"
+                    ? `Booking deleted, but failed to remove Google Calendar event: ${calendarResult?.error || "Unknown error"}`
+                    : `Booking berhasil dihapus, tetapi event Google Calendar gagal dihapus: ${calendarResult?.error || "Unknown error"}`;
+            } else if (calendarResult && calendarResult.success === false) {
+                const firstError = Array.isArray(calendarResult.errors) ? calendarResult.errors[0] : null;
+                calendarDeleteWarning = locale === "en"
+                    ? `Booking deleted, but some Google Calendar events failed to delete.${firstError ? ` ${firstError}` : ""}`
+                    : `Booking berhasil dihapus, tetapi sebagian event Google Calendar gagal dihapus.${firstError ? ` ${firstError}` : ""}`;
+            }
+        } catch {
+            calendarDeleteWarning = locale === "en"
+                ? "Booking deleted, but failed to remove Google Calendar event."
+                : "Booking berhasil dihapus, tetapi event Google Calendar gagal dihapus.";
+        }
+
+        const { error } = await supabase.from("bookings").delete().eq("id", booking.id);
+        if (error) {
+            setDeletingBooking(false);
+            showFeedback(locale === "en" ? "Failed to delete booking." : "Gagal menghapus booking.");
+            return;
+        }
+
+        setDeleteBookingModalOpen(false);
+        setDeletingBooking(false);
+
+        if (calendarDeleteWarning) {
+            setPendingRedirect(bookingsPath);
+            showFeedback(calendarDeleteWarning, locale === "en" ? "Warning" : "Peringatan");
+            return;
+        }
+
+        router.push(bookingsPath);
+        router.refresh();
     }
 
     if (loading) return (
@@ -1099,11 +1174,21 @@ export default function BookingDetailPage() {
                         </p>
                     </div>
                 </div>
-                <Link href={`/bookings/${booking.id}/edit`}>
-                    <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
-                        <Edit2 className="w-4 h-4" /> Edit
+                <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => setDeleteBookingModalOpen(true)}
+                    >
+                        <Trash2 className="w-4 h-4" /> Hapus
                     </Button>
-                </Link>
+                    <Link href={`/bookings/${booking.id}/edit`}>
+                        <Button variant="outline" size="sm" className="gap-1.5">
+                            <Edit2 className="w-4 h-4" /> Edit
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             {/* Quick Actions */}
@@ -1705,6 +1790,36 @@ export default function BookingDetailPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <ActionFeedbackDialog
+                open={feedbackDialog.open}
+                onOpenChange={(open) => {
+                    setFeedbackDialog((prev) => ({ ...prev, open }));
+                    if (!open && pendingRedirect) {
+                        const targetPath = pendingRedirect;
+                        setPendingRedirect(null);
+                        router.push(targetPath);
+                        router.refresh();
+                    }
+                }}
+                title={feedbackDialog.title}
+                message={feedbackDialog.message}
+                confirmLabel="OK"
+            />
+
+            <ActionConfirmDialog
+                open={deleteBookingModalOpen}
+                onOpenChange={setDeleteBookingModalOpen}
+                title={locale === "en" ? "Delete Booking" : "Hapus Booking"}
+                message={locale === "en"
+                    ? `Delete booking for ${booking.client_name}? Related Google Calendar event(s) will also be removed.`
+                    : `Yakin ingin menghapus booking ${booking.client_name}? Event Google Calendar terkait juga akan ikut dihapus.`}
+                cancelLabel={locale === "en" ? "Cancel" : "Batal"}
+                confirmLabel={deletingBooking ? (locale === "en" ? "Deleting..." : "Menghapus...") : (locale === "en" ? "Yes, Delete" : "Ya, Hapus")}
+                onConfirm={() => { void handleDeleteBooking(); }}
+                confirmVariant="destructive"
+                loading={deletingBooking}
+            />
         </>
     );
 }

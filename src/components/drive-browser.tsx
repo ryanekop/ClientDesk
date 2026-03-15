@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Folder, FolderPlus, ChevronRight, Loader2, Home, ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,19 @@ export function DriveBrowser({
     const [creating, setCreating] = React.useState(false);
     const [showNewFolder, setShowNewFolder] = React.useState(false);
     const [newFolderName, setNewFolderName] = React.useState("");
+    const [feedbackDialog, setFeedbackDialog] = React.useState<{
+        open: boolean;
+        title: string;
+        message: string;
+    }>({ open: false, title: "", message: "" });
+
+    const showFeedback = React.useCallback((message: string, title?: string) => {
+        setFeedbackDialog({
+            open: true,
+            title: title || "Informasi",
+            message,
+        });
+    }, []);
 
     const currentFolderId = breadcrumbs[breadcrumbs.length - 1].id;
 
@@ -104,10 +118,10 @@ export function DriveBrowser({
                 onOpenChange(false);
                 setShowNewFolder(false);
             } else {
-                alert(data.error || "Gagal membuat folder.");
+                showFeedback(data.error || "Gagal membuat folder.");
             }
         } catch {
-            alert("Gagal membuat folder.");
+            showFeedback("Gagal membuat folder.");
         }
         setCreating(false);
     }
@@ -120,6 +134,7 @@ export function DriveBrowser({
     }
 
     return (
+        <>
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
                 <DialogHeader>
@@ -242,5 +257,13 @@ export function DriveBrowser({
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+        <ActionFeedbackDialog
+            open={feedbackDialog.open}
+            onOpenChange={(open) => setFeedbackDialog((prev) => ({ ...prev, open }))}
+            title={feedbackDialog.title}
+            message={feedbackDialog.message}
+            confirmLabel="OK"
+        />
+        </>
     );
 }

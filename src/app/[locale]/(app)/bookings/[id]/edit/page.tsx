@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
 import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
 import { LocationAutocomplete } from "@/components/ui/location-autocomplete";
@@ -180,6 +181,19 @@ export default function EditBookingPage() {
     const [customFreelancerRole, setCustomFreelancerRole] = React.useState("Photographer");
     const [savingCustomFreelancer, setSavingCustomFreelancer] = React.useState(false);
     const [customFreelancerCountryCode, setCustomFreelancerCountryCode] = React.useState("+62");
+    const [feedbackDialog, setFeedbackDialog] = React.useState<{
+        open: boolean;
+        title: string;
+        message: string;
+    }>({ open: false, title: "", message: "" });
+
+    const showFeedback = React.useCallback((message: string, title?: string) => {
+        setFeedbackDialog({
+            open: true,
+            title: title || (locale === "en" ? "Information" : "Informasi"),
+            message,
+        });
+    }, [locale]);
 
     React.useEffect(() => {
         async function load() {
@@ -325,7 +339,7 @@ export default function EditBookingPage() {
             });
             setCustomServiceName(""); setCustomServicePrice(""); setCustomServiceDesc("");
             setShowCustomServicePopup(false);
-        } else { alert("Gagal menyimpan paket."); }
+        } else { showFeedback("Gagal menyimpan paket."); }
         setSavingCustomService(false);
     }
 
@@ -345,7 +359,7 @@ export default function EditBookingPage() {
             setFreelancerIds(prev => prev.length < 5 ? [...prev, f.id] : prev);
             setCustomFreelancerName(""); setCustomFreelancerWa(""); setCustomFreelancerRole("Photographer"); setCustomFreelancerCountryCode("+62");
             setShowCustomFreelancerPopup(false);
-        } else { console.error(error); alert("Gagal menyimpan freelance."); }
+        } else { console.error(error); showFeedback("Gagal menyimpan freelance."); }
         setSavingCustomFreelancer(false);
     }
 
@@ -354,12 +368,12 @@ export default function EditBookingPage() {
         setSaving(true);
 
         if (eventType === "Wedding" && (!extraFields.tempat_akad || !extraFields.tempat_resepsi)) {
-            alert("Lokasi Akad dan Lokasi Resepsi wajib diisi untuk acara Wedding.");
+            showFeedback("Lokasi Akad dan Lokasi Resepsi wajib diisi untuk acara Wedding.");
             setSaving(false);
             return;
         }
         if (selectedServiceIds.length === 0) {
-            alert("Pilih minimal satu paket utama.");
+            showFeedback("Pilih minimal satu paket utama.");
             setSaving(false);
             return;
         }
@@ -458,14 +472,14 @@ export default function EditBookingPage() {
                     });
                     if (!res.ok) {
                         const err = await res.json().catch(() => ({}));
-                        setCalendarWarning(`⚠️ Calendar booking gagal: ${err.error || "Google Calendar belum terkoneksi"}`);
+                        setCalendarWarning(`⚠️ Booking tersimpan, tetapi sinkronisasi Google Calendar gagal: ${err.error || "Google Calendar belum terkoneksi"}`);
                         setTimeout(() => setCalendarWarning(null), 5000);
                     } else if (noEmailNames.length > 0) {
                         setCalendarWarning(`⚠️ Invite tim belum lengkap: ${noEmailNames.join(", ")} belum punya Google Email`);
                         setTimeout(() => setCalendarWarning(null), 5000);
                     }
                 } catch {
-                    setCalendarWarning("⚠️ Calendar booking gagal tersinkron");
+                    setCalendarWarning("⚠️ Booking tersimpan, tetapi sinkronisasi Google Calendar gagal dijalankan.");
                     setTimeout(() => setCalendarWarning(null), 5000);
                 }
             } else if (freelancerIds.length > 0) {
@@ -474,7 +488,7 @@ export default function EditBookingPage() {
             }
             router.push(`/${locale}/bookings/${id}`);
         }
-        else { alert("Gagal menyimpan perubahan."); }
+        else { showFeedback("Gagal menyimpan perubahan."); }
     }
 
     const currentExtraFields = EXTRA_FIELDS_DEF[eventType] || [];
@@ -866,6 +880,14 @@ export default function EditBookingPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <ActionFeedbackDialog
+                open={feedbackDialog.open}
+                onOpenChange={(open) => setFeedbackDialog((prev) => ({ ...prev, open }))}
+                title={feedbackDialog.title}
+                message={feedbackDialog.message}
+                confirmLabel="OK"
+            />
         </div>
         </>
     );

@@ -29,7 +29,9 @@ export function ActionFeedbackDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{message}</DialogDescription>
+          <DialogDescription className="whitespace-pre-line">
+            {message}
+          </DialogDescription>
         </DialogHeader>
         <DialogFooter className="sm:justify-end">
           <Button type="button" onClick={() => onOpenChange(false)}>

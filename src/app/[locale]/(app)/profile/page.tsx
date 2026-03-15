@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Camera, Trash2, Save, Key, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations, useLocale } from "next-intl";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
@@ -52,6 +53,19 @@ export default function ProfilePage() {
     // Crop state
     const [cropSrc, setCropSrc] = React.useState<string | null>(null);
     const [showCrop, setShowCrop] = React.useState(false);
+    const [feedbackDialog, setFeedbackDialog] = React.useState<{
+        open: boolean;
+        title: string;
+        message: string;
+    }>({ open: false, title: "", message: "" });
+
+    const showFeedback = React.useCallback((message: string, title?: string) => {
+        setFeedbackDialog({
+            open: true,
+            title: title || (locale === "en" ? "Information" : "Informasi"),
+            message,
+        });
+    }, [locale]);
 
     React.useEffect(() => { fetchProfile(); }, []);
 
@@ -182,7 +196,7 @@ export default function ProfilePage() {
             };
             reader.readAsDataURL(blob);
         } catch {
-            alert("Gagal menyimpan foto.");
+            showFeedback("Gagal menyimpan foto.");
         }
     }
 
@@ -363,6 +377,16 @@ export default function ProfilePage() {
                     onCropComplete={handleCroppedAvatar}
                 />
             )}
+
+            <ActionFeedbackDialog
+                open={feedbackDialog.open}
+                onOpenChange={(open) =>
+                    setFeedbackDialog((prev) => ({ ...prev, open }))
+                }
+                title={feedbackDialog.title}
+                message={feedbackDialog.message}
+                confirmLabel="OK"
+            />
         </div>
     );
 }

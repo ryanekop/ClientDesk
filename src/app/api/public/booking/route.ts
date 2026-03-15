@@ -3,8 +3,15 @@ import { createClient } from "@supabase/supabase-js";
 import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
 import { hasBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import {
+    getGoogleCalendarSyncErrorMessage,
+    isNoScheduleSyncError,
+    NO_SCHEDULE_SYNC_MESSAGE,
+    updateBookingCalendarSyncState,
+} from "@/lib/google-calendar-sync";
+import {
     DEFAULT_CALENDAR_EVENT_FORMAT,
 } from "@/utils/google/template";
+import { hasOAuthTokenPair } from "@/utils/google/connection";
 import {
     createPaymentSourceFromBank,
     getEnabledBankAccounts,
@@ -580,13 +587,46 @@ export async function POST(request: NextRequest) {
             defaultLocation: location,
         });
 
-        // Auto-sync to Google Calendar (fire-and-forget)
-        if (vendor.google_access_token && vendor.google_refresh_token && shouldSyncCalendar) {
+        if (!shouldSyncCalendar) {
+            const updated = await updateBookingCalendarSyncState({
+                supabase: supabaseAdmin,
+                bookingId: booking.id,
+                userId: vendor.id,
+                status: "skipped",
+                errorMessage: NO_SCHEDULE_SYNC_MESSAGE,
+            });
+            if (!updated.ok) {
+                console.warn(
+                    "Failed to update booking calendar sync status (skipped):",
+                    updated.error,
+                );
+            }
+        } else if (!hasOAuthTokenPair(vendor.google_access_token, vendor.google_refresh_token)) {
+            const updated = await updateBookingCalendarSyncState({
+                supabase: supabaseAdmin,
+                bookingId: booking.id,
+                userId: vendor.id,
+                status: "failed",
+                errorMessage: "Koneksi Google Calendar belum lengkap. Silakan hubungkan ulang di Pengaturan.",
+            });
+            if (!updated.ok) {
+                console.warn(
+                    "Failed to update booking calendar sync status (failed):",
+                    updated.error,
+                );
+            }
+        } else {
+            const vendorAccessToken = typeof vendor.google_access_token === "string"
+                ? vendor.google_access_token.trim()
+                : "";
+            const vendorRefreshToken = typeof vendor.google_refresh_token === "string"
+                ? vendor.google_refresh_token.trim()
+                : "";
             try {
                 const syncedEvent = await syncBookingCalendarEvent({
                     profile: {
-                        accessToken: vendor.google_access_token,
-                        refreshToken: vendor.google_refresh_token,
+                        accessToken: vendorAccessToken,
+                        refreshToken: vendorRefreshToken,
                         studioName: vendor.studio_name ?? null,
                         eventFormat: vendor.calendar_event_format || DEFAULT_CALENDAR_EVENT_FORMAT,
                         eventFormatMap: vendor.calendar_event_format_map,
@@ -615,17 +655,36 @@ export async function POST(request: NextRequest) {
                     },
                 });
 
-                if (syncedEvent.eventId) {
-                    await supabaseAdmin
-                        .from("bookings")
-                        .update({
-                            google_calendar_event_id: syncedEvent.eventId,
-                            google_calendar_event_ids: syncedEvent.eventIds,
-                        })
-                        .eq("id", booking.id);
+                const updated = await updateBookingCalendarSyncState({
+                    supabase: supabaseAdmin,
+                    bookingId: booking.id,
+                    userId: vendor.id,
+                    status: "success",
+                    eventId: syncedEvent.eventId,
+                    eventIds: syncedEvent.eventIds,
+                });
+                if (!updated.ok) {
+                    console.warn(
+                        "Failed to update booking calendar sync status (success):",
+                        updated.error,
+                    );
                 }
-            } catch {
-                // Silently ignore — calendar may not be connected
+            } catch (error) {
+                const message = getGoogleCalendarSyncErrorMessage(error);
+                const syncStatus = isNoScheduleSyncError(error) ? "skipped" : "failed";
+                const updated = await updateBookingCalendarSyncState({
+                    supabase: supabaseAdmin,
+                    bookingId: booking.id,
+                    userId: vendor.id,
+                    status: syncStatus,
+                    errorMessage: message,
+                });
+                if (!updated.ok) {
+                    console.warn(
+                        `Failed to update booking calendar sync status (${syncStatus}):`,
+                        updated.error,
+                    );
+                }
             }
         }
 

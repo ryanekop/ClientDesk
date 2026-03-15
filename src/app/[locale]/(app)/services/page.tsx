@@ -39,6 +39,7 @@ import {
   MoveVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -439,6 +440,10 @@ export default function ServicesPage() {
   const [activeDragId, setActiveDragId] = React.useState<string | null>(null);
   const [pageError, setPageError] = React.useState("");
   const [eventTypeOptions, setEventTypeOptions] = React.useState<string[]>(EVENT_TYPES);
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = React.useState<{
+    open: boolean;
+    service: Service | null;
+  }>({ open: false, service: null });
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -645,19 +650,29 @@ export default function ServicesPage() {
     await fetchServices();
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm(ts("deleteConfirm"))) return;
-
+  function handleDelete(id: string) {
     const currentService = services.find((service) => service.id === id);
     if (!currentService) return;
+    setDeleteConfirmDialog({ open: true, service: currentService });
+  }
 
-    const { error } = await supabase.from("services").delete().eq("id", id);
+  async function confirmDeleteService() {
+    const currentService = deleteConfirmDialog.service;
+    if (!currentService) return;
+    setDeleteConfirmDialog({ open: false, service: null });
+
+    const { error } = await supabase
+      .from("services")
+      .delete()
+      .eq("id", currentService.id);
     if (error) {
       setPageError(error.message);
       return;
     }
 
-    const nextServices = services.filter((service) => service.id !== id);
+    const nextServices = services.filter(
+      (service) => service.id !== currentService.id,
+    );
     await normalizeGroupAfterMutation(getServiceGroupKey(currentService), nextServices);
     await fetchServices();
   }
@@ -1332,6 +1347,23 @@ export default function ServicesPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <ActionConfirmDialog
+        open={deleteConfirmDialog.open}
+        onOpenChange={(open) =>
+          setDeleteConfirmDialog((prev) => ({
+            ...prev,
+            open,
+            service: open ? prev.service : null,
+          }))
+        }
+        title="Konfirmasi"
+        message={ts("deleteConfirm")}
+        cancelLabel="Batal"
+        confirmLabel="Hapus"
+        confirmVariant="destructive"
+        onConfirm={confirmDeleteService}
+      />
     </div>
   );
 }

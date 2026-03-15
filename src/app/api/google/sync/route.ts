@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
+import { hasOAuthTokenPair } from "@/utils/google/connection";
+import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
+import {
+    getGoogleCalendarSyncErrorMessage,
+    isNoScheduleSyncError,
+    updateBookingCalendarSyncState,
+} from "@/lib/google-calendar-sync";
 
 type SyncRequestBody = {
     bookingIds?: string[];
@@ -14,17 +21,6 @@ export async function POST(request: NextRequest) {
 
         if (!user) {
             return NextResponse.json({ success: false, error: "Tidak terautentikasi" }, { status: 401 });
-        }
-
-        // Get stored Google tokens
-        const { data: profile } = await supabase
-            .from("profiles")
-            .select("google_access_token, google_refresh_token, studio_name, calendar_event_format, calendar_event_format_map, calendar_event_description, calendar_event_description_map")
-            .eq("id", user.id)
-            .single();
-
-        if (!profile?.google_access_token || !profile?.google_refresh_token) {
-            return NextResponse.json({ success: false, error: "Google Calendar belum terhubung. Silakan hubungkan dulu." }, { status: 400 });
         }
 
         const payload = await request.json() as SyncRequestBody;
@@ -42,6 +38,50 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Tidak ada event untuk disinkronkan." }, { status: 400 });
         }
 
+        const profileResult = await fetchGoogleCalendarProfileSchemaSafe(supabase, user.id);
+        if (profileResult.error) {
+            const profileErrorMessage = "Gagal memuat profil Google Calendar. Silakan coba lagi.";
+            for (const bookingId of bookingIds) {
+                await updateBookingCalendarSyncState({
+                    supabase,
+                    bookingId,
+                    userId: user.id,
+                    status: "failed",
+                    errorMessage: profileErrorMessage,
+                });
+            }
+            console.error("Google Calendar profile query failed:", profileResult.error);
+            return NextResponse.json(
+                { success: false, error: profileErrorMessage },
+                { status: 500 },
+            );
+        }
+        if (profileResult.droppedColumns.length > 0) {
+            console.warn("Google Calendar profile columns missing:", profileResult.droppedColumns.join(", "));
+        }
+
+        const profile = profileResult.data;
+        const accessToken = typeof profile?.google_access_token === "string"
+            ? profile.google_access_token.trim()
+            : "";
+        const refreshToken = typeof profile?.google_refresh_token === "string"
+            ? profile.google_refresh_token.trim()
+            : "";
+
+        if (!hasOAuthTokenPair(accessToken, refreshToken)) {
+            const tokenErrorMessage = "Koneksi Google Calendar belum lengkap. Silakan hubungkan ulang di Pengaturan.";
+            for (const bookingId of bookingIds) {
+                await updateBookingCalendarSyncState({
+                    supabase,
+                    bookingId,
+                    userId: user.id,
+                    status: "failed",
+                    errorMessage: tokenErrorMessage,
+                });
+            }
+            return NextResponse.json({ success: false, error: tokenErrorMessage }, { status: 400 });
+        }
+
         const { data: bookings } = await supabase
             .from("bookings")
             .select("id, booking_code, client_name, client_whatsapp, session_date, location, location_detail, notes, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon))")
@@ -49,19 +89,22 @@ export async function POST(request: NextRequest) {
             .in("id", bookingIds);
 
         let successCount = 0;
+        let failedCount = 0;
+        let skippedCount = 0;
         const errors: string[] = [];
+        const skipped: string[] = [];
 
         for (const booking of bookings || []) {
             try {
                 const syncedEvent = await syncBookingCalendarEvent({
                     profile: {
-                        accessToken: profile.google_access_token,
-                        refreshToken: profile.google_refresh_token,
-                        studioName: profile.studio_name,
-                        eventFormat: profile.calendar_event_format,
-                        eventFormatMap: profile.calendar_event_format_map,
-                        eventDescription: profile.calendar_event_description,
-                        eventDescriptionMap: profile.calendar_event_description_map,
+                        accessToken,
+                        refreshToken,
+                        studioName: profile?.studio_name ?? null,
+                        eventFormat: profile?.calendar_event_format ?? null,
+                        eventFormatMap: profile?.calendar_event_format_map ?? null,
+                        eventDescription: profile?.calendar_event_description ?? null,
+                        eventDescriptionMap: profile?.calendar_event_description_map ?? null,
                     },
                     booking: {
                         id: booking.id,
@@ -81,25 +124,69 @@ export async function POST(request: NextRequest) {
                     },
                 });
 
-                await supabase
-                    .from("bookings")
-                    .update({
-                        google_calendar_event_id: syncedEvent.eventId,
-                        google_calendar_event_ids: syncedEvent.eventIds,
-                    })
-                    .eq("id", booking.id)
-                    .eq("user_id", user.id);
+                const updated = await updateBookingCalendarSyncState({
+                    supabase,
+                    bookingId: booking.id,
+                    userId: user.id,
+                    status: "success",
+                    eventId: syncedEvent.eventId,
+                    eventIds: syncedEvent.eventIds,
+                });
+                if (!updated.ok) {
+                    console.warn(
+                        "Failed to update booking calendar sync status (success):",
+                        updated.error,
+                    );
+                }
                 successCount++;
             } catch (error) {
-                const message = error instanceof Error ? error.message : "Unknown error";
+                const message = getGoogleCalendarSyncErrorMessage(error, "Unknown error");
+
+                if (isNoScheduleSyncError(error)) {
+                    skippedCount++;
+                    skipped.push(`${booking.booking_code}: ${message}`);
+                    const updated = await updateBookingCalendarSyncState({
+                        supabase,
+                        bookingId: booking.id,
+                        userId: user.id,
+                        status: "skipped",
+                        errorMessage: message,
+                    });
+                    if (!updated.ok) {
+                        console.warn(
+                            "Failed to update booking calendar sync status (skipped):",
+                            updated.error,
+                        );
+                    }
+                    continue;
+                }
+
+                failedCount++;
                 errors.push(`${booking.booking_code}: ${message}`);
+                const updated = await updateBookingCalendarSyncState({
+                    supabase,
+                    bookingId: booking.id,
+                    userId: user.id,
+                    status: "failed",
+                    errorMessage: message,
+                });
+                if (!updated.ok) {
+                    console.warn(
+                        "Failed to update booking calendar sync status (failed):",
+                        updated.error,
+                    );
+                }
             }
         }
 
         return NextResponse.json({
-            success: true,
+            success: successCount > 0,
             count: successCount,
+            successCount,
+            failedCount,
+            skippedCount,
             errors: errors.length > 0 ? errors : undefined,
+            skipped: skipped.length > 0 ? skipped : undefined,
         });
     } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";

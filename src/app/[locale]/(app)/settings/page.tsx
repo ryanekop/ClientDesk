@@ -20,6 +20,7 @@ import {
   Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,10 @@ import {
   applyDriveTemplate,
   getCalendarTemplateVariables,
 } from "@/utils/google/template";
+import {
+  isGoogleCalendarConnected,
+  isGoogleDriveConnected,
+} from "@/utils/google/connection";
 import {
   getStoredTemplateName,
   getStoredTemplateType,
@@ -92,6 +97,10 @@ type Profile = {
   studio_name: string | null;
   whatsapp_number: string | null;
   vendor_slug: string | null;
+  google_access_token?: string | null;
+  google_refresh_token?: string | null;
+  google_drive_access_token?: string | null;
+  google_drive_refresh_token?: string | null;
   final_invoice_visible_from_status?: string | null;
   form_event_types?: string[] | null;
   custom_event_types?: string[] | null;
@@ -480,6 +489,11 @@ export default function SettingsPage() {
     service: "calendar" | "drive" | null;
   }>({ open: false, service: null });
   const [isDisconnecting, setIsDisconnecting] = React.useState(false);
+  const [feedbackDialog, setFeedbackDialog] = React.useState<{
+    open: boolean;
+    title: string;
+    message: string;
+  }>({ open: false, title: "", message: "" });
 
   // Logo studio
   const [logoUrl, setLogoUrl] = React.useState<string | null>(null);
@@ -538,6 +552,17 @@ export default function SettingsPage() {
   }>({ open: false, scope: null });
   const [resetSaving, setResetSaving] = React.useState(false);
   const unsupportedProfileColumnsRef = React.useRef<Set<string>>(new Set());
+  const feedbackTitle = locale === "en" ? "Information" : "Informasi";
+  const showFeedback = React.useCallback(
+    (message: string, title?: string) => {
+      setFeedbackDialog({
+        open: true,
+        title: title || feedbackTitle,
+        message,
+      });
+    },
+    [feedbackTitle],
+  );
   const calendarFormatInputRef = React.useRef<HTMLInputElement>(null);
   const calendarDescriptionInputRef = React.useRef<HTMLTextAreaElement>(null);
   const driveFormatInputRef = React.useRef<HTMLInputElement>(null);
@@ -826,18 +851,8 @@ export default function SettingsPage() {
     setCustomEventTypes(loadedCustomEventTypes);
     setActiveEventTypes(loadedActiveEventTypes);
     setStudioName(prof?.studio_name || "");
-    setIsCalendarConnected(
-      Boolean(
-        (prof as any)?.google_access_token ||
-        (prof as any)?.google_refresh_token,
-      ),
-    );
-    setIsDriveConnected(
-      Boolean(
-        (prof as any)?.google_drive_access_token ||
-        (prof as any)?.google_drive_refresh_token,
-      ),
-    );
+    setIsCalendarConnected(isGoogleCalendarConnected(prof));
+    setIsDriveConnected(isGoogleDriveConnected(prof));
     setLogoUrl((prof as any)?.invoice_logo_url || null);
     setCalendarEventFormats(
       normalizeTemplateFormatMap(
@@ -1043,7 +1058,7 @@ export default function SettingsPage() {
       void fetchAll(true);
     } catch (error) {
       console.error("Event type save error:", error);
-      alert("Gagal menyimpan jenis acara global.");
+      showFeedback("Gagal menyimpan jenis acara global.");
     } finally {
       setEventTypeSaving(false);
     }
@@ -1062,7 +1077,7 @@ export default function SettingsPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      alert("User tidak ditemukan.");
+      showFeedback("User tidak ditemukan.");
       return;
     }
     setTemplateSaving(true);
@@ -1156,7 +1171,7 @@ export default function SettingsPage() {
       void fetchAll(true);
     } catch (error) {
       console.error("Template save error:", error);
-      alert("Gagal menyimpan template.");
+      showFeedback("Gagal menyimpan template.");
     } finally {
       setTemplateSaving(false);
     }
@@ -1185,7 +1200,7 @@ export default function SettingsPage() {
       setTimeout(() => setStatusSaved(false), 3000);
     } catch (error) {
       console.error("Status save error:", error);
-      alert("Gagal menyimpan status.");
+      showFeedback("Gagal menyimpan status.");
     } finally {
       setStatusSaving(false);
     }
@@ -1313,7 +1328,7 @@ export default function SettingsPage() {
       setResetModal({ open: false, scope: null });
     } catch (error) {
       console.error("Reset settings error:", error);
-      alert("Gagal mengembalikan ke default.");
+      showFeedback("Gagal mengembalikan ke default.");
     } finally {
       setResetSaving(false);
     }
@@ -1410,13 +1425,13 @@ export default function SettingsPage() {
   // Logo handlers
   function handleLogoFileSelected(file: File) {
     if (file.size > 500 * 1024) {
-      alert(
+      showFeedback(
         "Ukuran file melebihi 500KB. Silakan pilih gambar yang lebih kecil.",
       );
       return;
     }
     if (!file.type.startsWith("image/")) {
-      alert("File harus berupa gambar (PNG/JPG).");
+      showFeedback("File harus berupa gambar (PNG/JPG).");
       return;
     }
     const reader = new FileReader();
@@ -1442,7 +1457,7 @@ export default function SettingsPage() {
       };
       reader.readAsDataURL(blob);
     } catch {
-      alert("Gagal menyimpan logo.");
+      showFeedback("Gagal menyimpan logo.");
       setLogoUploading(false);
     }
   }
@@ -2692,7 +2707,7 @@ export default function SettingsPage() {
                   }
                   onDelete={(id) => {
                     if (customClientStatuses.length <= 2) {
-                      alert("Minimal 2 status harus ada.");
+                      showFeedback("Minimal 2 status harus ada.");
                       return;
                     }
                     setNormalizedClientStatuses((prev) =>
@@ -3044,6 +3059,16 @@ export default function SettingsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <ActionFeedbackDialog
+          open={feedbackDialog.open}
+          onOpenChange={(open) =>
+            setFeedbackDialog((prev) => ({ ...prev, open }))
+          }
+          title={feedbackDialog.title}
+          message={feedbackDialog.message}
+          confirmLabel="OK"
+        />
       </div>
 
       {/* Logo Crop Modal */}

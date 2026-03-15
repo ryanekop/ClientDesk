@@ -78,6 +78,7 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
 
         let success = 0;
         const errors: string[] = [];
+        const insertedBookingIds: string[] = [];
 
         for (let i = 0; i < preview.length; i++) {
             const row = preview[i];
@@ -110,14 +111,19 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
             let inserted = false;
 
             for (let attempt = 0; attempt < 5; attempt++) {
-                const { error } = await supabase.from("bookings").insert({
-                    ...bookingPayload,
-                    booking_code: createBookingCode(),
-                });
+                const { data, error } = await supabase
+                    .from("bookings")
+                    .insert({
+                        ...bookingPayload,
+                        booking_code: createBookingCode(),
+                    })
+                    .select("id")
+                    .single();
 
-                if (!error) {
+                if (!error && data?.id) {
                     inserted = true;
                     insertError = null;
+                    insertedBookingIds.push(data.id);
                     break;
                 }
 
@@ -132,6 +138,48 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
                 success++;
             } else {
                 errors.push(`Baris ${i + 1} (${clientName}): ${insertError?.message || "Gagal menyimpan booking"}`);
+            }
+        }
+
+        if (insertedBookingIds.length > 0) {
+            try {
+                const syncResponse = await fetch("/api/google/sync", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ bookingIds: insertedBookingIds }),
+                });
+                const syncResult = await syncResponse.json().catch(() => null) as {
+                    successCount?: number;
+                    count?: number;
+                    failedCount?: number;
+                    skippedCount?: number;
+                    errors?: string[];
+                    skipped?: string[];
+                } | null;
+
+                if (!syncResponse.ok || !syncResult) {
+                    errors.push("Booking berhasil diimport, tetapi sinkronisasi Google Calendar gagal dijalankan.");
+                } else {
+                    const successCount = Number(syncResult.successCount ?? syncResult.count ?? 0);
+                    const failedCount = Number(syncResult.failedCount ?? 0);
+                    const skippedCount = Number(syncResult.skippedCount ?? 0);
+                    const syncErrors = Array.isArray(syncResult.errors) ? syncResult.errors : [];
+                    const syncSkipped = Array.isArray(syncResult.skipped) ? syncResult.skipped : [];
+
+                    if (failedCount > 0 || skippedCount > 0) {
+                        errors.push(
+                            `Sinkronisasi Google Calendar: berhasil ${successCount}, gagal ${failedCount}, dilewati ${skippedCount}.`,
+                        );
+                    }
+                    for (const syncError of syncErrors) {
+                        errors.push(`Sync gagal: ${syncError}`);
+                    }
+                    for (const skippedInfo of syncSkipped) {
+                        errors.push(`Sync dilewati: ${skippedInfo}`);
+                    }
+                }
+            } catch {
+                errors.push("Booking berhasil diimport, tetapi sinkronisasi Google Calendar gagal dijalankan.");
             }
         }
 

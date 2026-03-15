@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Plus, Edit2, Trash2, Users, MessageCircle, Loader2, X, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -109,6 +110,10 @@ export default function TeamPage() {
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(TEAM_COLUMN_DEFAULTS);
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
+    const [deleteConfirmDialog, setDeleteConfirmDialog] = React.useState<{
+        open: boolean;
+        member: Freelancer | null;
+    }>({ open: false, member: null });
 
     const fetchMembers = React.useCallback(async () => {
         setLoading(true);
@@ -188,9 +193,17 @@ export default function TeamPage() {
         fetchMembers();
     }
 
-    async function handleDelete(id: string) {
-        if (!confirm(tt("deleteConfirm"))) return;
-        await supabase.from("freelance").delete().eq("id", id);
+    function handleDelete(id: string) {
+        const member = members.find((item) => item.id === id);
+        if (!member) return;
+        setDeleteConfirmDialog({ open: true, member });
+    }
+
+    async function confirmDeleteMember() {
+        const member = deleteConfirmDialog.member;
+        if (!member) return;
+        setDeleteConfirmDialog({ open: false, member: null });
+        await supabase.from("freelance").delete().eq("id", member.id);
         fetchMembers();
     }
 
@@ -582,6 +595,23 @@ export default function TeamPage() {
                     )}
                 </DialogContent>
             </Dialog>
+
+            <ActionConfirmDialog
+                open={deleteConfirmDialog.open}
+                onOpenChange={(open) =>
+                    setDeleteConfirmDialog((prev) => ({
+                        ...prev,
+                        open,
+                        member: open ? prev.member : null,
+                    }))
+                }
+                title="Konfirmasi"
+                message={tt("deleteConfirm")}
+                cancelLabel="Batal"
+                confirmLabel="Hapus"
+                confirmVariant="destructive"
+                onConfirm={confirmDeleteMember}
+            />
         </div>
     );
 }
