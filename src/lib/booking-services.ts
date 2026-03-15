@@ -163,6 +163,43 @@ export function getBookingServicesTotal(
   );
 }
 
+export function normalizeDurationMinutes(value: unknown): number {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function toPositiveMinutes(value: unknown): number {
+  const minutes = normalizeDurationMinutes(value);
+  return minutes > 0 ? minutes : 0;
+}
+
+export function getBookingDurationMinutes(
+  selections: BookingServiceSelection[],
+  fallbackMinutes = 120,
+): number {
+  const mainDuration = getBookingServicesByKind(selections, "main").reduce(
+    (sum, selection) => sum + toPositiveMinutes(selection.service.duration_minutes),
+    0,
+  );
+  const addonDuration = getBookingServicesByKind(selections, "addon").reduce(
+    (sum, selection) => sum + toPositiveMinutes(selection.service.duration_minutes),
+    0,
+  );
+  const totalDuration = mainDuration + addonDuration;
+  if (totalDuration > 0) {
+    return totalDuration;
+  }
+
+  const fallback = toPositiveMinutes(fallbackMinutes);
+  return fallback > 0 ? fallback : 120;
+}
+
 export function toBookingServicesPayload(
   selections: Array<{ serviceId: string; kind: BookingServiceKind }>,
 ) {

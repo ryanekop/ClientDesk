@@ -17,11 +17,14 @@ import { useLocale } from "next-intl";
 import { cn } from "@/lib/utils";
 import { getSessionDateUTC, formatSessionDate } from "@/utils/format-date";
 import {
+    getBookingDurationMinutes,
     getBookingServiceLabel,
-    getBookingServicesByKind,
     normalizeBookingServiceSelections,
 } from "@/lib/booking-services";
-import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
+import {
+    normalizeGoogleCalendarEventIds,
+    resolveBookingCalendarSessions,
+} from "@/lib/booking-calendar-sessions";
 import {
     CANCELLED_BOOKING_STATUS,
     DEFAULT_CLIENT_STATUSES,
@@ -50,10 +53,15 @@ type StatusVisual = {
 
 type CalendarEvent = Event & {
     bookingId?: string;
+    bookingCode?: string | null;
     clientName?: string;
+    sessionKey?: string | null;
     status?: string;
     serviceName?: string;
     sessionLabel?: string | null;
+    googleEventId?: string | null;
+    syncStatus?: string | null;
+    syncError?: string | null;
     location?: string;
     source: "booking" | "google" | "freelancer";
     freelancerName?: string;
@@ -61,6 +69,16 @@ type CalendarEvent = Event & {
 };
 
 type FreelancerCal = { id: string; name: string; google_email: string };
+type GoogleOpenGuardAction = "settings" | "sync";
+type GoogleOpenGuardState = {
+    action: GoogleOpenGuardAction;
+    title: string;
+    message: string;
+    confirmLabel: string;
+    bookingId?: string;
+    bookingCode?: string | null;
+    sessionKey?: string | null;
+};
 
 const FREELANCER_COLORS = ["#8b5cf6", "#ec4899", "#f97316", "#06b6d4", "#84cc16"];
 const STATUS_VISUAL_PALETTE: StatusVisual[] = [
@@ -194,6 +212,8 @@ export default function CalendarPage() {
         title: string;
         message: string;
     }>({ open: false, title: "", message: "" });
+    const [googleOpenGuard, setGoogleOpenGuard] = React.useState<GoogleOpenGuardState | null>(null);
+    const [googleOpenGuardLoading, setGoogleOpenGuardLoading] = React.useState(false);
     const [disconnectConfirmOpen, setDisconnectConfirmOpen] = React.useState(false);
 
     const { statusVisuals, statusVisualsLowercase } = React.useMemo(() => {
@@ -236,6 +256,57 @@ export default function CalendarPage() {
             message,
         });
     }, [feedbackTitle]);
+
+    const resolveSessionEventId = React.useCallback(
+        (eventIds: Record<string, string>, sessionKey?: string | null) => {
+            if (sessionKey && eventIds[sessionKey]) return eventIds[sessionKey];
+            if (eventIds.primary) return eventIds.primary;
+            const fallbackEventId = Object.values(eventIds).find((value) => typeof value === "string" && value.trim());
+            return fallbackEventId || null;
+        },
+        [],
+    );
+
+    const openGoogleCalendarByEventId = React.useCallback((eventId: string) => {
+        const url = `https://calendar.google.com/calendar/u/0/r/eventedit/${encodeURIComponent(eventId)}`;
+        window.open(url, "_blank");
+    }, []);
+
+    const openGoogleCalendarSearchByBookingCode = React.useCallback((bookingCode: string) => {
+        const url = `https://calendar.google.com/calendar/u/0/r/search?q=${encodeURIComponent(bookingCode)}`;
+        window.open(url, "_blank");
+    }, []);
+
+    const fetchBookingCalendarMeta = React.useCallback(async (bookingId: string) => {
+        const { data, error } = await supabase
+            .from("bookings")
+            .select("id, booking_code, google_calendar_event_id, google_calendar_event_ids, google_calendar_sync_status, google_calendar_sync_error")
+            .eq("id", bookingId)
+            .single();
+
+        if (error || !data) return null;
+
+        const eventIds = normalizeGoogleCalendarEventIds(
+            (data as any).google_calendar_event_ids,
+            (data as any).google_calendar_event_id,
+        );
+
+        return {
+            bookingCode: typeof (data as any).booking_code === "string" ? (data as any).booking_code : null,
+            eventIds,
+            syncStatus: typeof (data as any).google_calendar_sync_status === "string"
+                ? (data as any).google_calendar_sync_status
+                : null,
+            syncError: typeof (data as any).google_calendar_sync_error === "string"
+                ? (data as any).google_calendar_sync_error
+                : null,
+        };
+    }, [supabase]);
+
+    const closeGoogleOpenGuard = React.useCallback(() => {
+        setGoogleOpenGuard(null);
+        setGoogleOpenGuardLoading(false);
+    }, []);
 
     React.useEffect(() => {
         fetchBookings();
@@ -346,7 +417,7 @@ export default function CalendarPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, session_date, status, location, event_type, extra_fields, services(id, name, duration_minutes, is_addon), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon))")
+            .select("id, booking_code, client_name, session_date, status, location, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, google_calendar_sync_status, google_calendar_sync_error, services(id, name, duration_minutes, is_addon), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon))")
             .eq("user_id", user.id);
 
         if (data) {
@@ -355,18 +426,21 @@ export default function CalendarPage() {
                     booking.booking_services,
                     booking.services,
                 );
-                const mainServices = getBookingServicesByKind(serviceSelections, "main");
-                const durationMinutes =
-                    mainServices.reduce(
-                        (sum, selection) => sum + (selection.service.duration_minutes || 0),
-                        0,
-                    ) ||
-                    serviceSelections[0]?.service.duration_minutes ||
-                    120;
+                const durationMinutes = getBookingDurationMinutes(serviceSelections);
                 const serviceName = getBookingServiceLabel(serviceSelections, {
                     kind: "main",
                     fallback: booking.event_type || "Layanan",
                 });
+                const eventIds = normalizeGoogleCalendarEventIds(
+                    booking.google_calendar_event_ids,
+                    booking.google_calendar_event_id,
+                );
+                const syncStatus = typeof booking.google_calendar_sync_status === "string"
+                    ? booking.google_calendar_sync_status
+                    : null;
+                const syncError = typeof booking.google_calendar_sync_error === "string"
+                    ? booking.google_calendar_sync_error
+                    : null;
                 const sessions = resolveBookingCalendarSessions({
                     eventType: booking.event_type,
                     sessionDate: booking.session_date,
@@ -392,15 +466,21 @@ export default function CalendarPage() {
                         location: session.location || booking.location || "-",
                         ...range.templateVars,
                     }, booking.extra_fields));
+                    const sessionEventId = resolveSessionEventId(eventIds, session.key);
                     return {
                         title: session.titlePrefix ? `${session.titlePrefix} ${baseTitle}` : baseTitle,
                         start: sessionDate,
                         end: endDate,
                         bookingId: booking.id,
+                        bookingCode: typeof booking.booking_code === "string" ? booking.booking_code : null,
                         clientName: booking.client_name,
+                        sessionKey: session.key,
                         status: booking.status,
                         serviceName: serviceName,
                         sessionLabel: session.label,
+                        googleEventId: sessionEventId,
+                        syncStatus,
+                        syncError,
                         location: session.location || booking.location || undefined,
                         source: "booking" as const,
                     };
@@ -537,13 +617,145 @@ export default function CalendarPage() {
         setEventPopupOpen(true);
     }
 
+    async function confirmGoogleOpenGuard() {
+        if (!googleOpenGuard) return;
+
+        if (googleOpenGuard.action === "settings") {
+            closeGoogleOpenGuard();
+            router.push(`/${locale}/settings`);
+            return;
+        }
+
+        if (!googleOpenGuard.bookingId) {
+            closeGoogleOpenGuard();
+            return;
+        }
+
+        setGoogleOpenGuardLoading(true);
+        try {
+            const res = await fetch("/api/google/sync", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    bookingIds: [googleOpenGuard.bookingId],
+                }),
+            });
+
+            const result = await res.json() as {
+                success?: boolean;
+                count?: number;
+                successCount?: number;
+                errors?: string[];
+                error?: string;
+            };
+
+            if (!res.ok) {
+                showFeedback(
+                    result.error || t("openGoogleSyncFailedMessage"),
+                    t("openGoogleSyncFailedTitle"),
+                );
+                return;
+            }
+
+            const successCount = Number(result.successCount ?? result.count ?? 0);
+            if (successCount <= 0) {
+                const failedMessage = Array.isArray(result.errors) && result.errors.length > 0
+                    ? result.errors.join("\n")
+                    : t("openGoogleSyncFailedMessage");
+                showFeedback(failedMessage, t("openGoogleSyncFailedTitle"));
+                return;
+            }
+
+            const latestBooking = await fetchBookingCalendarMeta(googleOpenGuard.bookingId);
+            await fetchBookings();
+            const latestBookingCode = latestBooking?.bookingCode || googleOpenGuard.bookingCode || null;
+            const latestEventId = latestBooking
+                ? resolveSessionEventId(latestBooking.eventIds, googleOpenGuard.sessionKey)
+                : null;
+
+            if (latestEventId) {
+                openGoogleCalendarByEventId(latestEventId);
+                return;
+            }
+
+            if (latestBookingCode) {
+                openGoogleCalendarSearchByBookingCode(latestBookingCode);
+                showFeedback(
+                    t("openGoogleSyncNoEventMessage", { bookingCode: latestBookingCode }),
+                    t("openGoogleSyncNoEventTitle"),
+                );
+                return;
+            }
+
+            showFeedback(
+                t("openGoogleSyncNoEventMessageNoCode"),
+                t("openGoogleSyncNoEventTitle"),
+            );
+        } catch {
+            showFeedback(
+                t("openGoogleSyncFailedMessage"),
+                t("openGoogleSyncFailedTitle"),
+            );
+        } finally {
+            closeGoogleOpenGuard();
+        }
+    }
+
     function openGoogleCalendarEvent() {
         if (!selectedEvent?.start) return;
-        const start = selectedEvent.start;
-        const dateStr = format(start, "yyyyMMdd'T'HHmmss");
-        const titleStr = typeof selectedEvent.title === "string" ? selectedEvent.title : String(selectedEvent.title || "");
-        const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titleStr)}&dates=${dateStr}/${dateStr}`;
-        window.open(url, "_blank");
+
+        if (selectedEvent.source !== "booking") {
+            const start = selectedEvent.start;
+            const dateStr = format(start, "yyyyMMdd'T'HHmmss");
+            const titleStr = typeof selectedEvent.title === "string"
+                ? selectedEvent.title
+                : String(selectedEvent.title || "");
+            const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titleStr)}&dates=${dateStr}/${dateStr}`;
+            window.open(url, "_blank");
+            setEventPopupOpen(false);
+            return;
+        }
+
+        const bookingCode = selectedEvent.bookingCode || null;
+
+        if (!isGoogleConnected) {
+            setGoogleOpenGuard({
+                action: "settings",
+                title: t("openGoogleNeedConnectTitle"),
+                message: t("openGoogleNeedConnectMessage"),
+                confirmLabel: t("openGoogleGoSettings"),
+                bookingId: selectedEvent.bookingId,
+                bookingCode,
+                sessionKey: selectedEvent.sessionKey,
+            });
+            setEventPopupOpen(false);
+            return;
+        }
+
+        const normalizedSyncStatus = (selectedEvent.syncStatus || "").trim().toLowerCase();
+        const hasGoogleEventId = Boolean(selectedEvent.googleEventId && selectedEvent.googleEventId.trim());
+        const needsSync = !hasGoogleEventId || (normalizedSyncStatus !== "" && normalizedSyncStatus !== "success");
+
+        if (needsSync) {
+            const baseMessage = t("openGoogleNeedSyncMessage", {
+                bookingCode: bookingCode || "-",
+            });
+            const syncError = selectedEvent.syncError?.trim();
+            const message = syncError ? `${baseMessage} ${syncError}` : baseMessage;
+            setGoogleOpenGuard({
+                action: "sync",
+                title: t("openGoogleNeedSyncTitle"),
+                message,
+                confirmLabel: t("openGoogleSyncNow"),
+                bookingId: selectedEvent.bookingId,
+                bookingCode,
+                sessionKey: selectedEvent.sessionKey,
+            });
+            setEventPopupOpen(false);
+            return;
+        }
+
+        openGoogleCalendarByEventId(selectedEvent.googleEventId!);
         setEventPopupOpen(false);
     }
 
@@ -792,6 +1004,23 @@ export default function CalendarPage() {
                 title={feedbackDialog.title}
                 message={feedbackDialog.message}
                 confirmLabel={feedbackOkLabel}
+            />
+
+            <ActionConfirmDialog
+                open={Boolean(googleOpenGuard)}
+                onOpenChange={(open) => {
+                    if (!open) closeGoogleOpenGuard();
+                }}
+                title={googleOpenGuard?.title || confirmTitle}
+                message={googleOpenGuard?.message || ""}
+                cancelLabel={confirmCancelLabel}
+                confirmLabel={
+                    googleOpenGuardLoading
+                        ? t("openGoogleSyncingOne")
+                        : (googleOpenGuard?.confirmLabel || feedbackOkLabel)
+                }
+                onConfirm={confirmGoogleOpenGuard}
+                loading={googleOpenGuardLoading}
             />
 
             <ActionConfirmDialog

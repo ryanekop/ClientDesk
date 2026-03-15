@@ -1,6 +1,6 @@
 import {
+  getBookingDurationMinutes,
   getBookingServiceLabel,
-  getBookingServicesByKind,
   normalizeBookingServiceSelections,
 } from "@/lib/booking-services";
 import {
@@ -83,14 +83,7 @@ export async function syncBookingCalendarEvent({
     booking.bookingServices,
     booking.services,
   );
-  const mainServices = getBookingServicesByKind(serviceSelections, "main");
-  const durationMinutes =
-    mainServices.reduce(
-      (sum, selection) => sum + (selection.service.duration_minutes || 0),
-      0,
-    ) ||
-    serviceSelections[0]?.service.duration_minutes ||
-    120;
+  const durationMinutes = getBookingDurationMinutes(serviceSelections);
   const serviceName = getBookingServiceLabel(serviceSelections, {
     kind: "main",
     fallback: booking.eventType || "Sesi Foto",

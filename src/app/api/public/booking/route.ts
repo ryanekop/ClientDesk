@@ -641,6 +641,20 @@ export async function POST(request: NextRequest) {
             const vendorRefreshToken = typeof vendor.google_refresh_token === "string"
                 ? vendor.google_refresh_token.trim()
                 : "";
+            const bookingServicesForSync = [
+                ...mainServices.map((service, index) => ({
+                    id: `${booking.id}-main-${service.id}`,
+                    kind: "main" as const,
+                    sort_order: index,
+                    service,
+                })),
+                ...addonServices.map((service, index) => ({
+                    id: `${booking.id}-addon-${service.id}`,
+                    kind: "addon" as const,
+                    sort_order: index,
+                    service,
+                })),
+            ];
             try {
                 const syncedEvent = await syncBookingCalendarEvent({
                     profile: {
@@ -667,12 +681,7 @@ export async function POST(request: NextRequest) {
                         extraFields: sanitizedExtraData,
                         googleCalendarEventIds: null,
                         services: mainServices[0] || null,
-                        bookingServices: mainServices.map((service, index) => ({
-                            id: `${booking.id}-main-${service.id}`,
-                            kind: "main",
-                            sort_order: index,
-                            service,
-                        })),
+                        bookingServices: bookingServicesForSync,
                     },
                 });
 
