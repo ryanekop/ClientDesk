@@ -108,6 +108,15 @@ function extractSlugCandidates(
     return final;
 }
 
+function normalizeStoredDateTime(value: unknown): string {
+    if (typeof value !== "string") return "";
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) return "";
+    return trimmed;
+}
+
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -178,7 +187,24 @@ export async function POST(request: NextRequest) {
             instagram,
         } = body;
 
-        if ((!vendorId && !vendorSlug) || !clientName || !clientWhatsapp || !sessionDate || (!serviceId && (!serviceIds || serviceIds.length === 0))) {
+        const normalizedClientName = clientName.trim();
+        const normalizedClientWhatsapp = clientWhatsapp.trim();
+        const rawExtraData =
+            typeof extraData === "object" && extraData !== null
+                ? extraData as Record<string, unknown>
+                : {};
+        const directSessionDate = normalizeStoredDateTime(sessionDate);
+        const weddingSessionCandidates = [
+            normalizeStoredDateTime(rawExtraData.tanggal_akad),
+            normalizeStoredDateTime(rawExtraData.tanggal_resepsi),
+        ].filter(Boolean);
+        const resolvedSessionDate =
+            directSessionDate ||
+            weddingSessionCandidates
+                .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0] ||
+            "";
+
+        if ((!vendorId && !vendorSlug && !vendorSlugPath) || !normalizedClientName || !normalizedClientWhatsapp) {
             return NextResponse.json({ success: false, error: "Data tidak lengkap." }, { status: 400 });
         }
 
@@ -285,16 +311,42 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const rawExtraData =
-            typeof extraData === "object" && extraData !== null
-                ? extraData as Record<string, unknown>
-                : {};
         const mainServiceIds = Array.isArray(serviceIds)
             ? serviceIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
             : [];
-        const normalizedMainServiceIds = Array.from(
+        let normalizedMainServiceIds = Array.from(
             new Set(mainServiceIds.length > 0 ? mainServiceIds : (serviceId ? [serviceId] : [])),
         );
+
+        if (normalizedMainServiceIds.length === 0) {
+            const { data: availableMainServices } = await supabaseAdmin
+                .from("services")
+                .select("id, event_types")
+                .eq("user_id", vendor.id)
+                .eq("is_active", true)
+                .eq("is_addon", false)
+                .order("sort_order", { ascending: true })
+                .order("created_at", { ascending: true });
+
+            const normalizedEventType = (eventType || "").trim();
+            const preferredService = normalizedEventType
+                ? (availableMainServices || []).find((service) => {
+                    const eventTypes = Array.isArray((service as any).event_types)
+                        ? ((service as any).event_types as string[])
+                        : [];
+                    return eventTypes.length === 0 || eventTypes.includes(normalizedEventType);
+                }) || (availableMainServices || [])[0]
+                : (availableMainServices || [])[0];
+
+            if (preferredService?.id) {
+                normalizedMainServiceIds = [preferredService.id];
+            }
+        }
+
+        if (normalizedMainServiceIds.length === 0) {
+            return NextResponse.json({ success: false, error: "Paket utama tidak tersedia." }, { status: 400 });
+        }
+
         const addonIds = Array.isArray(rawExtraData.addon_ids)
             ? rawExtraData.addon_ids.filter((value): value is string => typeof value === "string")
             : [];
@@ -370,10 +422,10 @@ export async function POST(request: NextRequest) {
             .insert({
                 user_id: vendor.id,
                 booking_code: bookingCode,
-                client_name: clientName,
-                client_whatsapp: clientWhatsapp,
+                client_name: normalizedClientName,
+                client_whatsapp: normalizedClientWhatsapp,
                 event_type: eventType || null,
-                session_date: sessionDate,
+                session_date: resolvedSessionDate || null,
                 service_id: mainServices[0]?.id || null,
                 total_price: computedTotalPrice,
                 dp_paid: dpPaid,
@@ -426,9 +478,9 @@ export async function POST(request: NextRequest) {
                     driveFolderStructureMap: vendor.drive_folder_structure_map,
                     studioName: vendor.studio_name,
                     bookingCode: booking.booking_code,
-                    clientName,
+                    clientName: normalizedClientName,
                     eventType,
-                    sessionDate,
+                    sessionDate: resolvedSessionDate,
                     extraFields: sanitizedExtraData,
                     fileName: paymentProofFile.name || `${booking.booking_code}_proof`,
                     mimeType: paymentProofFile.type || "application/octet-stream",
@@ -451,7 +503,7 @@ export async function POST(request: NextRequest) {
 
         const shouldSyncCalendar = hasBookingCalendarSessions({
             eventType,
-            sessionDate,
+            sessionDate: resolvedSessionDate || null,
             extraFields: sanitizedExtraData,
             defaultLocation: location,
         });
@@ -472,9 +524,9 @@ export async function POST(request: NextRequest) {
                     booking: {
                         id: booking.id,
                         bookingCode,
-                        clientName,
-                        clientWhatsapp,
-                        sessionDate,
+                        clientName: normalizedClientName,
+                        clientWhatsapp: normalizedClientWhatsapp,
+                        sessionDate: resolvedSessionDate || null,
                         location,
                         locationDetail,
                         eventType,
