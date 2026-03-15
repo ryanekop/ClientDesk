@@ -19,6 +19,7 @@ type VendorRecord = {
   qris_drive_file_id: string | null;
   form_payment_methods: PaymentMethod[] | null;
   settlement_form_payment_methods: PaymentMethod[] | null;
+  form_show_proof: boolean | null;
   bank_accounts: unknown[] | null;
   google_drive_access_token: string | null;
   google_drive_refresh_token: string | null;
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
 
     const { data: vendor } = await supabaseAdmin
       .from("profiles")
-      .select("qris_image_url, qris_drive_file_id, form_payment_methods, settlement_form_payment_methods, bank_accounts, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, studio_name")
+      .select("qris_image_url, qris_drive_file_id, form_payment_methods, settlement_form_payment_methods, form_show_proof, bank_accounts, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, studio_name")
       .eq("id", booking.user_id)
       .single();
 
@@ -134,6 +135,7 @@ export async function POST(request: NextRequest) {
       vendorRecord.settlement_form_payment_methods ??
         vendorRecord.form_payment_methods,
     );
+    const proofEnabled = vendorRecord.form_show_proof ?? true;
     const enabledBankAccounts = getEnabledBankAccounts(
       normalizeBankAccounts(vendorRecord.bank_accounts),
     );
@@ -180,7 +182,12 @@ export async function POST(request: NextRequest) {
       normalizedPaymentSource = { type: "cash", label: "Cash" };
     }
 
-    if (selectedPaymentMethod !== "cash" && !paymentProofUrl && !paymentProofFile) {
+    if (
+      proofEnabled &&
+      selectedPaymentMethod !== "cash" &&
+      !paymentProofUrl &&
+      !paymentProofFile
+    ) {
       return NextResponse.json(
         { success: false, error: "Bukti pembayaran wajib diupload." },
         { status: 400 },
@@ -188,7 +195,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (
+      proofEnabled &&
       selectedPaymentMethod !== "cash" &&
+      paymentProofFile &&
       (!vendorRecord.google_drive_access_token ||
         !vendorRecord.google_drive_refresh_token)
     ) {
@@ -199,10 +208,12 @@ export async function POST(request: NextRequest) {
     }
 
     let normalizedProofUrl =
-      selectedPaymentMethod === "cash" ? null : paymentProofUrl || null;
+      selectedPaymentMethod === "cash" || !proofEnabled
+        ? null
+        : paymentProofUrl || null;
     let proofFileId: string | null = null;
 
-    if (selectedPaymentMethod !== "cash" && paymentProofFile) {
+    if (proofEnabled && selectedPaymentMethod !== "cash" && paymentProofFile) {
       if (
         !vendorRecord.google_drive_access_token ||
         !vendorRecord.google_drive_refresh_token

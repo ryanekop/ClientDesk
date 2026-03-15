@@ -700,25 +700,122 @@ export default function FormBookingPage() {
     return true;
   }
 
-  function handleResetDefault() {
+  async function handleResetDefault() {
+    if (!profileId) return;
+
+    const resetSelectedEventTypes = [...DEFAULTS.eventTypes];
+    const resetCustomEventTypes: string[] = [];
+    const resetFormSections: FormSectionsByEventType = {};
+    const resetShowProof = isDriveConnected ? DEFAULTS.showProof : false;
+    const resetFormLang = "id";
+    const validBanks = getValidBankAccounts(bankAccounts);
+    const enabledBanks = getEnabledBankAccounts(bankAccounts);
+    let resetPaymentMethods: PaymentMethod[] = [...DEFAULTS.paymentMethods];
+
+    // Keep reset persistable even when default "bank" is unavailable.
+    if (enabledBanks.length === 0) {
+      if (qrisImageUrl) {
+        resetPaymentMethods = ["qris"];
+      } else {
+        resetPaymentMethods = ["cash"];
+      }
+    }
+
+    setSaving(true);
+    setSaveMessageTone("success");
+
+    let slug = vendorSlug;
+    if (!slug && studioName) {
+      slug = studioName
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+      setVendorSlug(slug);
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        vendor_slug: slug || null,
+        min_dp_percent: DEFAULTS.minDpPercent,
+        min_dp_map: {},
+        form_brand_color: DEFAULTS.brandColor,
+        form_greeting: null,
+        form_event_types: resetSelectedEventTypes,
+        form_sections: resetFormSections,
+        form_show_notes: DEFAULTS.showNotes,
+        form_show_addons: DEFAULTS.showAddons,
+        form_show_proof: resetShowProof,
+        form_payment_methods: resetPaymentMethods,
+        form_terms_enabled: DEFAULTS.termsEnabled,
+        form_terms_agreement_text: DEFAULTS.termsAgreementText,
+        form_terms_link_text: DEFAULTS.termsLinkText,
+        form_terms_suffix_text: DEFAULTS.termsSuffixText,
+        form_terms_content: DEFAULTS.termsContent,
+        bank_accounts: validBanks,
+        form_lang: resetFormLang,
+      })
+      .eq("id", profileId);
+
+    setSaving(false);
+
+    if (error) {
+      setSavedMsg("Gagal reset default.");
+      setSaveMessageTone("error");
+      setTimeout(() => setSavedMsg(""), 3000);
+      return;
+    }
+
+    setMinDpPercent(DEFAULTS.minDpPercent);
+    setMinDpMap({});
     setBrandColor(DEFAULTS.brandColor);
     setGreeting(DEFAULTS.greeting);
+    setSelectedEventTypes(resetSelectedEventTypes);
+    setCustomEventTypes(resetCustomEventTypes);
+    setSelectedDpEventType(resetSelectedEventTypes[0] || "Umum");
     setShowNotes(DEFAULTS.showNotes);
     setShowAddons(DEFAULTS.showAddons);
-    setShowProof(false); // Requires Google Drive — don't enable by default
-    setFormPaymentMethods([...DEFAULTS.paymentMethods]);
+    setShowProof(resetShowProof);
+    setFormPaymentMethods(resetPaymentMethods);
     setTermsEnabled(DEFAULTS.termsEnabled);
     setTermsAgreementText(DEFAULTS.termsAgreementText);
     setTermsLinkText(DEFAULTS.termsLinkText);
     setTermsSuffixText(DEFAULTS.termsSuffixText);
     setTermsContent(DEFAULTS.termsContent);
-    setMinDpPercent(DEFAULTS.minDpPercent);
-    setMinDpMap({});
-    setFormSectionsByEventType({});
-    setBankAccounts([]);
-    setFormLang("id");
-    setQrisImageUrl(null);
+    setFormSectionsByEventType(resetFormSections);
+    setSelectedCustomFormEventType(resetSelectedEventTypes[0] || "Umum");
+    setFormLang(resetFormLang);
+    setBankAccounts(validBanks);
     setShowResetConfirm(false);
+
+    const nextSnapshot = JSON.stringify(
+      createFormBookingSnapshot({
+        minDpPercent: DEFAULTS.minDpPercent,
+        minDpMap: {},
+        brandColor: DEFAULTS.brandColor,
+        greeting: DEFAULTS.greeting,
+        selectedEventTypes: resetSelectedEventTypes,
+        customEventTypes: resetCustomEventTypes,
+        showNotes: DEFAULTS.showNotes,
+        showAddons: DEFAULTS.showAddons,
+        showProof: resetShowProof,
+        termsEnabled: DEFAULTS.termsEnabled,
+        termsAgreementText: DEFAULTS.termsAgreementText,
+        termsLinkText: DEFAULTS.termsLinkText,
+        termsSuffixText: DEFAULTS.termsSuffixText,
+        termsContent: DEFAULTS.termsContent,
+        formSectionsByEventType: resetFormSections,
+        formPaymentMethods: resetPaymentMethods,
+        bankAccounts: validBanks,
+        formLang: resetFormLang,
+      }),
+    );
+    setLastSavedSnapshot(nextSnapshot);
+    setSavedMsg("Berhasil reset ke default.");
+    setSaveMessageTone("success");
+    setIframeKey((k) => k + 1);
+    setTimeout(() => setSavedMsg(""), 3000);
   }
 
   function copyUrl() {
@@ -1668,6 +1765,7 @@ export default function FormBookingPage() {
             <Button
               variant="outline"
               onClick={() => setShowResetConfirm(true)}
+              disabled={saving}
               className="gap-2 text-muted-foreground"
             >
               <RotateCcw className="w-4 h-4" /> Reset Default
@@ -1696,23 +1794,31 @@ export default function FormBookingPage() {
               >
                 <h3 className="font-semibold text-lg">Reset ke Default?</h3>
                 <p className="text-sm text-muted-foreground">
-                  Semua pengaturan form akan dikembalikan ke nilai default.
-                  Perubahan belum tersimpan sampai Anda klik &quot;Simpan
-                  Pengaturan&quot;.
+                  Semua pengaturan form akan dikembalikan ke nilai default dan
+                  langsung disimpan.
                 </p>
                 <div className="flex gap-3 justify-end">
                   <Button
                     variant="outline"
                     onClick={() => setShowResetConfirm(false)}
+                    disabled={saving}
                   >
                     Batal
                   </Button>
                   <Button
                     variant="destructive"
-                    onClick={handleResetDefault}
+                    onClick={() => {
+                      void handleResetDefault();
+                    }}
+                    disabled={saving}
                     className="gap-1.5"
                   >
-                    <RotateCcw className="w-4 h-4" /> Reset
+                    {saving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="w-4 h-4" />
+                    )}{" "}
+                    Reset
                   </Button>
                 </div>
               </div>

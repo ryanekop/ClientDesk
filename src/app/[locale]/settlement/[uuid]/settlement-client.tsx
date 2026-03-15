@@ -66,6 +66,7 @@ type VendorData = {
   brandColor: string;
   greeting: string | null;
   formLang: string;
+  formShowProof: boolean;
   formPaymentMethods: PaymentMethod[];
   qrisImageUrl: string | null;
   bankAccounts: BankAccount[];
@@ -74,7 +75,10 @@ type VendorData = {
 };
 
 type PreviewVendorPayload = Partial<
-  Pick<VendorData, "studioName" | "brandColor" | "greeting" | "formPaymentMethods">
+  Pick<
+    VendorData,
+    "studioName" | "brandColor" | "greeting" | "formShowProof" | "formPaymentMethods"
+  >
 >;
 
 type PreviewMessage = {
@@ -165,6 +169,10 @@ export default function SettlementClient({
         typeof previewVendor?.greeting === "string"
           ? previewVendor.greeting
           : vendor.greeting,
+      formShowProof:
+        typeof previewVendor?.formShowProof === "boolean"
+          ? previewVendor.formShowProof
+          : vendor.formShowProof,
       formPaymentMethods: normalizePaymentMethods(
         previewVendor?.formPaymentMethods ?? vendor.formPaymentMethods,
       ),
@@ -198,6 +206,7 @@ export default function SettlementClient({
     [booking],
   );
   const settlementStatus = getSettlementStatus(booking.settlementStatus);
+  const proofEnabled = effectiveVendor.formShowProof ?? true;
   const canSubmit = settlementStatus === "sent" || settlementStatus === "submitted";
   const [selectedPaymentMethod, setSelectedPaymentMethod] = React.useState<PaymentMethod | null>(
     effectiveVendor.formPaymentMethods[0] || null,
@@ -294,14 +303,14 @@ export default function SettlementClient({
       return;
     }
 
-    if (selectedPaymentMethod !== "cash" && !proofFile) {
+    if (proofEnabled && selectedPaymentMethod !== "cash" && !proofFile) {
       setError(t("errorProof"));
       return;
     }
 
     setSubmitting(true);
 
-    if (proofFile && selectedPaymentMethod !== "cash") {
+    if (proofEnabled && proofFile && selectedPaymentMethod !== "cash") {
       setUploadingProof(true);
     }
 
@@ -312,7 +321,7 @@ export default function SettlementClient({
       if (selectedPaymentSource) {
         formData.append("paymentSource", JSON.stringify(selectedPaymentSource));
       }
-      if (proofFile && selectedPaymentMethod !== "cash") {
+      if (proofEnabled && proofFile && selectedPaymentMethod !== "cash") {
         formData.append("paymentProofFile", proofFile);
       }
 
@@ -662,7 +671,7 @@ export default function SettlementClient({
               }}
             />
 
-            {selectedPaymentMethod !== "cash" ? (
+            {proofEnabled && selectedPaymentMethod !== "cash" ? (
               <FileDropzone
                 file={proofFile}
                 previewUrl={proofPreview}

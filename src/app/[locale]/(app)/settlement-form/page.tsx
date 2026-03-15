@@ -14,6 +14,7 @@ import {
   QrCode,
   RefreshCw,
   Banknote,
+  RotateCcw,
   Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,7 @@ export default function SettlementFormPage() {
   const [saving, setSaving] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [savedMsg, setSavedMsg] = React.useState("");
+  const [saveMessageTone, setSaveMessageTone] = React.useState<"success" | "error">("success");
   const [profileId, setProfileId] = React.useState("");
   const [studioName, setStudioName] = React.useState("");
   const [siteUrl, setSiteUrl] = React.useState("");
@@ -71,6 +73,7 @@ export default function SettlementFormPage() {
   const [sampleBookingCode, setSampleBookingCode] = React.useState("");
   const [lastSavedSnapshot, setLastSavedSnapshot] = React.useState<string | null>(null);
   const [iframeKey, setIframeKey] = React.useState(0);
+  const [showResetConfirm, setShowResetConfirm] = React.useState(false);
   const [mobileTab, setMobileTab] = React.useState<"settings" | "preview">(
     "settings",
   );
@@ -216,43 +219,91 @@ export default function SettlementFormPage() {
     );
   }
 
-  async function handleSave() {
-    if (!profileId) return;
-    if (paymentMethods.length === 0) {
+  async function persistSettings(
+    nextSettings: SettingsSnapshot,
+    successMessage = "Tersimpan!",
+  ) {
+    if (!profileId) return false;
+
+    if (nextSettings.settlement_form_payment_methods.length === 0) {
       setSavedMsg("Pilih minimal satu metode pembayaran.");
-      return;
+      setSaveMessageTone("error");
+      return false;
     }
-    if (paymentMethods.includes("bank") && enabledBankCount === 0) {
+    if (
+      nextSettings.settlement_form_payment_methods.includes("bank") &&
+      enabledBankCount === 0
+    ) {
       setSavedMsg("Belum ada rekening bank aktif. Atur dulu di Form Booking.");
-      return;
+      setSaveMessageTone("error");
+      return false;
     }
-    if (paymentMethods.includes("qris") && !hasQris) {
+    if (nextSettings.settlement_form_payment_methods.includes("qris") && !hasQris) {
       setSavedMsg("QRIS belum tersedia. Upload dulu di Form Booking.");
-      return;
+      setSaveMessageTone("error");
+      return false;
     }
 
     setSaving(true);
+    setSaveMessageTone("success");
     const { error } = await supabase
       .from("profiles")
       .update({
-        settlement_form_brand_color: brandColor,
-        settlement_form_greeting: greeting || null,
-        settlement_form_payment_methods: paymentMethods,
-        settlement_form_lang: settlementFormLang,
+        settlement_form_brand_color: nextSettings.settlement_form_brand_color,
+        settlement_form_greeting: nextSettings.settlement_form_greeting || null,
+        settlement_form_payment_methods: nextSettings.settlement_form_payment_methods,
+        settlement_form_lang: nextSettings.settlement_form_lang,
       })
       .eq("id", profileId);
     setSaving(false);
 
     if (error) {
       setSavedMsg("Gagal menyimpan.");
-      return;
+      setSaveMessageTone("error");
+      setTimeout(() => setSavedMsg(""), 3000);
+      return false;
     }
 
-    const next = JSON.stringify(draftSnapshot);
+    const next = JSON.stringify(createSnapshot(nextSettings));
     setLastSavedSnapshot(next);
-    setSavedMsg("Tersimpan!");
+    setSavedMsg(successMessage);
+    setSaveMessageTone("success");
     setIframeKey((prev) => prev + 1);
     setTimeout(() => setSavedMsg(""), 3000);
+    return true;
+  }
+
+  async function handleSave() {
+    await persistSettings({
+      settlement_form_brand_color: brandColor,
+      settlement_form_greeting: greeting,
+      settlement_form_payment_methods: paymentMethods,
+      settlement_form_lang: settlementFormLang,
+    });
+  }
+
+  function getResetPaymentMethods(): PaymentMethod[] {
+    if (enabledBankCount > 0) return ["bank"];
+    if (hasQris) return ["qris"];
+    return ["cash"];
+  }
+
+  async function handleResetDefault() {
+    const resetPaymentMethods = getResetPaymentMethods();
+    const nextSettings: SettingsSnapshot = {
+      settlement_form_brand_color: DEFAULTS.brandColor,
+      settlement_form_greeting: DEFAULTS.greeting,
+      settlement_form_payment_methods: resetPaymentMethods,
+      settlement_form_lang: DEFAULTS.lang,
+    };
+    const saved = await persistSettings(nextSettings, "Berhasil reset ke default.");
+    if (!saved) return;
+
+    setBrandColor(nextSettings.settlement_form_brand_color);
+    setGreeting(nextSettings.settlement_form_greeting);
+    setPaymentMethods(nextSettings.settlement_form_payment_methods);
+    setSettlementFormLang(nextSettings.settlement_form_lang);
+    setShowResetConfirm(false);
   }
 
   function copyUrl() {
@@ -434,8 +485,22 @@ export default function SettlementFormPage() {
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               Simpan Pengaturan
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowResetConfirm(true)}
+              disabled={saving}
+              className="gap-2 text-muted-foreground"
+            >
+              <RotateCcw className="w-4 h-4" /> Reset Default
+            </Button>
             {savedMsg ? (
-              <span className="text-sm text-green-600 dark:text-green-400">
+              <span
+                className={`text-sm ${
+                  saveMessageTone === "error"
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-green-600 dark:text-green-400"
+                }`}
+              >
                 {savedMsg}
               </span>
             ) : null}
@@ -445,6 +510,48 @@ export default function SettlementFormPage() {
               </span>
             ) : null}
           </div>
+
+          {showResetConfirm && (
+            <div
+              className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+              onClick={() => setShowResetConfirm(false)}
+            >
+              <div
+                className="bg-card rounded-xl border shadow-lg p-6 max-w-sm w-full space-y-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="font-semibold text-lg">Reset ke Default?</h3>
+                <p className="text-sm text-muted-foreground">
+                  Semua pengaturan form pelunasan akan dikembalikan ke nilai default
+                  dan langsung disimpan.
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowResetConfirm(false)}
+                    disabled={saving}
+                  >
+                    Batal
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      void handleResetDefault();
+                    }}
+                    disabled={saving}
+                    className="gap-1.5"
+                  >
+                    {saving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="w-4 h-4" />
+                    )}{" "}
+                    Reset
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div

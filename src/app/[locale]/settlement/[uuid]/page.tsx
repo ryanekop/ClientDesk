@@ -33,7 +33,7 @@ async function getSettlementData(uuid: string) {
     supabaseAdmin
       .from("profiles")
       .select(
-        "studio_name, whatsapp_number, form_payment_methods, settlement_form_brand_color, settlement_form_greeting, settlement_form_payment_methods, settlement_form_lang, qris_image_url, qris_drive_file_id, bank_accounts",
+        "studio_name, whatsapp_number, form_payment_methods, form_show_proof, settlement_form_brand_color, settlement_form_greeting, settlement_form_payment_methods, settlement_form_lang, qris_image_url, qris_drive_file_id, bank_accounts",
       )
       .eq("id", booking.user_id)
       .single(),
@@ -74,6 +74,7 @@ async function getSettlementData(uuid: string) {
       brandColor: profile?.settlement_form_brand_color || "#10b981",
       greeting: profile?.settlement_form_greeting || null,
       formLang: profile?.settlement_form_lang || "id",
+      formShowProof: profile?.form_show_proof ?? true,
       formPaymentMethods: normalizePaymentMethods(
         profile?.settlement_form_payment_methods ?? profile?.form_payment_methods,
       ),
