@@ -44,6 +44,7 @@ type VendorRecord = {
 type BookingRequestBody = {
     vendorId?: string | null;
     vendorSlug: string;
+    vendorSlugPath?: string | null;
     clientName: string;
     clientWhatsapp: string;
     eventType: string | null;
@@ -123,6 +124,7 @@ export async function POST(request: NextRequest) {
             body = {
                 vendorId: formData.get("vendorId") ? String(formData.get("vendorId")) : null,
                 vendorSlug: String(formData.get("vendorSlug") || ""),
+                vendorSlugPath: formData.get("vendorSlugPath") ? String(formData.get("vendorSlugPath")) : null,
                 clientName: String(formData.get("clientName") || ""),
                 clientWhatsapp: String(formData.get("clientWhatsapp") || ""),
                 eventType: formData.get("eventType") ? String(formData.get("eventType")) : null,
@@ -158,6 +160,7 @@ export async function POST(request: NextRequest) {
         const {
             vendorId,
             vendorSlug,
+            vendorSlugPath,
             clientName,
             clientWhatsapp,
             eventType,
@@ -184,7 +187,12 @@ export async function POST(request: NextRequest) {
 
         let vendor: VendorRecord | null = null;
         const referer = request.headers.get("referer");
-        const slugCandidates = extractSlugCandidates(vendorSlug, referer);
+        const slugCandidates = Array.from(
+            new Set([
+                ...extractSlugCandidates(vendorSlug, referer),
+                ...extractSlugCandidates(vendorSlugPath, referer),
+            ]),
+        );
 
         if (isValidUuid(vendorId || "")) {
             const { data: byId } = await supabaseAdmin

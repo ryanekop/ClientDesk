@@ -121,6 +121,14 @@ function parseFormatted(s: string): number | "" {
   return isNaN(num) ? "" : num;
 }
 
+function extractSlugFromPath(pathname: string) {
+  const match = pathname.match(/\/formbooking\/([^/?#]+)/i);
+  if (match && match[1]) {
+    return decodeURIComponent(match[1]).trim();
+  }
+  return "";
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface BookingFormClientProps {
@@ -482,8 +490,15 @@ export function BookingFormClient({
       );
 
       const formData = new FormData();
+      const slugFromPath =
+        typeof window !== "undefined"
+          ? extractSlugFromPath(window.location.pathname)
+          : "";
       formData.append("vendorId", vendor.id);
       formData.append("vendorSlug", slug);
+      if (slugFromPath) {
+        formData.append("vendorSlugPath", slugFromPath);
+      }
       formData.append("clientName", clientName);
       formData.append("clientWhatsapp", fullPhone);
       formData.append("eventType", eventType || "");
