@@ -59,6 +59,8 @@ type Booking = {
     client_whatsapp: string | null;
     session_date: string | null;
     status: string;
+    client_status: string | null;
+    queue_position: number | null;
     total_price: number;
     dp_paid: number;
     drive_folder_url: string | null;
@@ -182,6 +184,7 @@ export default function BookingsPage() {
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
     const [studioName, setStudioName] = React.useState("");
     const [statusOpts, setStatusOpts] = React.useState<string[]>(DEFAULT_STATUS_OPTS);
+    const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
     const [defaultWaTarget, setDefaultWaTarget] = React.useState<"client" | "freelancer">("client");
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_BOOKING_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
@@ -246,10 +249,15 @@ export default function BookingsPage() {
         if (!user) return;
 
         // Fetch studio name for WA templates
-        const { data: profile } = await supabase.from("profiles").select("studio_name, custom_client_statuses, default_wa_target, form_sections, table_column_preferences").eq("id", user.id).single();
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("studio_name, custom_client_statuses, queue_trigger_status, default_wa_target, form_sections, table_column_preferences")
+            .eq("id", user.id)
+            .single();
         const profileData = profile as ({
             studio_name?: string | null;
             custom_client_statuses?: string[] | null;
+            queue_trigger_status?: string | null;
             default_wa_target?: "client" | "freelancer" | null;
             form_sections?: unknown;
             table_column_preferences?: { bookings?: TableColumnPreference[] } | null;
@@ -264,6 +272,7 @@ export default function BookingsPage() {
 
         if (profile?.studio_name) setStudioName(profile.studio_name);
         setStatusOpts(getBookingStatusOptions(profileData?.custom_client_statuses));
+        setQueueTriggerStatus(profileData?.queue_trigger_status ?? "Antrian Edit");
         if (profileData?.default_wa_target) setDefaultWaTarget(profileData.default_wa_target);
         if (rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)) {
             setFormSectionsByEventType(rawSections as Record<string, FormLayoutItem[]>);
@@ -275,7 +284,7 @@ export default function BookingsPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, location, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, total_price, dp_paid, drive_folder_url, location, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
@@ -364,13 +373,83 @@ export default function BookingsPage() {
     async function handleUpdateStatus() {
         if (!statusModal.booking || !newStatus) return;
         setIsUpdatingStatus(true);
-        const { error } = await supabase.from("bookings").update({ status: newStatus, client_status: newStatus }).eq("id", statusModal.booking.id);
-        if (!error) {
-            setBookings(prev => prev.map(b => b.id === statusModal.booking?.id ? { ...b, status: newStatus } : b));
+        const activeBooking = bookings.find((booking) => booking.id === statusModal.booking?.id) || statusModal.booking;
+        const bookingId = activeBooking.id;
+        const previousStatus = activeBooking.client_status || activeBooking.status || null;
+        const nextStatus = newStatus || null;
+        const trigger = queueTriggerStatus?.trim();
+        const wasQueue = Boolean(trigger) && previousStatus === trigger;
+        const isQueue = Boolean(trigger) && nextStatus === trigger;
+
+        if (isQueue && !wasQueue) {
+            const maxPos = bookings
+                .filter((booking) => booking.client_status === trigger && booking.queue_position != null)
+                .reduce((max, booking) => Math.max(max, booking.queue_position || 0), 0);
+            const newPos = maxPos + 1;
+            const { error } = await supabase
+                .from("bookings")
+                .update({ status: nextStatus, client_status: nextStatus, queue_position: newPos })
+                .eq("id", bookingId);
+            if (error) {
+                setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
+                setIsUpdatingStatus(false);
+                return;
+            }
+            setBookings((prev) => prev.map((booking) => booking.id === bookingId
+                ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos }
+                : booking));
             setStatusModal({ open: false, booking: null });
-        } else {
-            setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
+            setIsUpdatingStatus(false);
+            return;
         }
+
+        if (wasQueue && !isQueue) {
+            const { error } = await supabase
+                .from("bookings")
+                .update({ status: nextStatus, client_status: nextStatus, queue_position: null })
+                .eq("id", bookingId);
+            if (error) {
+                setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
+                setIsUpdatingStatus(false);
+                return;
+            }
+
+            const remainingQueue = bookings
+                .filter((booking) => booking.client_status === trigger && booking.id !== bookingId && booking.queue_position != null)
+                .sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0));
+            for (let i = 0; i < remainingQueue.length; i += 1) {
+                await supabase.from("bookings").update({ queue_position: i + 1 }).eq("id", remainingQueue[i].id);
+            }
+
+            setBookings((prev) => {
+                let updated = prev.map((booking) => booking.id === bookingId
+                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null }
+                    : booking);
+                remainingQueue.forEach((queuedBooking, index) => {
+                    updated = updated.map((booking) => booking.id === queuedBooking.id
+                        ? { ...booking, queue_position: index + 1 }
+                        : booking);
+                });
+                return updated;
+            });
+            setStatusModal({ open: false, booking: null });
+            setIsUpdatingStatus(false);
+            return;
+        }
+
+        const { error } = await supabase
+            .from("bookings")
+            .update({ status: nextStatus, client_status: nextStatus })
+            .eq("id", bookingId);
+        if (error) {
+            setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
+            setIsUpdatingStatus(false);
+            return;
+        }
+        setBookings((prev) => prev.map((booking) => booking.id === bookingId
+            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus }
+            : booking));
+        setStatusModal({ open: false, booking: null });
         setIsUpdatingStatus(false);
     }
 
@@ -658,7 +737,7 @@ export default function BookingsPage() {
                                 </ActionIconButton>
                             </Link>
                             <ActionIconButton tone="orange" title={tb("changeStatusBtn")}
-                                onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
+                                onClick={() => { setNewStatus(booking.client_status || booking.status); setStatusModal({ open: true, booking }); }}>
                                 <RefreshCcw className="w-4 h-4" />
                             </ActionIconButton>
                             <Link href={`/bookings/${booking.id}/edit`}>
@@ -1015,7 +1094,7 @@ export default function BookingsPage() {
                                     <MessageCircle className="w-4 h-4" />
                                 </ActionIconButton>
                                 <Link href={`/bookings/${booking.id}`}><ActionIconButton tone="slate"><Info className="w-4 h-4" /></ActionIconButton></Link>
-                                <ActionIconButton tone="orange" onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
+                                <ActionIconButton tone="orange" onClick={() => { setNewStatus(booking.client_status || booking.status); setStatusModal({ open: true, booking }); }}>
                                     <RefreshCcw className="w-4 h-4" />
                                 </ActionIconButton>
                                 <Link href={`/bookings/${booking.id}/edit`}><ActionIconButton tone="indigo"><Edit2 className="w-4 h-4" /></ActionIconButton></Link>
@@ -1064,12 +1143,16 @@ export default function BookingsPage() {
                             {tb("changeStatusDesc")} <strong>{statusModal.booking?.client_name}</strong>
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="py-2 grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2 py-2 sm:grid-cols-3">
                         {statusOpts.map((opt) => (
                             <button key={opt} onClick={() => setNewStatus(opt)}
-                                className={cn("flex items-center justify-center p-3 rounded-lg border text-xs font-medium transition-all hover:bg-muted/50",
+                                className={cn("flex min-h-[3.25rem] items-center justify-center rounded-lg border px-2 py-2 text-xs font-medium transition-all hover:bg-muted/50",
                                     newStatus === opt ? "border-foreground bg-foreground/5 dark:bg-foreground/10" : "border-border text-muted-foreground")}>
-                                <StatusBadge status={opt} statusClass={statusColors[opt]} className="scale-110" />
+                                <StatusBadge
+                                    status={opt}
+                                    statusClass={statusColors[opt]}
+                                    className="h-auto max-w-full justify-center whitespace-normal break-words px-2 py-1 text-center leading-snug"
+                                />
                             </button>
                         ))}
                     </div>
