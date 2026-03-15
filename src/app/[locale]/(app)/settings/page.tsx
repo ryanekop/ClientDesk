@@ -1991,12 +1991,11 @@ export default function SettingsPage() {
                 {/* Default WA Target */}
                 <div className="space-y-2 pt-2 border-t">
                   <label className="text-sm font-medium flex items-center gap-1.5">
-                    <MessageSquare className="w-3.5 h-3.5" /> Default Penerima
-                    WA
+                    <MessageSquare className="w-3.5 h-3.5" />{" "}
+                    {tp("waPrimaryActionLabel")}
                   </label>
                   <p className="text-xs text-muted-foreground">
-                    Tentukan siapa yang dikirim pesan WhatsApp dari tombol WA di
-                    daftar booking.
+                    {tp("waPrimaryActionDesc")}
                   </p>
                   <div className="flex rounded-lg border border-input overflow-hidden w-fit">
                     <button
@@ -2004,14 +2003,14 @@ export default function SettingsPage() {
                       onClick={() => setDefaultWaTarget("client")}
                       className={`px-4 py-1.5 text-xs font-medium transition-colors cursor-pointer ${defaultWaTarget === "client" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}
                     >
-                      Klien
+                      {tp("waTargetClient")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setDefaultWaTarget("freelancer")}
                       className={`px-4 py-1.5 text-xs font-medium transition-colors cursor-pointer ${defaultWaTarget === "freelancer" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}
                     >
-                      Freelancer
+                      {tp("waTargetFreelancer")}
                     </button>
                   </div>
                 </div>

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Plus, Edit2, Trash2, Users, MessageCircle, Loader2, X, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -306,22 +307,22 @@ export default function TeamPage() {
                 return (
                     <td key={column.id} className="min-w-[120px] px-4 py-4 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-2.5 pr-2">
-                            <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)} className="p-0 text-green-600 transition-colors hover:text-green-700 cursor-pointer dark:text-green-400 dark:hover:text-green-300">
-                                <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-                            </button>
-                            <button title="Edit" onClick={() => {
+                            <ActionIconButton tone="green" title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)}>
+                                <MessageCircle className="w-4 h-4" />
+                            </ActionIconButton>
+                            <ActionIconButton tone="indigo" title="Edit" onClick={() => {
                                 setEditingMember(member);
                                 setEditTags(member.tags || []);
                                 const wa = member.whatsapp_number || "";
                                 const match = COUNTRY_CODES.find(c => wa.startsWith(c.code));
                                 setEditCountryCode(match ? match.code : "+62");
                                 setIsEditOpen(true);
-                            }} className="p-0 transition-colors hover:text-foreground cursor-pointer">
-                                <Edit2 className="w-4 h-4 text-muted-foreground" />
-                            </button>
-                            <button title="Hapus" onClick={() => handleDelete(member.id)} className="p-0 transition-colors hover:text-red-600 cursor-pointer">
-                                <Trash2 className="w-4 h-4 text-red-500" />
-                            </button>
+                            }}>
+                                <Edit2 className="w-4 h-4" />
+                            </ActionIconButton>
+                            <ActionIconButton tone="red" title="Hapus" onClick={() => handleDelete(member.id)}>
+                                <Trash2 className="w-4 h-4" />
+                            </ActionIconButton>
                         </div>
                     </td>
                 );
@@ -489,22 +490,22 @@ export default function TeamPage() {
                                         ))}
                                 </div>
                                 <div className="flex items-center gap-2.5 pt-1 border-t">
-                                    <button title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
-                                        <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-                                    </button>
-                                    <button title="Edit" onClick={() => {
+                                    <ActionIconButton tone="green" title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)}>
+                                        <MessageCircle className="w-4 h-4" />
+                                    </ActionIconButton>
+                                    <ActionIconButton tone="indigo" title="Edit" onClick={() => {
                                         setEditingMember(member);
                                         setEditTags(member.tags || []);
                                         const wa = member.whatsapp_number || "";
                                         const match = COUNTRY_CODES.find(c => wa.startsWith(c.code));
                                         setEditCountryCode(match ? match.code : "+62");
                                         setIsEditOpen(true);
-                                    }} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
-                                        <Edit2 className="w-4 h-4 text-blue-500" />
-                                    </button>
-                                    <button title="Hapus" onClick={() => handleDelete(member.id)} className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer">
-                                        <Trash2 className="w-4 h-4 text-red-500" />
-                                    </button>
+                                    }}>
+                                        <Edit2 className="w-4 h-4" />
+                                    </ActionIconButton>
+                                    <ActionIconButton tone="red" title="Hapus" onClick={() => handleDelete(member.id)}>
+                                        <Trash2 className="w-4 h-4" />
+                                    </ActionIconButton>
                                 </div>
                             </div>
                         ))}

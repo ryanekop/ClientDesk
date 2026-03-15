@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered } from "lucide-react";
+import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ActionIconButton } from "@/components/ui/action-icon-button";
+import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { formatSessionDate, formatSessionTime, formatTemplateSessionDate } from "@/utils/format-date";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -224,6 +226,9 @@ export default function BookingsPage() {
 
     // WA Freelancer popup
     const [waPopup, setWaPopup] = React.useState<{ open: boolean; freelancers: FreelancerInfo[]; booking: Booking | null }>({ open: false, freelancers: [], booking: null });
+    const [waMenuBookingId, setWaMenuBookingId] = React.useState<string | null>(null);
+    const [waTargetPopup, setWaTargetPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
+    const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
 
     const fetchTemplates = React.useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -338,6 +343,24 @@ export default function BookingsPage() {
         void fetchTemplates();
     }, [fetchData, fetchTemplates]);
 
+    React.useEffect(() => {
+        if (!waMenuBookingId) return;
+        function handleOutsideClick(event: MouseEvent) {
+            const target = event.target as HTMLElement | null;
+            if (target?.closest("[data-wa-menu-root='true']")) return;
+            setWaMenuBookingId(null);
+        }
+        function handleEscape(event: KeyboardEvent) {
+            if (event.key === "Escape") setWaMenuBookingId(null);
+        }
+        document.addEventListener("mousedown", handleOutsideClick);
+        document.addEventListener("keydown", handleEscape);
+        return () => {
+            document.removeEventListener("mousedown", handleOutsideClick);
+            document.removeEventListener("keydown", handleEscape);
+        };
+    }, [waMenuBookingId]);
+
     async function handleUpdateStatus() {
         if (!statusModal.booking || !newStatus) return;
         setIsUpdatingStatus(true);
@@ -345,7 +368,9 @@ export default function BookingsPage() {
         if (!error) {
             setBookings(prev => prev.map(b => b.id === statusModal.booking?.id ? { ...b, status: newStatus } : b));
             setStatusModal({ open: false, booking: null });
-        } else { alert(tb("failedUpdateStatus")); }
+        } else {
+            setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
+        }
         setIsUpdatingStatus(false);
     }
 
@@ -356,15 +381,80 @@ export default function BookingsPage() {
         if (!error) {
             setBookings(prev => prev.filter(b => b.id !== deleteModal.booking?.id));
             setDeleteModal({ open: false, booking: null });
-        } else { alert(tb("failedDeleteBooking")); }
+        } else {
+            setFeedbackDialog({ open: true, message: tb("failedDeleteBooking") });
+        }
         setIsDeleting(false);
     }
 
     function sendWhatsAppClient(booking: Booking) {
-        if (!booking.client_whatsapp) { alert(tb("waNotAvailable")); return; }
+        if (!booking.client_whatsapp) {
+            setFeedbackDialog({ open: true, message: tb("waNotAvailable") });
+            return;
+        }
         const cleaned = booking.client_whatsapp.replace(/^0/, "62").replace(/[^0-9]/g, "");
         const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName));
         window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
+    }
+
+    function sendWhatsAppFreelancer(booking: Booking, freelancer: FreelancerInfo) {
+        if (!freelancer.whatsapp_number) {
+            setFeedbackDialog({ open: true, message: tb("waFreelancerNotAvailable") });
+            return;
+        }
+        const cleaned = freelancer.whatsapp_number.replace(/^0/, "62").replace(/[^0-9]/g, "");
+        const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName, freelancer.name));
+        window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
+    }
+
+    function handleDefaultWhatsAppAction(booking: Booking) {
+        if (defaultWaTarget === "client" || booking.booking_freelancers.length === 0) {
+            if (booking.client_whatsapp) sendWhatsAppClient(booking);
+            else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
+                sendWhatsAppFreelancer(booking, booking.booking_freelancers[0]);
+            }
+            return;
+        }
+
+        if (booking.booking_freelancers.length > 1) {
+            setWaPopup({ open: true, freelancers: booking.booking_freelancers, booking });
+        } else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
+            sendWhatsAppFreelancer(booking, booking.booking_freelancers[0]);
+        } else {
+            sendWhatsAppClient(booking);
+        }
+    }
+
+    function handleExplicitWhatsAppAction(booking: Booking, target: "client" | "freelancer") {
+        if (target === "client") {
+            if (!booking.client_whatsapp) {
+                setFeedbackDialog({ open: true, message: tb("waNotAvailable") });
+                return;
+            }
+            sendWhatsAppClient(booking);
+            return;
+        }
+
+        if (booking.booking_freelancers.length === 0) {
+            setFeedbackDialog({ open: true, message: tb("waFreelancerNotAvailable") });
+            return;
+        }
+
+        if (booking.booking_freelancers.length > 1) {
+            if (!booking.booking_freelancers.some((freelancer) => freelancer.whatsapp_number)) {
+                setFeedbackDialog({ open: true, message: tb("waFreelancerNotAvailable") });
+                return;
+            }
+            setWaPopup({ open: true, freelancers: booking.booking_freelancers, booking });
+            return;
+        }
+
+        const freelancer = booking.booking_freelancers[0];
+        if (!freelancer.whatsapp_number) {
+            setFeedbackDialog({ open: true, message: tb("waFreelancerNotAvailable") });
+            return;
+        }
+        sendWhatsAppFreelancer(booking, freelancer);
     }
 
     function copyTemplate(booking: Booking) {
@@ -460,65 +550,90 @@ export default function BookingsPage() {
                 return (
                     <td key={column.id} className="min-w-[220px] px-4 py-3 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-violet-500 hover:bg-transparent hover:text-violet-600" title={tb("copyTemplate")}
+                            <ActionIconButton tone="violet" title={tb("copyTemplate")}
                                 onClick={() => copyTemplate(booking)}>
                                 {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-green-500 hover:bg-transparent hover:text-green-600"
-                                title={booking.booking_freelancers.length > 0 ? `${tb("waFreelance")} (${booking.booking_freelancers.length})` : tb("whatsapp")}
-                                disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
-                                onClick={() => {
-                                    if (defaultWaTarget === "client" || booking.booking_freelancers.length === 0) {
-                                        if (booking.client_whatsapp) sendWhatsAppClient(booking);
-                                        else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
-                                            const f = booking.booking_freelancers[0];
-                                            const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                            const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName, f.name));
-                                            window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
-                                        }
-                                    } else {
-                                        if (booking.booking_freelancers.length > 1) {
-                                            setWaPopup({ open: true, freelancers: booking.booking_freelancers, booking });
-                                        } else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
-                                            const f = booking.booking_freelancers[0];
-                                            const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                            const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName, f.name));
-                                            window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
-                                        } else {
-                                            sendWhatsAppClient(booking);
-                                        }
-                                    }
-                                }}>
-                                <MessageCircle className="w-4 h-4" />
-                            </Button>
+                            </ActionIconButton>
+                            <div className="relative" data-wa-menu-root="true">
+                                <div className="flex items-stretch overflow-hidden rounded-md border border-green-200 bg-green-50 text-green-600 dark:border-green-700 dark:bg-green-900/30 dark:text-green-300">
+                                    <button
+                                        type="button"
+                                        title={tb("waPrimaryAction")}
+                                        disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
+                                        onClick={() => {
+                                            setWaMenuBookingId(null);
+                                            handleDefaultWhatsAppAction(booking);
+                                        }}
+                                        className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-green-800/60"
+                                    >
+                                        <MessageCircle className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title={tb("waMoreActions")}
+                                        disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
+                                        onClick={() => setWaMenuBookingId((prev) => prev === booking.id ? null : booking.id)}
+                                        className="inline-flex h-8 w-6 items-center justify-center border-l border-green-200 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-700 dark:hover:bg-green-800/60"
+                                    >
+                                        <ChevronDown className="w-3 h-3" />
+                                    </button>
+                                </div>
+                                <div
+                                    className={`absolute right-0 top-full z-30 mt-1 w-44 rounded-md border border-border bg-card p-1 shadow-lg transition-all duration-200 ease-out origin-top-right ${waMenuBookingId === booking.id
+                                        ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                                        : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
+                                        }`}
+                                >
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setWaMenuBookingId(null);
+                                                handleExplicitWhatsAppAction(booking, "client");
+                                            }}
+                                            className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                                        >
+                                            {tb("sendToClient")}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setWaMenuBookingId(null);
+                                                handleExplicitWhatsAppAction(booking, "freelancer");
+                                            }}
+                                            className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                                        >
+                                            {tb("sendToFreelancer")}
+                                        </button>
+                                </div>
+                            </div>
                             {booking.drive_folder_url ? (
-                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-blue-500 hover:bg-transparent hover:text-blue-600" title={tb("openDrive")} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
+                                <ActionIconButton tone="blue" title={tb("openDrive")} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
                                     <Folder className="w-4 h-4" />
-                                </Button>
+                                </ActionIconButton>
                             ) : (
-                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-blue-400 hover:bg-transparent hover:text-blue-500" title="Set Link Drive"
+                                <ActionIconButton tone="blue" title="Set Link Drive"
                                     onClick={() => { setDriveLinkInput(""); setDriveLinkPopup({ open: true, booking }); }}>
                                     <Link2 className="w-4 h-4" />
-                                </Button>
+                                </ActionIconButton>
                             )}
                             <Link href={`/bookings/${booking.id}`}>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tb("detail")}>
+                                <ActionIconButton tone="slate" title={tb("detail")}>
                                     <Info className="w-4 h-4" />
-                                </Button>
+                                </ActionIconButton>
                             </Link>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-orange-500 hover:bg-transparent hover:text-orange-600" title={tb("changeStatusBtn")}
+                            <ActionIconButton tone="orange" title={tb("changeStatusBtn")}
                                 onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
                                 <RefreshCcw className="w-4 h-4" />
-                            </Button>
+                            </ActionIconButton>
                             <Link href={`/bookings/${booking.id}/edit`}>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-blue-500 hover:bg-transparent hover:text-blue-600" title={tb("editBtn")}>
+                                <ActionIconButton tone="indigo" title={tb("editBtn")}>
                                     <Edit2 className="w-4 h-4" />
-                                </Button>
+                                </ActionIconButton>
                             </Link>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-red-500 hover:bg-transparent hover:text-red-600" title={tb("deleteBtn")}
+                            <ActionIconButton tone="red" title={tb("deleteBtn")}
                                 onClick={() => setDeleteModal({ open: true, booking })}>
                                 <Trash2 className="w-4 h-4" />
-                            </Button>
+                            </ActionIconButton>
                         </div>
                     </td>
                 );
@@ -855,40 +970,22 @@ export default function BookingsPage() {
                                     ))}
                             </div>
                             <div className="flex items-center gap-1 pt-1 border-t flex-wrap">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500" title={tb("copyTemplate")} onClick={() => copyTemplate(booking)}>
+                                <ActionIconButton tone="violet" title={tb("copyTemplate")} onClick={() => copyTemplate(booking)}>
                                     {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500" title={tb("whatsapp")}
+                                </ActionIconButton>
+                                <ActionIconButton tone="green" title={tb("whatsapp")}
                                     disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
-                                    onClick={() => {
-                                        if (defaultWaTarget === "client" || booking.booking_freelancers.length === 0) {
-                                            if (booking.client_whatsapp) sendWhatsAppClient(booking);
-                                            else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
-                                                const f = booking.booking_freelancers[0];
-                                                const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                                const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName, f.name));
-                                                window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
-                                            }
-                                        } else {
-                                            if (booking.booking_freelancers.length > 1) { setWaPopup({ open: true, freelancers: booking.booking_freelancers, booking }); }
-                                            else if (booking.booking_freelancers.length === 1 && booking.booking_freelancers[0].whatsapp_number) {
-                                                const f = booking.booking_freelancers[0];
-                                                const cleaned = f.whatsapp_number!.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                                const msg = encodeURIComponent(generateWATemplate(booking, locale, savedTemplates, studioName, f.name));
-                                                window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
-                                            } else { sendWhatsAppClient(booking); }
-                                        }
-                                    }}>
+                                    onClick={() => setWaTargetPopup({ open: true, booking })}>
                                     <MessageCircle className="w-4 h-4" />
-                                </Button>
-                                <Link href={`/bookings/${booking.id}`}><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500"><Info className="w-4 h-4" /></Button></Link>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-500" onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
+                                </ActionIconButton>
+                                <Link href={`/bookings/${booking.id}`}><ActionIconButton tone="slate"><Info className="w-4 h-4" /></ActionIconButton></Link>
+                                <ActionIconButton tone="orange" onClick={() => { setNewStatus(booking.status); setStatusModal({ open: true, booking }); }}>
                                     <RefreshCcw className="w-4 h-4" />
-                                </Button>
-                                <Link href={`/bookings/${booking.id}/edit`}><Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500"><Edit2 className="w-4 h-4" /></Button></Link>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => setDeleteModal({ open: true, booking })}>
+                                </ActionIconButton>
+                                <Link href={`/bookings/${booking.id}/edit`}><ActionIconButton tone="indigo"><Edit2 className="w-4 h-4" /></ActionIconButton></Link>
+                                <ActionIconButton tone="red" onClick={() => setDeleteModal({ open: true, booking })}>
                                     <Trash2 className="w-4 h-4" />
-                                </Button>
+                                </ActionIconButton>
                             </div>
                         </div>
                     ))
@@ -896,8 +993,8 @@ export default function BookingsPage() {
             </div>
 
             {/* Desktop Table */}
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">
-                <div className="relative overflow-x-auto">
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-visible hidden md:block">
+                <div className="relative overflow-x-auto overflow-y-visible">
                     <table className="min-w-[1320px] w-full text-sm text-left border-collapse">
                         <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
@@ -972,6 +1069,52 @@ export default function BookingsPage() {
                 </DialogContent>
             </Dialog>
 
+            {/* WA Target Picker (Mobile) */}
+            <Dialog open={waTargetPopup.open} onOpenChange={(o) => !o && setWaTargetPopup({ open: false, booking: null })}>
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>{tb("waTargetPickerTitle")}</DialogTitle>
+                        <DialogDescription>{tb("waTargetPickerDesc")}</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-2 py-2">
+                        <button
+                            type="button"
+                            className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted/50 cursor-pointer"
+                            onClick={() => {
+                                const booking = waTargetPopup.booking;
+                                setWaTargetPopup({ open: false, booking: null });
+                                if (!booking) return;
+                                handleExplicitWhatsAppAction(booking, "client");
+                            }}
+                        >
+                            <span>{tb("sendToClient")}</span>
+                            <MessageCircle className="w-4 h-4 text-green-600" />
+                        </button>
+                        <button
+                            type="button"
+                            className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted/50 cursor-pointer"
+                            onClick={() => {
+                                const booking = waTargetPopup.booking;
+                                setWaTargetPopup({ open: false, booking: null });
+                                if (!booking) return;
+                                handleExplicitWhatsAppAction(booking, "freelancer");
+                            }}
+                        >
+                            <span>{tb("sendToFreelancer")}</span>
+                            <MessageCircle className="w-4 h-4 text-green-600" />
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <ActionFeedbackDialog
+                open={feedbackDialog.open}
+                onOpenChange={(open) => setFeedbackDialog((prev) => ({ ...prev, open }))}
+                title={tb("feedbackTitle")}
+                message={feedbackDialog.message}
+                confirmLabel={tb("feedbackOk")}
+            />
+
             {/* WA Freelancer Selection Popup */}
             <Dialog open={waPopup.open} onOpenChange={(o) => !o && setWaPopup({ open: false, freelancers: [], booking: null })}>
                 <DialogContent className="sm:max-w-md">
@@ -986,9 +1129,8 @@ export default function BookingsPage() {
                                 disabled={!f.whatsapp_number}
                                 onClick={() => {
                                     if (!f.whatsapp_number) return;
-                                    const cleaned = f.whatsapp_number.replace(/^0/, "62").replace(/[^0-9]/g, "");
-                                    const msg = waPopup.booking ? encodeURIComponent(generateWATemplate(waPopup.booking, locale, savedTemplates, studioName, f.name)) : encodeURIComponent(`Halo ${f.name}!`);
-                                    window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${msg}`, "_blank");
+                                    if (!waPopup.booking) return;
+                                    sendWhatsAppFreelancer(waPopup.booking, f);
                                     setWaPopup({ open: false, freelancers: [], booking: null });
                                 }}
                                 className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"

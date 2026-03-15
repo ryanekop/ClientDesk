@@ -1,8 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, ExternalLink, Receipt, Info } from "lucide-react";
+import { Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActionIconButton } from "@/components/ui/action-icon-button";
+import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
@@ -96,6 +99,14 @@ export default function FinancePage() {
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
+    const [invoiceMenuBookingId, setInvoiceMenuBookingId] = React.useState<string | null>(null);
+    const [waMenuBookingId, setWaMenuBookingId] = React.useState<string | null>(null);
+    const [mobileActionPicker, setMobileActionPicker] = React.useState<{
+        open: boolean;
+        booking: BookingFinance | null;
+        kind: "invoice" | "wa" | null;
+    }>({ open: false, booking: null, kind: null });
+    const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
     const fetchBookings = React.useCallback(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
@@ -161,6 +172,27 @@ export default function FinancePage() {
     React.useEffect(() => {
         void fetchBookings();
     }, [fetchBookings]);
+
+    React.useEffect(() => {
+        if (!invoiceMenuBookingId && !waMenuBookingId) return;
+        function handleOutsideClick(event: MouseEvent) {
+            const target = event.target as HTMLElement | null;
+            if (target?.closest("[data-finance-menu-root='true']")) return;
+            setInvoiceMenuBookingId(null);
+            setWaMenuBookingId(null);
+        }
+        function handleEscape(event: KeyboardEvent) {
+            if (event.key !== "Escape") return;
+            setInvoiceMenuBookingId(null);
+            setWaMenuBookingId(null);
+        }
+        document.addEventListener("mousedown", handleOutsideClick);
+        document.addEventListener("keydown", handleEscape);
+        return () => {
+            document.removeEventListener("mousedown", handleOutsideClick);
+            document.removeEventListener("keydown", handleEscape);
+        };
+    }, [invoiceMenuBookingId, waMenuBookingId]);
 
     const orderedVisibleColumns = React.useMemo(
         () => columns.filter((column) => column.visible),
@@ -287,7 +319,7 @@ export default function FinancePage() {
 
     async function ensureSettlementOpened(booking: BookingFinance) {
         if (!booking.tracking_uuid) {
-            alert(locale === "en" ? "Settlement link is not available yet." : "Link pelunasan belum tersedia.");
+            setFeedbackDialog({ open: true, message: tf("settlementLinkNotAvailable") });
             return null;
         }
 
@@ -312,7 +344,7 @@ export default function FinancePage() {
             .eq("id", booking.id);
 
         if (error) {
-            alert(locale === "en" ? "Failed to open settlement." : "Gagal membuka pelunasan.");
+            setFeedbackDialog({ open: true, message: tf("failedOpenSettlement") });
             return null;
         }
 
@@ -394,7 +426,7 @@ export default function FinancePage() {
 
     function sendInitialInvoiceWhatsApp(booking: BookingFinance) {
         if (!booking.client_whatsapp) {
-            alert(tf("waNotAvailable"));
+            setFeedbackDialog({ open: true, message: tf("waNotAvailable") });
             return;
         }
         const cleaned = normalizeWhatsAppNumber(booking.client_whatsapp);
@@ -404,7 +436,7 @@ export default function FinancePage() {
 
     async function sendFinalInvoiceWhatsApp(booking: BookingFinance) {
         if (!booking.client_whatsapp) {
-            alert(tf("waNotAvailable"));
+            setFeedbackDialog({ open: true, message: tf("waNotAvailable") });
             return;
         }
 
@@ -414,6 +446,46 @@ export default function FinancePage() {
         const cleaned = normalizeWhatsAppNumber(openedBooking.client_whatsapp);
         const message = buildFinalInvoiceMessage(openedBooking);
         window.open(`https://api.whatsapp.com/send?phone=${cleaned}&text=${encodeURIComponent(message)}`, "_blank");
+    }
+
+    function resolveInvoiceStageFromContext(booking: BookingFinance): "initial" | "final" {
+        const hasFinalSignal = Boolean(
+            booking.final_invoice_sent_at ||
+            booking.final_paid_at ||
+            booking.is_fully_paid ||
+            booking.final_payment_amount > 0 ||
+            booking.settlement_status === "sent" ||
+            booking.settlement_status === "paid",
+        );
+        return hasFinalSignal ? "final" : "initial";
+    }
+
+    function resolveWaInvoiceStageFromContext(booking: BookingFinance): "initial" | "final" {
+        const stage = resolveInvoiceStageFromContext(booking);
+        if (stage === "final" && !booking.tracking_uuid) {
+            return "initial";
+        }
+        return stage;
+    }
+
+    function handleOpenInvoiceStage(booking: BookingFinance, stage: "initial" | "final") {
+        openInvoice(booking, stage);
+    }
+
+    async function handleSendInvoiceWaStage(booking: BookingFinance, stage: "initial" | "final") {
+        if (stage === "initial") {
+            sendInitialInvoiceWhatsApp(booking);
+            return;
+        }
+        await sendFinalInvoiceWhatsApp(booking);
+    }
+
+    function handleOpenPrimaryInvoice(booking: BookingFinance) {
+        handleOpenInvoiceStage(booking, resolveInvoiceStageFromContext(booking));
+    }
+
+    async function handleSendPrimaryInvoiceWa(booking: BookingFinance) {
+        await handleSendInvoiceWaStage(booking, resolveWaInvoiceStageFromContext(booking));
     }
 
     function renderDesktopHeader(column: TableColumnPreference) {
@@ -431,7 +503,7 @@ export default function FinancePage() {
             case "status":
                 return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>;
             case "actions":
-                return <th key={column.id} className="min-w-[300px] px-4 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>;
+                return <th key={column.id} className="min-w-[340px] px-4 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>;
             default:
                 return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{column.label}</th>;
         }
@@ -482,43 +554,138 @@ export default function FinancePage() {
                 );
             case "actions":
                 return (
-                    <td key={column.id} className="min-w-[300px] px-4 py-4 text-right">
+                    <td key={column.id} className="min-w-[340px] px-4 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap pr-1">
                             <Link href={`/bookings/${booking.id}`}>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tf("detailBooking")}>
+                                <ActionIconButton tone="slate" title={tf("detailBooking")}>
                                     <Info className="w-4 h-4" />
-                                </Button>
+                                </ActionIconButton>
                             </Link>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-slate-500 hover:bg-transparent hover:text-slate-700" title={tf("openInitialInvoice")} onClick={() => openInvoice(booking, "initial")}>
-                                <FileText className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-indigo-500 hover:bg-transparent hover:text-indigo-600" title={tf("openFinalInvoice")} onClick={() => openInvoice(booking, "final")}>
-                                <Download className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-emerald-600 hover:bg-transparent hover:text-emerald-700 dark:text-emerald-400" title={tf("sendInitialInvoiceWA")}
-                                disabled={!booking.client_whatsapp}
-                                onClick={() => sendInitialInvoiceWhatsApp(booking)}>
-                                <MessageCircle className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-orange-500 hover:bg-transparent hover:text-orange-600 dark:text-orange-400" title={tf("sendFinalInvoiceWA")}
-                                disabled={!booking.client_whatsapp || !booking.tracking_uuid}
-                                onClick={() => { void sendFinalInvoiceWhatsApp(booking); }}>
-                                <MessageCircle className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-sky-500 hover:bg-transparent hover:text-sky-600" title={tf("openSettlementLink")}
+                            <div className="relative" data-finance-menu-root="true">
+                                <div className="flex items-stretch overflow-hidden rounded-md border border-indigo-200 bg-indigo-50 text-indigo-600 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                                    <button
+                                        type="button"
+                                        title={tf("openInvoiceByContext")}
+                                        onClick={() => {
+                                            setInvoiceMenuBookingId(null);
+                                            setWaMenuBookingId(null);
+                                            handleOpenPrimaryInvoice(booking);
+                                        }}
+                                        className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-indigo-100 dark:hover:bg-indigo-800/60"
+                                    >
+                                        <FileText className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title={tf("openInvoiceOptions")}
+                                        onClick={() => {
+                                            setWaMenuBookingId(null);
+                                            setInvoiceMenuBookingId((prev) => prev === booking.id ? null : booking.id);
+                                        }}
+                                        className="inline-flex h-8 w-6 items-center justify-center border-l border-indigo-200 transition-colors hover:bg-indigo-100 dark:border-indigo-700 dark:hover:bg-indigo-800/60"
+                                    >
+                                        <ChevronDown className="w-3 h-3" />
+                                    </button>
+                                </div>
+                                <div
+                                    className={`absolute right-0 top-full z-30 mt-1 w-48 rounded-md border border-border bg-card p-1 shadow-lg transition-all duration-200 ease-out origin-top-right ${invoiceMenuBookingId === booking.id
+                                        ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                                        : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
+                                        }`}
+                                >
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                                            onClick={() => {
+                                                setInvoiceMenuBookingId(null);
+                                                handleOpenInvoiceStage(booking, "initial");
+                                            }}
+                                        >
+                                            {tf("openInitialInvoice")}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                                            onClick={() => {
+                                                setInvoiceMenuBookingId(null);
+                                                handleOpenInvoiceStage(booking, "final");
+                                            }}
+                                        >
+                                            {tf("openFinalInvoice")}
+                                        </button>
+                                </div>
+                            </div>
+                            <div className="relative" data-finance-menu-root="true">
+                                <div className="flex items-stretch overflow-hidden rounded-md border border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                    <button
+                                        type="button"
+                                        title={tf("sendInvoiceWAByContext")}
+                                        disabled={!booking.client_whatsapp}
+                                        onClick={() => {
+                                            setWaMenuBookingId(null);
+                                            setInvoiceMenuBookingId(null);
+                                            void handleSendPrimaryInvoiceWa(booking);
+                                        }}
+                                        className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-emerald-800/60"
+                                    >
+                                        <MessageCircle className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title={tf("sendInvoiceWAOptions")}
+                                        disabled={!booking.client_whatsapp}
+                                        onClick={() => {
+                                            setInvoiceMenuBookingId(null);
+                                            setWaMenuBookingId((prev) => prev === booking.id ? null : booking.id);
+                                        }}
+                                        className="inline-flex h-8 w-6 items-center justify-center border-l border-emerald-200 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:hover:bg-emerald-800/60"
+                                    >
+                                        <ChevronDown className="w-3 h-3" />
+                                    </button>
+                                </div>
+                                <div
+                                    className={`absolute right-0 top-full z-30 mt-1 w-52 rounded-md border border-border bg-card p-1 shadow-lg transition-all duration-200 ease-out origin-top-right ${waMenuBookingId === booking.id
+                                        ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                                        : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
+                                        }`}
+                                >
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                                            onClick={() => {
+                                                setWaMenuBookingId(null);
+                                                void handleSendInvoiceWaStage(booking, "initial");
+                                            }}
+                                        >
+                                            {tf("sendInitialInvoiceWA")}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={!booking.tracking_uuid}
+                                            className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                                            onClick={() => {
+                                                setWaMenuBookingId(null);
+                                                void handleSendInvoiceWaStage(booking, "final");
+                                            }}
+                                        >
+                                            {tf("sendFinalInvoiceWA")}
+                                        </button>
+                                </div>
+                            </div>
+                            <ActionIconButton tone="sky" title={tf("openSettlementLink")}
                                 disabled={!booking.tracking_uuid}
                                 onClick={() => window.open(getSettlementLink(booking), "_blank")}>
                                 <ExternalLink className="w-4 h-4" />
-                            </Button>
+                            </ActionIconButton>
                             {booking.payment_proof_url ? (
-                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-amber-500 hover:bg-transparent hover:text-amber-600" title={tf("openInitialProof")} onClick={() => openProof(booking.payment_proof_url)}>
+                                <ActionIconButton tone="amber" title={tf("openInitialProof")} onClick={() => openProof(booking.payment_proof_url)}>
                                     <Receipt className="w-4 h-4" />
-                                </Button>
+                                </ActionIconButton>
                             ) : <span className="h-8 w-8" />}
                             {booking.final_payment_proof_url ? (
-                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-cyan-500 hover:bg-transparent hover:text-cyan-600" title={tf("openFinalProof")} onClick={() => openProof(booking.final_payment_proof_url)}>
+                                <ActionIconButton tone="cyan" title={tf("openFinalProof")} onClick={() => openProof(booking.final_payment_proof_url)}>
                                     <Receipt className="w-4 h-4" />
-                                </Button>
+                                </ActionIconButton>
                             ) : <span className="h-8 w-8" />}
                         </div>
                     </td>
@@ -767,34 +934,28 @@ export default function FinancePage() {
                             </div>
                             <div className="flex flex-wrap items-center gap-1 pt-1 border-t">
                                 <Link href={`/bookings/${b.id}`}>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" title={tf("detailBooking")}>
+                                    <ActionIconButton tone="slate" title={tf("detailBooking")}>
                                         <Info className="w-4 h-4" />
-                                    </Button>
+                                    </ActionIconButton>
                                 </Link>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" title={tf("openInitialInvoice")} onClick={() => openInvoice(b, "initial")}>
+                                <ActionIconButton tone="indigo" title={tf("openInvoiceOptions")} onClick={() => setMobileActionPicker({ open: true, booking: b, kind: "invoice" })}>
                                     <FileText className="w-4 h-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-500" title={tf("openFinalInvoice")} onClick={() => openInvoice(b, "final")}>
-                                    <Download className="w-4 h-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-emerald-600 hover:bg-transparent hover:text-emerald-700 dark:text-emerald-400" title={tf("sendInitialInvoiceWA")} disabled={!b.client_whatsapp} onClick={() => sendInitialInvoiceWhatsApp(b)}>
+                                </ActionIconButton>
+                                <ActionIconButton tone="emerald" title={tf("sendInvoiceWAOptions")} disabled={!b.client_whatsapp} onClick={() => setMobileActionPicker({ open: true, booking: b, kind: "wa" })}>
                                     <MessageCircle className="w-4 h-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0 text-orange-500 hover:bg-transparent hover:text-orange-600 dark:text-orange-400" title={tf("sendFinalInvoiceWA")} disabled={!b.client_whatsapp || !b.tracking_uuid} onClick={() => { void sendFinalInvoiceWhatsApp(b); }}>
-                                    <MessageCircle className="w-4 h-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-sky-500" title={tf("openSettlementLink")} disabled={!b.tracking_uuid} onClick={() => window.open(getSettlementLink(b), "_blank")}>
+                                </ActionIconButton>
+                                <ActionIconButton tone="sky" title={tf("openSettlementLink")} disabled={!b.tracking_uuid} onClick={() => window.open(getSettlementLink(b), "_blank")}>
                                     <ExternalLink className="w-4 h-4" />
-                                </Button>
+                                </ActionIconButton>
                                 {b.payment_proof_url && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-500" title={tf("openInitialProof")} onClick={() => openProof(b.payment_proof_url)}>
+                                    <ActionIconButton tone="amber" title={tf("openInitialProof")} onClick={() => openProof(b.payment_proof_url)}>
                                         <Receipt className="w-4 h-4" />
-                                    </Button>
+                                    </ActionIconButton>
                                 )}
                                 {b.final_payment_proof_url && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-cyan-500" title={tf("openFinalProof")} onClick={() => openProof(b.final_payment_proof_url)}>
+                                    <ActionIconButton tone="cyan" title={tf("openFinalProof")} onClick={() => openProof(b.final_payment_proof_url)}>
                                         <Receipt className="w-4 h-4" />
-                                    </Button>
+                                    </ActionIconButton>
                                 )}
                             </div>
                         </div>
@@ -802,9 +963,69 @@ export default function FinancePage() {
                 })}
             </div>
 
+            <Dialog open={mobileActionPicker.open} onOpenChange={(open) => !open && setMobileActionPicker({ open: false, booking: null, kind: null })}>
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {mobileActionPicker.kind === "wa" ? tf("sendInvoiceWAOptions") : tf("openInvoiceOptions")}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {mobileActionPicker.kind === "wa" ? tf("chooseWAInvoiceType") : tf("chooseInvoiceType")}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-2 py-2">
+                        <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:bg-muted/50"
+                            onClick={() => {
+                                const booking = mobileActionPicker.booking;
+                                const kind = mobileActionPicker.kind;
+                                setMobileActionPicker({ open: false, booking: null, kind: null });
+                                if (!booking) return;
+                                if (kind === "wa") {
+                                    void handleSendInvoiceWaStage(booking, "initial");
+                                    return;
+                                }
+                                handleOpenInvoiceStage(booking, "initial");
+                            }}
+                        >
+                            <span>{mobileActionPicker.kind === "wa" ? tf("sendInitialInvoiceWA") : tf("openInitialInvoice")}</span>
+                            {mobileActionPicker.kind === "wa" ? <MessageCircle className="w-4 h-4 text-emerald-600" /> : <FileText className="w-4 h-4 text-indigo-600" />}
+                        </button>
+                        <button
+                            type="button"
+                            disabled={mobileActionPicker.kind === "wa" && !mobileActionPicker.booking?.tracking_uuid}
+                            className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={() => {
+                                const booking = mobileActionPicker.booking;
+                                const kind = mobileActionPicker.kind;
+                                setMobileActionPicker({ open: false, booking: null, kind: null });
+                                if (!booking) return;
+                                if (kind === "wa") {
+                                    void handleSendInvoiceWaStage(booking, "final");
+                                    return;
+                                }
+                                handleOpenInvoiceStage(booking, "final");
+                            }}
+                        >
+                            <span>{mobileActionPicker.kind === "wa" ? tf("sendFinalInvoiceWA") : tf("openFinalInvoice")}</span>
+                            {mobileActionPicker.kind === "wa" ? <MessageCircle className="w-4 h-4 text-orange-600" /> : <Download className="w-4 h-4 text-indigo-600" />}
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <ActionFeedbackDialog
+                open={feedbackDialog.open}
+                onOpenChange={(open) => setFeedbackDialog((prev) => ({ ...prev, open }))}
+                title={tf("feedbackTitle")}
+                message={feedbackDialog.message}
+                confirmLabel={tf("feedbackOk")}
+            />
+
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">
-                <div className="relative overflow-x-auto">
+                <div className="relative overflow-x-auto overflow-y-visible">
                     <table className="min-w-[1180px] w-full text-sm text-left">
                         <thead className="text-xs uppercase bg-card border-b">
                             <tr>

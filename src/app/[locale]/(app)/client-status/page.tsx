@@ -4,6 +4,7 @@ import * as React from "react";
 import { createClient } from "@/utils/supabase/client";
 import { Activity, Copy, ClipboardCheck, Loader2, ExternalLink, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { Link } from "@/i18n/routing";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import { useTranslations, useLocale } from "next-intl";
@@ -320,22 +321,20 @@ export default function ClientStatusPage() {
                         <div className="flex items-center justify-end gap-1.5">
                             {booking.tracking_uuid && (
                                 <>
-                                    <Button
-                                        variant="ghost" size="icon"
-                                        className={`h-8 w-8 p-0 hover:bg-transparent ${copiedId === booking.id ? "text-green-500" : "text-slate-500 hover:text-slate-700"}`}
+                                    <ActionIconButton
+                                        tone={copiedId === booking.id ? "green" : "violet"}
                                         title={t("salinLinkTracking")}
                                         onClick={() => copyTrackLink(booking.tracking_uuid!, booking.id)}
                                     >
                                         {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                    </Button>
-                                    <Button
-                                        variant="ghost" size="icon"
-                                        className="h-8 w-8 p-0 text-blue-500 hover:bg-transparent hover:text-blue-600"
+                                    </ActionIconButton>
+                                    <ActionIconButton
+                                        tone="blue"
                                         title={t("bukaTracking")}
                                         onClick={() => window.open(`/${locale}/track/${booking.tracking_uuid}`, "_blank")}
                                     >
                                         <ExternalLink className="w-4 h-4" />
-                                    </Button>
+                                    </ActionIconButton>
                                 </>
                             )}
                         </div>
@@ -459,12 +458,12 @@ export default function ClientStatusPage() {
                         <div className="flex items-center gap-1 pt-1 border-t">
                             {b.tracking_uuid && (
                                 <>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500" title={t("bukaLink")} onClick={() => window.open(`${window.location.origin}/${locale}/track/${b.tracking_uuid}`, "_blank")}>
+                                    <ActionIconButton tone="blue" title={t("bukaLink")} onClick={() => window.open(`${window.location.origin}/${locale}/track/${b.tracking_uuid}`, "_blank")}>
                                         <ExternalLink className="w-4 h-4" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-violet-500" title={t("salinLink")} onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}>
+                                    </ActionIconButton>
+                                    <ActionIconButton tone={copiedId === b.id ? "green" : "violet"} title={t("salinLink")} onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}>
                                         {copiedId === b.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                    </Button>
+                                    </ActionIconButton>
                                 </>
                             )}
                         </div>
