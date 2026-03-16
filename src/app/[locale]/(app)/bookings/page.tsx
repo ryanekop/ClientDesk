@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
-import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
+import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
 import { formatSessionDate, formatSessionTime, formatTemplateSessionDate } from "@/utils/format-date";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -56,6 +56,7 @@ import {
     isTransitionToCancelled,
     syncGoogleCalendarForStatusTransition,
 } from "@/utils/google-calendar-status-sync";
+import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
 import * as XLSX from "xlsx";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
@@ -73,6 +74,10 @@ type Booking = {
     queue_position: number | null;
     total_price: number;
     dp_paid: number;
+    dp_verified_amount?: number | null;
+    dp_verified_at?: string | null;
+    dp_refund_amount?: number | null;
+    dp_refunded_at?: string | null;
     drive_folder_url: string | null;
     location: string | null;
     location_lat: number | null;
@@ -304,7 +309,7 @@ export default function BookingsPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, total_price, dp_paid, drive_folder_url, location, location_lat, location_lng, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, drive_folder_url, location, location_lat, location_lng, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
@@ -390,7 +395,10 @@ export default function BookingsPage() {
         };
     }, [waMenuBookingId]);
 
-    async function handleUpdateStatus(options?: { skipCancelConfirmation?: boolean }) {
+    async function handleUpdateStatus(options?: {
+        skipCancelConfirmation?: boolean;
+        cancelPayment?: { policy: CancelPaymentPolicy; refundAmount: number };
+    }) {
         if (!statusModal.booking || !newStatus) return;
         const activeBooking = bookings.find((booking) => booking.id === statusModal.booking?.id) || statusModal.booking;
         const bookingId = activeBooking.id;
@@ -409,6 +417,14 @@ export default function BookingsPage() {
         const trigger = queueTriggerStatus?.trim();
         const wasQueue = Boolean(trigger) && previousStatus === trigger;
         const isQueue = Boolean(trigger) && nextStatus === trigger;
+        const isCancelling = isTransitionToCancelled(previousStatus, nextStatus);
+        const cancelPatch = isCancelling
+            ? buildCancelPaymentPatch({
+                policy: options?.cancelPayment?.policy || "forfeit",
+                refundAmount: options?.cancelPayment?.refundAmount || 0,
+                verifiedAmount: activeBooking.dp_verified_amount || 0,
+            })
+            : null;
 
         try {
             if (isQueue && !wasQueue) {
@@ -418,19 +434,29 @@ export default function BookingsPage() {
                 const newPos = maxPos + 1;
                 const { error } = await supabase
                     .from("bookings")
-                    .update({ status: nextStatus, client_status: nextStatus, queue_position: newPos })
+                    .update({
+                        status: nextStatus,
+                        client_status: nextStatus,
+                        queue_position: newPos,
+                        ...(cancelPatch || {}),
+                    })
                     .eq("id", bookingId);
                 if (error) {
                     setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
                     return;
                 }
                 setBookings((prev) => prev.map((booking) => booking.id === bookingId
-                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos }
+                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos, ...(cancelPatch || {}) }
                     : booking));
             } else if (wasQueue && !isQueue) {
                 const { error } = await supabase
                     .from("bookings")
-                    .update({ status: nextStatus, client_status: nextStatus, queue_position: null })
+                    .update({
+                        status: nextStatus,
+                        client_status: nextStatus,
+                        queue_position: null,
+                        ...(cancelPatch || {}),
+                    })
                     .eq("id", bookingId);
                 if (error) {
                     setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
@@ -446,7 +472,7 @@ export default function BookingsPage() {
 
                 setBookings((prev) => {
                     let updated = prev.map((booking) => booking.id === bookingId
-                        ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null }
+                        ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null, ...(cancelPatch || {}) }
                         : booking);
                     remainingQueue.forEach((queuedBooking, index) => {
                         updated = updated.map((booking) => booking.id === queuedBooking.id
@@ -458,14 +484,18 @@ export default function BookingsPage() {
             } else {
                 const { error } = await supabase
                     .from("bookings")
-                    .update({ status: nextStatus, client_status: nextStatus })
+                    .update({
+                        status: nextStatus,
+                        client_status: nextStatus,
+                        ...(cancelPatch || {}),
+                    })
                     .eq("id", bookingId);
                 if (error) {
                     setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
                     return;
                 }
                 setBookings((prev) => prev.map((booking) => booking.id === bookingId
-                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus }
+                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, ...(cancelPatch || {}) }
                     : booking));
             }
 
@@ -1287,18 +1317,18 @@ export default function BookingsPage() {
                 </DialogContent>
             </Dialog>
 
-            <ActionConfirmDialog
+            <CancelStatusPaymentDialog
                 open={cancelStatusConfirmOpen}
                 onOpenChange={setCancelStatusConfirmOpen}
-                title={locale === "en" ? "Set status to Cancelled?" : "Ubah status ke Batal?"}
-                message={locale === "en"
-                    ? `Booking ${statusModal.booking?.client_name || ""} will be hidden from calendar and its Google Calendar event will be removed. Continue?`
-                    : `Booking ${statusModal.booking?.client_name || ""} akan disembunyikan dari kalender dan event Google Calendar akan dihapus. Lanjutkan?`}
-                cancelLabel={locale === "en" ? "Back" : "Kembali"}
-                confirmLabel={locale === "en" ? "Yes, Set to Cancelled" : "Ya, Ubah ke Batal"}
-                onConfirm={() => { void handleUpdateStatus({ skipCancelConfirmation: true }); }}
-                confirmVariant="destructive"
+                bookingName={statusModal.booking?.client_name || ""}
+                maxRefundAmount={Math.max(statusModal.booking?.dp_verified_amount || 0, 0)}
                 loading={isUpdatingStatus}
+                onConfirm={({ policy, refundAmount }) => {
+                    void handleUpdateStatus({
+                        skipCancelConfirmation: true,
+                        cancelPayment: { policy, refundAmount },
+                    });
+                }}
             />
 
             <ActionFeedbackDialog

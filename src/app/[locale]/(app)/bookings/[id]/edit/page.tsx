@@ -6,7 +6,7 @@ import { useLocale } from "next-intl";
 import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
-import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
+import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
 import {
@@ -40,6 +40,7 @@ import {
     isTransitionToCancelled,
     syncGoogleCalendarForStatusTransition,
 } from "@/utils/google-calendar-status-sync";
+import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -108,8 +109,14 @@ const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: st
 };
 
 type Service = { id: string; name: string; price: number; is_addon?: boolean | null };
-type Freelance = { id: string; name: string };
+type Freelance = { id: string; name: string; google_email?: string | null };
 type LocationCoords = { lat: number | null; lng: number | null };
+type ProfileRow = {
+    custom_client_statuses?: string[] | null;
+    form_sections?: unknown;
+    form_event_types?: string[] | null;
+    custom_event_types?: unknown;
+};
 
 function formatNumber(n: number | ""): string {
     if (n === "" || n === 0) return "";
@@ -165,6 +172,9 @@ export default function EditBookingPage() {
     const [freelancerIds, setFreelancerIds] = React.useState<string[]>([]);
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
+    const [initialDpPaid, setInitialDpPaid] = React.useState(0);
+    const [dpVerifiedAmount, setDpVerifiedAmount] = React.useState(0);
+    const [dpVerifiedAt, setDpVerifiedAt] = React.useState<string | null>(null);
     const [statusOptions, setStatusOptions] = React.useState<string[]>(
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
     );
@@ -224,11 +234,12 @@ export default function EditBookingPage() {
                 supabase.from("booking_services").select("service_id, kind, sort_order").eq("booking_id", id).order("sort_order", { ascending: true }),
                 supabase.from("profiles").select("custom_client_statuses, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
             ]);
-            const nextStatusOptions = getBookingStatusOptions((prof as any)?.custom_client_statuses as string[] | null | undefined);
+            const profileRow = (prof ?? null) as ProfileRow | null;
+            const nextStatusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
             setStatusOptions(nextStatusOptions);
             setEventTypeOptions(getActiveEventTypes({
-                customEventTypes: normalizeEventTypeList((prof as any)?.custom_event_types),
-                activeEventTypes: (prof as any)?.form_event_types,
+                customEventTypes: normalizeEventTypeList(profileRow?.custom_event_types),
+                activeEventTypes: profileRow?.form_event_types,
             }));
             const rawSections = (prof as Record<string, unknown> | null)?.form_sections;
             if (Array.isArray(rawSections)) {
@@ -260,10 +271,15 @@ export default function EditBookingPage() {
                 const selectedMainIds = ((bsRows || []) as Array<{ service_id: string; kind: string }>).filter((row) => row.kind === "main").map((row) => row.service_id);
                 setSelectedServiceIds(selectedMainIds.length > 0 ? selectedMainIds : booking.service_id ? [booking.service_id] : []);
                 // Load multi-freelancer from junction table, fallback to old column
-                const junctionIds = (bfRows || []).map((r: any) => r.freelance_id);
+                const junctionIds = ((bfRows || []) as Array<{ freelance_id: string | null }>)
+                    .map((row) => row.freelance_id)
+                    .filter((freelanceId): freelanceId is string => Boolean(freelanceId));
                 setFreelancerIds(junctionIds.length > 0 ? junctionIds : booking.freelance_id ? [booking.freelance_id] : []);
                 setTotalPrice(booking.total_price || "");
                 setDpPaid(booking.dp_paid || "");
+                setInitialDpPaid(Number(booking.dp_paid) || 0);
+                setDpVerifiedAmount(Number((booking as Record<string, unknown>).dp_verified_amount) || 0);
+                setDpVerifiedAt(((booking as Record<string, unknown>).dp_verified_at as string | null) || null);
                 const unifiedStatus = resolveUnifiedBookingStatus({
                     status: booking.status,
                     clientStatus: booking.client_status,
@@ -405,7 +421,10 @@ export default function EditBookingPage() {
         setSavingCustomFreelancer(false);
     }
 
-    async function submitBookingUpdate(options?: { skipCancelConfirmation?: boolean }) {
+    async function submitBookingUpdate(options?: {
+        skipCancelConfirmation?: boolean;
+        cancelPayment?: { policy: CancelPaymentPolicy; refundAmount: number };
+    }) {
         if (
             isTransitionToCancelled(initialStatus, status) &&
             !options?.skipCancelConfirmation
@@ -482,6 +501,24 @@ export default function EditBookingPage() {
 
         const previousStatus = initialStatus;
         const nextStatus = status;
+        const dpChanged = dPaid !== initialDpPaid;
+        const shouldResetVerifiedDp = dpChanged && Boolean(dpVerifiedAt);
+        const verifiedDpResetPatch = shouldResetVerifiedDp
+            ? {
+                dp_verified_amount: 0,
+                dp_verified_at: null,
+                dp_refund_amount: 0,
+                dp_refunded_at: null,
+            }
+            : {};
+        const isCancelling = isTransitionToCancelled(previousStatus, nextStatus);
+        const cancelPatch = isCancelling
+            ? buildCancelPaymentPatch({
+                policy: options?.cancelPayment?.policy || "forfeit",
+                refundAmount: options?.cancelPayment?.refundAmount || 0,
+                verifiedAmount: dpVerifiedAmount,
+            })
+            : null;
 
         const { error } = await supabase.from("bookings").update({
             client_name: clientName,
@@ -498,8 +535,10 @@ export default function EditBookingPage() {
             total_price: tPrice,
             dp_paid: dPaid,
             is_fully_paid: dPaid >= tPrice && tPrice > 0,
+            ...verifiedDpResetPatch,
             status: nextStatus,
             client_status: nextStatus,
+            ...(cancelPatch || {}),
             notes: notes || null,
             drive_folder_url: driveFolderUrl || null,
             portfolio_url: portfolioUrl || null,
@@ -549,10 +588,10 @@ export default function EditBookingPage() {
                 try {
                     const selectedFreelancerEmails = freelancers
                         .filter((freelancer) => freelancerIds.includes(freelancer.id))
-                        .map((freelancer) => (freelancer as any).google_email)
-                        .filter(Boolean);
+                        .map((freelancer) => freelancer.google_email)
+                        .filter((email): email is string => Boolean(email));
                     const noEmailNames = freelancers
-                        .filter((freelancer) => freelancerIds.includes(freelancer.id) && !(freelancer as any).google_email)
+                        .filter((freelancer) => freelancerIds.includes(freelancer.id) && !freelancer.google_email)
                         .map((freelancer) => freelancer.name);
 
                     const res = await fetch("/api/google/calendar-invite", {
@@ -595,6 +634,11 @@ export default function EditBookingPage() {
         }
 
         setInitialStatus(nextStatus);
+        setInitialDpPaid(dPaid);
+        if (shouldResetVerifiedDp) {
+            setDpVerifiedAmount(0);
+            setDpVerifiedAt(null);
+        }
         setCancelStatusConfirmOpen(false);
         router.push(`/${locale}/bookings/${id}`);
     }
@@ -1030,18 +1074,18 @@ export default function EditBookingPage() {
                 confirmLabel="OK"
             />
 
-            <ActionConfirmDialog
+            <CancelStatusPaymentDialog
                 open={cancelStatusConfirmOpen}
                 onOpenChange={setCancelStatusConfirmOpen}
-                title={locale === "en" ? "Set status to Cancelled?" : "Ubah status ke Batal?"}
-                message={locale === "en"
-                    ? "This booking will be hidden from calendar and its Google Calendar event will be removed. Continue?"
-                    : "Booking ini akan disembunyikan dari kalender dan event Google Calendar akan dihapus. Lanjutkan?"}
-                cancelLabel={locale === "en" ? "Back" : "Kembali"}
-                confirmLabel={locale === "en" ? "Yes, Set to Cancelled" : "Ya, Ubah ke Batal"}
-                onConfirm={() => { void submitBookingUpdate({ skipCancelConfirmation: true }); }}
-                confirmVariant="destructive"
+                bookingName={clientName}
+                maxRefundAmount={Math.max(dpVerifiedAmount || 0, 0)}
                 loading={saving}
+                onConfirm={({ policy, refundAmount }) => {
+                    void submitBookingUpdate({
+                        skipCancelConfirmation: true,
+                        cancelPayment: { policy, refundAmount },
+                    });
+                }}
             />
         </div>
         </>

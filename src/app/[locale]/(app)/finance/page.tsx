@@ -33,8 +33,9 @@ import {
 import type { FormLayoutItem } from "@/components/form-builder/booking-form-layout";
 import {
     getFinalInvoiceTotal,
+    getNetVerifiedRevenueAmount,
     getRemainingFinalPayment,
-    getTotalPaidAmount,
+    getVerifiedDpAmount,
 } from "@/lib/final-settlement";
 import {
     fillWhatsAppTemplate,
@@ -55,6 +56,10 @@ type BookingFinance = {
     client_whatsapp: string | null;
     total_price: number;
     dp_paid: number;
+    dp_verified_amount: number;
+    dp_verified_at: string | null;
+    dp_refund_amount: number;
+    dp_refunded_at: string | null;
     is_fully_paid: boolean;
     status: string;
     session_date: string | null;
@@ -124,9 +129,8 @@ export default function FinancePage() {
         const [{ data }, { data: templates }, { data: profile }] = await Promise.all([
             supabase
                 .from("bookings")
-                .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, is_fully_paid, status, session_date, event_type, location, location_lat, location_lng, tracking_uuid, client_status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, payment_proof_url, payment_proof_drive_file_id, final_payment_proof_url, final_payment_proof_drive_file_id, extra_fields, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
+                .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, status, session_date, event_type, location, location_lat, location_lng, tracking_uuid, client_status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, payment_proof_url, payment_proof_drive_file_id, final_payment_proof_url, final_payment_proof_drive_file_id, extra_fields, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
                 .eq("user_id", user.id)
-                .neq("status", "Batal")
                 .order("created_at", { ascending: false }),
             supabase
                 .from("templates")
@@ -294,7 +298,35 @@ export default function FinancePage() {
         return booking.tracking_uuid ? `${getSiteUrl()}/${locale}/track/${booking.tracking_uuid}` : "";
     }
 
+    function isCancelledBooking(booking: BookingFinance) {
+        return (booking.status || booking.client_status || "").trim().toLowerCase() === "batal";
+    }
+
+    function getNetVerifiedRevenue(booking: BookingFinance) {
+        return getNetVerifiedRevenueAmount({
+            total_price: booking.total_price,
+            dp_paid: booking.dp_paid,
+            dp_verified_amount: booking.dp_verified_amount,
+            dp_verified_at: booking.dp_verified_at,
+            dp_refund_amount: booking.dp_refund_amount,
+            dp_refunded_at: booking.dp_refunded_at,
+            final_adjustments: booking.final_adjustments,
+            final_payment_amount: booking.final_payment_amount,
+            final_paid_at: booking.final_paid_at,
+            settlement_status: booking.settlement_status,
+            is_fully_paid: booking.is_fully_paid,
+        });
+    }
+
+    function getFinanceStatusLabel(booking: BookingFinance) {
+        if (isCancelledBooking(booking)) {
+            return booking.dp_refund_amount > 0 ? t("batalRefund") : t("batalHangus");
+        }
+        return booking.is_fully_paid ? `✓ ${t("lunas")}` : t("belumLunas");
+    }
+
     function getRemainingAmount(booking: BookingFinance) {
+        if (isCancelledBooking(booking)) return 0;
         return getRemainingFinalPayment({
             total_price: booking.total_price,
             dp_paid: booking.dp_paid,
@@ -562,6 +594,18 @@ export default function FinancePage() {
                     </td>
                 );
             case "status":
+                if (isCancelledBooking(booking)) {
+                    return (
+                        <td key={column.id} className="px-6 py-4 whitespace-nowrap">
+                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${booking.dp_refund_amount > 0
+                                ? "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
+                                : "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400"
+                                }`}>
+                                {getFinanceStatusLabel(booking)}
+                            </span>
+                        </td>
+                    );
+                }
                 return (
                     <td key={column.id} className="px-6 py-4 whitespace-nowrap">
                         <button
@@ -571,7 +615,7 @@ export default function FinancePage() {
                                 : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 hover:bg-amber-200"
                                 }`}
                         >
-                            {booking.is_fully_paid ? "✓ " + t("lunas") : t("belumLunas")}
+                            {getFinanceStatusLabel(booking)}
                         </button>
                     </td>
                 );
@@ -739,13 +783,16 @@ export default function FinancePage() {
             case "remaining":
                 return formatCurrency(remaining);
             case "status":
-                return booking.is_fully_paid ? t("lunas") : t("belumLunas");
+                return getFinanceStatusLabel(booking);
             default:
                 return getBookingMetadataValue(booking.extra_fields, column.id);
         }
     }
 
-    const totalRevenue = bookings.reduce((sum, booking) => sum + getTotalPaidAmount({
+    const totalRevenue = bookings.reduce((sum, booking) => sum + getNetVerifiedRevenue(booking), 0);
+    const totalPending = bookings
+        .filter((b) => !isCancelledBooking(b) && !b.is_fully_paid)
+        .reduce((sum, booking) => sum + getRemainingFinalPayment({
         total_price: booking.total_price,
         dp_paid: booking.dp_paid,
         final_adjustments: booking.final_adjustments,
@@ -754,16 +801,11 @@ export default function FinancePage() {
         settlement_status: booking.settlement_status,
         is_fully_paid: booking.is_fully_paid,
     }), 0);
-    const totalPending = bookings.filter(b => !b.is_fully_paid).reduce((sum, booking) => sum + getRemainingFinalPayment({
+    const totalDP = bookings.reduce((sum, booking) => sum + getVerifiedDpAmount({
         total_price: booking.total_price,
         dp_paid: booking.dp_paid,
-        final_adjustments: booking.final_adjustments,
-        final_payment_amount: booking.final_payment_amount,
-        final_paid_at: booking.final_paid_at,
-        settlement_status: booking.settlement_status,
-        is_fully_paid: booking.is_fully_paid,
+        dp_verified_amount: booking.dp_verified_amount,
     }), 0);
-    const totalDP = bookings.reduce((s, b) => s + b.dp_paid, 0);
 
     function exportFinance() {
         const wb = XLSX.utils.book_new();
@@ -775,11 +817,11 @@ export default function FinancePage() {
             ["Total Pemasukan", totalRevenue, ""],
             ["Sisa Tagihan (Belum Lunas)", totalPending, ""],
             ["Total DP Diterima", totalDP, ""],
-            ["Jumlah Booking Lunas", bookings.filter(b => b.is_fully_paid).length, ""],
-            ["Jumlah Booking Belum Lunas", bookings.filter(b => !b.is_fully_paid).length, ""],
+            ["Jumlah Booking Lunas", bookings.filter((b) => !isCancelledBooking(b) && b.is_fully_paid).length, ""],
+            ["Jumlah Booking Belum Lunas", bookings.filter((b) => !isCancelledBooking(b) && !b.is_fully_paid).length, ""],
             ["", "", ""],
             ["Ringkasan per Bulan", "", ""],
-            ["Bulan", "Total Harga", "DP Diterima"],
+            ["Bulan", "Total Harga", "Pemasukan Bersih"],
         ];
         // Group by month
         const monthMap: Record<string, { total: number; dp: number }> = {};
@@ -788,15 +830,7 @@ export default function FinancePage() {
             const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
             if (!monthMap[key]) monthMap[key] = { total: 0, dp: 0 };
             monthMap[key].total += getFinalInvoiceTotal(b.total_price, b.final_adjustments);
-            monthMap[key].dp += getTotalPaidAmount({
-                total_price: b.total_price,
-                dp_paid: b.dp_paid,
-                final_adjustments: b.final_adjustments,
-                final_payment_amount: b.final_payment_amount,
-                final_paid_at: b.final_paid_at,
-                settlement_status: b.settlement_status,
-                is_fully_paid: b.is_fully_paid,
-            });
+            monthMap[key].dp += getNetVerifiedRevenue(b);
         });
         Object.keys(monthMap).sort().reverse().forEach(key => {
             const [y, m] = key.split("-");
@@ -816,7 +850,10 @@ export default function FinancePage() {
             "Total Harga": getFinalInvoiceTotal(b.total_price, b.final_adjustments),
             "Total Add-on": getAddonTotal(b),
             "DP Dibayar": b.dp_paid,
-            "Sisa": getRemainingFinalPayment({
+            "DP Terverifikasi": b.dp_verified_amount || 0,
+            "Refund DP": b.dp_refund_amount || 0,
+            "Pemasukan Bersih": getNetVerifiedRevenue(b),
+            "Sisa": isCancelledBooking(b) ? 0 : getRemainingFinalPayment({
                 total_price: b.total_price,
                 dp_paid: b.dp_paid,
                 final_adjustments: b.final_adjustments,
@@ -825,10 +862,10 @@ export default function FinancePage() {
                 settlement_status: b.settlement_status,
                 is_fully_paid: b.is_fully_paid,
             }),
-            "Status": b.is_fully_paid ? "Lunas" : "Belum Lunas",
+            "Status": getFinanceStatusLabel(b),
         }));
         const wsDetail = XLSX.utils.json_to_sheet(detailData);
-        wsDetail["!cols"] = [{ wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+        wsDetail["!cols"] = [{ wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
         XLSX.utils.book_append_sheet(wb, wsDetail, "Detail Booking");
 
         XLSX.writeFile(wb, `keuangan_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -840,8 +877,8 @@ export default function FinancePage() {
     }
 
     const filtered = filter === "all" ? bookings
-        : filter === "paid" ? bookings.filter(b => b.is_fully_paid)
-            : bookings.filter(b => !b.is_fully_paid);
+        : filter === "paid" ? bookings.filter(b => !isCancelledBooking(b) && b.is_fully_paid)
+            : bookings.filter(b => !isCancelledBooking(b) && !b.is_fully_paid);
 
     return (
         <div className="space-y-6">
@@ -870,7 +907,7 @@ export default function FinancePage() {
                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("sisaTagihan")}</span>
                     </div>
                     <div className="text-2xl font-bold">{formatCurrency(totalPending)}</div>
-                    <p className="text-xs text-muted-foreground mt-1">{t("dariBookingBelumLunas", { count: bookings.filter(b => !b.is_fully_paid).length })}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{t("dariBookingBelumLunas", { count: bookings.filter(b => !isCancelledBooking(b) && !b.is_fully_paid).length })}</p>
                 </div>
             </div>
 
@@ -916,15 +953,7 @@ export default function FinancePage() {
                 ) : filtered.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">{t("tidakAdaData")}</div>
                 ) : paginateArray(filtered, currentPage, itemsPerPage).map((b) => {
-                    const remaining = getRemainingFinalPayment({
-                        total_price: b.total_price,
-                        dp_paid: b.dp_paid,
-                        final_adjustments: b.final_adjustments,
-                        final_payment_amount: b.final_payment_amount,
-                        final_paid_at: b.final_paid_at,
-                        settlement_status: b.settlement_status,
-                        is_fully_paid: b.is_fully_paid,
-                    });
+                    const remaining = getRemainingAmount(b);
                     const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
                     const addonTotal = getAddonTotal(b);
                     return (
@@ -934,14 +963,22 @@ export default function FinancePage() {
                                     <p className="font-semibold">{b.client_name}</p>
                                     <p className="text-xs text-muted-foreground">{b.booking_code} · {b.service_label || b.services?.name || "-"}</p>
                                 </div>
-                                <button
-                                    onClick={() => b.is_fully_paid ? handleMarkUnpaid(b.id) : handleMarkPaid(b.id)}
-                                    className={`text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer ${b.is_fully_paid
-                                        ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
-                                        : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"}`}
-                                >
-                                    {b.is_fully_paid ? "✓ " + t("lunas") : t("belumLunas")}
-                                </button>
+                                {isCancelledBooking(b) ? (
+                                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${b.dp_refund_amount > 0
+                                        ? "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
+                                        : "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400"}`}>
+                                        {getFinanceStatusLabel(b)}
+                                    </span>
+                                ) : (
+                                    <button
+                                        onClick={() => b.is_fully_paid ? handleMarkUnpaid(b.id) : handleMarkPaid(b.id)}
+                                        className={`text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer ${b.is_fully_paid
+                                            ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
+                                            : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"}`}
+                                    >
+                                        {getFinanceStatusLabel(b)}
+                                    </button>
+                                )}
                             </div>
                             <div className="border-t pt-2 space-y-1.5 text-sm">
                                 {orderedVisibleColumns
@@ -1065,15 +1102,7 @@ export default function FinancePage() {
                                     {t("tidakAdaData")}
                                 </td></tr>
                             ) : paginateArray(filtered, currentPage, itemsPerPage).map((b) => {
-                                const remaining = getRemainingFinalPayment({
-                                    total_price: b.total_price,
-                                    dp_paid: b.dp_paid,
-                                    final_adjustments: b.final_adjustments,
-                                    final_payment_amount: b.final_payment_amount,
-                                    final_paid_at: b.final_paid_at,
-                                    settlement_status: b.settlement_status,
-                                    is_fully_paid: b.is_fully_paid,
-                                });
+                                const remaining = getRemainingAmount(b);
                                 const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
                                 const addonTotal = getAddonTotal(b);
                                 return (
