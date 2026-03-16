@@ -9,18 +9,23 @@ const supabaseAdmin = createAdminClient(
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
+function htmlResponse(html: string) {
+  return new NextResponse(html, {
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
 
   if (error || !code) {
-    return new NextResponse(
+    return htmlResponse(
       `<!DOCTYPE html><html><body><script>
                 window.opener?.postMessage({ type: "GOOGLE_DRIVE_ERROR", error: "${error || "no_code"}" }, "*");
                 window.close();
             </script></body></html>`,
-      { headers: { "Content-Type": "text/html" } },
     );
   }
 
@@ -34,12 +39,11 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return new NextResponse(
+      return htmlResponse(
         `<!DOCTYPE html><html><body><script>
                     window.opener?.postMessage({ type: "GOOGLE_DRIVE_ERROR", error: "not_authenticated" }, "*");
                     window.close();
                 </script></body></html>`,
-        { headers: { "Content-Type": "text/html" } },
       );
     }
 
@@ -71,19 +75,21 @@ export async function GET(request: NextRequest) {
     );
 
     if (dbError) {
-      return new NextResponse(
+      return htmlResponse(
         `<!DOCTYPE html><html><body><script>
                     window.opener?.postMessage({ type: "GOOGLE_DRIVE_ERROR", error: "db_error" }, "*");
                     window.close();
                 </script></body></html>`,
-        { headers: { "Content-Type": "text/html" } },
       );
     }
 
-    return new NextResponse(
+    return htmlResponse(
       `<!DOCTYPE html>
             <html>
-            <head><title>Menghubungkan...</title></head>
+            <head>
+                <meta charset="UTF-8" />
+                <title>Menghubungkan...</title>
+            </head>
             <body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#333;">
                 <div style="text-align:center;">
                     <p style="font-size:1.2rem;font-weight:600;">✅ Google Drive Terhubung!</p>
@@ -108,15 +114,13 @@ export async function GET(request: NextRequest) {
                 </script>
             </body>
             </html>`,
-      { headers: { "Content-Type": "text/html" } },
     );
   } catch {
-    return new NextResponse(
+    return htmlResponse(
       `<!DOCTYPE html><html><body><script>
                 window.opener?.postMessage({ type: "GOOGLE_DRIVE_ERROR", error: "token_exchange_failed" }, "*");
                 window.close();
             </script></body></html>`,
-      { headers: { "Content-Type": "text/html" } },
     );
   }
 }

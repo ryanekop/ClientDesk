@@ -83,7 +83,12 @@ const EXTRA_FIELD_LABELS: Record<string, string> = {
 };
 
 const LOCATION_FIELDS = new Set(["tempat_akad", "tempat_resepsi"]);
-const HIDDEN_EXTRA_FIELD_KEYS = new Set(["terms_accepted", "terms_accepted_at"]);
+const HIDDEN_EXTRA_FIELD_KEYS = new Set([
+    "terms_accepted",
+    "terms_accepted_at",
+    "addon_ids",
+    "addon_names",
+]);
 
 type FreelancerDetail = { id: string; name: string; whatsapp_number: string | null };
 type BookingRow = Booking & {
@@ -1227,6 +1232,14 @@ export default function BookingDetailPage() {
     const settlementLink = booking.tracking_uuid ? `${window.location.origin}/${locale}/settlement/${booking.tracking_uuid}` : "";
     const builtInExtraFields = extractBuiltInExtraFieldValues(booking.extra_fields);
     const extraEntries = Object.entries(builtInExtraFields);
+    const addonNamesFromServices = (booking.service_selections || [])
+        .filter((selection) => selection.kind === "addon")
+        .map((selection) => selection.service.name)
+        .filter(Boolean);
+    const addonLabel =
+        addonNamesFromServices.length > 0
+            ? addonNamesFromServices.join(", ")
+            : builtInExtraFields.addon_names || "-";
     const customFieldSnapshots = extractCustomFieldSnapshots(booking.extra_fields)
         .filter((field) => !HIDDEN_EXTRA_FIELD_KEYS.has(field.id));
     const customFieldsBySection = groupCustomSnapshotsBySection(customFieldSnapshots);
@@ -1353,6 +1366,7 @@ export default function BookingDetailPage() {
                     <InfoRow label="Detail Lokasi" value={booking.location_detail} />
                 )}
                 <InfoRow label="Paket" value={booking.service_label || booking.services?.name || "-"} />
+                <InfoRow label="Add-on" value={addonLabel} />
                 <InfoRow label="Freelance" value={
                     booking.booking_freelancers.length > 0
                         ? booking.booking_freelancers.map(f => f.name).join(", ")

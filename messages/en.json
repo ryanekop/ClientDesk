@@ -685,6 +685,8 @@
         "googleDrive": "Google Drive",
         "googleDriveDesc": "Save client files directly to Google Drive",
         "connected": "Connected",
+        "connectedAs": "Account:",
+        "connectedEmailUnavailable": "Connected account email unavailable",
         "notConnected": "Not connected",
         "connect": "Connect",
         "disconnect": "Disconnect",

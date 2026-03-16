@@ -685,6 +685,8 @@
         "googleDrive": "Google Drive",
         "googleDriveDesc": "Simpan file klien langsung ke Google Drive",
         "connected": "Terhubung",
+        "connectedAs": "Akun:",
+        "connectedEmailUnavailable": "Email akun tidak tersedia",
         "notConnected": "Belum terhubung",
         "connect": "Hubungkan",
         "disconnect": "Putuskan",

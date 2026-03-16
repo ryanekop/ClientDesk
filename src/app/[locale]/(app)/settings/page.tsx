@@ -120,6 +120,17 @@ type Template = {
   event_type: string | null;
 };
 
+type ConnectedGoogleAccountResponse = {
+  calendar?: {
+    connected?: boolean;
+    email?: string | null;
+  };
+  drive?: {
+    connected?: boolean;
+    email?: string | null;
+  };
+};
+
 const templateTypes = [
   {
     value: "whatsapp_client",
@@ -482,6 +493,14 @@ export default function SettingsPage() {
   // Google integration
   const [isCalendarConnected, setIsCalendarConnected] = React.useState(false);
   const [isDriveConnected, setIsDriveConnected] = React.useState(false);
+  const [calendarConnectedEmail, setCalendarConnectedEmail] = React.useState<
+    string | null
+  >(null);
+  const [driveConnectedEmail, setDriveConnectedEmail] = React.useState<
+    string | null
+  >(null);
+  const [loadingConnectedAccountInfo, setLoadingConnectedAccountInfo] =
+    React.useState(false);
 
   // Disconnect modal
   const [disconnectModal, setDisconnectModal] = React.useState<{
@@ -966,6 +985,44 @@ export default function SettingsPage() {
   React.useEffect(() => {
     void fetchAll();
   }, []);
+
+  React.useEffect(() => {
+    if (activeTab !== "google") return;
+    if (!isCalendarConnected && !isDriveConnected) {
+      setCalendarConnectedEmail(null);
+      setDriveConnectedEmail(null);
+      setLoadingConnectedAccountInfo(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingConnectedAccountInfo(true);
+    void fetch("/api/google/connected-account")
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return (await response.json().catch(
+          () => null,
+        )) as ConnectedGoogleAccountResponse | null;
+      })
+      .then((payload) => {
+        if (cancelled) return;
+        setCalendarConnectedEmail(payload?.calendar?.email || null);
+        setDriveConnectedEmail(payload?.drive?.email || null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCalendarConnectedEmail(null);
+        setDriveConnectedEmail(null);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoadingConnectedAccountInfo(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isCalendarConnected, isDriveConnected]);
 
   const saveProfilePatch = React.useEffectEvent(
     async (patch: Record<string, unknown>) => {
@@ -2177,10 +2234,21 @@ export default function SettingsPage() {
                   <div className="border-t mt-3 pt-3 flex items-center justify-between">
                     {isCalendarConnected ? (
                       <>
-                        <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                          <CheckCircle className="w-3.5 h-3.5" />{" "}
-                          {tp("connected")}
-                        </span>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[11px] text-muted-foreground">
+                            {tp("connectedAs")}{" "}
+                            {loadingConnectedAccountInfo
+                              ? locale === "en"
+                                ? "Loading..."
+                                : "Memuat..."
+                              : calendarConnectedEmail ||
+                                tp("connectedEmailUnavailable")}
+                          </span>
+                          <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                            <CheckCircle className="w-3.5 h-3.5" />{" "}
+                            {tp("connected")}
+                          </span>
+                        </div>
                         <Button
                           variant="outline"
                           size="sm"
@@ -2372,10 +2440,21 @@ export default function SettingsPage() {
                   <div className="border-t mt-3 pt-3 flex items-center justify-between">
                     {isDriveConnected ? (
                       <>
-                        <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                          <CheckCircle className="w-3.5 h-3.5" />{" "}
-                          {tp("connected")}
-                        </span>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[11px] text-muted-foreground">
+                            {tp("connectedAs")}{" "}
+                            {loadingConnectedAccountInfo
+                              ? locale === "en"
+                                ? "Loading..."
+                                : "Memuat..."
+                              : driveConnectedEmail ||
+                                tp("connectedEmailUnavailable")}
+                          </span>
+                          <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                            <CheckCircle className="w-3.5 h-3.5" />{" "}
+                            {tp("connected")}
+                          </span>
+                        </div>
                         <Button
                           variant="outline"
                           size="sm"
