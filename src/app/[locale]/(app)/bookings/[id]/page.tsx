@@ -358,7 +358,7 @@ export default function BookingDetailPage() {
     const [studioName, setStudioName] = React.useState("");
     const [driveFolderPathHint, setDriveFolderPathHint] = React.useState("Data Booking Client Desk > {client_name} > File Client");
     const [refreshingDrivePathHint, setRefreshingDrivePathHint] = React.useState(false);
-    const [savedTemplates, setSavedTemplates] = React.useState<{ id: string; type: string; content: string; content_en: string; event_type: string | null }[]>([]);
+    const [savedTemplates, setSavedTemplates] = React.useState<{ id: string; type: string; name?: string | null; content: string; content_en: string; event_type: string | null }[]>([]);
     const [adjustmentItems, setAdjustmentItems] = React.useState<EditableAdjustment[]>([]);
     const [addonServices, setAddonServices] = React.useState<AddonService[]>([]);
     const [savingAdjustments, setSavingAdjustments] = React.useState(false);
@@ -502,7 +502,7 @@ export default function BookingDetailPage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
             const { data } = await supabase.from("templates").select("id, type, name, content, content_en, event_type").eq("user_id", user.id);
-            setSavedTemplates((data || []) as { id: string; type: string; content: string; content_en: string; event_type: string | null }[]);
+            setSavedTemplates((data || []) as { id: string; type: string; name?: string | null; content: string; content_en: string; event_type: string | null }[]);
         }
         load();
         fetchTemplates();

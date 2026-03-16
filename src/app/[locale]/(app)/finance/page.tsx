@@ -167,7 +167,7 @@ export default function FinancePage() {
             setFormSectionsByEventType({});
         }
         setBookings(normalizedBookings);
-        setSavedTemplates((templates || []) as { id: string; type: string; content: string; content_en: string; event_type: string | null }[]);
+        setSavedTemplates((templates || []) as { id: string; type: string; name?: string | null; content: string; content_en: string; event_type: string | null }[]);
         setStudioName(profile?.studio_name || "");
         setColumns(
             mergeTableColumnPreferences(

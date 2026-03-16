@@ -7,16 +7,30 @@ function sanitizeWhatsAppPhone(phone: string) {
   return phone.replace(/^0/, "62").replace(/[^0-9]/g, "");
 }
 
-export function buildWhatsAppUrl(phone: string, message?: string) {
-  const params = new URLSearchParams({ phone: sanitizeWhatsAppPhone(phone) });
-  if (message != null) {
-    params.set("text", message);
+function isMobileDevice() {
+  if (typeof window === "undefined") return false;
+
+  const ua = window.navigator.userAgent || "";
+  if (/Android|iPhone|iPad|iPod|IEMobile|Opera Mini|webOS|BlackBerry/i.test(ua)) {
+    return true;
   }
-  return `https://api.whatsapp.com/send?${params.toString()}`;
+
+  // iPadOS may report as Mac; touch points disambiguate tablets.
+  return window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1;
+}
+
+export function buildWhatsAppUrl(phone: string, message?: string) {
+  const normalizedPhone = sanitizeWhatsAppPhone(phone);
+  const phoneQuery = `phone=${encodeURIComponent(normalizedPhone)}`;
+  if (message == null) {
+    return `https://api.whatsapp.com/send?${phoneQuery}`;
+  }
+  return `https://api.whatsapp.com/send?${phoneQuery}&text=${encodeURIComponent(message)}`;
 }
 
 export function preopenWindowForDeferredNavigation() {
   if (typeof window === "undefined") return null;
+  if (isMobileDevice()) return null;
   const preOpenedWindow = window.open("about:blank", "_blank", "noopener,noreferrer");
   if (preOpenedWindow) {
     try {
@@ -42,6 +56,11 @@ export function openWhatsAppUrl(
   { preOpenedWindow = null, fallbackToSameTab = true }: OpenWhatsAppUrlOptions = {},
 ) {
   if (typeof window === "undefined") return false;
+
+  if (isMobileDevice()) {
+    window.location.assign(url);
+    return true;
+  }
 
   if (preOpenedWindow && !preOpenedWindow.closed) {
     try {
