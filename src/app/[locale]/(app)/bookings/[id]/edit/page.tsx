@@ -108,7 +108,13 @@ const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: st
     ],
 };
 
-type Service = { id: string; name: string; price: number; is_addon?: boolean | null };
+type Service = {
+    id: string;
+    name: string;
+    price: number;
+    is_addon?: boolean | null;
+    is_public?: boolean | null;
+};
 type Freelance = { id: string; name: string; google_email?: string | null };
 type LocationCoords = { lat: number | null; lng: number | null };
 type ProfileRow = {
@@ -169,6 +175,7 @@ export default function EditBookingPage() {
     const [locationCoords, setLocationCoords] = React.useState<LocationCoords>({ lat: null, lng: null });
     const [locationDetail, setLocationDetail] = React.useState("");
     const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
+    const [selectedAddonIds, setSelectedAddonIds] = React.useState<string[]>([]);
     const [freelancerIds, setFreelancerIds] = React.useState<string[]>([]);
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
@@ -228,7 +235,7 @@ export default function EditBookingPage() {
             if (!user) return;
             const [{ data: booking }, { data: svcs }, { data: frees }, { data: bfRows }, { data: bsRows }, { data: prof }] = await Promise.all([
                 supabase.from("bookings").select("*").eq("id", id).single(),
-                supabase.from("services").select("id, name, price, is_addon").eq("user_id", user.id).eq("is_active", true),
+                supabase.from("services").select("id, name, price, is_addon, is_public").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
                 supabase.from("booking_services").select("service_id, kind, sort_order").eq("booking_id", id).order("sort_order", { ascending: true }),
@@ -268,8 +275,18 @@ export default function EditBookingPage() {
                     lng: typeof booking.location_lng === "number" ? booking.location_lng : null,
                 });
                 setLocationDetail(booking.location_detail || "");
-                const selectedMainIds = ((bsRows || []) as Array<{ service_id: string; kind: string }>).filter((row) => row.kind === "main").map((row) => row.service_id);
+                const bookingServices = (bsRows || []) as Array<{ service_id: string; kind: string }>;
+                const selectedMainIds = bookingServices.filter((row) => row.kind === "main").map((row) => row.service_id);
+                const selectedAddons = bookingServices.filter((row) => row.kind === "addon").map((row) => row.service_id);
                 setSelectedServiceIds(selectedMainIds.length > 0 ? selectedMainIds : booking.service_id ? [booking.service_id] : []);
+                if (selectedAddons.length > 0) {
+                    setSelectedAddonIds(selectedAddons);
+                } else {
+                    const legacyAddonIds = Array.isArray(booking.extra_fields?.addon_ids)
+                        ? booking.extra_fields.addon_ids.filter((id: unknown): id is string => typeof id === "string")
+                        : [];
+                    setSelectedAddonIds(legacyAddonIds);
+                }
                 // Load multi-freelancer from junction table, fallback to old column
                 const junctionIds = ((bfRows || []) as Array<{ freelance_id: string | null }>)
                     .map((row) => row.freelance_id)
@@ -333,9 +350,17 @@ export default function EditBookingPage() {
         () => services.filter((service) => !service.is_addon),
         [services],
     );
+    const addonServices = React.useMemo(
+        () => services.filter((service) => service.is_addon),
+        [services],
+    );
     const selectedMainServices = React.useMemo(
         () => mainServices.filter((service) => selectedServiceIds.includes(service.id)),
         [mainServices, selectedServiceIds],
+    );
+    const selectedAddonServices = React.useMemo(
+        () => addonServices.filter((service) => selectedAddonIds.includes(service.id)),
+        [addonServices, selectedAddonIds],
     );
     const toggleService = (serviceId: string) => {
         setSelectedServiceIds((prev) =>
@@ -344,13 +369,33 @@ export default function EditBookingPage() {
                 : [...prev, serviceId],
         );
     };
+    const toggleAddon = (serviceId: string) => {
+        setSelectedAddonIds((prev) =>
+            prev.includes(serviceId)
+                ? prev.filter((item) => item !== serviceId)
+                : [...prev, serviceId],
+        );
+    };
     React.useEffect(() => {
-        if (selectedMainServices.length === 0) {
+        setSelectedServiceIds((prev) =>
+            prev.filter((id) => mainServices.some((service) => service.id === id)),
+        );
+    }, [mainServices]);
+    React.useEffect(() => {
+        setSelectedAddonIds((prev) =>
+            prev.filter((id) => addonServices.some((service) => service.id === id)),
+        );
+    }, [addonServices]);
+    React.useEffect(() => {
+        if (selectedMainServices.length === 0 && selectedAddonServices.length === 0) {
             setTotalPrice("");
             return;
         }
-        setTotalPrice(selectedMainServices.reduce((sum, service) => sum + service.price, 0));
-    }, [selectedMainServices]);
+        setTotalPrice(
+            selectedMainServices.reduce((sum, service) => sum + service.price, 0) +
+            selectedAddonServices.reduce((sum, service) => sum + service.price, 0),
+        );
+    }, [selectedAddonServices, selectedMainServices]);
 
     React.useEffect(() => {
         if (!statusOptions.includes(status)) {
@@ -385,8 +430,11 @@ export default function EditBookingPage() {
         const { data, error } = await supabase.from("services").insert({
             user_id: user.id, name: customServiceName.trim(),
             description: customServiceDesc.trim() || null,
-            price: parseFloat(customServicePrice.toString()) || 0, is_active: true,
-        }).select("id, name, price").single();
+            price: parseFloat(customServicePrice.toString()) || 0,
+            is_active: true,
+            is_addon: false,
+            is_public: true,
+        }).select("id, name, price, is_addon, is_public").single();
         if (!error && data) {
             const s = data as Service;
             setServices(prev => [...prev, s]);
@@ -561,14 +609,23 @@ export default function EditBookingPage() {
         // Sync junction table
         await supabase.from("booking_freelance").delete().eq("booking_id", id);
         await supabase.from("booking_services").delete().eq("booking_id", id);
-        if (selectedServiceIds.length > 0) {
+        const bookingServiceRows = [
+            ...selectedServiceIds.map((serviceId, index) => ({
+                booking_id: id,
+                service_id: serviceId,
+                kind: "main" as const,
+                sort_order: index,
+            })),
+            ...selectedAddonIds.map((serviceId, index) => ({
+                booking_id: id,
+                service_id: serviceId,
+                kind: "addon" as const,
+                sort_order: index,
+            })),
+        ];
+        if (bookingServiceRows.length > 0) {
             await supabase.from("booking_services").insert(
-                selectedServiceIds.map((serviceId, index) => ({
-                    booking_id: id,
-                    service_id: serviceId,
-                    kind: "main",
-                    sort_order: index,
-                })),
+                bookingServiceRows,
             );
         }
         if (freelancerIds.length > 0) {
@@ -885,6 +942,41 @@ export default function EditBookingPage() {
                             {selectedMainServices.length > 0 && (
                                 <p className="text-[11px] text-muted-foreground">
                                     Dipilih: {selectedMainServices.map(service => service.name).join(", ")}
+                                </p>
+                            )}
+                        </div>
+                        <div className="col-span-full space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Add-on (opsional)</label>
+                            {addonServices.length === 0 ? (
+                                <p className="rounded-lg border border-dashed border-input px-3 py-2 text-xs text-muted-foreground">
+                                    Belum ada add-on aktif.
+                                </p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {addonServices.map((service) => {
+                                        const selected = selectedAddonIds.includes(service.id);
+                                        return (
+                                            <button
+                                                key={service.id}
+                                                type="button"
+                                                onClick={() => toggleAddon(service.id)}
+                                                className={cn(
+                                                    "flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-all",
+                                                    selected
+                                                        ? "border-foreground bg-foreground/5 dark:bg-foreground/10"
+                                                        : "border-input hover:bg-muted/50"
+                                                )}
+                                            >
+                                                <span>{service.name}</span>
+                                                <span className="font-medium">+ Rp {formatNumber(service.price)}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            {selectedAddonServices.length > 0 && (
+                                <p className="text-[11px] text-muted-foreground">
+                                    Dipilih: {selectedAddonServices.map(service => service.name).join(", ")}
                                 </p>
                             )}
                         </div>

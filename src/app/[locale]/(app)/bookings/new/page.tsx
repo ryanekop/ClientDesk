@@ -100,7 +100,13 @@ const EXTRA_FIELDS: Record<string, { key: string; label: string; labelEn: string
     ],
 };
 
-type Service = { id: string; name: string; price: number; is_addon?: boolean | null };
+type Service = {
+    id: string;
+    name: string;
+    price: number;
+    is_addon?: boolean | null;
+    is_public?: boolean | null;
+};
 type Freelance = { id: string; name: string };
 type LocationCoords = { lat: number | null; lng: number | null };
 
@@ -143,6 +149,7 @@ export default function NewBookingPage() {
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
     const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
+    const [selectedAddonIds, setSelectedAddonIds] = React.useState<string[]>([]);
     const [selectedFreelancerIds, setSelectedFreelancerIds] = React.useState<string[]>([]);
     const [countryCode, setCountryCode] = React.useState("+62");
     const [phoneNumber, setPhoneNumber] = React.useState("");
@@ -196,7 +203,7 @@ export default function NewBookingPage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
             const [{ data: svcs }, { data: frees }, { data: prof }] = await Promise.all([
-                supabase.from("services").select("id, name, price, is_addon").eq("user_id", user.id).eq("is_active", true),
+                supabase.from("services").select("id, name, price, is_addon, is_public").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("profiles").select("custom_client_statuses, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
             ]);
@@ -229,9 +236,17 @@ export default function NewBookingPage() {
         () => services.filter((service) => !service.is_addon),
         [services],
     );
+    const addonServices = React.useMemo(
+        () => services.filter((service) => service.is_addon),
+        [services],
+    );
     const selectedMainServices = React.useMemo(
         () => mainServices.filter((service) => selectedServiceIds.includes(service.id)),
         [mainServices, selectedServiceIds],
+    );
+    const selectedAddonServices = React.useMemo(
+        () => addonServices.filter((service) => selectedAddonIds.includes(service.id)),
+        [addonServices, selectedAddonIds],
     );
 
     const toggleService = (serviceId: string) => {
@@ -242,13 +257,36 @@ export default function NewBookingPage() {
         );
     };
 
+    const toggleAddon = (serviceId: string) => {
+        setSelectedAddonIds((prev) =>
+            prev.includes(serviceId)
+                ? prev.filter((item) => item !== serviceId)
+                : [...prev, serviceId],
+        );
+    };
+
     React.useEffect(() => {
-        if (selectedMainServices.length === 0) {
+        setSelectedServiceIds((prev) =>
+            prev.filter((id) => mainServices.some((service) => service.id === id)),
+        );
+    }, [mainServices]);
+
+    React.useEffect(() => {
+        setSelectedAddonIds((prev) =>
+            prev.filter((id) => addonServices.some((service) => service.id === id)),
+        );
+    }, [addonServices]);
+
+    React.useEffect(() => {
+        if (selectedMainServices.length === 0 && selectedAddonServices.length === 0) {
             setTotalPrice("");
             return;
         }
-        setTotalPrice(selectedMainServices.reduce((sum, service) => sum + service.price, 0));
-    }, [selectedMainServices]);
+        setTotalPrice(
+            selectedMainServices.reduce((sum, service) => sum + service.price, 0) +
+            selectedAddonServices.reduce((sum, service) => sum + service.price, 0),
+        );
+    }, [selectedAddonServices, selectedMainServices]);
 
     const activeCustomLayoutSections = React.useMemo(() => {
         const rawLayout =
@@ -278,8 +316,11 @@ export default function NewBookingPage() {
         const { data, error } = await supabase.from("services").insert({
             user_id: user.id, name: customServiceName.trim(),
             description: customServiceDesc.trim() || null,
-            price: parseFloat(customServicePrice.toString()) || 0, is_active: true,
-        }).select("id, name, price").single();
+            price: parseFloat(customServicePrice.toString()) || 0,
+            is_active: true,
+            is_addon: false,
+            is_public: true,
+        }).select("id, name, price, is_addon, is_public").single();
         if (!error && data) {
             const s = data as Service;
             setServices(prev => [...prev, s]);
@@ -439,14 +480,23 @@ export default function NewBookingPage() {
         setSaving(false);
         if (booking) {
             // Insert into junction table
-            if (selectedServiceIds.length > 0) {
+            const bookingServiceRows = [
+                ...selectedServiceIds.map((serviceId, index) => ({
+                    booking_id: booking.id,
+                    service_id: serviceId,
+                    kind: "main" as const,
+                    sort_order: index,
+                })),
+                ...selectedAddonIds.map((serviceId, index) => ({
+                    booking_id: booking.id,
+                    service_id: serviceId,
+                    kind: "addon" as const,
+                    sort_order: index,
+                })),
+            ];
+            if (bookingServiceRows.length > 0) {
                 await supabase.from("booking_services").insert(
-                    selectedServiceIds.map((serviceId, index) => ({
-                        booking_id: booking.id,
-                        service_id: serviceId,
-                        kind: "main",
-                        sort_order: index,
-                    }))
+                    bookingServiceRows,
                 );
             }
 
@@ -741,6 +791,41 @@ export default function NewBookingPage() {
                             {selectedMainServices.length > 0 && (
                                 <p className="text-[11px] text-muted-foreground">
                                     Dipilih: {selectedMainServices.map(service => service.name).join(", ")}
+                                </p>
+                            )}
+                        </div>
+                        <div className="col-span-full space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Add-on (opsional)</label>
+                            {addonServices.length === 0 ? (
+                                <p className="rounded-lg border border-dashed border-input px-3 py-2 text-xs text-muted-foreground">
+                                    Belum ada add-on aktif.
+                                </p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {addonServices.map((service) => {
+                                        const selected = selectedAddonIds.includes(service.id);
+                                        return (
+                                            <button
+                                                key={service.id}
+                                                type="button"
+                                                onClick={() => toggleAddon(service.id)}
+                                                className={cn(
+                                                    "flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-all",
+                                                    selected
+                                                        ? "border-foreground bg-foreground/5 dark:bg-foreground/10"
+                                                        : "border-input hover:bg-muted/50"
+                                                )}
+                                            >
+                                                <span>{service.name}</span>
+                                                <span className="font-medium">+ Rp {formatNumber(service.price)}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            {selectedAddonServices.length > 0 && (
+                                <p className="text-[11px] text-muted-foreground">
+                                    Dipilih: {selectedAddonServices.map(service => service.name).join(", ")}
                                 </p>
                             )}
                         </div>

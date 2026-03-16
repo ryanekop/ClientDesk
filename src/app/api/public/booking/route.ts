@@ -46,6 +46,7 @@ type VendorRecord = {
     calendar_event_format_map?: Record<string, string> | null;
     calendar_event_description_map?: Record<string, string> | null;
     form_payment_methods?: PaymentMethod[] | null;
+    form_show_addons?: boolean | null;
     form_show_proof?: boolean | null;
     qris_image_url?: string | null;
     qris_drive_file_id?: string | null;
@@ -176,6 +177,7 @@ const VENDOR_SELECT_COLUMNS = [
     "calendar_event_format_map",
     "calendar_event_description_map",
     "form_payment_methods",
+    "form_show_addons",
     "form_show_proof",
     "qris_image_url",
     "qris_drive_file_id",
@@ -407,6 +409,7 @@ export async function POST(request: NextRequest) {
                 .select("id, event_types")
                 .eq("user_id", vendor.id)
                 .eq("is_active", true)
+                .eq("is_public", true)
                 .eq("is_addon", false)
                 .order("sort_order", { ascending: true })
                 .order("created_at", { ascending: true });
@@ -430,9 +433,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: "Paket utama tidak tersedia." }, { status: 400 });
         }
 
-        const addonIds = Array.isArray(rawExtraData.addon_ids)
+        const addonIdsRaw = Array.isArray(rawExtraData.addon_ids)
             ? rawExtraData.addon_ids.filter((value): value is string => typeof value === "string")
             : [];
+        const addonIds = (vendor.form_show_addons ?? true) ? addonIdsRaw : [];
 
         const requestedServiceIds = Array.from(new Set([...normalizedMainServiceIds, ...addonIds]));
         const { data: selectedServices } = await supabaseAdmin
@@ -440,6 +444,7 @@ export async function POST(request: NextRequest) {
             .select("id, name, price, duration_minutes, is_addon")
             .eq("user_id", vendor.id)
             .eq("is_active", true)
+            .eq("is_public", true)
             .in("id", requestedServiceIds);
 
         const mainServices = normalizedMainServiceIds

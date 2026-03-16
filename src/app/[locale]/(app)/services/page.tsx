@@ -67,6 +67,7 @@ type Service = {
   duration_minutes: number | null;
   is_active: boolean;
   is_addon: boolean;
+  is_public: boolean | null;
   sort_order: number;
   created_at: string;
   event_types: string[] | null;
@@ -194,6 +195,15 @@ function SortableServiceRow({
                   }`}
                 >
                   {service.is_active ? "Aktif" : "Nonaktif"}
+                </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    service.is_public !== false
+                      ? "bg-sky-100 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400"
+                      : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+                  }`}
+                >
+                  {service.is_public !== false ? "Publik" : "Privat"}
                 </span>
               </div>
               {service.description ? (
@@ -323,6 +333,15 @@ function ServiceCard({
             }`}
           >
             {service.is_active ? "Aktif" : "Nonaktif"}
+          </span>
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+              service.is_public !== false
+                ? "bg-sky-100 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400"
+                : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+            }`}
+          >
+            {service.is_public !== false ? "Publik" : "Privat"}
           </span>
           {service.is_addon ? (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700 dark:bg-purple-500/10 dark:text-purple-400">
@@ -563,6 +582,7 @@ export default function ServicesPage() {
     if (!user) return;
 
     const isAddon = formData.get("is_addon") === "on";
+    const isPublic = formData.get("is_public") === "on";
     const nextSortOrder = splitServicesByGroup(services)[isAddon ? "addon" : "main"].length;
 
     const { error } = await supabase.from("services").insert({
@@ -576,6 +596,7 @@ export default function ServicesPage() {
         parseInt((formData.get("duration_mins") as string) || "0", 10),
       is_active: true,
       is_addon: isAddon,
+      is_public: isPublic,
       sort_order: nextSortOrder,
       event_types:
         formData.getAll("event_types").length > 0
@@ -595,6 +616,7 @@ export default function ServicesPage() {
     if (!editingService) return;
 
     const nextIsAddon = formData.get("is_addon") === "on";
+    const nextIsPublic = formData.get("is_public") === "on";
     const previousGroupKey = getServiceGroupKey(editingService);
     const nextGroupKey: ServiceGroupKey = nextIsAddon ? "addon" : "main";
     const remainingServices = services.filter((service) => service.id !== editingService.id);
@@ -614,6 +636,7 @@ export default function ServicesPage() {
           parseInt((formData.get("duration_hours") as string) || "0", 10) * 60 +
           parseInt((formData.get("duration_mins") as string) || "0", 10),
         is_addon: nextIsAddon,
+        is_public: nextIsPublic,
         sort_order: nextSortOrder,
         event_types:
           formData.getAll("event_types").length > 0
@@ -943,6 +966,24 @@ export default function ServicesPage() {
                   </label>
                   <span className="text-xs text-muted-foreground">
                     (tambahan, bukan paket utama)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name="is_public"
+                    id="add_is_public"
+                    defaultChecked
+                    className="h-4 w-4 accent-primary"
+                  />
+                  <label
+                    htmlFor="add_is_public"
+                    className="cursor-pointer text-sm font-medium"
+                  >
+                    Tampilkan di form publik
+                  </label>
+                  <span className="text-xs text-muted-foreground">
+                    (jika mati, hanya bisa dipilih dari booking admin)
                   </span>
                 </div>
                 <DialogFooter>
@@ -1338,6 +1379,24 @@ export default function ServicesPage() {
                 </label>
                 <span className="text-xs text-muted-foreground">
                   (tambahan, bukan paket utama)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="is_public"
+                  id="edit_is_public"
+                  defaultChecked={editingService.is_public !== false}
+                  className="h-4 w-4 accent-primary"
+                />
+                <label
+                  htmlFor="edit_is_public"
+                  className="cursor-pointer text-sm font-medium"
+                >
+                  Tampilkan di form publik
+                </label>
+                <span className="text-xs text-muted-foreground">
+                  (jika mati, hanya bisa dipilih dari booking admin)
                 </span>
               </div>
               <DialogFooter>

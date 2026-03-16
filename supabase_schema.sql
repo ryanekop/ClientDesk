@@ -6,7 +6,7 @@
 create extension if not exists "uuid-ossp";
 
 -- 1. USERS & PROFILES (Studio Admin / Owners)
-CREATE TABLE profiles (
+CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
   full_name TEXT NOT NULL,
   studio_name TEXT,
@@ -17,7 +17,7 @@ CREATE TABLE profiles (
 );
 
 -- 2. FREELANCERS / TEAM MEMBERS
-CREATE TABLE freelancers (
+CREATE TABLE IF NOT EXISTS freelancers (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE, -- Belongs to which studio admin
   name TEXT NOT NULL,
@@ -28,18 +28,19 @@ CREATE TABLE freelancers (
 );
 
 -- 3. SERVICES & PACKAGES
-CREATE TABLE services (
+CREATE TABLE IF NOT EXISTS services (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
   price NUMERIC(15, 2) NOT NULL DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
+  is_public BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 4. BOOKINGS (Transactions)
-CREATE TABLE bookings (
+CREATE TABLE IF NOT EXISTS bookings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   booking_code TEXT UNIQUE NOT NULL, -- e.g., 'BKG-001'
@@ -66,7 +67,7 @@ CREATE TABLE bookings (
 );
 
 -- 5. TEMPLATES (WhatsApp & Forms)
-CREATE TABLE templates (
+CREATE TABLE IF NOT EXISTS templates (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   type TEXT NOT NULL CHECK (type IN (

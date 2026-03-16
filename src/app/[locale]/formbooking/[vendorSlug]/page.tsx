@@ -115,9 +115,10 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
   // Fetch services — bisa paralel karena kita sudah punya vendor.id dari query di atas
   const { data: services } = (await supabaseAdmin
     .from("services")
-    .select("id, name, price, original_price, description, event_types, is_addon, sort_order, created_at")
+    .select("id, name, price, original_price, description, event_types, is_addon, is_public, sort_order, created_at")
     .eq("user_id", vendor.id)
     .eq("is_active", true)
+    .eq("is_public", true)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true })) as { data: Service[] | null; error: unknown };
 

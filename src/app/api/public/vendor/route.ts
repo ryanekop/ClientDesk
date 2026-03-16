@@ -73,9 +73,10 @@ export async function GET(request: NextRequest) {
   // Fetch services in parallel now that we have vendor.id
   const { data: services } = await supabaseAdmin
     .from("services")
-    .select("id, name, price, original_price, description, is_addon, sort_order")
+    .select("id, name, price, original_price, description, is_addon, is_public, sort_order")
     .eq("user_id", vendor.id)
     .eq("is_active", true)
+    .eq("is_public", true)
     .order("sort_order", { ascending: true })
     .order("name");
 
