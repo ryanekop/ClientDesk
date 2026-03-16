@@ -6,6 +6,7 @@ import { useLocale } from "next-intl";
 import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
+import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
 import {
@@ -31,9 +32,14 @@ import {
     DEFAULT_CLIENT_STATUSES,
     getBookingStatusOptions,
     getInitialBookingStatus,
+    isCancelledBookingStatus,
     resolveUnifiedBookingStatus,
 } from "@/lib/client-status";
 import { resolvePreferredLocation } from "@/utils/location";
+import {
+    isTransitionToCancelled,
+    syncGoogleCalendarForStatusTransition,
+} from "@/utils/google-calendar-status-sync";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -165,6 +171,9 @@ export default function EditBookingPage() {
     const [status, setStatus] = React.useState(
         getInitialBookingStatus(DEFAULT_CLIENT_STATUSES),
     );
+    const [initialStatus, setInitialStatus] = React.useState(
+        getInitialBookingStatus(DEFAULT_CLIENT_STATUSES),
+    );
     const [notes, setNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
     const [portfolioUrl, setPortfolioUrl] = React.useState("");
@@ -193,6 +202,7 @@ export default function EditBookingPage() {
         title: string;
         message: string;
     }>({ open: false, title: "", message: "" });
+    const [cancelStatusConfirmOpen, setCancelStatusConfirmOpen] = React.useState(false);
 
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
@@ -254,13 +264,13 @@ export default function EditBookingPage() {
                 setFreelancerIds(junctionIds.length > 0 ? junctionIds : booking.freelance_id ? [booking.freelance_id] : []);
                 setTotalPrice(booking.total_price || "");
                 setDpPaid(booking.dp_paid || "");
-                setStatus(
-                    resolveUnifiedBookingStatus({
-                        status: booking.status,
-                        clientStatus: booking.client_status,
-                        statuses: nextStatusOptions,
-                    }),
-                );
+                const unifiedStatus = resolveUnifiedBookingStatus({
+                    status: booking.status,
+                    clientStatus: booking.client_status,
+                    statuses: nextStatusOptions,
+                });
+                setStatus(unifiedStatus);
+                setInitialStatus(unifiedStatus);
                 setNotes(booking.notes || "");
                 setDriveFolderUrl(booking.drive_folder_url || "");
                 setPortfolioUrl(booking.portfolio_url || "");
@@ -395,8 +405,15 @@ export default function EditBookingPage() {
         setSavingCustomFreelancer(false);
     }
 
-    async function handleSubmit(e: React.FormEvent) {
-        e.preventDefault();
+    async function submitBookingUpdate(options?: { skipCancelConfirmation?: boolean }) {
+        if (
+            isTransitionToCancelled(initialStatus, status) &&
+            !options?.skipCancelConfirmation
+        ) {
+            setCancelStatusConfirmOpen(true);
+            return;
+        }
+
         setSaving(true);
 
         if (eventType === "Wedding" && (!extraFields.tempat_akad || !extraFields.tempat_resepsi)) {
@@ -463,6 +480,9 @@ export default function EditBookingPage() {
                 ],
         );
 
+        const previousStatus = initialStatus;
+        const nextStatus = status;
+
         const { error } = await supabase.from("bookings").update({
             client_name: clientName,
             client_whatsapp: fullPhone,
@@ -478,8 +498,8 @@ export default function EditBookingPage() {
             total_price: tPrice,
             dp_paid: dPaid,
             is_fully_paid: dPaid >= tPrice && tPrice > 0,
-            status,
-            client_status: status,
+            status: nextStatus,
+            client_status: nextStatus,
             notes: notes || null,
             drive_folder_url: driveFolderUrl || null,
             portfolio_url: portfolioUrl || null,
@@ -493,35 +513,47 @@ export default function EditBookingPage() {
             updated_at: new Date().toISOString(),
         }).eq("id", id);
         setSaving(false);
-        if (!error) {
-            // Sync junction table
-            await supabase.from("booking_freelance").delete().eq("booking_id", id);
-            await supabase.from("booking_services").delete().eq("booking_id", id);
-            if (selectedServiceIds.length > 0) {
-                await supabase.from("booking_services").insert(
-                    selectedServiceIds.map((serviceId, index) => ({
-                        booking_id: id,
-                        service_id: serviceId,
-                        kind: "main",
-                        sort_order: index,
-                    }))
-                );
-            }
-            if (freelancerIds.length > 0) {
-                await supabase.from("booking_freelance").insert(
-                    freelancerIds.map(fid => ({ booking_id: id, freelance_id: fid }))
-                );
-            }
 
-            if (finalSessionDate) {
+        if (error) {
+            showFeedback("Gagal menyimpan perubahan.");
+            return;
+        }
+
+        // Sync junction table
+        await supabase.from("booking_freelance").delete().eq("booking_id", id);
+        await supabase.from("booking_services").delete().eq("booking_id", id);
+        if (selectedServiceIds.length > 0) {
+            await supabase.from("booking_services").insert(
+                selectedServiceIds.map((serviceId, index) => ({
+                    booking_id: id,
+                    service_id: serviceId,
+                    kind: "main",
+                    sort_order: index,
+                })),
+            );
+        }
+        if (freelancerIds.length > 0) {
+            await supabase.from("booking_freelance").insert(
+                freelancerIds.map((freelancerId) => ({ booking_id: id, freelance_id: freelancerId })),
+            );
+        }
+
+        const cancelledAfterSave = isCancelledBookingStatus(nextStatus);
+        const transitionFromCancelled =
+            isCancelledBookingStatus(previousStatus) &&
+            !isCancelledBookingStatus(nextStatus);
+
+        if (!cancelledAfterSave) {
+            const shouldInviteCalendar = Boolean(finalSessionDate) || transitionFromCancelled;
+            if (shouldInviteCalendar) {
                 try {
                     const selectedFreelancerEmails = freelancers
-                        .filter(f => freelancerIds.includes(f.id))
-                        .map(f => (f as any).google_email)
+                        .filter((freelancer) => freelancerIds.includes(freelancer.id))
+                        .map((freelancer) => (freelancer as any).google_email)
                         .filter(Boolean);
                     const noEmailNames = freelancers
-                        .filter(f => freelancerIds.includes(f.id) && !(f as any).google_email)
-                        .map(f => f.name);
+                        .filter((freelancer) => freelancerIds.includes(freelancer.id) && !(freelancer as any).google_email)
+                        .map((freelancer) => freelancer.name);
 
                     const res = await fetch("/api/google/calendar-invite", {
                         method: "POST",
@@ -547,9 +579,29 @@ export default function EditBookingPage() {
                 setCalendarWarning("⚠️ Calendar invite tidak terkirim: jadwal sesi belum diisi");
                 setTimeout(() => setCalendarWarning(null), 5000);
             }
-            router.push(`/${locale}/bookings/${id}`);
         }
-        else { showFeedback("Gagal menyimpan perubahan."); }
+
+        if (isTransitionToCancelled(previousStatus, nextStatus)) {
+            const calendarTransitionWarning = await syncGoogleCalendarForStatusTransition({
+                bookingId: id,
+                previousStatus,
+                nextStatus,
+                locale,
+            });
+            if (calendarTransitionWarning) {
+                setCalendarWarning(`⚠️ ${calendarTransitionWarning}`);
+                setTimeout(() => setCalendarWarning(null), 5000);
+            }
+        }
+
+        setInitialStatus(nextStatus);
+        setCancelStatusConfirmOpen(false);
+        router.push(`/${locale}/bookings/${id}`);
+    }
+
+    async function handleSubmit(e: React.FormEvent) {
+        e.preventDefault();
+        await submitBookingUpdate();
     }
 
     const currentExtraFields = EXTRA_FIELDS_DEF[eventType] || [];
@@ -976,6 +1028,20 @@ export default function EditBookingPage() {
                 title={feedbackDialog.title}
                 message={feedbackDialog.message}
                 confirmLabel="OK"
+            />
+
+            <ActionConfirmDialog
+                open={cancelStatusConfirmOpen}
+                onOpenChange={setCancelStatusConfirmOpen}
+                title={locale === "en" ? "Set status to Cancelled?" : "Ubah status ke Batal?"}
+                message={locale === "en"
+                    ? "This booking will be hidden from calendar and its Google Calendar event will be removed. Continue?"
+                    : "Booking ini akan disembunyikan dari kalender dan event Google Calendar akan dihapus. Lanjutkan?"}
+                cancelLabel={locale === "en" ? "Back" : "Kembali"}
+                confirmLabel={locale === "en" ? "Yes, Set to Cancelled" : "Ya, Ubah ke Batal"}
+                onConfirm={() => { void submitBookingUpdate({ skipCancelConfirmation: true }); }}
+                confirmVariant="destructive"
+                loading={saving}
             />
         </div>
         </>

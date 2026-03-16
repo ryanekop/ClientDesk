@@ -657,6 +657,7 @@
         "tabGeneral": "General",
         "tabTemplates": "Message Templates",
         "tabEventTypes": "Event Types",
+        "tabGoogle": "Google",
         "tabTelegram": "Telegram Bot",
         "vendorStudioName": "Vendor/Studio Name",
         "vendorNamePlaceholder": "e.g.: Memori Studio",

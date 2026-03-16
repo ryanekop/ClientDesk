@@ -315,6 +315,8 @@ export function BookingFormClient({
   const [uploadingProof, setUploadingProof] = React.useState(false);
   const [termsAccepted, setTermsAccepted] = React.useState(false);
   const [termsDialogOpen, setTermsDialogOpen] = React.useState(false);
+  const [packageDialogOpen, setPackageDialogOpen] = React.useState(false);
+  const [addonDialogOpen, setAddonDialogOpen] = React.useState(false);
   const [error, setError] = React.useState("");
 
   const autoDpAmountRef = React.useRef<number | null>(null);
@@ -323,7 +325,17 @@ export function BookingFormClient({
     if (effectiveVendor.form_show_addons === false && selectedAddons.size > 0) {
       setSelectedAddons(new Set());
     }
-  }, [effectiveVendor.form_show_addons, selectedAddons.size]);
+    if (effectiveVendor.form_show_addons === false && addonDialogOpen) {
+      setAddonDialogOpen(false);
+    }
+  }, [addonDialogOpen, effectiveVendor.form_show_addons, selectedAddons.size]);
+
+  React.useEffect(() => {
+    if (!eventType) {
+      setPackageDialogOpen(false);
+      setAddonDialogOpen(false);
+    }
+  }, [eventType]);
 
   // ── Helpers ──
 
@@ -349,6 +361,15 @@ export function BookingFormClient({
       const next = prev.includes(id)
         ? prev.filter((serviceId) => serviceId !== id)
         : [...prev, id];
+      return next;
+    });
+  }
+
+  function handleAddonToggle(id: string) {
+    setSelectedAddons((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
@@ -1289,35 +1310,20 @@ export function BookingFormClient({
                   Pilih tipe acara dulu untuk menampilkan paket yang tersedia.
                 </div>
               ) : (
-              <div className="space-y-2">
-                {filteredServices.map((service) => {
-                  const selected = selectedServiceIds.includes(service.id);
-                  return (
-                    <button
-                      key={service.id}
-                      type="button"
-                      onClick={() => handleServiceChange(service.id)}
-                      className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className={`mt-0.5 inline-flex h-4 w-4 shrink-0 rounded border ${selected ? "border-primary bg-primary" : "border-muted-foreground/30"}`} />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{service.name}</p>
-                          {service.description ? (
-                            <p className="text-[11px] text-muted-foreground">{service.description}</p>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-sm font-semibold text-primary">{formatCurrency(service.price)}</p>
-                        {service.original_price && service.original_price > service.price ? (
-                          <p className="text-[11px] text-muted-foreground line-through">{formatCurrency(service.original_price)}</p>
-                        ) : null}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                <button
+                  type="button"
+                  onClick={() => setPackageDialogOpen(true)}
+                  className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all hover:bg-muted/30 cursor-pointer"
+                >
+                  <span className="text-left">
+                    {selectedMainServices.length > 0
+                      ? `${selectedMainServices.length} paket dipilih`
+                      : "Pilih Paket / Layanan"}
+                  </span>
+                  <span className="text-xs font-medium text-primary">
+                    Buka Daftar
+                  </span>
+                </button>
               )}
             </div>
             {selectedMainServices.length > 0 && (
@@ -1351,35 +1357,42 @@ export function BookingFormClient({
               <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Paket Tambahan</span>
               <div className="flex-1 border-t" />
             </div>
-            {addonServices.map((addon) => (
-              <label
-                key={addon.id}
-                className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-all ${selectedAddons.has(addon.id) ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedAddons.has(addon.id)}
-                  onChange={() => {
-                    setSelectedAddons((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(addon.id)) next.delete(addon.id);
-                      else next.add(addon.id);
-                      return next;
-                    });
-                  }}
-                  className="accent-primary w-4 h-4 cursor-pointer"
-                />
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium">{addon.name}</span>
-                  {addon.description && (
-                    <p className="text-[11px] text-muted-foreground truncate">{addon.description}</p>
-                  )}
-                </div>
-                <span className="text-sm font-semibold text-primary whitespace-nowrap">
-                  +{formatCurrency(addon.price)}
-                </span>
-              </label>
-            ))}
+            <button
+              type="button"
+              onClick={() => setAddonDialogOpen(true)}
+              className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all hover:bg-muted/30 cursor-pointer"
+            >
+              <span className="text-left">
+                {selectedAddonServices.length > 0
+                  ? `${selectedAddonServices.length} add-on dipilih`
+                  : "Pilih Add-on"}
+              </span>
+              <span className="text-xs font-medium text-primary">
+                Buka Daftar
+              </span>
+            </button>
+            {selectedAddonServices.length > 0 && (
+              <div className="space-y-2">
+                {selectedAddonServices.map((addon) => (
+                  <div
+                    key={addon.id}
+                    className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium">{addon.name}</p>
+                      {addon.description ? (
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {addon.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="font-semibold text-primary whitespace-nowrap">
+                      +{formatCurrency(addon.price)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             {selectedAddons.size > 0 && selectedMainServices.length > 0 && (
               <div className="rounded-lg bg-muted/50 p-3 text-sm">
                 {selectedMainServices.map((service) => (
@@ -1700,6 +1713,128 @@ export function BookingFormClient({
             )}
           </button>
         </form>
+
+        <Dialog open={packageDialogOpen} onOpenChange={setPackageDialogOpen}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{t("paketLayanan")}</DialogTitle>
+              <DialogDescription>
+                Pilih satu atau lebih paket utama sesuai kebutuhan.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+              {filteredServices.length === 0 ? (
+                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                  Belum ada paket untuk tipe acara ini.
+                </div>
+              ) : (
+                filteredServices.map((service) => {
+                  const selected = selectedServiceIds.includes(service.id);
+                  return (
+                    <button
+                      key={service.id}
+                      type="button"
+                      onClick={() => handleServiceChange(service.id)}
+                      className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{service.name}</p>
+                          {service.description ? (
+                            <p className="text-[11px] text-muted-foreground">
+                              {service.description}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold text-primary">
+                          {formatCurrency(service.price)}
+                        </p>
+                        {service.original_price &&
+                        service.original_price > service.price ? (
+                          <p className="text-[11px] text-muted-foreground line-through">
+                            {formatCurrency(service.original_price)}
+                          </p>
+                        ) : null}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPackageDialogOpen(false)}
+                className="inline-flex h-10 items-center justify-center rounded-lg border px-4 text-sm font-medium transition-colors hover:bg-muted cursor-pointer"
+              >
+                Selesai
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={addonDialogOpen} onOpenChange={setAddonDialogOpen}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Paket Add-on</DialogTitle>
+              <DialogDescription>
+                Pilih add-on tambahan, bisa pilih lebih dari satu.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+              {addonServices.length === 0 ? (
+                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                  Belum ada add-on untuk tipe acara ini.
+                </div>
+              ) : (
+                addonServices.map((addon) => {
+                  const selected = selectedAddons.has(addon.id);
+                  return (
+                    <button
+                      key={addon.id}
+                      type="button"
+                      onClick={() => handleAddonToggle(addon.id)}
+                      className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{addon.name}</p>
+                          {addon.description ? (
+                            <p className="text-[11px] text-muted-foreground">
+                              {addon.description}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold text-primary">
+                          +{formatCurrency(addon.price)}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setAddonDialogOpen(false)}
+                className="inline-flex h-10 items-center justify-center rounded-lg border px-4 text-sm font-medium transition-colors hover:bg-muted cursor-pointer"
+              >
+                Selesai
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {hasTerms && (
           <Dialog open={termsDialogOpen} onOpenChange={setTermsDialogOpen}>

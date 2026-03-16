@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
+import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { formatSessionDate, formatSessionTime, formatTemplateSessionDate } from "@/utils/format-date";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -51,6 +52,10 @@ import {
     buildGoogleMapsUrlOrFallback,
 } from "@/utils/location";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
+import {
+    isTransitionToCancelled,
+    syncGoogleCalendarForStatusTransition,
+} from "@/utils/google-calendar-status-sync";
 import * as XLSX from "xlsx";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
@@ -220,6 +225,7 @@ export default function BookingsPage() {
 
     // Modals
     const [statusModal, setStatusModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
+    const [cancelStatusConfirmOpen, setCancelStatusConfirmOpen] = React.useState(false);
     const [newStatus, setNewStatus] = React.useState("");
     const [isUpdatingStatus, setIsUpdatingStatus] = React.useState(false);
 
@@ -384,87 +390,99 @@ export default function BookingsPage() {
         };
     }, [waMenuBookingId]);
 
-    async function handleUpdateStatus() {
+    async function handleUpdateStatus(options?: { skipCancelConfirmation?: boolean }) {
         if (!statusModal.booking || !newStatus) return;
-        setIsUpdatingStatus(true);
         const activeBooking = bookings.find((booking) => booking.id === statusModal.booking?.id) || statusModal.booking;
         const bookingId = activeBooking.id;
         const previousStatus = activeBooking.client_status || activeBooking.status || null;
         const nextStatus = newStatus || null;
+
+        if (
+            isTransitionToCancelled(previousStatus, nextStatus) &&
+            !options?.skipCancelConfirmation
+        ) {
+            setCancelStatusConfirmOpen(true);
+            return;
+        }
+
+        setIsUpdatingStatus(true);
         const trigger = queueTriggerStatus?.trim();
         const wasQueue = Boolean(trigger) && previousStatus === trigger;
         const isQueue = Boolean(trigger) && nextStatus === trigger;
 
-        if (isQueue && !wasQueue) {
-            const maxPos = bookings
-                .filter((booking) => booking.client_status === trigger && booking.queue_position != null)
-                .reduce((max, booking) => Math.max(max, booking.queue_position || 0), 0);
-            const newPos = maxPos + 1;
-            const { error } = await supabase
-                .from("bookings")
-                .update({ status: nextStatus, client_status: nextStatus, queue_position: newPos })
-                .eq("id", bookingId);
-            if (error) {
-                setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
-                setIsUpdatingStatus(false);
-                return;
-            }
-            setBookings((prev) => prev.map((booking) => booking.id === bookingId
-                ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos }
-                : booking));
-            setStatusModal({ open: false, booking: null });
-            setIsUpdatingStatus(false);
-            return;
-        }
+        try {
+            if (isQueue && !wasQueue) {
+                const maxPos = bookings
+                    .filter((booking) => booking.client_status === trigger && booking.queue_position != null)
+                    .reduce((max, booking) => Math.max(max, booking.queue_position || 0), 0);
+                const newPos = maxPos + 1;
+                const { error } = await supabase
+                    .from("bookings")
+                    .update({ status: nextStatus, client_status: nextStatus, queue_position: newPos })
+                    .eq("id", bookingId);
+                if (error) {
+                    setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
+                    return;
+                }
+                setBookings((prev) => prev.map((booking) => booking.id === bookingId
+                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos }
+                    : booking));
+            } else if (wasQueue && !isQueue) {
+                const { error } = await supabase
+                    .from("bookings")
+                    .update({ status: nextStatus, client_status: nextStatus, queue_position: null })
+                    .eq("id", bookingId);
+                if (error) {
+                    setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
+                    return;
+                }
 
-        if (wasQueue && !isQueue) {
-            const { error } = await supabase
-                .from("bookings")
-                .update({ status: nextStatus, client_status: nextStatus, queue_position: null })
-                .eq("id", bookingId);
-            if (error) {
-                setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
-                setIsUpdatingStatus(false);
-                return;
-            }
+                const remainingQueue = bookings
+                    .filter((booking) => booking.client_status === trigger && booking.id !== bookingId && booking.queue_position != null)
+                    .sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0));
+                for (let i = 0; i < remainingQueue.length; i += 1) {
+                    await supabase.from("bookings").update({ queue_position: i + 1 }).eq("id", remainingQueue[i].id);
+                }
 
-            const remainingQueue = bookings
-                .filter((booking) => booking.client_status === trigger && booking.id !== bookingId && booking.queue_position != null)
-                .sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0));
-            for (let i = 0; i < remainingQueue.length; i += 1) {
-                await supabase.from("bookings").update({ queue_position: i + 1 }).eq("id", remainingQueue[i].id);
-            }
-
-            setBookings((prev) => {
-                let updated = prev.map((booking) => booking.id === bookingId
-                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null }
-                    : booking);
-                remainingQueue.forEach((queuedBooking, index) => {
-                    updated = updated.map((booking) => booking.id === queuedBooking.id
-                        ? { ...booking, queue_position: index + 1 }
+                setBookings((prev) => {
+                    let updated = prev.map((booking) => booking.id === bookingId
+                        ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null }
                         : booking);
+                    remainingQueue.forEach((queuedBooking, index) => {
+                        updated = updated.map((booking) => booking.id === queuedBooking.id
+                            ? { ...booking, queue_position: index + 1 }
+                            : booking);
+                    });
+                    return updated;
                 });
-                return updated;
-            });
-            setStatusModal({ open: false, booking: null });
-            setIsUpdatingStatus(false);
-            return;
-        }
+            } else {
+                const { error } = await supabase
+                    .from("bookings")
+                    .update({ status: nextStatus, client_status: nextStatus })
+                    .eq("id", bookingId);
+                if (error) {
+                    setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
+                    return;
+                }
+                setBookings((prev) => prev.map((booking) => booking.id === bookingId
+                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus }
+                    : booking));
+            }
 
-        const { error } = await supabase
-            .from("bookings")
-            .update({ status: nextStatus, client_status: nextStatus })
-            .eq("id", bookingId);
-        if (error) {
-            setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
+            setCancelStatusConfirmOpen(false);
+            setStatusModal({ open: false, booking: null });
+            const calendarWarning = await syncGoogleCalendarForStatusTransition({
+                bookingId,
+                previousStatus,
+                nextStatus,
+                locale,
+            });
+            if (calendarWarning) {
+                setFeedbackDialog({ open: true, message: calendarWarning });
+            }
+        } finally {
             setIsUpdatingStatus(false);
-            return;
         }
-        setBookings((prev) => prev.map((booking) => booking.id === bookingId
-            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus }
-            : booking));
-        setStatusModal({ open: false, booking: null });
-        setIsUpdatingStatus(false);
     }
 
     async function confirmDelete() {
@@ -1158,7 +1176,12 @@ export default function BookingsPage() {
             </div>
 
             {/* Status Change Modal */}
-            <Dialog open={statusModal.open} onOpenChange={(o) => !o && setStatusModal({ open: false, booking: null })}>
+            <Dialog open={statusModal.open} onOpenChange={(o) => {
+                if (!o) {
+                    setCancelStatusConfirmOpen(false);
+                    setStatusModal({ open: false, booking: null });
+                }
+            }}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>{tb("changeStatus")}</DialogTitle>
@@ -1180,8 +1203,23 @@ export default function BookingsPage() {
                         ))}
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setStatusModal({ open: false, booking: null })} disabled={isUpdatingStatus}>{tb("cancel")}</Button>
-                        <Button onClick={handleUpdateStatus} disabled={isUpdatingStatus || newStatus === statusModal.booking?.status}>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setCancelStatusConfirmOpen(false);
+                                setStatusModal({ open: false, booking: null });
+                            }}
+                            disabled={isUpdatingStatus}
+                        >
+                            {tb("cancel")}
+                        </Button>
+                        <Button
+                            onClick={() => { void handleUpdateStatus(); }}
+                            disabled={
+                                isUpdatingStatus ||
+                                newStatus === (statusModal.booking?.client_status || statusModal.booking?.status)
+                            }
+                        >
                             {isUpdatingStatus ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
                             {tb("saveChanges")}
                         </Button>
@@ -1248,6 +1286,20 @@ export default function BookingsPage() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            <ActionConfirmDialog
+                open={cancelStatusConfirmOpen}
+                onOpenChange={setCancelStatusConfirmOpen}
+                title={locale === "en" ? "Set status to Cancelled?" : "Ubah status ke Batal?"}
+                message={locale === "en"
+                    ? `Booking ${statusModal.booking?.client_name || ""} will be hidden from calendar and its Google Calendar event will be removed. Continue?`
+                    : `Booking ${statusModal.booking?.client_name || ""} akan disembunyikan dari kalender dan event Google Calendar akan dihapus. Lanjutkan?`}
+                cancelLabel={locale === "en" ? "Back" : "Kembali"}
+                confirmLabel={locale === "en" ? "Yes, Set to Cancelled" : "Ya, Ubah ke Batal"}
+                onConfirm={() => { void handleUpdateStatus({ skipCancelConfirmation: true }); }}
+                confirmVariant="destructive"
+                loading={isUpdatingStatus}
+            />
 
             <ActionFeedbackDialog
                 open={feedbackDialog.open}

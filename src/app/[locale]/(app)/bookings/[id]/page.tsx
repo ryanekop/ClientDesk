@@ -58,6 +58,10 @@ import {
     openWhatsAppUrl,
     preopenWindowForDeferredNavigation,
 } from "@/utils/whatsapp-link";
+import {
+    isTransitionToCancelled,
+    syncGoogleCalendarForStatusTransition,
+} from "@/utils/google-calendar-status-sync";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -351,6 +355,7 @@ export default function BookingDetailPage() {
     const [queuePos, setQueuePos] = React.useState<number | "">(0);
     const [savingStatus, setSavingStatus] = React.useState(false);
     const [statusSaved, setStatusSaved] = React.useState(false);
+    const [cancelStatusConfirmOpen, setCancelStatusConfirmOpen] = React.useState(false);
     const [bookingStatuses, setBookingStatuses] = React.useState<string[]>(
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
     );
@@ -508,27 +513,61 @@ export default function BookingDetailPage() {
         fetchTemplates();
     }, [id, supabase]);
 
-    async function handleSaveClientStatus() {
+    async function handleSaveClientStatus(options?: { skipCancelConfirmation?: boolean }) {
         if (!booking) return;
+        const previousStatus = booking.client_status || booking.status || null;
+        const nextStatus = clientStatus || booking.status || null;
+
+        if (
+            isTransitionToCancelled(previousStatus, nextStatus) &&
+            !options?.skipCancelConfirmation
+        ) {
+            setCancelStatusConfirmOpen(true);
+            return;
+        }
+
         setSavingStatus(true);
-        await supabase.from("bookings").update({
-            status: clientStatus || booking.status,
-            client_status: clientStatus || booking.status,
-            queue_position: queuePos === "" ? null : Number(queuePos),
-        }).eq("id", booking.id);
+        const { error } = await supabase
+            .from("bookings")
+            .update({
+                status: nextStatus,
+                client_status: nextStatus,
+                queue_position: queuePos === "" ? null : Number(queuePos),
+            })
+            .eq("id", booking.id);
+        setSavingStatus(false);
+
+        if (error) {
+            showFeedback(locale === "en" ? "Failed to update status." : "Gagal menyimpan status.");
+            return;
+        }
+
+        setCancelStatusConfirmOpen(false);
         setBooking((prev) =>
             prev
                 ? {
                     ...prev,
-                    status: clientStatus || prev.status,
-                    client_status: clientStatus || prev.status,
+                    status: nextStatus || prev.status,
+                    client_status: nextStatus,
                     queue_position: queuePos === "" ? null : Number(queuePos),
                 }
                 : prev,
         );
         setStatusSaved(true);
         setTimeout(() => setStatusSaved(false), 2000);
-        setSavingStatus(false);
+
+        const calendarWarning = await syncGoogleCalendarForStatusTransition({
+            bookingId: booking.id,
+            previousStatus,
+            nextStatus,
+            locale,
+        });
+        if (calendarWarning) {
+            showFeedback(
+                calendarWarning,
+                locale === "en" ? "Warning" : "Peringatan",
+            );
+        }
     }
 
     async function handleSaveDp() {
@@ -1729,7 +1768,12 @@ export default function BookingDetailPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <Button size="sm" onClick={handleSaveClientStatus} disabled={savingStatus} className="gap-1.5">
+                    <Button
+                        size="sm"
+                        onClick={() => { void handleSaveClientStatus(); }}
+                        disabled={savingStatus}
+                        className="gap-1.5"
+                    >
                         {savingStatus ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                         Simpan Status
                     </Button>
@@ -1845,6 +1889,20 @@ export default function BookingDetailPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <ActionConfirmDialog
+                open={cancelStatusConfirmOpen}
+                onOpenChange={setCancelStatusConfirmOpen}
+                title={locale === "en" ? "Set status to Cancelled?" : "Ubah status ke Batal?"}
+                message={locale === "en"
+                    ? `Booking ${booking.client_name} will be hidden from calendar and its Google Calendar event will be removed. Continue?`
+                    : `Booking ${booking.client_name} akan disembunyikan dari kalender dan event Google Calendar akan dihapus. Lanjutkan?`}
+                cancelLabel={locale === "en" ? "Back" : "Kembali"}
+                confirmLabel={locale === "en" ? "Yes, Set to Cancelled" : "Ya, Ubah ke Batal"}
+                onConfirm={() => { void handleSaveClientStatus({ skipCancelConfirmation: true }); }}
+                confirmVariant="destructive"
+                loading={savingStatus}
+            />
 
             <ActionFeedbackDialog
                 open={feedbackDialog.open}

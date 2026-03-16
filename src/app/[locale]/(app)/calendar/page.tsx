@@ -418,7 +418,8 @@ export default function CalendarPage() {
         const { data } = await supabase
             .from("bookings")
             .select("id, booking_code, client_name, session_date, status, location, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, google_calendar_sync_status, google_calendar_sync_error, services(id, name, duration_minutes, is_addon), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon))")
-            .eq("user_id", user.id);
+            .eq("user_id", user.id)
+            .neq("status", CANCELLED_BOOKING_STATUS);
 
         if (data) {
             const bookingEvents: CalendarEvent[] = data.flatMap((booking: any) => {
@@ -486,7 +487,11 @@ export default function CalendarPage() {
                     };
                 });
             });
-            setEvents(bookingEvents);
+            setEvents(
+                bookingEvents.filter(
+                    (event) => event.status?.toLowerCase() !== CANCELLED_BOOKING_STATUS.toLowerCase(),
+                ),
+            );
         }
         setLoading(false);
     }

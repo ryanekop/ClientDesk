@@ -3,8 +3,9 @@
 import * as React from "react";
 import { createClient } from "@/utils/supabase/client";
 import { Activity, Copy, ClipboardCheck, Loader2, ExternalLink, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
+import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
+import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { Link } from "@/i18n/routing";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import { useTranslations, useLocale } from "next-intl";
@@ -31,6 +32,10 @@ import {
     DEFAULT_CLIENT_STATUSES,
     getBookingStatusOptions,
 } from "@/lib/client-status";
+import {
+    isTransitionToCancelled,
+    syncGoogleCalendarForStatusTransition,
+} from "@/utils/google-calendar-status-sync";
 
 type BookingStatus = {
     id: string;
@@ -88,6 +93,24 @@ export default function ClientStatusPage() {
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
+    const [cancelStatusConfirm, setCancelStatusConfirm] = React.useState<{
+        open: boolean;
+        booking: BookingStatus | null;
+        nextStatus: string;
+    }>({ open: false, booking: null, nextStatus: "" });
+    const [feedbackDialog, setFeedbackDialog] = React.useState<{
+        open: boolean;
+        title: string;
+        message: string;
+    }>({ open: false, title: "", message: "" });
+
+    const showFeedback = React.useCallback((message: string, title?: string) => {
+        setFeedbackDialog({
+            open: true,
+            title: title || (locale === "en" ? "Information" : "Informasi"),
+            message,
+        });
+    }, [locale]);
 
     const statusColors = React.useMemo(() => {
         const map: Record<string, string> = {};
@@ -165,42 +188,120 @@ export default function ClientStatusPage() {
         setColumns((current) => mergeTableColumnPreferences(nextDefaults, current));
     }, [bookings, formSectionsByEventType]);
 
-    async function updateStatus(id: string, clientStatus: string) {
-        setSavingId(id);
-        const oldBooking = bookings.find(b => b.id === id);
-        const wasQueue = queueTriggerStatus && oldBooking?.client_status === queueTriggerStatus;
-        const isQueue = queueTriggerStatus && clientStatus === queueTriggerStatus;
-        const nextStatus = clientStatus || null;
+    async function updateStatus(
+        id: string,
+        clientStatus: string,
+        options?: { skipCancelConfirmation?: boolean },
+    ) {
+        const oldBooking = bookings.find((booking) => booking.id === id);
+        if (!oldBooking) return;
 
-        if (isQueue && !wasQueue) {
-            // Auto-assign: get max queue_position for current queue bookings
-            const maxPos = bookings
-                .filter(b => b.client_status === queueTriggerStatus && b.queue_position != null)
-                .reduce((max, b) => Math.max(max, b.queue_position!), 0);
-            const newPos = maxPos + 1;
-            await supabase.from("bookings").update({ status: nextStatus, client_status: nextStatus, queue_position: newPos }).eq("id", id);
-            setBookings(prev => prev.map(b => b.id === id ? { ...b, status: nextStatus || b.status, client_status: nextStatus, queue_position: newPos } : b));
-        } else if (wasQueue && !isQueue) {
-            // Auto-clear: remove position and re-number remaining
-            await supabase.from("bookings").update({ status: nextStatus, client_status: nextStatus, queue_position: null }).eq("id", id);
-            const remaining = bookings
-                .filter(b => b.client_status === queueTriggerStatus && b.id !== id && b.queue_position != null)
-                .sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0));
-            for (let i = 0; i < remaining.length; i++) {
-                await supabase.from("bookings").update({ queue_position: i + 1 }).eq("id", remaining[i].id);
-            }
-            setBookings(prev => {
-                let updated = prev.map(b => b.id === id ? { ...b, status: nextStatus || b.status, client_status: nextStatus, queue_position: null } : b);
-                remaining.forEach((r, i) => {
-                    updated = updated.map(b => b.id === r.id ? { ...b, queue_position: i + 1 } : b);
-                });
-                return updated;
+        const previousStatus = oldBooking.client_status || oldBooking.status || null;
+        const nextStatus = clientStatus || null;
+        if (
+            isTransitionToCancelled(previousStatus, nextStatus) &&
+            !options?.skipCancelConfirmation
+        ) {
+            setCancelStatusConfirm({
+                open: true,
+                booking: oldBooking,
+                nextStatus: clientStatus,
             });
-        } else {
-            await supabase.from("bookings").update({ status: nextStatus, client_status: nextStatus }).eq("id", id);
-            setBookings(prev => prev.map(b => b.id === id ? { ...b, status: nextStatus || b.status, client_status: nextStatus } : b));
+            return;
         }
-        setSavingId(null);
+
+        setSavingId(id);
+        const wasQueue = queueTriggerStatus && oldBooking.client_status === queueTriggerStatus;
+        const isQueue = queueTriggerStatus && clientStatus === queueTriggerStatus;
+
+        try {
+            if (isQueue && !wasQueue) {
+                // Auto-assign: get max queue_position for current queue bookings
+                const maxPos = bookings
+                    .filter((booking) => booking.client_status === queueTriggerStatus && booking.queue_position != null)
+                    .reduce((max, booking) => Math.max(max, booking.queue_position || 0), 0);
+                const newPos = maxPos + 1;
+                const { error } = await supabase
+                    .from("bookings")
+                    .update({ status: nextStatus, client_status: nextStatus, queue_position: newPos })
+                    .eq("id", id);
+                if (error) {
+                    showFeedback(locale === "en" ? "Failed to update status." : "Gagal update status.");
+                    return;
+                }
+                setBookings((prev) =>
+                    prev.map((booking) =>
+                        booking.id === id
+                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos }
+                            : booking,
+                    ),
+                );
+            } else if (wasQueue && !isQueue) {
+                // Auto-clear: remove position and re-number remaining
+                const { error } = await supabase
+                    .from("bookings")
+                    .update({ status: nextStatus, client_status: nextStatus, queue_position: null })
+                    .eq("id", id);
+                if (error) {
+                    showFeedback(locale === "en" ? "Failed to update status." : "Gagal update status.");
+                    return;
+                }
+
+                const remaining = bookings
+                    .filter((booking) => booking.client_status === queueTriggerStatus && booking.id !== id && booking.queue_position != null)
+                    .sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0));
+                for (let i = 0; i < remaining.length; i += 1) {
+                    await supabase.from("bookings").update({ queue_position: i + 1 }).eq("id", remaining[i].id);
+                }
+                setBookings((prev) => {
+                    let updated = prev.map((booking) =>
+                        booking.id === id
+                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null }
+                            : booking,
+                    );
+                    remaining.forEach((queueBooking, index) => {
+                        updated = updated.map((booking) =>
+                            booking.id === queueBooking.id
+                                ? { ...booking, queue_position: index + 1 }
+                                : booking,
+                        );
+                    });
+                    return updated;
+                });
+            } else {
+                const { error } = await supabase
+                    .from("bookings")
+                    .update({ status: nextStatus, client_status: nextStatus })
+                    .eq("id", id);
+                if (error) {
+                    showFeedback(locale === "en" ? "Failed to update status." : "Gagal update status.");
+                    return;
+                }
+                setBookings((prev) =>
+                    prev.map((booking) =>
+                        booking.id === id
+                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus }
+                            : booking,
+                    ),
+                );
+            }
+
+            setCancelStatusConfirm({ open: false, booking: null, nextStatus: "" });
+            const calendarWarning = await syncGoogleCalendarForStatusTransition({
+                bookingId: id,
+                previousStatus,
+                nextStatus,
+                locale,
+            });
+            if (calendarWarning) {
+                showFeedback(
+                    calendarWarning,
+                    locale === "en" ? "Warning" : "Peringatan",
+                );
+            }
+        } finally {
+            setSavingId(null);
+        }
     }
 
     async function updateQueue(id: string, pos: number | null) {
@@ -499,6 +600,39 @@ export default function ClientStatusPage() {
                 </div>
                 <TablePagination totalItems={filtered.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
             </div>
+
+            <ActionConfirmDialog
+                open={cancelStatusConfirm.open}
+                onOpenChange={(open) =>
+                    setCancelStatusConfirm((prev) =>
+                        open ? prev : { open: false, booking: null, nextStatus: "" },
+                    )
+                }
+                title={locale === "en" ? "Set status to Cancelled?" : "Ubah status ke Batal?"}
+                message={locale === "en"
+                    ? `Booking ${cancelStatusConfirm.booking?.client_name || ""} will be hidden from calendar and its Google Calendar event will be removed. Continue?`
+                    : `Booking ${cancelStatusConfirm.booking?.client_name || ""} akan disembunyikan dari kalender dan event Google Calendar akan dihapus. Lanjutkan?`}
+                cancelLabel={locale === "en" ? "Back" : "Kembali"}
+                confirmLabel={locale === "en" ? "Yes, Set to Cancelled" : "Ya, Ubah ke Batal"}
+                onConfirm={() => {
+                    if (!cancelStatusConfirm.booking) return;
+                    void updateStatus(
+                        cancelStatusConfirm.booking.id,
+                        cancelStatusConfirm.nextStatus,
+                        { skipCancelConfirmation: true },
+                    );
+                }}
+                confirmVariant="destructive"
+                loading={savingId === cancelStatusConfirm.booking?.id}
+            />
+
+            <ActionFeedbackDialog
+                open={feedbackDialog.open}
+                onOpenChange={(open) => setFeedbackDialog((prev) => ({ ...prev, open }))}
+                title={feedbackDialog.title}
+                message={feedbackDialog.message}
+                confirmLabel={locale === "en" ? "OK" : "OK"}
+            />
         </div>
     );
 }

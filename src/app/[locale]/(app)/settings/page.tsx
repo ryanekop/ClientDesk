@@ -548,7 +548,7 @@ export default function SettingsPage() {
   const [newDriveSegment, setNewDriveSegment] = React.useState("");
   const [resetModal, setResetModal] = React.useState<{
     open: boolean;
-    scope: "umum" | "template" | "status" | "jenis-acara" | null;
+    scope: "umum" | "google" | "template" | "status" | "jenis-acara" | null;
   }>({ open: false, scope: null });
   const [resetSaving, setResetSaving] = React.useState(false);
   const unsupportedProfileColumnsRef = React.useRef<Set<string>>(new Set());
@@ -1021,6 +1021,27 @@ export default function SettingsPage() {
         whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
         vendor_slug: slug || null,
         default_wa_target: defaultWaTarget,
+      });
+
+      setVendorSlug(slug);
+      setSavedMsg(SETTINGS_SAVED_MESSAGE);
+      setTimeout(() => setSavedMsg(""), 3000);
+      void fetchAll(true);
+    } catch (error) {
+      console.error("Settings save error:", error);
+      setSavedMsg("Gagal menyimpan.");
+      setTimeout(() => setSavedMsg(""), 3000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveGoogleSettings() {
+    if (!profile) return;
+    setSaving(true);
+
+    try {
+      await saveProfilePatch({
         calendar_event_format:
           calendarEventFormats.Umum || DEFAULT_CALENDAR_EVENT_FORMAT,
         calendar_event_format_map: calendarEventFormats,
@@ -1032,13 +1053,11 @@ export default function SettingsPage() {
         drive_folder_format_map: driveFolderFormats,
         drive_folder_structure_map: driveFolderStructures,
       });
-
-      setVendorSlug(slug);
       setSavedMsg(SETTINGS_SAVED_MESSAGE);
       setTimeout(() => setSavedMsg(""), 3000);
       void fetchAll(true);
     } catch (error) {
-      console.error("Settings save error:", error);
+      console.error("Google settings save error:", error);
       setSavedMsg("Gagal menyimpan.");
       setTimeout(() => setSavedMsg(""), 3000);
     } finally {
@@ -1318,6 +1337,8 @@ export default function SettingsPage() {
     try {
       if (resetModal.scope === "umum") {
         await resetGeneralToDefaultAndSave();
+      } else if (resetModal.scope === "google") {
+        await resetGeneralToDefaultAndSave();
       } else if (resetModal.scope === "template") {
         await resetTemplatesToDefaultAndSave();
       } else if (resetModal.scope === "status") {
@@ -1487,6 +1508,7 @@ export default function SettingsPage() {
     { key: "template", label: tp("tabTemplates") },
     { key: "status", label: "Status Booking" },
     { key: "jenis-acara", label: tp("tabEventTypes") },
+    { key: "google", label: tp("tabGoogle") },
     { key: "telegram", label: tp("tabTelegram") },
   ];
   const resetDialogMeta: Record<
@@ -1512,6 +1534,11 @@ export default function SettingsPage() {
       title: "Balikkan Jenis Acara ke Default?",
       description:
         "Semua jenis acara custom akan dihapus dan jenis acara bawaan akan diaktifkan kembali.",
+    },
+    google: {
+      title: "Balikkan Pengaturan Google ke Default?",
+      description:
+        "Format Google Calendar dan Google Drive akan dikembalikan ke default dan langsung disimpan.",
     },
   };
 
@@ -1879,10 +1906,12 @@ export default function SettingsPage() {
         </div>
 
         {/* ═══ TAB: Umum ═══ */}
-        {activeTab === "umum" && (
+        {(activeTab === "umum" || activeTab === "google") && (
           <div className="space-y-6">
-            {/* Profile Section */}
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+            {activeTab === "umum" && (
+              <>
+                {/* Profile Section */}
+                <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
               <div className="px-6 py-4 border-b">
                 <h3 className="font-semibold flex items-center gap-2">
                   <Building2 className="w-4 h-4" /> {t("profilStudio")}
@@ -2094,11 +2123,15 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-              </div>
-            </div>
+                </div>
+                </div>
+              </>
+            )}
 
-            {/* Google Integration Section */}
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+            {activeTab === "google" && (
+              <>
+                {/* Google Integration Section */}
+                <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
               <div className="px-6 py-4 border-b">
                 <h3 className="font-semibold flex items-center gap-2">
                   <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -2607,12 +2640,18 @@ export default function SettingsPage() {
                 )}
               </div>
             </div>
+              </>
+            )}
             <div className="pt-1">
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   type="button"
                   disabled={saving}
-                  onClick={handleSaveGeneralSettings}
+                  onClick={
+                    activeTab === "google"
+                      ? handleSaveGoogleSettings
+                      : handleSaveGeneralSettings
+                  }
                   className={unifiedSaveButtonClass}
                 >
                   {saving ? (
@@ -2622,16 +2661,20 @@ export default function SettingsPage() {
                   )}
                   Simpan Semua
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={unifiedResetButtonClass}
-                  onClick={() => setResetModal({ open: true, scope: "umum" })}
-                  disabled={resetSaving}
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Balik ke Default
-                </Button>
+                {activeTab === "google" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={unifiedResetButtonClass}
+                    onClick={() =>
+                      setResetModal({ open: true, scope: "google" })
+                    }
+                    disabled={resetSaving}
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Balik ke Default
+                  </Button>
+                )}
                 {savedMsg && (
                   <span className="text-sm text-green-600 dark:text-green-400">
                     {savedMsg}
