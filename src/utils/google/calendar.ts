@@ -16,6 +16,9 @@ export function getAuthUrl() {
         access_type: "offline",
         prompt: "consent",
         scope: [
+            "openid",
+            "email",
+            "profile",
             "https://www.googleapis.com/auth/calendar.events",
         ],
     });

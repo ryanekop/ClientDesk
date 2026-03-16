@@ -773,6 +773,7 @@
     "CancelStatusDialog": {
         "title": "Pengaturan DP Saat Batal",
         "description": "Booking {name} akan diubah ke status Batal. Pilih perlakuan untuk DP yang sudah terverifikasi.",
+        "calendarImpactNote": "Booking akan hilang dari kalender internal. Jika integrasi Google Calendar aktif, event terkait juga akan ikut dihapus.",
         "forfeitTitle": "DP Hangus",
         "forfeitDesc": "DP tetap dihitung sebagai pemasukan.",
         "refundTitle": "DP Dikembalikan",

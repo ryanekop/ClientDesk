@@ -773,6 +773,7 @@
     "CancelStatusDialog": {
         "title": "DP Handling for Cancelled Booking",
         "description": "Booking {name} will be set to Cancelled. Choose how to handle the verified DP.",
+        "calendarImpactNote": "This booking will be removed from the internal calendar. If Google Calendar integration is active, related event(s) will also be deleted.",
         "forfeitTitle": "Keep DP (Forfeit)",
         "forfeitDesc": "Verified DP stays counted as revenue.",
         "refundTitle": "Refund DP",

@@ -53,6 +53,18 @@ async function resolveDriveEmail(accessToken: string, refreshToken: string) {
   }
 }
 
+function hasMissingColumnError(error: unknown) {
+  const message =
+    error && typeof error === "object" && "message" in error
+      ? String((error as { message?: unknown }).message || "")
+      : "";
+  return (
+    message.includes("column") &&
+    (message.includes("google_calendar_account_email") ||
+      message.includes("google_drive_account_email"))
+  );
+}
+
 export async function GET() {
   try {
     const supabase = await createClient();
@@ -67,18 +79,46 @@ export async function GET() {
       );
     }
 
-    const { data: profile } = await supabase
+    const {
+      data: profileWithEmailFields,
+      error: profileErrorWithEmailFields,
+    } = await supabase
       .from("profiles")
       .select(
-        "google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token",
+        "google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token, google_calendar_account_email, google_drive_account_email",
       )
       .eq("id", user.id)
       .maybeSingle();
+
+    let supportsEmailColumns = true;
+    let profile = profileWithEmailFields;
+
+    if (profileErrorWithEmailFields && hasMissingColumnError(profileErrorWithEmailFields)) {
+      supportsEmailColumns = false;
+      const { data: fallbackProfile } = await supabase
+        .from("profiles")
+        .select(
+          "google_access_token, google_refresh_token, google_drive_access_token, google_drive_refresh_token",
+        )
+        .eq("id", user.id)
+        .maybeSingle();
+      profile = fallbackProfile
+        ? {
+            ...fallbackProfile,
+            google_calendar_account_email: null,
+            google_drive_account_email: null,
+          }
+        : null;
+    }
 
     const calendarAccessToken = normalizeEmail(profile?.google_access_token);
     const calendarRefreshToken = normalizeEmail(profile?.google_refresh_token);
     const driveAccessToken = normalizeEmail(profile?.google_drive_access_token);
     const driveRefreshToken = normalizeEmail(profile?.google_drive_refresh_token);
+    const storedCalendarEmail = normalizeEmail(
+      profile?.google_calendar_account_email,
+    );
+    const storedDriveEmail = normalizeEmail(profile?.google_drive_account_email);
 
     const calendarConnected = hasOAuthTokenPair(
       calendarAccessToken,
@@ -92,25 +132,48 @@ export async function GET() {
     const responsePayload: ConnectedAccountResponse = {
       calendar: {
         connected: calendarConnected,
-        email: null,
+        email: calendarConnected ? storedCalendarEmail : null,
       },
       drive: {
         connected: driveConnected,
-        email: null,
+        email: driveConnected ? storedDriveEmail : null,
       },
     };
 
     const [calendarEmail, driveEmail] = await Promise.all([
-      calendarConnected && calendarAccessToken && calendarRefreshToken
+      calendarConnected &&
+      !responsePayload.calendar.email &&
+      calendarAccessToken &&
+      calendarRefreshToken
         ? resolveCalendarEmail(calendarAccessToken, calendarRefreshToken)
         : Promise.resolve(null),
-      driveConnected && driveAccessToken && driveRefreshToken
+      driveConnected &&
+      !responsePayload.drive.email &&
+      driveAccessToken &&
+      driveRefreshToken
         ? resolveDriveEmail(driveAccessToken, driveRefreshToken)
         : Promise.resolve(null),
     ]);
 
-    responsePayload.calendar.email = calendarEmail;
-    responsePayload.drive.email = driveEmail;
+    if (calendarEmail) {
+      responsePayload.calendar.email = calendarEmail;
+    }
+    if (driveEmail) {
+      responsePayload.drive.email = driveEmail;
+    }
+
+    if (supportsEmailColumns) {
+      const patch: Record<string, string> = {};
+      if (calendarEmail) {
+        patch.google_calendar_account_email = calendarEmail;
+      }
+      if (driveEmail) {
+        patch.google_drive_account_email = driveEmail;
+      }
+      if (Object.keys(patch).length > 0) {
+        await supabase.from("profiles").update(patch).eq("id", user.id);
+      }
+    }
 
     return NextResponse.json(responsePayload);
   } catch (error) {

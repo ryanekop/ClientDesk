@@ -1428,6 +1428,7 @@ export default function SettingsPage() {
         google_access_token: null,
         google_refresh_token: null,
         google_token_expiry: null,
+        google_calendar_account_email: null,
       });
       setIsCalendarConnected(false);
     } else {
@@ -1435,6 +1436,7 @@ export default function SettingsPage() {
         google_drive_access_token: null,
         google_drive_refresh_token: null,
         google_drive_token_expiry: null,
+        google_drive_account_email: null,
       });
       setIsDriveConnected(false);
     }
