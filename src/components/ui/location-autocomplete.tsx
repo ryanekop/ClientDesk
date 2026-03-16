@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, Loader2, X } from "lucide-react";
+import { AlertTriangle, Loader2, MapPin, X } from "lucide-react";
 import { LocationPointerIcon } from "@/components/icons/location-pointer-icon";
 
 const inputClass =
@@ -274,7 +274,7 @@ export function LocationAutocomplete({
             title="Pilih di Peta"
             className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors shrink-0"
           >
-            <LocationPointerIcon className="w-4 h-4" />
+            <MapPin className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -597,7 +597,7 @@ function MapPickerModal({
               }}
               className="inline-flex items-center justify-center h-8 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors gap-1.5"
             >
-              <LocationPointerIcon className="w-3.5 h-3.5" /> Pilih Lokasi
+              <MapPin className="w-3.5 h-3.5" /> Pilih Lokasi
             </button>
           </div>
         </div>

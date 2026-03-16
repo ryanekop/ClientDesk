@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, Instagram, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink, Upload, FileText, Trash2, AlertCircle, Image as ImageIcon, RefreshCcw } from "lucide-react";
+import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink, Upload, FileText, Trash2, AlertCircle, Image as ImageIcon, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
@@ -67,7 +67,6 @@ import {
     syncGoogleCalendarForStatusTransition,
 } from "@/utils/google-calendar-status-sync";
 import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
-import { LocationPointerIcon } from "@/components/icons/location-pointer-icon";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -256,13 +255,13 @@ function LocationValue({
                 {mapsUrl && (
                     <button type="button" onClick={() => window.open(mapsUrl, "_blank")} title="Buka di Google Maps"
                         className="text-blue-600 hover:text-blue-700 transition-colors inline-flex items-center justify-center w-6 h-6 rounded hover:bg-blue-50 dark:hover:bg-blue-500/10">
-                        <LocationPointerIcon className="w-3.5 h-3.5" />
+                        <MapPin className="w-3.5 h-3.5" />
                     </button>
                 )}
                 {dirUrl && (
                     <button type="button" onClick={() => window.open(dirUrl, "_blank")} title="Direction"
                         className="text-green-600 hover:text-green-700 transition-colors inline-flex items-center justify-center w-6 h-6 rounded hover:bg-green-50 dark:hover:bg-green-500/10">
-                        <LocationPointerIcon className="w-3.5 h-3.5" />
+                        <Navigation className="w-3.5 h-3.5" />
                     </button>
                 )}
             </span>

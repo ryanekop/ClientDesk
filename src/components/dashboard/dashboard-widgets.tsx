@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   CalendarDays,
+  MapPin,
   User,
   ExternalLink,
   Package,
@@ -10,7 +11,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useLocale, useTranslations } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
-import { LocationPointerIcon } from "@/components/icons/location-pointer-icon";
 
 export type UpcomingBooking = {
   id: string;
@@ -130,7 +130,7 @@ export function UpcomingBookingCard({ booking }: UpcomingBookingCardProps) {
         </div>
         {booking.location && (
           <div className="flex items-start gap-2 text-sm text-muted-foreground min-w-0">
-            <LocationPointerIcon className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             <span className="line-clamp-2 break-words">{booking.location}</span>
           </div>
         )}

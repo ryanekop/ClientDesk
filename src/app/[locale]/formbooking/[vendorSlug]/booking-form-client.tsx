@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import {
   Loader2,
   CheckCircle2,
+  MapPin,
   MessageCircle,
   FileText,
 } from "lucide-react";
@@ -52,7 +53,6 @@ import {
   type LocationCoordinates,
 } from "@/utils/location";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
-import { LocationPointerIcon } from "@/components/icons/location-pointer-icon";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1253,7 +1253,7 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium flex items-center gap-1.5">
-              <LocationPointerIcon className="w-3.5 h-3.5" />
+              <MapPin className="w-3.5 h-3.5" />
               {t("lokasi")} <span className="text-red-500">*</span>
             </label>
             <LocationAutocomplete
