@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
-import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
@@ -112,6 +112,8 @@ type Service = {
     id: string;
     name: string;
     price: number;
+    original_price?: number | null;
+    description?: string | null;
     is_addon?: boolean | null;
     is_public?: boolean | null;
 };
@@ -132,6 +134,13 @@ function parseFormattedNumber(s: string): number | "" {
     const cleaned = s.replace(/\./g, "").replace(/,/g, "");
     const num = parseInt(cleaned, 10);
     return isNaN(num) ? "" : num;
+}
+function formatCurrency(n: number) {
+    return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+    }).format(n || 0);
 }
 function sanitizePhone(raw: string): string {
     let cleaned = raw.replace(/[^0-9]/g, "");
@@ -176,6 +185,8 @@ export default function EditBookingPage() {
     const [locationDetail, setLocationDetail] = React.useState("");
     const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
     const [selectedAddonIds, setSelectedAddonIds] = React.useState<string[]>([]);
+    const [packageDialogOpen, setPackageDialogOpen] = React.useState(false);
+    const [addonDialogOpen, setAddonDialogOpen] = React.useState(false);
     const [freelancerIds, setFreelancerIds] = React.useState<string[]>([]);
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
@@ -235,7 +246,7 @@ export default function EditBookingPage() {
             if (!user) return;
             const [{ data: booking }, { data: svcs }, { data: frees }, { data: bfRows }, { data: bsRows }, { data: prof }] = await Promise.all([
                 supabase.from("bookings").select("*").eq("id", id).single(),
-                supabase.from("services").select("id, name, price, is_addon, is_public").eq("user_id", user.id).eq("is_active", true),
+                supabase.from("services").select("id, name, price, original_price, description, is_addon, is_public").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
                 supabase.from("booking_services").select("service_id, kind, sort_order").eq("booking_id", id).order("sort_order", { ascending: true }),
@@ -434,7 +445,7 @@ export default function EditBookingPage() {
             is_active: true,
             is_addon: false,
             is_public: true,
-        }).select("id, name, price, is_addon, is_public").single();
+        }).select("id, name, price, original_price, description, is_addon, is_public").single();
         if (!error && data) {
             const s = data as Service;
             setServices(prev => [...prev, s]);
@@ -912,25 +923,20 @@ export default function EditBookingPage() {
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Paket / Layanan{reqMark}</label>
                             <div className="space-y-2">
-                                {mainServices.map((service) => {
-                                    const selected = selectedServiceIds.includes(service.id);
-                                    return (
-                                        <button
-                                            key={service.id}
-                                            type="button"
-                                            onClick={() => toggleService(service.id)}
-                                            className={cn(
-                                                "flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-all",
-                                                selected
-                                                    ? "border-foreground bg-foreground/5 dark:bg-foreground/10"
-                                                    : "border-input hover:bg-muted/50"
-                                            )}
-                                        >
-                                            <span>{service.name}</span>
-                                            <span className="font-medium">Rp {formatNumber(service.price)}</span>
-                                        </button>
-                                    );
-                                })}
+                                <button
+                                    type="button"
+                                    onClick={() => setPackageDialogOpen(true)}
+                                    className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all hover:bg-muted/30 cursor-pointer"
+                                >
+                                    <span className="text-left">
+                                        {selectedMainServices.length > 0
+                                            ? `${selectedMainServices.length} paket dipilih`
+                                            : "Pilih Paket / Layanan"}
+                                    </span>
+                                    <span className="text-xs font-medium text-primary">
+                                        Buka Daftar
+                                    </span>
+                                </button>
                                 <button
                                     type="button"
                                     onClick={() => setShowCustomServicePopup(true)}
@@ -940,44 +946,89 @@ export default function EditBookingPage() {
                                 </button>
                             </div>
                             {selectedMainServices.length > 0 && (
-                                <p className="text-[11px] text-muted-foreground">
-                                    Dipilih: {selectedMainServices.map(service => service.name).join(", ")}
-                                </p>
+                                <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                                    {selectedMainServices.map((service) => (
+                                        <div key={service.id} className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-medium">{service.name}</p>
+                                                {service.description ? (
+                                                    <p className="text-xs text-muted-foreground">{service.description}</p>
+                                                ) : null}
+                                            </div>
+                                            <div className="shrink-0 text-right">
+                                                <p className="text-lg font-bold text-primary">{formatCurrency(service.price)}</p>
+                                                {service.original_price && service.original_price > service.price ? (
+                                                    <p className="text-[11px] text-muted-foreground line-through">{formatCurrency(service.original_price)}</p>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </div>
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Add-on (opsional)</label>
+                            <button
+                                type="button"
+                                onClick={() => setAddonDialogOpen(true)}
+                                disabled={addonServices.length === 0}
+                                className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all hover:bg-muted/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <span className="text-left">
+                                    {selectedAddonServices.length > 0
+                                        ? `${selectedAddonServices.length} add-on dipilih`
+                                        : "Pilih Add-on"}
+                                </span>
+                                <span className="text-xs font-medium text-primary">
+                                    Buka Daftar
+                                </span>
+                            </button>
                             {addonServices.length === 0 ? (
                                 <p className="rounded-lg border border-dashed border-input px-3 py-2 text-xs text-muted-foreground">
                                     Belum ada add-on aktif.
                                 </p>
-                            ) : (
+                            ) : null}
+                            {selectedAddonServices.length > 0 && (
                                 <div className="space-y-2">
-                                    {addonServices.map((service) => {
-                                        const selected = selectedAddonIds.includes(service.id);
-                                        return (
-                                            <button
-                                                key={service.id}
-                                                type="button"
-                                                onClick={() => toggleAddon(service.id)}
-                                                className={cn(
-                                                    "flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-all",
-                                                    selected
-                                                        ? "border-foreground bg-foreground/5 dark:bg-foreground/10"
-                                                        : "border-input hover:bg-muted/50"
-                                                )}
-                                            >
-                                                <span>{service.name}</span>
-                                                <span className="font-medium">+ Rp {formatNumber(service.price)}</span>
-                                            </button>
-                                        );
-                                    })}
+                                    {selectedAddonServices.map((addon) => (
+                                        <div
+                                            key={addon.id}
+                                            className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
+                                        >
+                                            <div className="min-w-0">
+                                                <p className="font-medium">{addon.name}</p>
+                                                {addon.description ? (
+                                                    <p className="text-[11px] text-muted-foreground truncate">
+                                                        {addon.description}
+                                                    </p>
+                                                ) : null}
+                                            </div>
+                                            <span className="font-semibold text-primary whitespace-nowrap">
+                                                +{formatCurrency(addon.price)}
+                                            </span>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
-                            {selectedAddonServices.length > 0 && (
-                                <p className="text-[11px] text-muted-foreground">
-                                    Dipilih: {selectedAddonServices.map(service => service.name).join(", ")}
-                                </p>
+                            {selectedAddonServices.length > 0 && selectedMainServices.length > 0 && (
+                                <div className="rounded-lg bg-muted/50 p-3 text-sm">
+                                    {selectedMainServices.map((service) => (
+                                        <div key={service.id} className="flex justify-between">
+                                            <span>{service.name}</span>
+                                            <span>{formatCurrency(service.price)}</span>
+                                        </div>
+                                    ))}
+                                    {selectedAddonServices.map((service) => (
+                                        <div key={service.id} className="flex justify-between text-muted-foreground">
+                                            <span>+ {service.name}</span>
+                                            <span>{formatCurrency(service.price)}</span>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-between font-bold border-t pt-1 mt-1">
+                                        <span>Total</span>
+                                        <span>{formatCurrency((typeof totalPrice === "number" ? totalPrice : 0))}</span>
+                                    </div>
+                                </div>
                             )}
                         </div>
                         <div className="col-span-full space-y-1.5">
@@ -1088,6 +1139,121 @@ export default function EditBookingPage() {
                     </Button>
                 </div>
             </form>
+
+            <Dialog open={packageDialogOpen} onOpenChange={setPackageDialogOpen}>
+                <DialogContent className="sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Paket / Layanan</DialogTitle>
+                    </DialogHeader>
+                    <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+                        {mainServices.length === 0 ? (
+                            <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                Belum ada paket utama aktif.
+                            </div>
+                        ) : (
+                            mainServices.map((service) => {
+                                const selected = selectedServiceIds.includes(service.id);
+                                return (
+                                    <button
+                                        key={service.id}
+                                        type="button"
+                                        onClick={() => toggleService(service.id)}
+                                        className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
+                                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                            </span>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-medium">{service.name}</p>
+                                                {service.description ? (
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        {service.description}
+                                                    </p>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                        <div className="shrink-0 text-right">
+                                            <p className="text-sm font-semibold text-primary">
+                                                {formatCurrency(service.price)}
+                                            </p>
+                                            {service.original_price && service.original_price > service.price ? (
+                                                <p className="text-[11px] text-muted-foreground line-through">
+                                                    {formatCurrency(service.original_price)}
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                    <div className="flex justify-end">
+                        <button
+                            type="button"
+                            onClick={() => setPackageDialogOpen(false)}
+                            className="inline-flex h-10 items-center justify-center rounded-lg border px-4 text-sm font-medium transition-colors hover:bg-muted cursor-pointer"
+                        >
+                            Selesai
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={addonDialogOpen} onOpenChange={setAddonDialogOpen}>
+                <DialogContent className="sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Paket Add-on</DialogTitle>
+                    </DialogHeader>
+                    <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+                        {addonServices.length === 0 ? (
+                            <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                Belum ada add-on aktif.
+                            </div>
+                        ) : (
+                            addonServices.map((addon) => {
+                                const selected = selectedAddonIds.includes(addon.id);
+                                return (
+                                    <button
+                                        key={addon.id}
+                                        type="button"
+                                        onClick={() => toggleAddon(addon.id)}
+                                        className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
+                                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                            </span>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-medium">{addon.name}</p>
+                                                {addon.description ? (
+                                                    <p className="text-[11px] text-muted-foreground">
+                                                        {addon.description}
+                                                    </p>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                        <div className="shrink-0 text-right">
+                                            <p className="text-sm font-semibold text-primary">
+                                                +{formatCurrency(addon.price)}
+                                            </p>
+                                        </div>
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                    <div className="flex justify-end">
+                        <button
+                            type="button"
+                            onClick={() => setAddonDialogOpen(false)}
+                            className="inline-flex h-10 items-center justify-center rounded-lg border px-4 text-sm font-medium transition-colors hover:bg-muted cursor-pointer"
+                        >
+                            Selesai
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={showCustomServicePopup} onOpenChange={setShowCustomServicePopup}>
                 <DialogContent className="sm:max-w-md">

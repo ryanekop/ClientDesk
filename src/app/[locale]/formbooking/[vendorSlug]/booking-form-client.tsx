@@ -627,6 +627,7 @@ export function BookingFormClient({
     const wa = resultData.vendorWhatsapp
       .replace(/^0/, "62")
       .replace(/[^0-9]/g, "");
+    const clientWhatsapp = `${countryCode}${phone}`.replace(/[^0-9+]/g, "") || "-";
     const svcName = selectedMainServices.map((service) => service.name).join(", ") || "-";
     const dateStr = sessionDate
       ? new Date(sessionDate).toLocaleDateString("id-ID", {
@@ -679,6 +680,7 @@ export function BookingFormClient({
       (resultData.bookingConfirmTemplate || "").trim()
         ? fillWhatsAppTemplate(resultData.bookingConfirmTemplate || "", {
             client_name: clientName || "-",
+            client_whatsapp: clientWhatsapp,
             booking_code: resultData.bookingCode || "-",
             session_date: dateStr,
             service_name: svcName,

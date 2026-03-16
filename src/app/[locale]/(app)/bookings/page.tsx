@@ -146,6 +146,7 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
     const vars: Record<string, string> = {
         client_name: booking.client_name,
+        client_whatsapp: booking.client_whatsapp || "-",
         booking_code: booking.booking_code,
         session_date: sessionStr,
         session_time: sessionTime,

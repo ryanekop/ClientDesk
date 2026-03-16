@@ -750,6 +750,7 @@ export default function BookingDetailPage() {
         if (content.trim()) {
             const vars: Record<string, string> = {
                 client_name: booking?.client_name || name,
+                client_whatsapp: booking?.client_whatsapp || "-",
                 booking_code: booking?.booking_code || "",
                 session_date: booking?.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-",
                 service_name: booking?.service_label || booking?.services?.name || "-",
@@ -795,7 +796,7 @@ export default function BookingDetailPage() {
             const vars: Record<string, string> = {
                 freelancer_name: fname,
                 client_name: booking?.client_name || "",
-                client_whatsapp: booking?.client_whatsapp || "",
+                client_whatsapp: booking?.client_whatsapp || "-",
                 booking_code: booking?.booking_code || "",
                 session_date: sessionStr,
                 session_time: sessionTime,
@@ -1095,6 +1096,7 @@ export default function BookingDetailPage() {
         const message = templateContent.trim()
             ? fillWhatsAppTemplate(templateContent, {
                 client_name: booking.client_name,
+                client_whatsapp: booking.client_whatsapp || "-",
                 booking_code: booking.booking_code,
                 session_date: booking.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-",
                 service_name: booking.service_label || booking.services?.name || "-",

@@ -38,6 +38,7 @@ type BookingData = {
   bookingCode: string;
   trackingUuid: string | null;
   clientName: string;
+  clientWhatsapp: string | null;
   sessionDate: string | null;
   eventType: string | null;
   totalPrice: number;
@@ -383,6 +384,7 @@ export default function SettlementClient({
       : getDefaultWhatsAppTemplate("whatsapp_settlement_confirm", locale);
     const message = fillWhatsAppTemplate(resolvedTemplate, {
       client_name: booking.clientName,
+      client_whatsapp: booking.clientWhatsapp || "-",
       booking_code: booking.bookingCode,
       service_name: booking.serviceName || "-",
       session_date: booking.sessionDate

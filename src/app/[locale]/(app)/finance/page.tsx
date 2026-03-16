@@ -414,6 +414,7 @@ export default function FinancePage() {
         if (templateContent.trim()) {
             return fillWhatsAppTemplate(templateContent, {
                 client_name: booking.client_name,
+                client_whatsapp: booking.client_whatsapp || "-",
                 booking_code: booking.booking_code,
                 session_date: date,
                 service_name: booking.service_label || booking.services?.name || "-",
@@ -452,6 +453,7 @@ export default function FinancePage() {
         if (templateContent.trim()) {
             return fillWhatsAppTemplate(templateContent, {
                 client_name: booking.client_name,
+                client_whatsapp: booking.client_whatsapp || "-",
                 booking_code: booking.booking_code,
                 session_date: date,
                 service_name: booking.service_label || booking.services?.name || "-",
