@@ -6,6 +6,7 @@ import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, Ma
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
+import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
@@ -23,7 +24,10 @@ import {
     getFinalAdjustmentsTotal,
     getFinalInvoiceTotal,
     getInvoiceStage,
+    getNetVerifiedRevenueAmount,
     getRemainingFinalPayment,
+    getVerifiedDpAmount,
+    getDpRefundAmount,
     getSettlementLabel,
     getSettlementStatus,
     normalizeFinalAdjustments,
@@ -62,6 +66,7 @@ import {
     isTransitionToCancelled,
     syncGoogleCalendarForStatusTransition,
 } from "@/utils/google-calendar-status-sync";
+import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -107,6 +112,10 @@ type Booking = {
     status: string;
     total_price: number;
     dp_paid: number;
+    dp_verified_amount: number;
+    dp_verified_at: string | null;
+    dp_refund_amount: number;
+    dp_refunded_at: string | null;
     is_fully_paid: boolean;
     payment_proof_url: string | null;
     payment_proof_drive_file_id: string | null;
@@ -154,6 +163,10 @@ type DrivePathProfile = {
     drive_folder_format?: string | null;
     drive_folder_format_map?: Record<string, string> | null;
     drive_folder_structure_map?: Record<string, string[] | string> | null;
+};
+
+type BookingProfileRow = {
+    custom_client_statuses?: string[] | null;
 };
 
 type EditableAdjustment = {
@@ -375,6 +388,8 @@ export default function BookingDetailPage() {
     const [sendingFinalInvoice, setSendingFinalInvoice] = React.useState(false);
     const [markingFinalPaid, setMarkingFinalPaid] = React.useState(false);
     const [markingFinalUnpaid, setMarkingFinalUnpaid] = React.useState(false);
+    const [markingDpVerified, setMarkingDpVerified] = React.useState(false);
+    const [markingDpUnverified, setMarkingDpUnverified] = React.useState(false);
     const [editingDp, setEditingDp] = React.useState(false);
     const [dpInput, setDpInput] = React.useState("");
     const [savingDp, setSavingDp] = React.useState(false);
@@ -435,7 +450,7 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }, { data: addonServiceRows }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map").eq("id", user.id).single(),
                 supabase.from("services")
@@ -452,7 +467,8 @@ export default function BookingDetailPage() {
                 rawBooking?.booking_services,
                 rawBooking?.services || null,
             );
-            const statusOptions = getBookingStatusOptions((profile as any)?.custom_client_statuses as string[] | null | undefined);
+            const profileRow = (profile ?? null) as BookingProfileRow | null;
+            const statusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
             setBookingStatuses(statusOptions);
             const syncedStatus = resolveUnifiedBookingStatus({
                 status: rawBooking?.status,
@@ -518,7 +534,10 @@ export default function BookingDetailPage() {
         fetchTemplates();
     }, [id, supabase]);
 
-    async function handleSaveClientStatus(options?: { skipCancelConfirmation?: boolean }) {
+    async function handleSaveClientStatus(options?: {
+        skipCancelConfirmation?: boolean;
+        cancelPayment?: { policy: CancelPaymentPolicy; refundAmount: number };
+    }) {
         if (!booking) return;
         const previousStatus = booking.client_status || booking.status || null;
         const nextStatus = clientStatus || booking.status || null;
@@ -532,12 +551,21 @@ export default function BookingDetailPage() {
         }
 
         setSavingStatus(true);
+        const isCancelling = isTransitionToCancelled(previousStatus, nextStatus);
+        const cancelPatch = isCancelling
+            ? buildCancelPaymentPatch({
+                policy: options?.cancelPayment?.policy || "forfeit",
+                refundAmount: options?.cancelPayment?.refundAmount || 0,
+                verifiedAmount: booking.dp_verified_amount || 0,
+            })
+            : null;
         const { error } = await supabase
             .from("bookings")
             .update({
                 status: nextStatus,
                 client_status: nextStatus,
                 queue_position: queuePos === "" ? null : Number(queuePos),
+                ...(cancelPatch || {}),
             })
             .eq("id", booking.id);
         setSavingStatus(false);
@@ -555,6 +583,7 @@ export default function BookingDetailPage() {
                     status: nextStatus || prev.status,
                     client_status: nextStatus,
                     queue_position: queuePos === "" ? null : Number(queuePos),
+                    ...(cancelPatch || {}),
                 }
                 : prev,
         );
@@ -584,6 +613,16 @@ export default function BookingDetailPage() {
         }
 
         setSavingDp(true);
+        const dpChanged = nextDp !== (booking.dp_paid || 0);
+        const shouldResetVerification = dpChanged && Boolean(booking.dp_verified_at);
+        const verificationResetPatch = shouldResetVerification
+            ? {
+                dp_verified_amount: 0,
+                dp_verified_at: null,
+                dp_refund_amount: 0,
+                dp_refunded_at: null,
+            }
+            : {};
         const nextFinalPaymentAmount = booking.is_fully_paid
             ? Math.max(getFinalInvoiceTotal(booking.total_price, booking.final_adjustments) - nextDp, 0)
             : booking.final_payment_amount;
@@ -593,6 +632,7 @@ export default function BookingDetailPage() {
             .update({
                 dp_paid: nextDp,
                 final_payment_amount: nextFinalPaymentAmount,
+                ...verificationResetPatch,
             })
             .eq("id", booking.id);
 
@@ -606,9 +646,60 @@ export default function BookingDetailPage() {
             ...prev,
             dp_paid: nextDp,
             final_payment_amount: nextFinalPaymentAmount,
+            ...verificationResetPatch,
         } : prev);
         setEditingDp(false);
         setSavingDp(false);
+    }
+
+    async function handleMarkDpVerified() {
+        if (!booking) return;
+        setMarkingDpVerified(true);
+        const verifiedAmount = Math.max(booking.dp_paid || 0, 0);
+        const verifiedAt = verifiedAmount > 0 ? new Date().toISOString() : null;
+        const patch = {
+            dp_verified_amount: verifiedAmount,
+            dp_verified_at: verifiedAt,
+            dp_refund_amount: 0,
+            dp_refunded_at: null,
+        };
+
+        const { error } = await supabase
+            .from("bookings")
+            .update(patch)
+            .eq("id", booking.id);
+        setMarkingDpVerified(false);
+
+        if (error) {
+            showFeedback("Gagal menandai DP sebagai terverifikasi.");
+            return;
+        }
+
+        setBooking((prev) => (prev ? { ...prev, ...patch } : prev));
+    }
+
+    async function handleMarkDpUnverified() {
+        if (!booking) return;
+        setMarkingDpUnverified(true);
+        const patch = {
+            dp_verified_amount: 0,
+            dp_verified_at: null,
+            dp_refund_amount: 0,
+            dp_refunded_at: null,
+        };
+
+        const { error } = await supabase
+            .from("bookings")
+            .update(patch)
+            .eq("id", booking.id);
+        setMarkingDpUnverified(false);
+
+        if (error) {
+            showFeedback("Gagal membatalkan verifikasi DP.");
+            return;
+        }
+
+        setBooking((prev) => (prev ? { ...prev, ...patch } : prev));
     }
 
     function copyTrackingLink() {
@@ -1204,11 +1295,29 @@ export default function BookingDetailPage() {
     const finalAdjustments = normalizeEditableAdjustments(adjustmentItems);
     const finalAdjustmentsTotal = getFinalAdjustmentsTotal(finalAdjustments);
     const finalInvoiceTotal = getFinalInvoiceTotal(booking.total_price, finalAdjustments);
+    const verifiedPaymentInput = {
+        total_price: booking.total_price,
+        dp_paid: booking.dp_paid,
+        dp_verified_amount: booking.dp_verified_amount,
+        dp_verified_at: booking.dp_verified_at,
+        dp_refund_amount: booking.dp_refund_amount,
+        dp_refunded_at: booking.dp_refunded_at,
+        final_adjustments: finalAdjustments,
+        final_payment_amount: booking.final_payment_amount,
+        final_paid_at: booking.final_paid_at,
+        settlement_status: booking.settlement_status,
+        is_fully_paid: booking.is_fully_paid,
+    };
+    const verifiedDpAmount = getVerifiedDpAmount(verifiedPaymentInput);
+    const dpRefundAmount = getDpRefundAmount(verifiedPaymentInput);
     const verifiedFinalPayment = booking.final_paid_at ? booking.final_payment_amount || 0 : 0;
+    const netVerifiedRevenue = getNetVerifiedRevenueAmount(verifiedPaymentInput);
     const initialPaymentStatus = booking.is_fully_paid
         ? "Lunas"
-        : booking.dp_paid > 0
-            ? "DP Dibayar"
+        : verifiedDpAmount > 0
+            ? "DP Terverifikasi"
+            : booking.dp_paid > 0
+                ? "DP Menunggu Verifikasi"
             : "Belum Dibayar";
     const remaining = getRemainingFinalPayment({
         total_price: booking.total_price,
@@ -1425,10 +1534,34 @@ export default function BookingDetailPage() {
                             <Button variant="outline" size="sm" className="h-8 px-2.5" onClick={() => setEditingDp(true)}>
                                 Edit DP
                             </Button>
+                            {verifiedDpAmount > 0 ? (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 px-2.5"
+                                    onClick={handleMarkDpUnverified}
+                                    disabled={markingDpUnverified}
+                                >
+                                    {markingDpUnverified ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Batal Tandai Lunas DP"}
+                                </Button>
+                            ) : (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 px-2.5"
+                                    onClick={handleMarkDpVerified}
+                                    disabled={markingDpVerified || booking.dp_paid <= 0}
+                                >
+                                    {markingDpVerified ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Tandai Lunas DP"}
+                                </Button>
+                            )}
                         </div>
                     )}
                 />
+                <InfoRow label="DP Terverifikasi" value={formatCurrency(verifiedDpAmount)} />
+                <InfoRow label="Refund DP" value={formatCurrency(dpRefundAmount)} />
                 <InfoRow label="Pelunasan Terverifikasi" value={formatCurrency(verifiedFinalPayment)} />
+                <InfoRow label="Total Terverifikasi Bersih" value={<span className="font-semibold">{formatCurrency(netVerifiedRevenue)}</span>} />
                 <InfoRow label="Metode Pembayaran" value={formatPaymentMethod(booking.payment_method)} />
                 <InfoRow label="Sumber Pembayaran" value={formatPaymentSource(booking.payment_source)} />
                 <InfoRow label="Sisa" value={
@@ -1904,18 +2037,18 @@ export default function BookingDetailPage() {
                 </DialogContent>
             </Dialog>
 
-            <ActionConfirmDialog
+            <CancelStatusPaymentDialog
                 open={cancelStatusConfirmOpen}
                 onOpenChange={setCancelStatusConfirmOpen}
-                title={locale === "en" ? "Set status to Cancelled?" : "Ubah status ke Batal?"}
-                message={locale === "en"
-                    ? `Booking ${booking.client_name} will be hidden from calendar and its Google Calendar event will be removed. Continue?`
-                    : `Booking ${booking.client_name} akan disembunyikan dari kalender dan event Google Calendar akan dihapus. Lanjutkan?`}
-                cancelLabel={locale === "en" ? "Back" : "Kembali"}
-                confirmLabel={locale === "en" ? "Yes, Set to Cancelled" : "Ya, Ubah ke Batal"}
-                onConfirm={() => { void handleSaveClientStatus({ skipCancelConfirmation: true }); }}
-                confirmVariant="destructive"
+                bookingName={booking.client_name}
+                maxRefundAmount={Math.max(booking.dp_verified_amount || 0, 0)}
                 loading={savingStatus}
+                onConfirm={({ policy, refundAmount }) => {
+                    void handleSaveClientStatus({
+                        skipCancelConfirmation: true,
+                        cancelPayment: { policy, refundAmount },
+                    });
+                }}
             />
 
             <ActionFeedbackDialog

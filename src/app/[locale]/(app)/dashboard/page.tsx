@@ -22,8 +22,10 @@ import { getTranslations, getLocale } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import type { ChangelogEntry } from "@/lib/changelog";
 import {
+  getDpRefundAmount,
+  getNetVerifiedRevenueAmount,
   getRemainingFinalPayment,
-  getTotalPaidAmount,
+  getVerifiedDpAmount,
   getVerifiedFinalPaymentAmount,
 } from "@/lib/final-settlement";
 
@@ -116,10 +118,9 @@ export default async function DashboardPage() {
     supabase
       .from("bookings")
       .select(
-        "total_price, dp_paid, created_at, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at",
+        "total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, created_at, status, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at",
       )
-      .eq("user_id", user!.id)
-      .neq("status", "Batal"),
+      .eq("user_id", user!.id),
     supabase
       .from("changelog")
       .select("id, version, title, description, badge, published_at")
@@ -127,8 +128,12 @@ export default async function DashboardPage() {
       .limit(50),
   ]);
 
-  const pendingAmount = (financeRows || []).reduce(
-    (sum, booking) =>
+  const isCancelledStatus = (value?: string | null) =>
+    (value || "").trim().toLowerCase() === "batal";
+
+  const pendingAmount = (financeRows || []).reduce((sum, booking) => {
+    if (isCancelledStatus(booking.status)) return sum;
+    return (
       sum +
       getRemainingFinalPayment({
         total_price: booking.total_price || 0,
@@ -138,15 +143,19 @@ export default async function DashboardPage() {
         final_paid_at: booking.final_paid_at,
         settlement_status: booking.settlement_status,
         is_fully_paid: booking.is_fully_paid,
-      }),
-    0,
-  );
+      })
+    );
+  }, 0);
   const totalRevenue = (financeRows || []).reduce(
     (sum, booking) =>
       sum +
-      getTotalPaidAmount({
+      getNetVerifiedRevenueAmount({
         total_price: booking.total_price || 0,
         dp_paid: booking.dp_paid || 0,
+        dp_verified_amount: booking.dp_verified_amount || 0,
+        dp_verified_at: booking.dp_verified_at,
+        dp_refund_amount: booking.dp_refund_amount || 0,
+        dp_refunded_at: booking.dp_refunded_at,
         final_adjustments: booking.final_adjustments,
         final_payment_amount: booking.final_payment_amount || 0,
         final_paid_at: booking.final_paid_at,
@@ -190,7 +199,7 @@ export default async function DashboardPage() {
     dateValue: string | null | undefined,
     amount: number,
   ) => {
-    if (!dateValue || amount <= 0) return;
+    if (!dateValue || amount === 0) return;
     const transactionDate = new Date(dateValue);
     if (Number.isNaN(transactionDate.getTime())) return;
 
@@ -211,16 +220,22 @@ export default async function DashboardPage() {
     const input = {
       total_price: booking.total_price || 0,
       dp_paid: booking.dp_paid || 0,
+      dp_verified_amount: booking.dp_verified_amount || 0,
+      dp_verified_at: booking.dp_verified_at,
+      dp_refund_amount: booking.dp_refund_amount || 0,
+      dp_refunded_at: booking.dp_refunded_at,
       final_adjustments: booking.final_adjustments,
       final_payment_amount: booking.final_payment_amount || 0,
       final_paid_at: booking.final_paid_at,
       settlement_status: booking.settlement_status,
       is_fully_paid: booking.is_fully_paid,
     };
-    const dpAmount = Math.max(booking.dp_paid || 0, 0);
+    const dpAmount = getVerifiedDpAmount(input);
+    const refundAmount = getDpRefundAmount(input);
     const finalPaidAmount = getVerifiedFinalPaymentAmount(input);
 
-    recordRevenueTransaction(booking.created_at, dpAmount);
+    recordRevenueTransaction(booking.dp_verified_at, dpAmount);
+    recordRevenueTransaction(booking.dp_refunded_at, -refundAmount);
     recordRevenueTransaction(booking.final_paid_at, finalPaidAmount);
   });
 

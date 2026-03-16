@@ -257,6 +257,8 @@
         "semua": "All",
         "lunas": "Paid",
         "belumLunas": "Unpaid",
+        "batalHangus": "Cancelled-Forfeit",
+        "batalRefund": "Cancelled-Refund",
         "klien": "Client",
         "hargaTotal": "Total Price",
         "addOn": "Add-on",
@@ -767,6 +769,21 @@
         "feedbackTitle": "Information",
         "feedbackOk": "OK",
         "waNotAvailable": "Client WhatsApp number not available."
+    },
+    "CancelStatusDialog": {
+        "title": "DP Handling for Cancelled Booking",
+        "description": "Booking {name} will be set to Cancelled. Choose how to handle the verified DP.",
+        "forfeitTitle": "Keep DP (Forfeit)",
+        "forfeitDesc": "Verified DP stays counted as revenue.",
+        "refundTitle": "Refund DP",
+        "refundDesc": "DP refund will reduce verified revenue.",
+        "maxRefund": "Maximum refund: {amount}",
+        "refundAmountLabel": "DP Refund Amount",
+        "refundAmountHelp": "Enter 0 up to {amount}. Partial refunds are allowed.",
+        "validationInvalid": "Refund amount is invalid.",
+        "validationExceed": "Refund amount exceeds the limit ({max}).",
+        "cancel": "Back",
+        "confirm": "Save & Set Cancelled"
     },
     "ServicesPage": {
         "duration": "Duration",

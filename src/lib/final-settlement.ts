@@ -15,6 +15,10 @@ export type SettlementStatus = "draft" | "sent" | "submitted" | "paid";
 type SettlementInput = {
   total_price: number;
   dp_paid: number;
+  dp_verified_amount?: number | null;
+  dp_verified_at?: string | null;
+  dp_refund_amount?: number | null;
+  dp_refunded_at?: string | null;
   final_adjustments?: unknown;
   final_payment_amount?: number | null;
   final_paid_at?: string | null;
@@ -88,6 +92,20 @@ export function getVerifiedFinalPaymentAmount(input: SettlementInput): number {
   }
 
   return 0;
+}
+
+export function getVerifiedDpAmount(input: SettlementInput): number {
+  return Math.max(input.dp_verified_amount || 0, 0);
+}
+
+export function getDpRefundAmount(input: SettlementInput): number {
+  const refund = Math.max(input.dp_refund_amount || 0, 0);
+  const verifiedDp = getVerifiedDpAmount(input);
+  return refund > verifiedDp ? verifiedDp : refund;
+}
+
+export function getNetVerifiedRevenueAmount(input: SettlementInput): number {
+  return getVerifiedDpAmount(input) + getVerifiedFinalPaymentAmount(input) - getDpRefundAmount(input);
 }
 
 export function getTotalPaidAmount(input: SettlementInput): number {

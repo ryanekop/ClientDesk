@@ -4,8 +4,8 @@ import * as React from "react";
 import { createClient } from "@/utils/supabase/client";
 import { Activity, Copy, ClipboardCheck, Loader2, ExternalLink, Search } from "lucide-react";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
-import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
+import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
 import { Link } from "@/i18n/routing";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import { useTranslations, useLocale } from "next-intl";
@@ -36,6 +36,7 @@ import {
     isTransitionToCancelled,
     syncGoogleCalendarForStatusTransition,
 } from "@/utils/google-calendar-status-sync";
+import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
 
 type BookingStatus = {
     id: string;
@@ -46,6 +47,9 @@ type BookingStatus = {
     status: string;
     client_status: string | null;
     queue_position: number | null;
+    dp_verified_amount?: number | null;
+    dp_refund_amount?: number | null;
+    dp_refunded_at?: string | null;
     tracking_uuid: string | null;
     services: { id?: string; name: string; price?: number; is_addon?: boolean | null } | null;
     booking_services?: unknown[];
@@ -142,7 +146,7 @@ export default function ClientStatusPage() {
 
             const { data } = await supabase
                 .from("bookings")
-                .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, tracking_uuid, event_type, extra_fields, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
+                .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, dp_verified_amount, dp_refund_amount, dp_refunded_at, tracking_uuid, event_type, extra_fields, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
                 .eq("user_id", user.id)
                 .neq("status", "Batal")
                 .order("created_at", { ascending: false });
@@ -191,7 +195,10 @@ export default function ClientStatusPage() {
     async function updateStatus(
         id: string,
         clientStatus: string,
-        options?: { skipCancelConfirmation?: boolean },
+        options?: {
+            skipCancelConfirmation?: boolean;
+            cancelPayment?: { policy: CancelPaymentPolicy; refundAmount: number };
+        },
     ) {
         const oldBooking = bookings.find((booking) => booking.id === id);
         if (!oldBooking) return;
@@ -213,6 +220,14 @@ export default function ClientStatusPage() {
         setSavingId(id);
         const wasQueue = queueTriggerStatus && oldBooking.client_status === queueTriggerStatus;
         const isQueue = queueTriggerStatus && clientStatus === queueTriggerStatus;
+        const isCancelling = isTransitionToCancelled(previousStatus, nextStatus);
+        const cancelPatch = isCancelling
+            ? buildCancelPaymentPatch({
+                policy: options?.cancelPayment?.policy || "forfeit",
+                refundAmount: options?.cancelPayment?.refundAmount || 0,
+                verifiedAmount: oldBooking.dp_verified_amount || 0,
+            })
+            : null;
 
         try {
             if (isQueue && !wasQueue) {
@@ -223,7 +238,12 @@ export default function ClientStatusPage() {
                 const newPos = maxPos + 1;
                 const { error } = await supabase
                     .from("bookings")
-                    .update({ status: nextStatus, client_status: nextStatus, queue_position: newPos })
+                    .update({
+                        status: nextStatus,
+                        client_status: nextStatus,
+                        queue_position: newPos,
+                        ...(cancelPatch || {}),
+                    })
                     .eq("id", id);
                 if (error) {
                     showFeedback(locale === "en" ? "Failed to update status." : "Gagal update status.");
@@ -232,7 +252,7 @@ export default function ClientStatusPage() {
                 setBookings((prev) =>
                     prev.map((booking) =>
                         booking.id === id
-                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos }
+                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos, ...(cancelPatch || {}) }
                             : booking,
                     ),
                 );
@@ -240,7 +260,12 @@ export default function ClientStatusPage() {
                 // Auto-clear: remove position and re-number remaining
                 const { error } = await supabase
                     .from("bookings")
-                    .update({ status: nextStatus, client_status: nextStatus, queue_position: null })
+                    .update({
+                        status: nextStatus,
+                        client_status: nextStatus,
+                        queue_position: null,
+                        ...(cancelPatch || {}),
+                    })
                     .eq("id", id);
                 if (error) {
                     showFeedback(locale === "en" ? "Failed to update status." : "Gagal update status.");
@@ -256,7 +281,7 @@ export default function ClientStatusPage() {
                 setBookings((prev) => {
                     let updated = prev.map((booking) =>
                         booking.id === id
-                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null }
+                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null, ...(cancelPatch || {}) }
                             : booking,
                     );
                     remaining.forEach((queueBooking, index) => {
@@ -271,7 +296,11 @@ export default function ClientStatusPage() {
             } else {
                 const { error } = await supabase
                     .from("bookings")
-                    .update({ status: nextStatus, client_status: nextStatus })
+                    .update({
+                        status: nextStatus,
+                        client_status: nextStatus,
+                        ...(cancelPatch || {}),
+                    })
                     .eq("id", id);
                 if (error) {
                     showFeedback(locale === "en" ? "Failed to update status." : "Gagal update status.");
@@ -280,7 +309,7 @@ export default function ClientStatusPage() {
                 setBookings((prev) =>
                     prev.map((booking) =>
                         booking.id === id
-                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus }
+                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, ...(cancelPatch || {}) }
                             : booking,
                     ),
                 );
@@ -601,29 +630,23 @@ export default function ClientStatusPage() {
                 <TablePagination totalItems={filtered.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
             </div>
 
-            <ActionConfirmDialog
+            <CancelStatusPaymentDialog
                 open={cancelStatusConfirm.open}
                 onOpenChange={(open) =>
                     setCancelStatusConfirm((prev) =>
                         open ? prev : { open: false, booking: null, nextStatus: "" },
                     )
                 }
-                title={locale === "en" ? "Set status to Cancelled?" : "Ubah status ke Batal?"}
-                message={locale === "en"
-                    ? `Booking ${cancelStatusConfirm.booking?.client_name || ""} will be hidden from calendar and its Google Calendar event will be removed. Continue?`
-                    : `Booking ${cancelStatusConfirm.booking?.client_name || ""} akan disembunyikan dari kalender dan event Google Calendar akan dihapus. Lanjutkan?`}
-                cancelLabel={locale === "en" ? "Back" : "Kembali"}
-                confirmLabel={locale === "en" ? "Yes, Set to Cancelled" : "Ya, Ubah ke Batal"}
-                onConfirm={() => {
-                    if (!cancelStatusConfirm.booking) return;
-                    void updateStatus(
-                        cancelStatusConfirm.booking.id,
-                        cancelStatusConfirm.nextStatus,
-                        { skipCancelConfirmation: true },
-                    );
-                }}
-                confirmVariant="destructive"
+                bookingName={cancelStatusConfirm.booking?.client_name || ""}
+                maxRefundAmount={Math.max(cancelStatusConfirm.booking?.dp_verified_amount || 0, 0)}
                 loading={savingId === cancelStatusConfirm.booking?.id}
+                onConfirm={({ policy, refundAmount }) => {
+                    if (!cancelStatusConfirm.booking) return;
+                    void updateStatus(cancelStatusConfirm.booking.id, cancelStatusConfirm.nextStatus, {
+                        skipCancelConfirmation: true,
+                        cancelPayment: { policy, refundAmount },
+                    });
+                }}
             />
 
             <ActionFeedbackDialog

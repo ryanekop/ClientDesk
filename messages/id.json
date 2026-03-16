@@ -257,6 +257,8 @@
         "semua": "Semua",
         "lunas": "Lunas",
         "belumLunas": "Belum Lunas",
+        "batalHangus": "Batal-Hangus",
+        "batalRefund": "Batal-Refund",
         "klien": "Klien",
         "hargaTotal": "Harga Total",
         "addOn": "Add-on",
@@ -767,6 +769,21 @@
         "feedbackTitle": "Informasi",
         "feedbackOk": "OK",
         "waNotAvailable": "Nomor WhatsApp klien tidak tersedia."
+    },
+    "CancelStatusDialog": {
+        "title": "Pengaturan DP Saat Batal",
+        "description": "Booking {name} akan diubah ke status Batal. Pilih perlakuan untuk DP yang sudah terverifikasi.",
+        "forfeitTitle": "DP Hangus",
+        "forfeitDesc": "DP tetap dihitung sebagai pemasukan.",
+        "refundTitle": "DP Dikembalikan",
+        "refundDesc": "Refund DP akan mengurangi total pemasukan terverifikasi.",
+        "maxRefund": "Maksimal refund: {amount}",
+        "refundAmountLabel": "Nominal Refund DP",
+        "refundAmountHelp": "Isi 0 sampai {amount}. Anda bisa mengisi refund parsial.",
+        "validationInvalid": "Nominal refund tidak valid.",
+        "validationExceed": "Nominal refund melebihi batas ({max}).",
+        "cancel": "Kembali",
+        "confirm": "Simpan & Ubah ke Batal"
     },
     "ServicesPage": {
         "duration": "Durasi",
