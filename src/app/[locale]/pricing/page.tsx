@@ -21,12 +21,18 @@ import { createClient } from '@/utils/supabase/client'
 
 import { LandingNav } from "@/components/landing/landing-client"
 
+type PricingMode = "single" | "bundle"
+
+const CLIENT_DESK_CHECKOUT_LINK = "https://ryaneko.myr.id/m/client-desk-pro-access"
+const BUNDLE_CHECKOUT_LINK = "https://ryaneko.myr.id/m/bundling-client-desk-fastpik/"
+
 export default function PricingPage() {
     const t = useTranslations('Pricing')
     const tl = useTranslations('Landing')
     const locale = useLocale()
     const supabase = createClient()
     const [currentTier, setCurrentTier] = useState<string | null>(null)
+    const [pricingMode, setPricingMode] = useState<PricingMode>("single")
 
     useEffect(() => {
         async function fetchSubscription() {
@@ -58,10 +64,10 @@ export default function PricingPage() {
         {
             nameKey: "plan1Month",
             tier: "pro_monthly",
-            price: "39rb",
+            price: pricingMode === "bundle" ? "49rb" : "39rb",
             durationKey: "perMonth",
             features: [...sharedFeatures],
-            link: "https://ryaneko.myr.id/m/client-desk-pro-access",
+            link: pricingMode === "bundle" ? BUNDLE_CHECKOUT_LINK : CLIENT_DESK_CHECKOUT_LINK,
             popular: false,
             icon: Zap,
             isLifetime: false
@@ -69,10 +75,10 @@ export default function PricingPage() {
         {
             nameKey: "plan3Months",
             tier: "pro_quarterly",
-            price: "99rb",
+            price: pricingMode === "bundle" ? "125rb" : "99rb",
             durationKey: "per3Months",
-            features: ["featurePerMonth3", ...sharedFeatures],
-            link: "https://ryaneko.myr.id/m/client-desk-pro-access",
+            features: [pricingMode === "bundle" ? "featurePerMonthBundle3" : "featurePerMonth3", ...sharedFeatures],
+            link: pricingMode === "bundle" ? BUNDLE_CHECKOUT_LINK : CLIENT_DESK_CHECKOUT_LINK,
             popular: false,
             icon: Star,
             isLifetime: false
@@ -80,10 +86,10 @@ export default function PricingPage() {
         {
             nameKey: "plan1Year",
             tier: "pro_yearly",
-            price: "349rb",
+            price: pricingMode === "bundle" ? "399rb" : "349rb",
             durationKey: "perYear",
-            features: ["featurePerMonth12", ...sharedFeatures],
-            link: "https://ryaneko.myr.id/m/client-desk-pro-access",
+            features: [pricingMode === "bundle" ? "featurePerMonthBundle12" : "featurePerMonth12", ...sharedFeatures],
+            link: pricingMode === "bundle" ? BUNDLE_CHECKOUT_LINK : CLIENT_DESK_CHECKOUT_LINK,
             popular: true,
             icon: Crown,
             isLifetime: false
@@ -91,10 +97,10 @@ export default function PricingPage() {
         {
             nameKey: "planLifetime",
             tier: "lifetime",
-            price: "549rb",
+            price: pricingMode === "bundle" ? "749rb" : "549rb",
             durationKey: "oneTime",
             features: ["featurePayOnce", "featureLimitedSlot", ...sharedFeatures, "featureFutureUpdates"],
-            link: "https://ryaneko.myr.id/m/client-desk-pro-access",
+            link: pricingMode === "bundle" ? BUNDLE_CHECKOUT_LINK : CLIENT_DESK_CHECKOUT_LINK,
             popular: false,
             icon: InfinityIcon,
             isLifetime: true
@@ -147,6 +153,46 @@ export default function PricingPage() {
                     </div>
                 </div>
 
+                <div className="mb-10 flex flex-col items-center gap-3">
+                    <div className="inline-flex items-center rounded-full border bg-muted p-1">
+                        <button
+                            type="button"
+                            onClick={() => setPricingMode("single")}
+                            className={cn(
+                                "rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                                pricingMode === "single"
+                                    ? "bg-background text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            {t("modeSingleLabel")}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setPricingMode("bundle")}
+                            className={cn(
+                                "rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                                pricingMode === "bundle"
+                                    ? "bg-primary text-primary-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            {t("modeBundleLabel")}
+                        </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        {t("crossProductHint")}{" "}
+                        <a
+                            href={`https://fastpik.ryanekoapp.web.id/${locale}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-primary hover:underline"
+                        >
+                            {t("crossProductLinkLabel")}
+                        </a>
+                    </p>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
                     {plans.map((plan) => {
                         const isActive = currentTier === plan.tier
@@ -178,7 +224,7 @@ export default function PricingPage() {
                                         <span className="text-muted-foreground text-sm mb-1">{t(plan.durationKey)}</span>
                                     </div>
                                     <CardDescription>
-                                        {plan.isLifetime ? t('billingOnce') : t('billingAuto')}
+                                        {plan.isLifetime ? t('billingOnce') : t('billingManualRenew')}
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="flex-1">
