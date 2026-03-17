@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
@@ -116,6 +117,9 @@ export default function FinancePage() {
     const [invoiceMenuBookingId, setInvoiceMenuBookingId] = React.useState<string | null>(null);
     const [copyMenuBookingId, setCopyMenuBookingId] = React.useState<string | null>(null);
     const [waMenuBookingId, setWaMenuBookingId] = React.useState<string | null>(null);
+    const [invoiceMenuAnchorEl, setInvoiceMenuAnchorEl] = React.useState<HTMLElement | null>(null);
+    const [copyMenuAnchorEl, setCopyMenuAnchorEl] = React.useState<HTMLElement | null>(null);
+    const [waMenuAnchorEl, setWaMenuAnchorEl] = React.useState<HTMLElement | null>(null);
     const [copiedInitialTemplateId, setCopiedInitialTemplateId] = React.useState<string | null>(null);
     const [copiedFinalTemplateId, setCopiedFinalTemplateId] = React.useState<string | null>(null);
     const [mobileActionPicker, setMobileActionPicker] = React.useState<{
@@ -124,6 +128,15 @@ export default function FinancePage() {
         kind: "invoice" | "copy" | "wa" | null;
     }>({ open: false, booking: null, kind: null });
     const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
+
+    const closeDesktopMenus = React.useCallback(() => {
+        setInvoiceMenuBookingId(null);
+        setCopyMenuBookingId(null);
+        setWaMenuBookingId(null);
+        setInvoiceMenuAnchorEl(null);
+        setCopyMenuAnchorEl(null);
+        setWaMenuAnchorEl(null);
+    }, []);
     const fetchBookings = React.useCallback(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
@@ -194,15 +207,12 @@ export default function FinancePage() {
         function handleOutsideClick(event: MouseEvent) {
             const target = event.target as HTMLElement | null;
             if (target?.closest("[data-finance-menu-root='true']")) return;
-            setInvoiceMenuBookingId(null);
-            setCopyMenuBookingId(null);
-            setWaMenuBookingId(null);
+            if (target?.closest("[data-table-action-menu-root='true']")) return;
+            closeDesktopMenus();
         }
         function handleEscape(event: KeyboardEvent) {
             if (event.key !== "Escape") return;
-            setInvoiceMenuBookingId(null);
-            setCopyMenuBookingId(null);
-            setWaMenuBookingId(null);
+            closeDesktopMenus();
         }
         document.addEventListener("mousedown", handleOutsideClick);
         document.addEventListener("keydown", handleEscape);
@@ -210,7 +220,7 @@ export default function FinancePage() {
             document.removeEventListener("mousedown", handleOutsideClick);
             document.removeEventListener("keydown", handleEscape);
         };
-    }, [copyMenuBookingId, invoiceMenuBookingId, waMenuBookingId]);
+    }, [closeDesktopMenus, copyMenuBookingId, invoiceMenuBookingId, waMenuBookingId]);
 
     const orderedVisibleColumns = React.useMemo(
         () => columns.filter((column) => column.visible),
@@ -674,9 +684,7 @@ export default function FinancePage() {
                                         type="button"
                                         title={tf("openInvoiceByContext")}
                                         onClick={() => {
-                                            setInvoiceMenuBookingId(null);
-                                            setCopyMenuBookingId(null);
-                                            setWaMenuBookingId(null);
+                                            closeDesktopMenus();
                                             handleOpenPrimaryInvoice(booking);
                                         }}
                                         className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-indigo-100 dark:hover:bg-indigo-800/60"
@@ -686,27 +694,32 @@ export default function FinancePage() {
                                     <button
                                         type="button"
                                         title={tf("openInvoiceOptions")}
-                                        onClick={() => {
+                                        onClick={(event) => {
                                             setCopyMenuBookingId(null);
                                             setWaMenuBookingId(null);
-                                            setInvoiceMenuBookingId((prev) => prev === booking.id ? null : booking.id);
+                                            setCopyMenuAnchorEl(null);
+                                            setWaMenuAnchorEl(null);
+                                            setInvoiceMenuBookingId((prev) => {
+                                                const next = prev === booking.id ? null : booking.id;
+                                                setInvoiceMenuAnchorEl(next ? event.currentTarget : null);
+                                                return next;
+                                            });
                                         }}
                                         className="inline-flex h-8 w-6 items-center justify-center border-l border-indigo-200 transition-colors hover:bg-indigo-100 dark:border-indigo-700 dark:hover:bg-indigo-800/60"
                                     >
                                         <ChevronDown className="w-3 h-3" />
                                     </button>
                                 </div>
-                                <div
-                                    className={`absolute right-0 top-full z-30 mt-1 w-48 rounded-md border border-border bg-card p-1 shadow-lg transition-all duration-200 ease-out origin-top-right ${invoiceMenuBookingId === booking.id
-                                        ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
-                                        : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
-                                        }`}
+                                <TableActionMenuPortal
+                                    open={invoiceMenuBookingId === booking.id}
+                                    anchorEl={invoiceMenuAnchorEl}
+                                    className="w-48"
                                 >
                                         <button
                                             type="button"
                                             className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
                                             onClick={() => {
-                                                setInvoiceMenuBookingId(null);
+                                                closeDesktopMenus();
                                                 handleOpenInvoiceStage(booking, "initial");
                                             }}
                                         >
@@ -716,13 +729,13 @@ export default function FinancePage() {
                                             type="button"
                                             className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
                                             onClick={() => {
-                                                setInvoiceMenuBookingId(null);
+                                                closeDesktopMenus();
                                                 handleOpenInvoiceStage(booking, "final");
                                             }}
                                         >
                                             {tf("openFinalInvoice")}
                                         </button>
-                                </div>
+                                </TableActionMenuPortal>
                             </div>
                             <div className="relative" data-finance-menu-root="true">
                                 <div className="flex items-stretch overflow-hidden rounded-md border border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
@@ -730,9 +743,7 @@ export default function FinancePage() {
                                         type="button"
                                         title={tf("copyInvoiceTemplateByContext")}
                                         onClick={() => {
-                                            setInvoiceMenuBookingId(null);
-                                            setCopyMenuBookingId(null);
-                                            setWaMenuBookingId(null);
+                                            closeDesktopMenus();
                                             handleCopyPrimaryInvoiceTemplate(booking);
                                         }}
                                         className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-violet-100 dark:hover:bg-violet-800/60"
@@ -748,27 +759,32 @@ export default function FinancePage() {
                                     <button
                                         type="button"
                                         title={tf("copyInvoiceTemplateOptions")}
-                                        onClick={() => {
+                                        onClick={(event) => {
                                             setInvoiceMenuBookingId(null);
                                             setWaMenuBookingId(null);
-                                            setCopyMenuBookingId((prev) => prev === booking.id ? null : booking.id);
+                                            setInvoiceMenuAnchorEl(null);
+                                            setWaMenuAnchorEl(null);
+                                            setCopyMenuBookingId((prev) => {
+                                                const next = prev === booking.id ? null : booking.id;
+                                                setCopyMenuAnchorEl(next ? event.currentTarget : null);
+                                                return next;
+                                            });
                                         }}
                                         className="inline-flex h-8 w-6 items-center justify-center border-l border-violet-200 transition-colors hover:bg-violet-100 dark:border-violet-700 dark:hover:bg-violet-800/60"
                                     >
                                         <ChevronDown className="w-3 h-3" />
                                     </button>
                                 </div>
-                                <div
-                                    className={`absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-card p-1 shadow-lg transition-all duration-200 ease-out origin-top-right ${copyMenuBookingId === booking.id
-                                        ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
-                                        : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
-                                        }`}
+                                <TableActionMenuPortal
+                                    open={copyMenuBookingId === booking.id}
+                                    anchorEl={copyMenuAnchorEl}
+                                    className="w-56"
                                 >
                                         <button
                                             type="button"
                                             className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
                                             onClick={() => {
-                                                setCopyMenuBookingId(null);
+                                                closeDesktopMenus();
                                                 handleCopyInvoiceTemplateStage(booking, "initial");
                                             }}
                                         >
@@ -778,13 +794,13 @@ export default function FinancePage() {
                                             type="button"
                                             className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
                                             onClick={() => {
-                                                setCopyMenuBookingId(null);
+                                                closeDesktopMenus();
                                                 handleCopyInvoiceTemplateStage(booking, "final");
                                             }}
                                         >
                                             {tf("copyFinalInvoiceTemplate")}
                                         </button>
-                                </div>
+                                </TableActionMenuPortal>
                             </div>
                             <div className="relative" data-finance-menu-root="true">
                                 <div className="flex items-stretch overflow-hidden rounded-md border border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
@@ -793,9 +809,7 @@ export default function FinancePage() {
                                         title={tf("sendInvoiceWAByContext")}
                                         disabled={!booking.client_whatsapp}
                                         onClick={() => {
-                                            setWaMenuBookingId(null);
-                                            setInvoiceMenuBookingId(null);
-                                            setCopyMenuBookingId(null);
+                                            closeDesktopMenus();
                                             void handleSendPrimaryInvoiceWa(booking);
                                         }}
                                         className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-emerald-800/60"
@@ -806,27 +820,32 @@ export default function FinancePage() {
                                         type="button"
                                         title={tf("sendInvoiceWAOptions")}
                                         disabled={!booking.client_whatsapp}
-                                        onClick={() => {
+                                        onClick={(event) => {
                                             setInvoiceMenuBookingId(null);
                                             setCopyMenuBookingId(null);
-                                            setWaMenuBookingId((prev) => prev === booking.id ? null : booking.id);
+                                            setInvoiceMenuAnchorEl(null);
+                                            setCopyMenuAnchorEl(null);
+                                            setWaMenuBookingId((prev) => {
+                                                const next = prev === booking.id ? null : booking.id;
+                                                setWaMenuAnchorEl(next ? event.currentTarget : null);
+                                                return next;
+                                            });
                                         }}
                                         className="inline-flex h-8 w-6 items-center justify-center border-l border-emerald-200 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:hover:bg-emerald-800/60"
                                     >
                                         <ChevronDown className="w-3 h-3" />
                                     </button>
                                 </div>
-                                <div
-                                    className={`absolute right-0 top-full z-30 mt-1 w-52 rounded-md border border-border bg-card p-1 shadow-lg transition-all duration-200 ease-out origin-top-right ${waMenuBookingId === booking.id
-                                        ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
-                                        : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
-                                        }`}
+                                <TableActionMenuPortal
+                                    open={waMenuBookingId === booking.id}
+                                    anchorEl={waMenuAnchorEl}
+                                    className="w-52"
                                 >
                                         <button
                                             type="button"
                                             className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
                                             onClick={() => {
-                                                setWaMenuBookingId(null);
+                                                closeDesktopMenus();
                                                 void handleSendInvoiceWaStage(booking, "initial");
                                             }}
                                         >
@@ -837,13 +856,13 @@ export default function FinancePage() {
                                             disabled={!booking.tracking_uuid}
                                             className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                                             onClick={() => {
-                                                setWaMenuBookingId(null);
+                                                closeDesktopMenus();
                                                 void handleSendInvoiceWaStage(booking, "final");
                                             }}
                                         >
                                             {tf("sendFinalInvoiceWA")}
                                         </button>
-                                </div>
+                                </TableActionMenuPortal>
                             </div>
                             <ActionIconButton tone="sky" title={tf("openSettlementLink")}
                                 disabled={!booking.tracking_uuid}

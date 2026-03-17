@@ -16,6 +16,7 @@ import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { BatchImportButton } from "@/components/batch-import";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
+import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
 import { buildExtraFieldTemplateVars, getEventExtraFields } from "@/utils/form-extra-fields";
 import {
     buildCustomFieldTemplateVars,
@@ -259,9 +260,18 @@ export default function BookingsPage() {
     const [copyFreelancerPopup, setCopyFreelancerPopup] = React.useState<{ open: boolean; freelancers: FreelancerInfo[]; booking: Booking | null }>({ open: false, freelancers: [], booking: null });
     const [waMenuBookingId, setWaMenuBookingId] = React.useState<string | null>(null);
     const [copyMenuBookingId, setCopyMenuBookingId] = React.useState<string | null>(null);
+    const [waMenuAnchorEl, setWaMenuAnchorEl] = React.useState<HTMLElement | null>(null);
+    const [copyMenuAnchorEl, setCopyMenuAnchorEl] = React.useState<HTMLElement | null>(null);
     const [waTargetPopup, setWaTargetPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [copyTargetPopup, setCopyTargetPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
+
+    const closeDesktopMenus = React.useCallback(() => {
+        setWaMenuBookingId(null);
+        setCopyMenuBookingId(null);
+        setWaMenuAnchorEl(null);
+        setCopyMenuAnchorEl(null);
+    }, []);
 
     const fetchTemplates = React.useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -388,13 +398,12 @@ export default function BookingsPage() {
             const target = event.target as HTMLElement | null;
             if (target?.closest("[data-wa-menu-root='true']")) return;
             if (target?.closest("[data-copy-menu-root='true']")) return;
-            setWaMenuBookingId(null);
-            setCopyMenuBookingId(null);
+            if (target?.closest("[data-table-action-menu-root='true']")) return;
+            closeDesktopMenus();
         }
         function handleEscape(event: KeyboardEvent) {
             if (event.key !== "Escape") return;
-            setWaMenuBookingId(null);
-            setCopyMenuBookingId(null);
+            closeDesktopMenus();
         }
         document.addEventListener("mousedown", handleOutsideClick);
         document.addEventListener("keydown", handleEscape);
@@ -402,7 +411,7 @@ export default function BookingsPage() {
             document.removeEventListener("mousedown", handleOutsideClick);
             document.removeEventListener("keydown", handleEscape);
         };
-    }, [copyMenuBookingId, waMenuBookingId]);
+    }, [closeDesktopMenus, copyMenuBookingId, waMenuBookingId]);
 
     async function handleUpdateStatus(options?: {
         skipCancelConfirmation?: boolean;
@@ -791,8 +800,7 @@ export default function BookingsPage() {
                                         type="button"
                                         title={tb("copyPrimaryAction")}
                                         onClick={() => {
-                                            setCopyMenuBookingId(null);
-                                            setWaMenuBookingId(null);
+                                            closeDesktopMenus();
                                             handleDefaultCopyAction(booking);
                                         }}
                                         className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-violet-100 dark:hover:bg-violet-800/60"
@@ -806,25 +814,29 @@ export default function BookingsPage() {
                                     <button
                                         type="button"
                                         title={tb("copyMoreActions")}
-                                        onClick={() => {
+                                        onClick={(event) => {
                                             setWaMenuBookingId(null);
-                                            setCopyMenuBookingId((prev) => prev === booking.id ? null : booking.id);
+                                            setWaMenuAnchorEl(null);
+                                            setCopyMenuBookingId((prev) => {
+                                                const next = prev === booking.id ? null : booking.id;
+                                                setCopyMenuAnchorEl(next ? event.currentTarget : null);
+                                                return next;
+                                            });
                                         }}
                                         className="inline-flex h-8 w-6 items-center justify-center border-l border-violet-200 transition-colors hover:bg-violet-100 dark:border-violet-700 dark:hover:bg-violet-800/60"
                                     >
                                         <ChevronDown className="w-3 h-3" />
                                     </button>
                                 </div>
-                                <div
-                                    className={`absolute right-0 top-full z-30 mt-1 w-48 rounded-md border border-border bg-card p-1 shadow-lg transition-all duration-200 ease-out origin-top-right ${copyMenuBookingId === booking.id
-                                        ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
-                                        : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
-                                        }`}
+                                <TableActionMenuPortal
+                                    open={copyMenuBookingId === booking.id}
+                                    anchorEl={copyMenuAnchorEl}
+                                    className="w-48"
                                 >
                                         <button
                                             type="button"
                                             onClick={() => {
-                                                setCopyMenuBookingId(null);
+                                                closeDesktopMenus();
                                                 handleExplicitCopyAction(booking, "client");
                                             }}
                                             className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
@@ -834,14 +846,14 @@ export default function BookingsPage() {
                                         <button
                                             type="button"
                                             onClick={() => {
-                                                setCopyMenuBookingId(null);
+                                                closeDesktopMenus();
                                                 handleExplicitCopyAction(booking, "freelancer");
                                             }}
                                             className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
                                         >
                                             {tb("copyToFreelancer")}
                                         </button>
-                                </div>
+                                </TableActionMenuPortal>
                             </div>
                             <div className="relative" data-wa-menu-root="true">
                                 <div className="flex items-stretch overflow-hidden rounded-md border border-green-200 bg-green-50 text-green-600 dark:border-green-700 dark:bg-green-900/30 dark:text-green-300">
@@ -850,8 +862,7 @@ export default function BookingsPage() {
                                         title={tb("waPrimaryAction")}
                                         disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
                                         onClick={() => {
-                                            setWaMenuBookingId(null);
-                                            setCopyMenuBookingId(null);
+                                            closeDesktopMenus();
                                             handleDefaultWhatsAppAction(booking);
                                         }}
                                         className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-green-800/60"
@@ -862,25 +873,29 @@ export default function BookingsPage() {
                                         type="button"
                                         title={tb("waMoreActions")}
                                         disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
-                                        onClick={() => {
+                                        onClick={(event) => {
                                             setCopyMenuBookingId(null);
-                                            setWaMenuBookingId((prev) => prev === booking.id ? null : booking.id);
+                                            setCopyMenuAnchorEl(null);
+                                            setWaMenuBookingId((prev) => {
+                                                const next = prev === booking.id ? null : booking.id;
+                                                setWaMenuAnchorEl(next ? event.currentTarget : null);
+                                                return next;
+                                            });
                                         }}
                                         className="inline-flex h-8 w-6 items-center justify-center border-l border-green-200 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-700 dark:hover:bg-green-800/60"
                                     >
                                         <ChevronDown className="w-3 h-3" />
                                     </button>
                                 </div>
-                                <div
-                                    className={`absolute right-0 top-full z-30 mt-1 w-44 rounded-md border border-border bg-card p-1 shadow-lg transition-all duration-200 ease-out origin-top-right ${waMenuBookingId === booking.id
-                                        ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
-                                        : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
-                                        }`}
+                                <TableActionMenuPortal
+                                    open={waMenuBookingId === booking.id}
+                                    anchorEl={waMenuAnchorEl}
+                                    className="w-44"
                                 >
                                         <button
                                             type="button"
                                             onClick={() => {
-                                                setWaMenuBookingId(null);
+                                                closeDesktopMenus();
                                                 handleExplicitWhatsAppAction(booking, "client");
                                             }}
                                             className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
@@ -890,14 +905,14 @@ export default function BookingsPage() {
                                         <button
                                             type="button"
                                             onClick={() => {
-                                                setWaMenuBookingId(null);
+                                                closeDesktopMenus();
                                                 handleExplicitWhatsAppAction(booking, "freelancer");
                                             }}
                                             className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
                                         >
                                             {tb("sendToFreelancer")}
                                         </button>
-                                </div>
+                                </TableActionMenuPortal>
                             </div>
                             {booking.drive_folder_url ? (
                                 <ActionIconButton tone="blue" title={tb("openDrive")} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
