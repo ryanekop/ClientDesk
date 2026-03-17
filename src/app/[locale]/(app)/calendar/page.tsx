@@ -417,7 +417,7 @@ export default function CalendarPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, session_date, status, location, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, google_calendar_sync_status, google_calendar_sync_error, services(id, name, duration_minutes, is_addon), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon))")
+            .select("id, booking_code, client_name, session_date, status, location, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, google_calendar_sync_status, google_calendar_sync_error, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon, affects_schedule))")
             .eq("user_id", user.id)
             .neq("status", CANCELLED_BOOKING_STATUS);
 

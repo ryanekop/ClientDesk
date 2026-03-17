@@ -8,6 +8,7 @@ export type BookingServiceRecord = {
   description?: string | null;
   duration_minutes?: number | null;
   is_addon?: boolean | null;
+  affects_schedule?: boolean | null;
   is_public?: boolean | null;
   event_types?: string[] | null;
 };
@@ -28,6 +29,7 @@ type LegacyBookingServiceRecord = {
   description?: string | null;
   duration_minutes?: number | null;
   is_addon?: boolean | null;
+  affects_schedule?: boolean | null;
   is_public?: boolean | null;
   event_types?: unknown;
 };
@@ -91,6 +93,7 @@ export function normalizeLegacyServiceRecord(
     description: raw.description ?? null,
     duration_minutes: raw.duration_minutes ?? null,
     is_addon: raw.is_addon ?? null,
+    affects_schedule: raw.affects_schedule ?? null,
     is_public: raw.is_public ?? null,
     event_types: Array.isArray(raw.event_types)
       ? raw.event_types.filter((item): item is string => typeof item === "string")
@@ -191,7 +194,10 @@ export function getBookingDurationMinutes(
     0,
   );
   const addonDuration = getBookingServicesByKind(selections, "addon").reduce(
-    (sum, selection) => sum + toPositiveMinutes(selection.service.duration_minutes),
+    (sum, selection) =>
+      selection.service.affects_schedule === false
+        ? sum
+        : sum + toPositiveMinutes(selection.service.duration_minutes),
     0,
   );
   const totalDuration = mainDuration + addonDuration;

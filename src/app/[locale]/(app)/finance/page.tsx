@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown } from "lucide-react";
+import { Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown, Copy, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -114,11 +114,14 @@ export default function FinancePage() {
     const [savingColumns, setSavingColumns] = React.useState(false);
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
     const [invoiceMenuBookingId, setInvoiceMenuBookingId] = React.useState<string | null>(null);
+    const [copyMenuBookingId, setCopyMenuBookingId] = React.useState<string | null>(null);
     const [waMenuBookingId, setWaMenuBookingId] = React.useState<string | null>(null);
+    const [copiedInitialTemplateId, setCopiedInitialTemplateId] = React.useState<string | null>(null);
+    const [copiedFinalTemplateId, setCopiedFinalTemplateId] = React.useState<string | null>(null);
     const [mobileActionPicker, setMobileActionPicker] = React.useState<{
         open: boolean;
         booking: BookingFinance | null;
-        kind: "invoice" | "wa" | null;
+        kind: "invoice" | "copy" | "wa" | null;
     }>({ open: false, booking: null, kind: null });
     const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
     const fetchBookings = React.useCallback(async () => {
@@ -187,16 +190,18 @@ export default function FinancePage() {
     }, [fetchBookings]);
 
     React.useEffect(() => {
-        if (!invoiceMenuBookingId && !waMenuBookingId) return;
+        if (!invoiceMenuBookingId && !copyMenuBookingId && !waMenuBookingId) return;
         function handleOutsideClick(event: MouseEvent) {
             const target = event.target as HTMLElement | null;
             if (target?.closest("[data-finance-menu-root='true']")) return;
             setInvoiceMenuBookingId(null);
+            setCopyMenuBookingId(null);
             setWaMenuBookingId(null);
         }
         function handleEscape(event: KeyboardEvent) {
             if (event.key !== "Escape") return;
             setInvoiceMenuBookingId(null);
+            setCopyMenuBookingId(null);
             setWaMenuBookingId(null);
         }
         document.addEventListener("mousedown", handleOutsideClick);
@@ -205,7 +210,7 @@ export default function FinancePage() {
             document.removeEventListener("mousedown", handleOutsideClick);
             document.removeEventListener("keydown", handleEscape);
         };
-    }, [invoiceMenuBookingId, waMenuBookingId]);
+    }, [copyMenuBookingId, invoiceMenuBookingId, waMenuBookingId]);
 
     const orderedVisibleColumns = React.useMemo(
         () => columns.filter((column) => column.visible),
@@ -537,6 +542,39 @@ export default function FinancePage() {
         await sendFinalInvoiceWhatsApp(booking);
     }
 
+    function handleCopyInvoiceTemplateStage(
+        booking: BookingFinance,
+        stage: "initial" | "final",
+    ) {
+        const message =
+            stage === "initial"
+                ? buildInitialInvoiceMessage(booking)
+                : buildFinalInvoiceMessage(booking);
+        navigator.clipboard.writeText(message);
+        if (stage === "initial") {
+            setCopiedInitialTemplateId(booking.id);
+            setTimeout(() => {
+                setCopiedInitialTemplateId((current) =>
+                    current === booking.id ? null : current,
+                );
+            }, 2000);
+            return;
+        }
+        setCopiedFinalTemplateId(booking.id);
+        setTimeout(() => {
+            setCopiedFinalTemplateId((current) =>
+                current === booking.id ? null : current,
+            );
+        }, 2000);
+    }
+
+    function handleCopyPrimaryInvoiceTemplate(booking: BookingFinance) {
+        handleCopyInvoiceTemplateStage(
+            booking,
+            resolveInvoiceStageFromContext(booking),
+        );
+    }
+
     function handleOpenPrimaryInvoice(booking: BookingFinance) {
         handleOpenInvoiceStage(booking, resolveInvoiceStageFromContext(booking));
     }
@@ -560,7 +598,7 @@ export default function FinancePage() {
             case "status":
                 return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>;
             case "actions":
-                return <th key={column.id} className="min-w-[340px] px-4 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>;
+                return <th key={column.id} className="min-w-[420px] px-4 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>;
             default:
                 return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{column.label}</th>;
         }
@@ -623,7 +661,7 @@ export default function FinancePage() {
                 );
             case "actions":
                 return (
-                    <td key={column.id} className="min-w-[340px] px-4 py-4 text-right">
+                    <td key={column.id} className="min-w-[420px] px-4 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap pr-1">
                             <Link href={`/bookings/${booking.id}`}>
                                 <ActionIconButton tone="slate" title={tf("detailBooking")}>
@@ -637,6 +675,7 @@ export default function FinancePage() {
                                         title={tf("openInvoiceByContext")}
                                         onClick={() => {
                                             setInvoiceMenuBookingId(null);
+                                            setCopyMenuBookingId(null);
                                             setWaMenuBookingId(null);
                                             handleOpenPrimaryInvoice(booking);
                                         }}
@@ -648,6 +687,7 @@ export default function FinancePage() {
                                         type="button"
                                         title={tf("openInvoiceOptions")}
                                         onClick={() => {
+                                            setCopyMenuBookingId(null);
                                             setWaMenuBookingId(null);
                                             setInvoiceMenuBookingId((prev) => prev === booking.id ? null : booking.id);
                                         }}
@@ -685,6 +725,68 @@ export default function FinancePage() {
                                 </div>
                             </div>
                             <div className="relative" data-finance-menu-root="true">
+                                <div className="flex items-stretch overflow-hidden rounded-md border border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                                    <button
+                                        type="button"
+                                        title={tf("copyInvoiceTemplateByContext")}
+                                        onClick={() => {
+                                            setInvoiceMenuBookingId(null);
+                                            setCopyMenuBookingId(null);
+                                            setWaMenuBookingId(null);
+                                            handleCopyPrimaryInvoiceTemplate(booking);
+                                        }}
+                                        className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-violet-100 dark:hover:bg-violet-800/60"
+                                    >
+                                        {(resolveInvoiceStageFromContext(booking) === "initial"
+                                            ? copiedInitialTemplateId
+                                            : copiedFinalTemplateId) === booking.id ? (
+                                            <ClipboardCheck className="w-4 h-4" />
+                                        ) : (
+                                            <Copy className="w-4 h-4" />
+                                        )}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title={tf("copyInvoiceTemplateOptions")}
+                                        onClick={() => {
+                                            setInvoiceMenuBookingId(null);
+                                            setWaMenuBookingId(null);
+                                            setCopyMenuBookingId((prev) => prev === booking.id ? null : booking.id);
+                                        }}
+                                        className="inline-flex h-8 w-6 items-center justify-center border-l border-violet-200 transition-colors hover:bg-violet-100 dark:border-violet-700 dark:hover:bg-violet-800/60"
+                                    >
+                                        <ChevronDown className="w-3 h-3" />
+                                    </button>
+                                </div>
+                                <div
+                                    className={`absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-card p-1 shadow-lg transition-all duration-200 ease-out origin-top-right ${copyMenuBookingId === booking.id
+                                        ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                                        : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
+                                        }`}
+                                >
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                                            onClick={() => {
+                                                setCopyMenuBookingId(null);
+                                                handleCopyInvoiceTemplateStage(booking, "initial");
+                                            }}
+                                        >
+                                            {tf("copyInitialInvoiceTemplate")}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                                            onClick={() => {
+                                                setCopyMenuBookingId(null);
+                                                handleCopyInvoiceTemplateStage(booking, "final");
+                                            }}
+                                        >
+                                            {tf("copyFinalInvoiceTemplate")}
+                                        </button>
+                                </div>
+                            </div>
+                            <div className="relative" data-finance-menu-root="true">
                                 <div className="flex items-stretch overflow-hidden rounded-md border border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
                                     <button
                                         type="button"
@@ -693,6 +795,7 @@ export default function FinancePage() {
                                         onClick={() => {
                                             setWaMenuBookingId(null);
                                             setInvoiceMenuBookingId(null);
+                                            setCopyMenuBookingId(null);
                                             void handleSendPrimaryInvoiceWa(booking);
                                         }}
                                         className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-emerald-800/60"
@@ -705,6 +808,7 @@ export default function FinancePage() {
                                         disabled={!booking.client_whatsapp}
                                         onClick={() => {
                                             setInvoiceMenuBookingId(null);
+                                            setCopyMenuBookingId(null);
                                             setWaMenuBookingId((prev) => prev === booking.id ? null : booking.id);
                                         }}
                                         className="inline-flex h-8 w-6 items-center justify-center border-l border-emerald-200 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:hover:bg-emerald-800/60"
@@ -1003,6 +1107,13 @@ export default function FinancePage() {
                                 <ActionIconButton tone="indigo" title={tf("openInvoiceOptions")} onClick={() => setMobileActionPicker({ open: true, booking: b, kind: "invoice" })}>
                                     <FileText className="w-4 h-4" />
                                 </ActionIconButton>
+                                <ActionIconButton tone="violet" title={tf("copyInvoiceTemplateOptions")} onClick={() => setMobileActionPicker({ open: true, booking: b, kind: "copy" })}>
+                                    {(copiedInitialTemplateId === b.id || copiedFinalTemplateId === b.id) ? (
+                                        <ClipboardCheck className="w-4 h-4" />
+                                    ) : (
+                                        <Copy className="w-4 h-4" />
+                                    )}
+                                </ActionIconButton>
                                 <ActionIconButton tone="emerald" title={tf("sendInvoiceWAOptions")} disabled={!b.client_whatsapp} onClick={() => setMobileActionPicker({ open: true, booking: b, kind: "wa" })}>
                                     <MessageCircle className="w-4 h-4" />
                                 </ActionIconButton>
@@ -1029,10 +1140,18 @@ export default function FinancePage() {
                 <DialogContent className="sm:max-w-sm">
                     <DialogHeader>
                         <DialogTitle>
-                            {mobileActionPicker.kind === "wa" ? tf("sendInvoiceWAOptions") : tf("openInvoiceOptions")}
+                            {mobileActionPicker.kind === "wa"
+                                ? tf("sendInvoiceWAOptions")
+                                : mobileActionPicker.kind === "copy"
+                                    ? tf("copyInvoiceTemplateOptions")
+                                    : tf("openInvoiceOptions")}
                         </DialogTitle>
                         <DialogDescription>
-                            {mobileActionPicker.kind === "wa" ? tf("chooseWAInvoiceType") : tf("chooseInvoiceType")}
+                            {mobileActionPicker.kind === "wa"
+                                ? tf("chooseWAInvoiceType")
+                                : mobileActionPicker.kind === "copy"
+                                    ? tf("chooseCopyInvoiceType")
+                                    : tf("chooseInvoiceType")}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-2 py-2">
@@ -1048,11 +1167,19 @@ export default function FinancePage() {
                                     void handleSendInvoiceWaStage(booking, "initial");
                                     return;
                                 }
+                                if (kind === "copy") {
+                                    handleCopyInvoiceTemplateStage(booking, "initial");
+                                    return;
+                                }
                                 handleOpenInvoiceStage(booking, "initial");
                             }}
                         >
-                            <span>{mobileActionPicker.kind === "wa" ? tf("sendInitialInvoiceWA") : tf("openInitialInvoice")}</span>
-                            {mobileActionPicker.kind === "wa" ? <MessageCircle className="w-4 h-4 text-emerald-600" /> : <FileText className="w-4 h-4 text-indigo-600" />}
+                            <span>{mobileActionPicker.kind === "wa" ? tf("sendInitialInvoiceWA") : mobileActionPicker.kind === "copy" ? tf("copyInitialInvoiceTemplate") : tf("openInitialInvoice")}</span>
+                            {mobileActionPicker.kind === "wa"
+                                ? <MessageCircle className="w-4 h-4 text-emerald-600" />
+                                : mobileActionPicker.kind === "copy"
+                                    ? <Copy className="w-4 h-4 text-violet-600" />
+                                    : <FileText className="w-4 h-4 text-indigo-600" />}
                         </button>
                         <button
                             type="button"
@@ -1067,11 +1194,19 @@ export default function FinancePage() {
                                     void handleSendInvoiceWaStage(booking, "final");
                                     return;
                                 }
+                                if (kind === "copy") {
+                                    handleCopyInvoiceTemplateStage(booking, "final");
+                                    return;
+                                }
                                 handleOpenInvoiceStage(booking, "final");
                             }}
                         >
-                            <span>{mobileActionPicker.kind === "wa" ? tf("sendFinalInvoiceWA") : tf("openFinalInvoice")}</span>
-                            {mobileActionPicker.kind === "wa" ? <MessageCircle className="w-4 h-4 text-orange-600" /> : <Download className="w-4 h-4 text-indigo-600" />}
+                            <span>{mobileActionPicker.kind === "wa" ? tf("sendFinalInvoiceWA") : mobileActionPicker.kind === "copy" ? tf("copyFinalInvoiceTemplate") : tf("openFinalInvoice")}</span>
+                            {mobileActionPicker.kind === "wa"
+                                ? <MessageCircle className="w-4 h-4 text-orange-600" />
+                                : mobileActionPicker.kind === "copy"
+                                    ? <Copy className="w-4 h-4 text-violet-600" />
+                                    : <Download className="w-4 h-4 text-indigo-600" />}
                         </button>
                     </div>
                 </DialogContent>
@@ -1086,9 +1221,9 @@ export default function FinancePage() {
             />
 
             {/* Desktop Table */}
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-visible hidden md:block">
                 <div className="relative overflow-x-auto overflow-y-visible">
-                    <table className="min-w-[1180px] w-full text-sm text-left">
+                    <table className="min-w-[1260px] w-full text-sm text-left">
                         <thead className="text-xs uppercase bg-card border-b">
                             <tr>
                                 {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}

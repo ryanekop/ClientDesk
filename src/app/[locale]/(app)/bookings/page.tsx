@@ -206,7 +206,8 @@ export default function BookingsPage() {
     const [freelancerNames, setFreelancerNames] = React.useState<string[]>([]);
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
     const [loading, setLoading] = React.useState(true);
-    const [copiedId, setCopiedId] = React.useState<string | null>(null);
+    const [copiedClientTemplateId, setCopiedClientTemplateId] = React.useState<string | null>(null);
+    const [copiedFreelancerTemplateId, setCopiedFreelancerTemplateId] = React.useState<string | null>(null);
     const [studioName, setStudioName] = React.useState("");
     const [statusOpts, setStatusOpts] = React.useState<string[]>(DEFAULT_STATUS_OPTS);
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
@@ -255,8 +256,11 @@ export default function BookingsPage() {
 
     // WA Freelancer popup
     const [waPopup, setWaPopup] = React.useState<{ open: boolean; freelancers: FreelancerInfo[]; booking: Booking | null }>({ open: false, freelancers: [], booking: null });
+    const [copyFreelancerPopup, setCopyFreelancerPopup] = React.useState<{ open: boolean; freelancers: FreelancerInfo[]; booking: Booking | null }>({ open: false, freelancers: [], booking: null });
     const [waMenuBookingId, setWaMenuBookingId] = React.useState<string | null>(null);
+    const [copyMenuBookingId, setCopyMenuBookingId] = React.useState<string | null>(null);
     const [waTargetPopup, setWaTargetPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
+    const [copyTargetPopup, setCopyTargetPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
 
     const fetchTemplates = React.useCallback(async () => {
@@ -379,14 +383,18 @@ export default function BookingsPage() {
     }, [fetchData, fetchTemplates]);
 
     React.useEffect(() => {
-        if (!waMenuBookingId) return;
+        if (!waMenuBookingId && !copyMenuBookingId) return;
         function handleOutsideClick(event: MouseEvent) {
             const target = event.target as HTMLElement | null;
             if (target?.closest("[data-wa-menu-root='true']")) return;
+            if (target?.closest("[data-copy-menu-root='true']")) return;
             setWaMenuBookingId(null);
+            setCopyMenuBookingId(null);
         }
         function handleEscape(event: KeyboardEvent) {
-            if (event.key === "Escape") setWaMenuBookingId(null);
+            if (event.key !== "Escape") return;
+            setWaMenuBookingId(null);
+            setCopyMenuBookingId(null);
         }
         document.addEventListener("mousedown", handleOutsideClick);
         document.addEventListener("keydown", handleEscape);
@@ -394,7 +402,7 @@ export default function BookingsPage() {
             document.removeEventListener("mousedown", handleOutsideClick);
             document.removeEventListener("keydown", handleEscape);
         };
-    }, [waMenuBookingId]);
+    }, [copyMenuBookingId, waMenuBookingId]);
 
     async function handleUpdateStatus(options?: {
         skipCancelConfirmation?: boolean;
@@ -635,11 +643,51 @@ export default function BookingsPage() {
         sendWhatsAppFreelancer(booking, freelancer);
     }
 
-    function copyTemplate(booking: Booking) {
+    function copyClientTemplate(booking: Booking) {
         const template = generateWATemplate(booking, locale, savedTemplates, studioName);
         navigator.clipboard.writeText(template);
-        setCopiedId(booking.id);
-        setTimeout(() => setCopiedId(null), 2000);
+        setCopiedClientTemplateId(booking.id);
+        setTimeout(() => {
+            setCopiedClientTemplateId((current) => current === booking.id ? null : current);
+        }, 2000);
+    }
+
+    function copyFreelancerTemplate(booking: Booking, freelancer: FreelancerInfo) {
+        const template = generateWATemplate(
+            booking,
+            locale,
+            savedTemplates,
+            studioName,
+            freelancer.name,
+        );
+        navigator.clipboard.writeText(template);
+        setCopiedFreelancerTemplateId(booking.id);
+        setTimeout(() => {
+            setCopiedFreelancerTemplateId((current) => current === booking.id ? null : current);
+        }, 2000);
+    }
+
+    function handleDefaultCopyAction(booking: Booking) {
+        copyClientTemplate(booking);
+    }
+
+    function handleExplicitCopyAction(booking: Booking, target: "client" | "freelancer") {
+        if (target === "client") {
+            copyClientTemplate(booking);
+            return;
+        }
+
+        if (booking.booking_freelancers.length === 0) {
+            setFeedbackDialog({ open: true, message: tb("templateFreelancerNotAvailable") });
+            return;
+        }
+
+        if (booking.booking_freelancers.length > 1) {
+            setCopyFreelancerPopup({ open: true, freelancers: booking.booking_freelancers, booking });
+            return;
+        }
+
+        copyFreelancerTemplate(booking, booking.booking_freelancers[0]);
     }
 
     const formatDate = (d: string | null) => {
@@ -737,10 +785,64 @@ export default function BookingsPage() {
                 return (
                     <td key={column.id} className="min-w-[220px] px-4 py-3 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-                            <ActionIconButton tone="violet" title={tb("copyTemplate")}
-                                onClick={() => copyTemplate(booking)}>
-                                {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                            </ActionIconButton>
+                            <div className="relative" data-copy-menu-root="true">
+                                <div className="flex items-stretch overflow-hidden rounded-md border border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                                    <button
+                                        type="button"
+                                        title={tb("copyPrimaryAction")}
+                                        onClick={() => {
+                                            setCopyMenuBookingId(null);
+                                            setWaMenuBookingId(null);
+                                            handleDefaultCopyAction(booking);
+                                        }}
+                                        className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-violet-100 dark:hover:bg-violet-800/60"
+                                    >
+                                        {copiedClientTemplateId === booking.id ? (
+                                            <ClipboardCheck className="w-4 h-4" />
+                                        ) : (
+                                            <Copy className="w-4 h-4" />
+                                        )}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title={tb("copyMoreActions")}
+                                        onClick={() => {
+                                            setWaMenuBookingId(null);
+                                            setCopyMenuBookingId((prev) => prev === booking.id ? null : booking.id);
+                                        }}
+                                        className="inline-flex h-8 w-6 items-center justify-center border-l border-violet-200 transition-colors hover:bg-violet-100 dark:border-violet-700 dark:hover:bg-violet-800/60"
+                                    >
+                                        <ChevronDown className="w-3 h-3" />
+                                    </button>
+                                </div>
+                                <div
+                                    className={`absolute right-0 top-full z-30 mt-1 w-48 rounded-md border border-border bg-card p-1 shadow-lg transition-all duration-200 ease-out origin-top-right ${copyMenuBookingId === booking.id
+                                        ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                                        : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
+                                        }`}
+                                >
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setCopyMenuBookingId(null);
+                                                handleExplicitCopyAction(booking, "client");
+                                            }}
+                                            className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                                        >
+                                            {tb("copyToClient")}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setCopyMenuBookingId(null);
+                                                handleExplicitCopyAction(booking, "freelancer");
+                                            }}
+                                            className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                                        >
+                                            {tb("copyToFreelancer")}
+                                        </button>
+                                </div>
+                            </div>
                             <div className="relative" data-wa-menu-root="true">
                                 <div className="flex items-stretch overflow-hidden rounded-md border border-green-200 bg-green-50 text-green-600 dark:border-green-700 dark:bg-green-900/30 dark:text-green-300">
                                     <button
@@ -749,6 +851,7 @@ export default function BookingsPage() {
                                         disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
                                         onClick={() => {
                                             setWaMenuBookingId(null);
+                                            setCopyMenuBookingId(null);
                                             handleDefaultWhatsAppAction(booking);
                                         }}
                                         className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-green-800/60"
@@ -759,7 +862,10 @@ export default function BookingsPage() {
                                         type="button"
                                         title={tb("waMoreActions")}
                                         disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
-                                        onClick={() => setWaMenuBookingId((prev) => prev === booking.id ? null : booking.id)}
+                                        onClick={() => {
+                                            setCopyMenuBookingId(null);
+                                            setWaMenuBookingId((prev) => prev === booking.id ? null : booking.id);
+                                        }}
                                         className="inline-flex h-8 w-6 items-center justify-center border-l border-green-200 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-700 dark:hover:bg-green-800/60"
                                     >
                                         <ChevronDown className="w-3 h-3" />
@@ -1157,8 +1263,12 @@ export default function BookingsPage() {
                                     ))}
                             </div>
                             <div className="flex items-center gap-1 pt-1 border-t flex-wrap">
-                                <ActionIconButton tone="violet" title={tb("copyTemplate")} onClick={() => copyTemplate(booking)}>
-                                    {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                <ActionIconButton tone="violet" title={tb("copyTemplate")} onClick={() => setCopyTargetPopup({ open: true, booking })}>
+                                    {copiedClientTemplateId === booking.id || copiedFreelancerTemplateId === booking.id ? (
+                                        <ClipboardCheck className="w-4 h-4" />
+                                    ) : (
+                                        <Copy className="w-4 h-4" />
+                                    )}
                                 </ActionIconButton>
                                 <ActionIconButton tone="green" title={tb("whatsapp")}
                                     disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
@@ -1280,6 +1390,44 @@ export default function BookingsPage() {
                 </DialogContent>
             </Dialog>
 
+            {/* Template Target Picker (Mobile) */}
+            <Dialog open={copyTargetPopup.open} onOpenChange={(o) => !o && setCopyTargetPopup({ open: false, booking: null })}>
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>{tb("copyTargetPickerTitle")}</DialogTitle>
+                        <DialogDescription>{tb("copyTargetPickerDesc")}</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-2 py-2">
+                        <button
+                            type="button"
+                            className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted/50 cursor-pointer"
+                            onClick={() => {
+                                const booking = copyTargetPopup.booking;
+                                setCopyTargetPopup({ open: false, booking: null });
+                                if (!booking) return;
+                                handleExplicitCopyAction(booking, "client");
+                            }}
+                        >
+                            <span>{tb("copyToClient")}</span>
+                            <Copy className="w-4 h-4 text-violet-600" />
+                        </button>
+                        <button
+                            type="button"
+                            className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted/50 cursor-pointer"
+                            onClick={() => {
+                                const booking = copyTargetPopup.booking;
+                                setCopyTargetPopup({ open: false, booking: null });
+                                if (!booking) return;
+                                handleExplicitCopyAction(booking, "freelancer");
+                            }}
+                        >
+                            <span>{tb("copyToFreelancer")}</span>
+                            <Copy className="w-4 h-4 text-violet-600" />
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
             {/* WA Target Picker (Mobile) */}
             <Dialog open={waTargetPopup.open} onOpenChange={(o) => !o && setWaTargetPopup({ open: false, booking: null })}>
                 <DialogContent className="sm:max-w-sm">
@@ -1362,6 +1510,37 @@ export default function BookingsPage() {
                             >
                                 <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-500/10 flex items-center justify-center shrink-0">
                                     <MessageCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium">{f.name}</p>
+                                    <p className="text-xs text-muted-foreground">{f.whatsapp_number || tb("numberNotAvailable")}</p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Copy Template Freelancer Selection Popup */}
+            <Dialog open={copyFreelancerPopup.open} onOpenChange={(o) => !o && setCopyFreelancerPopup({ open: false, freelancers: [], booking: null })}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{tb("copyFreelance")}</DialogTitle>
+                        <DialogDescription>{tb("selectFreelanceTemplate")}</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-2 py-2">
+                        {copyFreelancerPopup.freelancers.map((f) => (
+                            <button
+                                key={f.id}
+                                onClick={() => {
+                                    if (!copyFreelancerPopup.booking) return;
+                                    copyFreelancerTemplate(copyFreelancerPopup.booking, f);
+                                    setCopyFreelancerPopup({ open: false, freelancers: [], booking: null });
+                                }}
+                                className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left cursor-pointer"
+                            >
+                                <div className="w-9 h-9 rounded-full bg-violet-100 dark:bg-violet-500/10 flex items-center justify-center shrink-0">
+                                    <Copy className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium">{f.name}</p>

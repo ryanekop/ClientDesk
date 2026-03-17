@@ -35,6 +35,8 @@ import {
   ArrowUp,
   ArrowDown,
   Layers,
+  Eye,
+  EyeOff,
   GripVertical,
   MoveVertical,
 } from "lucide-react";
@@ -67,6 +69,7 @@ type Service = {
   duration_minutes: number | null;
   is_active: boolean;
   is_addon: boolean;
+  affects_schedule: boolean | null;
   is_public: boolean | null;
   sort_order: number;
   created_at: string;
@@ -300,6 +303,7 @@ function ServiceCard({
   durationLabel,
   onEdit,
   onToggleActive,
+  onTogglePublic,
   onDelete,
   onMoveUp,
   onMoveDown,
@@ -309,6 +313,7 @@ function ServiceCard({
   durationLabel: string | null;
   onEdit: () => void;
   onToggleActive: () => void;
+  onTogglePublic: () => void;
   onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -396,6 +401,19 @@ function ServiceCard({
             <ToggleLeft className="h-4 w-4 text-muted-foreground" />
           )}
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={onTogglePublic}
+          title={service.is_public !== false ? "Jadikan privat" : "Jadikan publik"}
+        >
+          {service.is_public !== false ? (
+            <Eye className="h-4 w-4 text-sky-600" />
+          ) : (
+            <EyeOff className="h-4 w-4 text-amber-600" />
+          )}
+        </Button>
         <Button variant="outline" size="sm" className="gap-1.5" onClick={onDelete}>
           <Trash2 className="h-3.5 w-3.5 text-red-500" />
         </Button>
@@ -448,6 +466,10 @@ export default function ServicesPage() {
   const [editingService, setEditingService] = React.useState<Service | null>(null);
   const [isAddOpen, setIsAddOpen] = React.useState(false);
   const [isEditOpen, setIsEditOpen] = React.useState(false);
+  const [addIsAddon, setAddIsAddon] = React.useState(false);
+  const [addAffectsSchedule, setAddAffectsSchedule] = React.useState(true);
+  const [editIsAddon, setEditIsAddon] = React.useState(false);
+  const [editAffectsSchedule, setEditAffectsSchedule] = React.useState(true);
   const [mainPage, setMainPage] = React.useState(1);
   const [addonPage, setAddonPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(10);
@@ -527,6 +549,13 @@ export default function ServicesPage() {
     fetchServices();
   }, [fetchServices]);
 
+  React.useEffect(() => {
+    if (!isAddOpen) {
+      setAddIsAddon(false);
+      setAddAffectsSchedule(true);
+    }
+  }, [isAddOpen]);
+
   async function persistNormalizedGroup(
     groupKey: ServiceGroupKey,
     nextGroup: Service[],
@@ -583,6 +612,7 @@ export default function ServicesPage() {
 
     const isAddon = formData.get("is_addon") === "on";
     const isPublic = formData.get("is_public") === "on";
+    const affectsSchedule = !isAddon || formData.get("affects_schedule") === "on";
     const nextSortOrder = splitServicesByGroup(services)[isAddon ? "addon" : "main"].length;
 
     const { error } = await supabase.from("services").insert({
@@ -597,6 +627,7 @@ export default function ServicesPage() {
       is_active: true,
       is_addon: isAddon,
       is_public: isPublic,
+      affects_schedule: affectsSchedule,
       sort_order: nextSortOrder,
       event_types:
         formData.getAll("event_types").length > 0
@@ -617,6 +648,8 @@ export default function ServicesPage() {
 
     const nextIsAddon = formData.get("is_addon") === "on";
     const nextIsPublic = formData.get("is_public") === "on";
+    const nextAffectsSchedule =
+      !nextIsAddon || formData.get("affects_schedule") === "on";
     const previousGroupKey = getServiceGroupKey(editingService);
     const nextGroupKey: ServiceGroupKey = nextIsAddon ? "addon" : "main";
     const remainingServices = services.filter((service) => service.id !== editingService.id);
@@ -637,6 +670,7 @@ export default function ServicesPage() {
           parseInt((formData.get("duration_mins") as string) || "0", 10),
         is_addon: nextIsAddon,
         is_public: nextIsPublic,
+        affects_schedule: nextAffectsSchedule,
         sort_order: nextSortOrder,
         event_types:
           formData.getAll("event_types").length > 0
@@ -671,6 +705,27 @@ export default function ServicesPage() {
     }
 
     await fetchServices();
+  }
+
+  async function handleTogglePublic(service: Service) {
+    const { error } = await supabase
+      .from("services")
+      .update({ is_public: service.is_public === false })
+      .eq("id", service.id);
+
+    if (error) {
+      setPageError(error.message);
+      return;
+    }
+
+    await fetchServices();
+  }
+
+  function openEditDialog(service: Service) {
+    setEditingService(service);
+    setEditIsAddon(service.is_addon);
+    setEditAffectsSchedule(service.affects_schedule !== false);
+    setIsEditOpen(true);
   }
 
   function handleDelete(id: string) {
@@ -929,33 +984,13 @@ export default function ServicesPage() {
                     <span className="text-sm text-muted-foreground">{ts("minutes")}</span>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Jenis Acara</label>
-                  <p className="-mt-1 text-[11px] text-muted-foreground">
-                    Kosongkan jika paket ini untuk semua jenis acara.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {eventTypeOptions.map((eventType) => (
-                      <label
-                        key={eventType}
-                        className="flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted/50 has-[:checked]:border-foreground has-[:checked]:bg-foreground/5"
-                      >
-                        <input
-                          type="checkbox"
-                          name="event_types"
-                          value={eventType}
-                          className="h-3 w-3 accent-foreground"
-                        />
-                        {eventType}
-                      </label>
-                    ))}
-                  </div>
-                </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     name="is_addon"
                     id="add_is_addon"
+                    checked={addIsAddon}
+                    onChange={(event) => setAddIsAddon(event.target.checked)}
                     className="h-4 w-4 accent-primary"
                   />
                   <label
@@ -985,6 +1020,48 @@ export default function ServicesPage() {
                   <span className="text-xs text-muted-foreground">
                     (jika mati, hanya bisa dipilih dari booking admin)
                   </span>
+                </div>
+                {addIsAddon ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="affects_schedule"
+                      id="add_affects_schedule"
+                      checked={addAffectsSchedule}
+                      onChange={(event) =>
+                        setAddAffectsSchedule(event.target.checked)
+                      }
+                      className="h-4 w-4 accent-primary"
+                    />
+                    <label
+                      htmlFor="add_affects_schedule"
+                      className="cursor-pointer text-sm font-medium"
+                    >
+                      {ts("affectsSchedule")}
+                    </label>
+                  </div>
+                ) : null}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Jenis Acara</label>
+                  <p className="-mt-1 text-[11px] text-muted-foreground">
+                    Kosongkan jika paket ini untuk semua jenis acara.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {eventTypeOptions.map((eventType) => (
+                      <label
+                        key={eventType}
+                        className="flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted/50 has-[:checked]:border-foreground has-[:checked]:bg-foreground/5"
+                      >
+                        <input
+                          type="checkbox"
+                          name="event_types"
+                          value={eventType}
+                          className="h-3 w-3 accent-foreground"
+                        />
+                        {eventType}
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 <DialogFooter>
                   <Button type="submit">{t("simpan")}</Button>
@@ -1176,11 +1253,9 @@ export default function ServicesPage() {
                     service={service}
                     formatCurrency={formatCurrency}
                     durationLabel={formatDuration(service)}
-                    onEdit={() => {
-                      setEditingService(service);
-                      setIsEditOpen(true);
-                    }}
+                    onEdit={() => openEditDialog(service)}
                     onToggleActive={() => handleToggleActive(service)}
+                    onTogglePublic={() => handleTogglePublic(service)}
                     onDelete={() => handleDelete(service.id)}
                     onMoveUp={() => handleMove(service, "up")}
                     onMoveDown={() => handleMove(service, "down")}
@@ -1227,11 +1302,9 @@ export default function ServicesPage() {
                     service={service}
                     formatCurrency={formatCurrency}
                     durationLabel={formatDuration(service)}
-                    onEdit={() => {
-                      setEditingService(service);
-                      setIsEditOpen(true);
-                    }}
+                    onEdit={() => openEditDialog(service)}
                     onToggleActive={() => handleToggleActive(service)}
+                    onTogglePublic={() => handleTogglePublic(service)}
                     onDelete={() => handleDelete(service.id)}
                     onMoveUp={() => handleMove(service, "up")}
                     onMoveDown={() => handleMove(service, "down")}
@@ -1260,7 +1333,11 @@ export default function ServicesPage() {
         open={isEditOpen}
         onOpenChange={(open) => {
           setIsEditOpen(open);
-          if (!open) setEditingService(null);
+          if (!open) {
+            setEditingService(null);
+            setEditIsAddon(false);
+            setEditAffectsSchedule(true);
+          }
         }}
       >
         <DialogContent className="sm:max-w-[500px]">
@@ -1340,35 +1417,13 @@ export default function ServicesPage() {
                   <span className="text-sm text-muted-foreground">{ts("minutes")}</span>
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Jenis Acara</label>
-                <p className="-mt-1 text-[11px] text-muted-foreground">
-                  Kosongkan jika paket ini untuk semua jenis acara.
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {eventTypeOptions.map((eventType) => (
-                    <label
-                      key={eventType}
-                      className="flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted/50 has-[:checked]:border-foreground has-[:checked]:bg-foreground/5"
-                    >
-                      <input
-                        type="checkbox"
-                        name="event_types"
-                        value={eventType}
-                        defaultChecked={editingService.event_types?.includes(eventType)}
-                        className="h-3 w-3 accent-foreground"
-                      />
-                      {eventType}
-                    </label>
-                  ))}
-                </div>
-              </div>
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   name="is_addon"
                   id="edit_is_addon"
-                  defaultChecked={editingService.is_addon}
+                  checked={editIsAddon}
+                  onChange={(event) => setEditIsAddon(event.target.checked)}
                   className="h-4 w-4 accent-primary"
                 />
                 <label
@@ -1398,6 +1453,49 @@ export default function ServicesPage() {
                 <span className="text-xs text-muted-foreground">
                   (jika mati, hanya bisa dipilih dari booking admin)
                 </span>
+              </div>
+              {editIsAddon ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name="affects_schedule"
+                    id="edit_affects_schedule"
+                    checked={editAffectsSchedule}
+                    onChange={(event) =>
+                      setEditAffectsSchedule(event.target.checked)
+                    }
+                    className="h-4 w-4 accent-primary"
+                  />
+                  <label
+                    htmlFor="edit_affects_schedule"
+                    className="cursor-pointer text-sm font-medium"
+                  >
+                    {ts("affectsSchedule")}
+                  </label>
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Jenis Acara</label>
+                <p className="-mt-1 text-[11px] text-muted-foreground">
+                  Kosongkan jika paket ini untuk semua jenis acara.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {eventTypeOptions.map((eventType) => (
+                    <label
+                      key={eventType}
+                      className="flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted/50 has-[:checked]:border-foreground has-[:checked]:bg-foreground/5"
+                    >
+                      <input
+                        type="checkbox"
+                        name="event_types"
+                        value={eventType}
+                        defaultChecked={editingService.event_types?.includes(eventType)}
+                        className="h-3 w-3 accent-foreground"
+                      />
+                      {eventType}
+                    </label>
+                  ))}
+                </div>
               </div>
               <DialogFooter>
                 <Button type="submit">{t("perbarui")}</Button>
