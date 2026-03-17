@@ -258,6 +258,27 @@ export default function EditBookingPage() {
         });
     }, [locale]);
 
+    const triggerFastpikAutoSync = React.useCallback(
+        async (bookingId: string) => {
+            if (!bookingId) return;
+            try {
+                await fetch("/api/integrations/fastpik/sync-booking", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        bookingId,
+                        locale,
+                        mode: "auto",
+                    }),
+                    keepalive: true,
+                });
+            } catch {
+                // Silent by design: booking update should not fail due to integration sync.
+            }
+        },
+        [locale],
+    );
+
     React.useEffect(() => {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
@@ -758,6 +779,7 @@ export default function EditBookingPage() {
             setDpVerifiedAt(null);
         }
         setCancelStatusConfirmOpen(false);
+        void triggerFastpikAutoSync(id);
         router.push(`/${locale}/bookings/${id}`);
     }
 

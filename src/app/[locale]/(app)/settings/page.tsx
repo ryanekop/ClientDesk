@@ -109,6 +109,24 @@ type Profile = {
   form_sections?: Record<string, FormLayoutItem[]> | FormLayoutItem[] | null;
   calendar_event_description?: string | null;
   calendar_event_description_map?: Record<string, string> | null;
+  fastpik_integration_enabled?: boolean | null;
+  fastpik_sync_mode?: "manual" | "auto" | null;
+  fastpik_preset_source?: "clientdesk" | "fastpik" | null;
+  fastpik_api_key?: string | null;
+  fastpik_last_sync_at?: string | null;
+  fastpik_last_sync_status?:
+    | "idle"
+    | "success"
+    | "warning"
+    | "failed"
+    | "syncing"
+    | null;
+  fastpik_last_sync_message?: string | null;
+  fastpik_default_max_photos?: number | null;
+  fastpik_default_selection_days?: number | null;
+  fastpik_default_download_days?: number | null;
+  fastpik_default_detect_subfolders?: boolean | null;
+  fastpik_default_password?: string | null;
 };
 
 type Template = {
@@ -360,6 +378,18 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "form_event_types",
   "custom_event_types",
   "form_sections",
+  "fastpik_integration_enabled",
+  "fastpik_sync_mode",
+  "fastpik_preset_source",
+  "fastpik_api_key",
+  "fastpik_last_sync_at",
+  "fastpik_last_sync_status",
+  "fastpik_last_sync_message",
+  "fastpik_default_max_photos",
+  "fastpik_default_selection_days",
+  "fastpik_default_download_days",
+  "fastpik_default_detect_subfolders",
+  "fastpik_default_password",
 ] as const;
 
 // Google Calendar SVG Logo (official 2020)
@@ -508,6 +538,37 @@ export default function SettingsPage() {
   >(null);
   const [loadingConnectedAccountInfo, setLoadingConnectedAccountInfo] =
     React.useState(false);
+  const [fastpikIntegrationEnabled, setFastpikIntegrationEnabled] =
+    React.useState(false);
+  const [fastpikSyncMode, setFastpikSyncMode] = React.useState<
+    "manual" | "auto"
+  >("manual");
+  const [fastpikPresetSource, setFastpikPresetSource] = React.useState<
+    "clientdesk" | "fastpik"
+  >("clientdesk");
+  const [fastpikApiKey, setFastpikApiKey] = React.useState("");
+  const [fastpikLastSyncAt, setFastpikLastSyncAt] = React.useState<
+    string | null
+  >(null);
+  const [fastpikLastSyncStatus, setFastpikLastSyncStatus] = React.useState<
+    "idle" | "success" | "warning" | "failed" | "syncing"
+  >("idle");
+  const [fastpikLastSyncMessage, setFastpikLastSyncMessage] =
+    React.useState("");
+  const [fastpikDefaultMaxPhotos, setFastpikDefaultMaxPhotos] =
+    React.useState(50);
+  const [fastpikDefaultSelectionDays, setFastpikDefaultSelectionDays] =
+    React.useState(14);
+  const [fastpikDefaultDownloadDays, setFastpikDefaultDownloadDays] =
+    React.useState(14);
+  const [fastpikDefaultDetectSubfolders, setFastpikDefaultDetectSubfolders] =
+    React.useState(false);
+  const [fastpikDefaultPassword, setFastpikDefaultPassword] = React.useState(
+    "",
+  );
+  const [fastpikTesting, setFastpikTesting] = React.useState(false);
+  const [fastpikBatchSyncing, setFastpikBatchSyncing] = React.useState(false);
+  const [fastpikActionMessage, setFastpikActionMessage] = React.useState("");
 
   // Disconnect modal
   const [disconnectModal, setDisconnectModal] = React.useState<{
@@ -948,6 +1009,47 @@ export default function SettingsPage() {
       setWaNumber(savedWa.replace(/^0/, ""));
     }
     setVendorSlug(prof?.vendor_slug || "");
+    setFastpikIntegrationEnabled(
+      Boolean((prof as any)?.fastpik_integration_enabled),
+    );
+    setFastpikSyncMode(
+      (prof as any)?.fastpik_sync_mode === "auto" ? "auto" : "manual",
+    );
+    setFastpikPresetSource(
+      (prof as any)?.fastpik_preset_source === "fastpik"
+        ? "fastpik"
+        : "clientdesk",
+    );
+    setFastpikApiKey((prof as any)?.fastpik_api_key || "");
+    setFastpikLastSyncAt((prof as any)?.fastpik_last_sync_at || null);
+    setFastpikLastSyncStatus(
+      ((prof as any)?.fastpik_last_sync_status || "idle") as
+        | "idle"
+        | "success"
+        | "warning"
+        | "failed"
+        | "syncing",
+    );
+    setFastpikLastSyncMessage((prof as any)?.fastpik_last_sync_message || "");
+    setFastpikDefaultMaxPhotos(
+      Number((prof as any)?.fastpik_default_max_photos) > 0
+        ? Number((prof as any)?.fastpik_default_max_photos)
+        : 50,
+    );
+    setFastpikDefaultSelectionDays(
+      Number((prof as any)?.fastpik_default_selection_days) > 0
+        ? Number((prof as any)?.fastpik_default_selection_days)
+        : 14,
+    );
+    setFastpikDefaultDownloadDays(
+      Number((prof as any)?.fastpik_default_download_days) > 0
+        ? Number((prof as any)?.fastpik_default_download_days)
+        : 14,
+    );
+    setFastpikDefaultDetectSubfolders(
+      Boolean((prof as any)?.fastpik_default_detect_subfolders),
+    );
+    setFastpikDefaultPassword((prof as any)?.fastpik_default_password || "");
 
     const allTemplates = (templatesResponse.data || []) as Template[];
     setTemplates(allTemplates);
@@ -1126,6 +1228,141 @@ export default function SettingsPage() {
       setTimeout(() => setSavedMsg(""), 3000);
     } finally {
       setSaving(false);
+    }
+  }
+
+  function resolveFastpikStatusBadgeClass(
+    value: "idle" | "success" | "warning" | "failed" | "syncing",
+  ) {
+    if (value === "success") {
+      return "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300";
+    }
+    if (value === "warning") {
+      return "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300";
+    }
+    if (value === "failed") {
+      return "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300";
+    }
+    if (value === "syncing") {
+      return "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300";
+    }
+    return "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300";
+  }
+
+  async function handleSaveFastpikSettings() {
+    if (!profile) return;
+    setSaving(true);
+    try {
+      await saveProfilePatch({
+        fastpik_integration_enabled: fastpikIntegrationEnabled,
+        fastpik_sync_mode: fastpikSyncMode,
+        fastpik_preset_source: fastpikPresetSource,
+        fastpik_api_key: fastpikApiKey.trim() || null,
+        fastpik_default_max_photos:
+          Number.isFinite(fastpikDefaultMaxPhotos) && fastpikDefaultMaxPhotos > 0
+            ? Math.floor(fastpikDefaultMaxPhotos)
+            : 50,
+        fastpik_default_selection_days:
+          Number.isFinite(fastpikDefaultSelectionDays) &&
+          fastpikDefaultSelectionDays > 0
+            ? Math.floor(fastpikDefaultSelectionDays)
+            : 14,
+        fastpik_default_download_days:
+          Number.isFinite(fastpikDefaultDownloadDays) &&
+          fastpikDefaultDownloadDays > 0
+            ? Math.floor(fastpikDefaultDownloadDays)
+            : 14,
+        fastpik_default_detect_subfolders: fastpikDefaultDetectSubfolders,
+        fastpik_default_password: fastpikDefaultPassword.trim() || null,
+      });
+      setSavedMsg(SETTINGS_SAVED_MESSAGE);
+      setTimeout(() => setSavedMsg(""), 3000);
+      void fetchAll(true);
+    } catch (error) {
+      console.error("Fastpik settings save error:", error);
+      setSavedMsg("Gagal menyimpan.");
+      setTimeout(() => setSavedMsg(""), 3000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTestFastpikConnection() {
+    setFastpikTesting(true);
+    setFastpikActionMessage("");
+    try {
+      const response = await fetch("/api/integrations/fastpik/test", {
+        method: "POST",
+      });
+      const payload = await response.json().catch(() => null);
+      const status =
+        (payload?.status as
+          | "idle"
+          | "success"
+          | "warning"
+          | "failed"
+          | "syncing"
+          | undefined) || (response.ok ? "success" : "failed");
+      const message =
+        typeof payload?.message === "string"
+          ? payload.message
+          : response.ok
+            ? "Koneksi Fastpik berhasil."
+            : "Koneksi Fastpik gagal.";
+      setFastpikLastSyncStatus(status);
+      setFastpikLastSyncMessage(message);
+      setFastpikLastSyncAt(new Date().toISOString());
+      setFastpikActionMessage(message);
+      void fetchAll(true);
+    } catch (error: any) {
+      const message = error?.message || "Koneksi Fastpik gagal.";
+      setFastpikLastSyncStatus("failed");
+      setFastpikLastSyncMessage(message);
+      setFastpikLastSyncAt(new Date().toISOString());
+      setFastpikActionMessage(message);
+    } finally {
+      setFastpikTesting(false);
+    }
+  }
+
+  async function handleBatchSyncFastpik() {
+    setFastpikBatchSyncing(true);
+    setFastpikActionMessage("");
+    try {
+      const response = await fetch("/api/integrations/fastpik/sync-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          locale,
+          chunkSize: 50,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || "Batch sync Fastpik gagal.");
+      }
+
+      const message = `Batch selesai. Total ${payload.total || 0}, sukses ${payload.successCount || 0}, warning ${payload.warningCount || 0}, gagal ${payload.failedCount || 0}.`;
+      const status: "idle" | "success" | "warning" | "failed" | "syncing" =
+        (payload.failedCount || 0) > 0
+          ? "failed"
+          : (payload.warningCount || 0) > 0
+            ? "warning"
+            : "success";
+
+      setFastpikLastSyncStatus(status);
+      setFastpikLastSyncMessage(message);
+      setFastpikLastSyncAt(new Date().toISOString());
+      setFastpikActionMessage(message);
+      void fetchAll(true);
+    } catch (error: any) {
+      const message = error?.message || "Batch sync Fastpik gagal.";
+      setFastpikLastSyncStatus("failed");
+      setFastpikLastSyncMessage(message);
+      setFastpikLastSyncAt(new Date().toISOString());
+      setFastpikActionMessage(message);
+    } finally {
+      setFastpikBatchSyncing(false);
     }
   }
 
@@ -1575,6 +1812,7 @@ export default function SettingsPage() {
     { key: "status", label: "Status Booking" },
     { key: "jenis-acara", label: tp("tabEventTypes") },
     { key: "google", label: tp("tabGoogle") },
+    { key: "fastpik", label: tp("tabFastpik") },
     { key: "telegram", label: tp("tabTelegram") },
   ];
   const resetDialogMeta: Record<
@@ -1978,7 +2216,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ═══ TAB: Umum ═══ */}
-        {(activeTab === "umum" || activeTab === "google") && (
+        {(activeTab === "umum" || activeTab === "google" || activeTab === "fastpik") && (
           <div className="space-y-6">
             {activeTab === "umum" && (
               <>
@@ -2736,6 +2974,246 @@ export default function SettingsPage() {
             </div>
               </>
             )}
+            {activeTab === "fastpik" && (
+              <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                <div className="px-6 py-4 border-b">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Link2 className="w-4 h-4" /> {tp("fastpikIntegrationTitle")}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {tp("fastpikIntegrationDesc")}
+                  </p>
+                </div>
+                <div className="p-6 space-y-5">
+                  <div className="rounded-lg border bg-muted/20 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {tp("fastpikIntegrationStatus")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {fastpikIntegrationEnabled
+                          ? tp("connected")
+                          : tp("notConnected")}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFastpikIntegrationEnabled((prev) => !prev)
+                      }
+                      className={`px-3 py-1.5 text-xs rounded-md border transition-colors cursor-pointer ${
+                        fastpikIntegrationEnabled
+                          ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/20 dark:text-green-300 dark:border-green-500/40"
+                          : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-500/20 dark:text-slate-300 dark:border-slate-500/40"
+                      }`}
+                    >
+                      {fastpikIntegrationEnabled
+                        ? tp("fastpikEnabled")
+                        : tp("fastpikDisabled")}
+                    </button>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        {tp("fastpikSyncMode")}
+                      </label>
+                      <select
+                        value={fastpikSyncMode}
+                        onChange={(e) =>
+                          setFastpikSyncMode(
+                            e.target.value === "auto" ? "auto" : "manual",
+                          )
+                        }
+                        className={inputClass}
+                      >
+                        <option value="manual">{tp("fastpikSyncManual")}</option>
+                        <option value="auto">{tp("fastpikSyncAuto")}</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        {tp("fastpikPresetSource")}
+                      </label>
+                      <select
+                        value={fastpikPresetSource}
+                        onChange={(e) =>
+                          setFastpikPresetSource(
+                            e.target.value === "fastpik"
+                              ? "fastpik"
+                              : "clientdesk",
+                          )
+                        }
+                        className={inputClass}
+                      >
+                        <option value="clientdesk">
+                          {tp("fastpikPresetClientdesk")}
+                        </option>
+                        <option value="fastpik">
+                          {tp("fastpikPresetFastpik")}
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      {tp("fastpikApiKey")}
+                    </label>
+                    <input
+                      type="password"
+                      value={fastpikApiKey}
+                      onChange={(e) => setFastpikApiKey(e.target.value)}
+                      placeholder="fpk_xxx.yyy"
+                      className={inputClass}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {tp("fastpikApiKeyHint")}
+                    </p>
+                  </div>
+
+                  {fastpikPresetSource === "clientdesk" && (
+                    <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+                      <p className="text-sm font-medium">
+                        {tp("fastpikDefaultsTitle")}
+                      </p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-muted-foreground">
+                            {tp("fastpikDefaultMaxPhotos")}
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={fastpikDefaultMaxPhotos}
+                            onChange={(e) =>
+                              setFastpikDefaultMaxPhotos(Number(e.target.value))
+                            }
+                            className={inputClass}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-muted-foreground">
+                            {tp("fastpikDefaultSelectionDays")}
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={fastpikDefaultSelectionDays}
+                            onChange={(e) =>
+                              setFastpikDefaultSelectionDays(
+                                Number(e.target.value),
+                              )
+                            }
+                            className={inputClass}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-muted-foreground">
+                            {tp("fastpikDefaultDownloadDays")}
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={fastpikDefaultDownloadDays}
+                            onChange={(e) =>
+                              setFastpikDefaultDownloadDays(
+                                Number(e.target.value),
+                              )
+                            }
+                            className={inputClass}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-muted-foreground">
+                            {tp("fastpikDefaultPassword")}
+                          </label>
+                          <input
+                            type="text"
+                            value={fastpikDefaultPassword}
+                            onChange={(e) =>
+                              setFastpikDefaultPassword(e.target.value)
+                            }
+                            placeholder={tp("fastpikOptional")}
+                            className={inputClass}
+                          />
+                        </div>
+                      </div>
+                      <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={fastpikDefaultDetectSubfolders}
+                          onChange={(e) =>
+                            setFastpikDefaultDetectSubfolders(e.target.checked)
+                          }
+                          className="accent-primary"
+                        />
+                        {tp("fastpikDetectSubfolders")}
+                      </label>
+                    </div>
+                  )}
+
+                  <div className="rounded-lg border bg-muted/10 p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {tp("fastpikLastSync")}
+                      </span>
+                      <span
+                        className={`text-[11px] px-2 py-0.5 rounded-full ${resolveFastpikStatusBadgeClass(fastpikLastSyncStatus)}`}
+                      >
+                        {fastpikLastSyncStatus}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {fastpikLastSyncAt
+                        ? new Date(fastpikLastSyncAt).toLocaleString()
+                        : tp("fastpikNeverSynced")}
+                    </p>
+                    {fastpikLastSyncMessage && (
+                      <p className="text-xs text-foreground/80">
+                        {fastpikLastSyncMessage}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-2"
+                      onClick={handleTestFastpikConnection}
+                      disabled={fastpikTesting || !fastpikApiKey.trim()}
+                    >
+                      {fastpikTesting ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <CheckCircle className="w-4 h-4" />
+                      )}
+                      {tp("fastpikTestConnection")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-2"
+                      onClick={handleBatchSyncFastpik}
+                      disabled={fastpikBatchSyncing || !fastpikIntegrationEnabled}
+                    >
+                      {fastpikBatchSyncing ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="w-4 h-4" />
+                      )}
+                      {tp("fastpikBatchSync")}
+                    </Button>
+                  </div>
+                  {fastpikActionMessage && (
+                    <p className="text-xs text-muted-foreground">
+                      {fastpikActionMessage}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="pt-1">
               <div className="flex flex-wrap items-center gap-3">
                 <Button
@@ -2744,7 +3222,9 @@ export default function SettingsPage() {
                   onClick={
                     activeTab === "google"
                       ? handleSaveGoogleSettings
-                      : handleSaveGeneralSettings
+                      : activeTab === "fastpik"
+                        ? handleSaveFastpikSettings
+                        : handleSaveGeneralSettings
                   }
                   className={unifiedSaveButtonClass}
                 >

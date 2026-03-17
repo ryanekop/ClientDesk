@@ -281,6 +281,27 @@ export default function BookingsPage() {
         setCopyMenuAnchorEl(null);
     }, []);
 
+    const triggerFastpikAutoSync = React.useCallback(
+        async (bookingId: string) => {
+            if (!bookingId) return;
+            try {
+                await fetch("/api/integrations/fastpik/sync-booking", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        bookingId,
+                        locale,
+                        mode: "auto",
+                    }),
+                    keepalive: true,
+                });
+            } catch {
+                // Silent by design: Drive link update should not fail due to integration sync.
+            }
+        },
+        [locale],
+    );
+
     const fetchTemplates = React.useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
@@ -1596,6 +1617,7 @@ export default function BookingsPage() {
                             setSavingDriveLink(true);
                             await supabase.from("bookings").update({ drive_folder_url: driveLinkInput }).eq("id", driveLinkPopup.booking.id);
                             setBookings(prev => prev.map(b => b.id === driveLinkPopup.booking?.id ? { ...b, drive_folder_url: driveLinkInput } : b));
+                            void triggerFastpikAutoSync(driveLinkPopup.booking.id);
                             setSavingDriveLink(false);
                             setDriveLinkPopup({ open: false, booking: null });
                         }}>

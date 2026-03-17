@@ -33,6 +33,7 @@ type BookingRow = {
     queue_position: number | null;
     status: string;
     drive_folder_url: string | null;
+    fastpik_project_link: string | null;
     total_price: number;
     dp_paid: number;
     is_fully_paid: boolean;
@@ -56,7 +57,7 @@ type ProfileRow = {
 async function getBookingData(uuid: string) {
     const { data: booking } = await supabaseAdmin
         .from("bookings")
-        .select("id, booking_code, tracking_uuid, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, location, user_id, services(name), created_at")
+        .select("id, booking_code, tracking_uuid, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, fastpik_project_link, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, location, user_id, services(name), created_at")
         .eq("tracking_uuid", uuid)
         .single() as { data: BookingRow | null; error: unknown };
 
@@ -152,6 +153,7 @@ export default async function TrackingPage({ params }: PageProps) {
         queuePosition: booking.queue_position,
         status: booking.status,
         serviceName: (booking.services as { name?: string } | null)?.name || null,
+        fastpikUrl: booking.fastpik_project_link,
         driveUrl: booking.drive_folder_url,
         createdAt: booking.created_at,
         totalPrice: booking.total_price || 0,

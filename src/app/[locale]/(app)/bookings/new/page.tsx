@@ -227,6 +227,27 @@ export default function NewBookingPage() {
         });
     }, [locale]);
 
+    const triggerFastpikAutoSync = React.useCallback(
+        async (bookingId: string) => {
+            if (!bookingId) return;
+            try {
+                await fetch("/api/integrations/fastpik/sync-booking", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        bookingId,
+                        locale,
+                        mode: "auto",
+                    }),
+                    keepalive: true,
+                });
+            } catch {
+                // Silent by design: booking save should not fail because integration sync fails.
+            }
+        },
+        [locale],
+    );
+
     React.useEffect(() => {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
@@ -592,6 +613,7 @@ export default function NewBookingPage() {
                 setTimeout(() => setCalendarWarning(null), 5000);
             }
 
+            void triggerFastpikAutoSync(booking.id);
             router.push(`/${locale}/bookings/${booking.id}`);
         }
         else { showFeedback(insertError?.message || "Gagal menyimpan booking"); }

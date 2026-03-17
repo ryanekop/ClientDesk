@@ -15,6 +15,7 @@ type BookingData = {
     queuePosition: number | null;
     status: string;
     serviceName: string | null;
+    fastpikUrl: string | null;
     driveUrl: string | null;
     createdAt: string;
     totalPrice: number;
@@ -66,6 +67,8 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
     const sessionDate = booking.sessionDate
         ? formatSessionDate(booking.sessionDate)
         : "-";
+    const galleryUrl = booking.fastpikUrl || booking.driveUrl;
+    const galleryLabel = booking.fastpikUrl ? t("openFastpik") : t("openGoogleDrive");
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 py-8 sm:py-12 px-4">
@@ -189,17 +192,17 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                 </div>
 
                 {/* Drive Link - only show if status >= Sesi Foto */}
-                {booking.driveUrl && currentIdx >= 1 && (
+                {galleryUrl && currentIdx >= 1 && (
                     <div className="bg-background rounded-2xl shadow-lg border p-6">
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("fileResults")}</h3>
                         <a
-                            href={booking.driveUrl}
+                            href={galleryUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-2 text-sm text-primary hover:underline"
                         >
                             <HardDrive className="w-4 h-4" />
-                            {t("openGoogleDrive")}
+                            {galleryLabel}
                             <ExternalLink className="w-3.5 h-3.5" />
                         </a>
                     </div>

@@ -123,6 +123,10 @@ type Booking = {
     payment_proof_url: string | null;
     payment_proof_drive_file_id: string | null;
     drive_folder_url: string | null;
+    fastpik_project_id: string | null;
+    fastpik_project_link: string | null;
+    fastpik_sync_status: string | null;
+    fastpik_last_synced_at: string | null;
     portfolio_url: string | null;
     location: string | null;
     location_lat: number | null;
@@ -393,6 +397,7 @@ export default function BookingDetailPage() {
     const [markingFinalUnpaid, setMarkingFinalUnpaid] = React.useState(false);
     const [markingDpVerified, setMarkingDpVerified] = React.useState(false);
     const [markingDpUnverified, setMarkingDpUnverified] = React.useState(false);
+    const [syncingFastpik, setSyncingFastpik] = React.useState(false);
     const [editingDp, setEditingDp] = React.useState(false);
     const [dpInput, setDpInput] = React.useState("");
     const [savingDp, setSavingDp] = React.useState(false);
@@ -427,6 +432,66 @@ export default function BookingDetailPage() {
         });
     }, [locale]);
 
+    const handleSyncFastpikManual = React.useCallback(async () => {
+        if (!booking) return;
+        setSyncingFastpik(true);
+        try {
+            const response = await fetch("/api/integrations/fastpik/sync-booking", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    bookingId: booking.id,
+                    locale,
+                    mode: "manual",
+                }),
+            });
+            const payload = await response.json().catch(() => null);
+            const message =
+                (typeof payload?.message === "string" && payload.message) ||
+                (response.ok
+                    ? "Sinkronisasi Fastpik selesai."
+                    : payload?.error || "Sinkronisasi Fastpik gagal.");
+
+            if (response.ok && payload?.projectLink) {
+                const nowIso = new Date().toISOString();
+                setBooking((prev) =>
+                    prev
+                        ? {
+                              ...prev,
+                              fastpik_project_id:
+                                  payload?.projectId || prev.fastpik_project_id,
+                              fastpik_project_link:
+                                  payload?.projectLink || prev.fastpik_project_link,
+                              fastpik_sync_status:
+                                  payload?.status || prev.fastpik_sync_status,
+                              fastpik_last_synced_at: nowIso,
+                          }
+                        : prev,
+                );
+            }
+
+            showFeedback(
+                message,
+                response.ok
+                    ? locale === "en"
+                        ? "Fastpik Sync"
+                        : "Sinkron Fastpik"
+                    : locale === "en"
+                      ? "Warning"
+                      : "Peringatan",
+            );
+        } catch {
+            showFeedback(
+                locale === "en"
+                    ? "Fastpik sync failed."
+                    : "Sinkronisasi Fastpik gagal.",
+                locale === "en" ? "Warning" : "Peringatan",
+            );
+        } finally {
+            setSyncingFastpik(false);
+        }
+    }, [booking, locale, showFeedback]);
+
     const buildPathHint = React.useCallback((profile: DrivePathProfile | null | undefined, bookingValue: Pick<Booking, "booking_code" | "client_name" | "event_type" | "session_date" | "extra_fields">) => {
         const folderPathSegments = buildDriveFolderPathSegments({
             structureMap: profile?.drive_folder_structure_map,
@@ -453,7 +518,7 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }, { data: addonServiceRows }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map").eq("id", user.id).single(),
                 supabase.from("services")
@@ -1788,20 +1853,77 @@ export default function BookingDetailPage() {
                 </div>
             )}
 
-            {/* Link Google Drive */}
-            {booking.drive_folder_url && (
+            {/* Link Pilih Foto (Prioritas Fastpik, Drive fallback) */}
+            {(booking.fastpik_project_link || booking.drive_folder_url) && (
                 <div className="rounded-xl border bg-card p-6 space-y-3">
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5"><Folder className="w-4 h-4" /> Google Drive</h3>
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
-                        <Link2 className="w-4 h-4 text-blue-500 shrink-0" />
-                        <span className="flex-1 truncate text-xs text-muted-foreground">{booking.drive_folder_url}</span>
-                        <button onClick={() => { navigator.clipboard.writeText(booking.drive_folder_url!); }} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
-                            <Copy className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => window.open(booking.drive_folder_url!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">
-                            <ExternalLink className="w-3.5 h-3.5" />
-                        </button>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                            <Folder className="w-4 h-4" /> Link Pilih Foto
+                        </h3>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => void handleSyncFastpikManual()}
+                            disabled={syncingFastpik}
+                        >
+                            {syncingFastpik ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <RefreshCcw className="w-4 h-4" />
+                            )}
+                            Sync Fastpik
+                        </Button>
                     </div>
+
+                    {booking.fastpik_project_link ? (
+                        <div className="space-y-1.5">
+                            <p className="text-[11px] text-muted-foreground">Fastpik (utama)</p>
+                            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
+                                <Link2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                <span className="flex-1 truncate text-xs text-muted-foreground">{booking.fastpik_project_link}</span>
+                                <button onClick={() => { navigator.clipboard.writeText(booking.fastpik_project_link!); }} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
+                                    <Copy className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => window.open(booking.fastpik_project_link!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        booking.drive_folder_url && (
+                            <div className="space-y-1.5">
+                                <p className="text-[11px] text-muted-foreground">Google Drive (fallback)</p>
+                                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
+                                    <Link2 className="w-4 h-4 text-blue-500 shrink-0" />
+                                    <span className="flex-1 truncate text-xs text-muted-foreground">{booking.drive_folder_url}</span>
+                                    <button onClick={() => { navigator.clipboard.writeText(booking.drive_folder_url!); }} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
+                                        <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={() => window.open(booking.drive_folder_url!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">
+                                        <ExternalLink className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        )
+                    )}
+
+                    {booking.fastpik_project_link && booking.drive_folder_url && (
+                        <div className="space-y-1.5">
+                            <p className="text-[11px] text-muted-foreground">Google Drive (opsional)</p>
+                            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/20 border text-sm">
+                                <Link2 className="w-4 h-4 text-blue-500 shrink-0" />
+                                <span className="flex-1 truncate text-xs text-muted-foreground">{booking.drive_folder_url}</span>
+                                <button onClick={() => { navigator.clipboard.writeText(booking.drive_folder_url!); }} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
+                                    <Copy className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => window.open(booking.drive_folder_url!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
