@@ -199,12 +199,15 @@ export default function PricingPage() {
                         return (
                             <Card key={plan.nameKey} className={cn(
                                 "flex flex-col relative",
-                                isActive ? "border-green-500 border-2 shadow-lg" :
-                                    plan.popular ? "border-primary shadow-lg scale-105 z-10" : "border-border"
+                                plan.popular ? "border-primary shadow-lg scale-105 z-10" : "border-border",
+                                isActive && "border-green-500 border-2 ring-2 ring-green-500/25"
                             )}>
                                 {isActive && (
                                     <div className="absolute -top-4 left-0 right-0 flex justify-center">
-                                        <Badge className="bg-green-500 text-white px-3 py-1">✅ {t('currentPlan')}</Badge>
+                                        <Badge className="bg-green-500 text-white px-3 py-1 flex items-center gap-1.5">
+                                            <Check className="h-3.5 w-3.5" />
+                                            {t('currentPlan')}
+                                        </Badge>
                                     </div>
                                 )}
                                 {!isActive && plan.popular && (
@@ -240,7 +243,8 @@ export default function PricingPage() {
                                 <CardFooter>
                                     {isActive ? (
                                         <Button className="w-full" variant="outline" disabled>
-                                            ✅ {t('currentPlan')}
+                                            <Check className="h-4 w-4 mr-2" />
+                                            {t('currentPlan')}
                                         </Button>
                                     ) : (
                                         <Button className="w-full cursor-pointer" variant={plan.popular ? "default" : "outline"} asChild>
