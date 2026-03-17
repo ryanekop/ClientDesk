@@ -46,6 +46,9 @@ import {
 } from "@/lib/payment-config";
 import {
   getActiveEventTypes,
+  isShowAllPackagesEventType,
+  LEGACY_PUBLIC_CUSTOM_EVENT_TYPE,
+  normalizeEventTypeName,
   normalizeEventTypeList,
   PUBLIC_CUSTOM_EVENT_TYPE,
 } from "@/lib/event-type-config";
@@ -143,6 +146,18 @@ function compareServicesByCatalogOrder(a: Service, b: Service) {
   const bCreatedAt = b.created_at || "";
   if (aCreatedAt !== bCreatedAt) return aCreatedAt.localeCompare(bCreatedAt);
   return a.name.localeCompare(b.name);
+}
+
+function isServiceAvailableForEventType(service: Service, eventType: string): boolean {
+  if (!eventType) return false;
+  if (!service.event_types || service.event_types.length === 0) return true;
+  if (isShowAllPackagesEventType(eventType)) return true;
+  const normalizedEventType = normalizeEventTypeName(eventType);
+  if (!normalizedEventType) return false;
+  return service.event_types.some(
+    (serviceEventType) =>
+      normalizeEventTypeName(serviceEventType) === normalizedEventType,
+  );
 }
 
 function extractSlugFromPath(pathname: string) {
@@ -357,10 +372,17 @@ export function BookingFormClient({
   // ── Helpers ──
 
   function getMinDpForEvent(et?: string): { mode: "percent" | "fixed"; value: number } {
-    const eventKey = et ?? eventType;
+    const normalizedEventKey = normalizeEventTypeName(et ?? eventType);
     const fallbackPercent = effectiveVendor.min_dp_percent ?? 50;
-    if (eventKey && effectiveVendor.min_dp_map && effectiveVendor.min_dp_map[eventKey] !== undefined) {
-      const entry = effectiveVendor.min_dp_map[eventKey];
+    const dpMap = effectiveVendor.min_dp_map;
+    const entry =
+      normalizedEventKey && dpMap
+        ? dpMap[normalizedEventKey] ??
+          (normalizedEventKey === PUBLIC_CUSTOM_EVENT_TYPE
+            ? dpMap[LEGACY_PUBLIC_CUSTOM_EVENT_TYPE]
+            : undefined)
+        : undefined;
+    if (entry !== undefined) {
       if (typeof entry === "number") return { mode: "percent", value: entry }; // backward compat
       return { mode: (entry.mode as "percent" | "fixed") || "percent", value: entry.value ?? fallbackPercent };
     }
@@ -511,16 +533,9 @@ export function BookingFormClient({
           ],
     );
     const finalLocation = resolvedLocation.location;
-    const activeSelectedMainServices = (eventType
-      ? services.filter(
-          (service) =>
-            !service.is_addon &&
-            (!service.event_types ||
-              service.event_types.length === 0 ||
-              service.event_types.includes(eventType)),
-        )
-      : services.filter((service) => !service.is_addon)
-    ).filter((service) => selectedServiceIds.includes(service.id));
+    const activeSelectedMainServices = filteredServices.filter((service) =>
+      selectedServiceIds.includes(service.id),
+    );
     const activeSelectedService = activeSelectedMainServices[0] || null;
     const activeSelectedAddonTotal = services
       .filter((service) => selectedAddons.has(service.id))
@@ -749,34 +764,39 @@ export function BookingFormClient({
     " cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat pr-8";
 
   const minDP = getMinDpForEvent();
-  const currentExtraFields = EVENT_EXTRA_FIELDS[eventType] || [];
+  const normalizedEventType = normalizeEventTypeName(eventType) || eventType;
+  const currentExtraFields = EVENT_EXTRA_FIELDS[normalizedEventType] || [];
   const brandColor = effectiveVendor.form_brand_color || "#000000";
   const formSectionsByEventType = React.useMemo(() => {
     if (Array.isArray(effectiveVendor.form_sections)) {
       return { Umum: normalizeStoredFormLayout(effectiveVendor.form_sections, "Umum") };
     }
     if (effectiveVendor.form_sections && typeof effectiveVendor.form_sections === "object") {
-      return Object.fromEntries(
-        Object.entries(effectiveVendor.form_sections).map(([k, v]) => [
-          k,
-          normalizeStoredFormLayout(v, k),
-        ]),
-      ) as Record<string, FormLayoutItem[]>;
+      return Object.entries(effectiveVendor.form_sections).reduce(
+        (acc, [key, value]) => {
+          const normalizedKey = normalizeEventTypeName(key) || key;
+          if (!(normalizedKey in acc) || key === normalizedKey) {
+            acc[normalizedKey] = normalizeStoredFormLayout(value, normalizedKey);
+          }
+          return acc;
+        },
+        {} as Record<string, FormLayoutItem[]>,
+      );
     }
     return { Umum: normalizeStoredFormLayout([], "Umum") } as Record<string, FormLayoutItem[]>;
   }, [effectiveVendor.form_sections]);
-  const activeLayout = !eventType
+  const activeLayout = !normalizedEventType
     ? formSectionsByEventType.Umum || normalizeStoredFormLayout([], "Umum")
-    : formSectionsByEventType[eventType] ||
+    : formSectionsByEventType[normalizedEventType] ||
       formSectionsByEventType.Umum ||
-      normalizeStoredFormLayout([], eventType);
+      normalizeStoredFormLayout([], normalizedEventType);
   const normalizedActiveLayout = normalizeStoredFormLayout(
     activeLayout,
-    eventType || "Umum",
+    normalizedEventType || "Umum",
   );
   const activeSections = groupFormLayoutBySection(
     normalizedActiveLayout,
-    eventType || "Umum",
+    normalizedEventType || "Umum",
   );
   const showsLocationField =
     effectiveVendor.form_show_location !== false &&
@@ -793,11 +813,7 @@ export function BookingFormClient({
       }),
     [effectiveVendor.custom_event_types, effectiveVendor.form_event_types],
   );
-  const publicEventTypeOptions = React.useMemo(
-    () => [...availableEventTypes, PUBLIC_CUSTOM_EVENT_TYPE],
-    [availableEventTypes],
-  );
-  const showAllActivePackages = eventType === PUBLIC_CUSTOM_EVENT_TYPE;
+  const showAllActivePackages = isShowAllPackagesEventType(eventType);
   const termsAgreementText =
     effectiveVendor.form_terms_agreement_text?.trim() || t("termsAgreementDefault");
   const termsLinkText =
@@ -827,12 +843,18 @@ export function BookingFormClient({
     ? []
     : showAllActivePackages
       ? sortedServices.filter((service) => !service.is_addon)
-      : sortedServices.filter((service) => !service.is_addon && (!service.event_types || service.event_types.length === 0 || service.event_types.includes(eventType)));
+      : sortedServices.filter(
+          (service) =>
+            !service.is_addon && isServiceAvailableForEventType(service, eventType),
+        );
   const addonServices = !eventType
     ? []
     : showAllActivePackages
       ? sortedServices.filter((service) => service.is_addon)
-      : sortedServices.filter((service) => service.is_addon && (!service.event_types || service.event_types.length === 0 || service.event_types.includes(eventType)));
+      : sortedServices.filter(
+          (service) =>
+            service.is_addon && isServiceAvailableForEventType(service, eventType),
+        );
   const searchedMainServices = React.useMemo(() => {
     const query = packageSearchQuery.trim().toLowerCase();
     if (!query) return filteredServices;
@@ -1176,7 +1198,7 @@ export function BookingFormClient({
               required
             >
               <option value="">{t("pilihTipe")}</option>
-              {publicEventTypeOptions.map((et) => (
+              {availableEventTypes.map((et) => (
                 <option key={et} value={et}>
                   {et}
                 </option>

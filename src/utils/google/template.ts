@@ -19,7 +19,7 @@ export const GOOGLE_EVENT_TYPES = [
     "Newborn",
     "Family",
     "Komersil",
-    "Lainnya",
+    "Custom/Lainnya",
 ] as const;
 
 export type GoogleEventType = (typeof GOOGLE_EVENT_TYPES)[number];
@@ -93,6 +93,28 @@ export const DRIVE_TEMPLATE_VARIABLES = [
 
 export type DriveFolderStructureMap = Record<string, string[]>;
 
+const LEGACY_CUSTOM_EVENT_TYPE = "Lainnya";
+const CANONICAL_CUSTOM_EVENT_TYPE = "Custom/Lainnya";
+
+function normalizeTemplateEventTypeName(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+    const normalized = value.trim();
+    if (!normalized) return null;
+    if (normalized === LEGACY_CUSTOM_EVENT_TYPE) {
+        return CANONICAL_CUSTOM_EVENT_TYPE;
+    }
+    return normalized;
+}
+
+function getEventTypeLookupKeys(eventType: string | null | undefined): string[] {
+    const normalized = normalizeTemplateEventTypeName(eventType);
+    if (!normalized) return [];
+    if (normalized === CANONICAL_CUSTOM_EVENT_TYPE) {
+        return [CANONICAL_CUSTOM_EVENT_TYPE, LEGACY_CUSTOM_EVENT_TYPE];
+    }
+    return [normalized];
+}
+
 export function normalizeTemplateFormatMap(value: unknown, fallback: string): TemplateFormatMap {
     const normalized: TemplateFormatMap = Object.fromEntries(
         GOOGLE_EVENT_TYPES.map((eventType) => [eventType, eventType === "Umum" ? fallback : ""]),
@@ -100,8 +122,12 @@ export function normalizeTemplateFormatMap(value: unknown, fallback: string): Te
 
     if (value && typeof value === "object" && !Array.isArray(value)) {
         for (const [key, mapValue] of Object.entries(value)) {
+            const normalizedKey = normalizeTemplateEventTypeName(key);
             if (typeof mapValue === "string") {
-                normalized[key] = mapValue;
+                if (!normalizedKey) continue;
+                if (!(normalizedKey in normalized) || key === normalizedKey) {
+                    normalized[normalizedKey] = mapValue;
+                }
             }
         }
     }
@@ -119,7 +145,9 @@ export function resolveTemplateByEventType(
     fallback: string,
 ): string {
     const normalized = normalizeTemplateFormatMap(mapValue, fallback);
-    const eventSpecific = eventType ? normalized[eventType]?.trim() : "";
+    const eventSpecific = getEventTypeLookupKeys(eventType)
+        .map((key) => normalized[key]?.trim())
+        .find(Boolean);
     return eventSpecific || normalized.Umum?.trim() || fallback;
 }
 
@@ -184,12 +212,19 @@ export function normalizeDriveFolderStructureMap(
 
     if (value && typeof value === "object" && !Array.isArray(value)) {
         for (const [key, mapValue] of Object.entries(value)) {
+            const normalizedKey = normalizeTemplateEventTypeName(key);
+            if (!normalizedKey) continue;
             if (Array.isArray(mapValue)) {
-                normalized[key] = mapValue.filter(
+                const nextValue = mapValue.filter(
                     (item): item is string => typeof item === "string" && item.trim().length > 0,
                 );
+                if (!(normalizedKey in normalized) || key === normalizedKey) {
+                    normalized[normalizedKey] = nextValue;
+                }
             } else if (typeof mapValue === "string" && mapValue.trim()) {
-                normalized[key] = [mapValue.trim()];
+                if (!(normalizedKey in normalized) || key === normalizedKey) {
+                    normalized[normalizedKey] = [mapValue.trim()];
+                }
             }
         }
     }
@@ -207,8 +242,10 @@ export function resolveDriveFolderStructureByEventType(
     fallback: string[] = DEFAULT_DRIVE_FOLDER_STRUCTURE,
 ): string[] {
     const normalized = normalizeDriveFolderStructureMap(structureMap, fallback);
-    const eventSpecific = eventType ? normalized[eventType] || [] : [];
-    return eventSpecific.length > 0 ? eventSpecific : normalized.Umum || [...fallback];
+    const eventSpecific = getEventTypeLookupKeys(eventType)
+        .map((key) => normalized[key] || [])
+        .find((segments) => segments.length > 0);
+    return eventSpecific || normalized.Umum || [...fallback];
 }
 
 export function buildCalendarRangeFromStoredSession(sessionDate: string, durationMinutes: number) {

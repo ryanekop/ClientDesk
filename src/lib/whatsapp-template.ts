@@ -1,3 +1,5 @@
+import { normalizeEventTypeName } from "@/lib/event-type-config";
+
 export type WhatsAppTemplate = {
   type: string;
   name?: string | null;
@@ -157,12 +159,13 @@ export function getWhatsAppTemplateContent(
   locale: string,
   eventType?: string | null,
 ) {
+  const normalizedEventType = normalizeEventTypeName(eventType);
   const exact =
-    eventType != null
+    normalizedEventType != null
       ? templates.find(
           (template) =>
             resolveTemplateType(template) === type &&
-            template.event_type === eventType,
+            normalizeEventTypeName(template.event_type) === normalizedEventType,
         )
       : null;
   const fallback =

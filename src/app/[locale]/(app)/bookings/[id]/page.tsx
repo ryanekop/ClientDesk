@@ -75,6 +75,10 @@ import {
     syncGoogleCalendarForStatusTransition,
 } from "@/utils/google-calendar-status-sync";
 import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
+import {
+    isShowAllPackagesEventType,
+    normalizeEventTypeName,
+} from "@/lib/event-type-config";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -368,7 +372,13 @@ function normalizeEditableAdjustments(items: EditableAdjustment[]): FinalAdjustm
 function isAddonAvailableForEvent(service: AddonService, eventType: string | null) {
     if (!service.event_types || service.event_types.length === 0) return true;
     if (!eventType) return true;
-    return service.event_types.includes(eventType);
+    if (isShowAllPackagesEventType(eventType)) return true;
+    const normalizedEventType = normalizeEventTypeName(eventType);
+    if (!normalizedEventType) return false;
+    return service.event_types.some(
+        (serviceEventType) =>
+            normalizeEventTypeName(serviceEventType) === normalizedEventType,
+    );
 }
 
 export default function BookingDetailPage() {
@@ -569,6 +579,7 @@ export default function BookingDetailPage() {
             });
             const normalized = rawBooking ? {
                 ...rawBooking,
+                event_type: normalizeEventTypeName(rawBooking.event_type) || rawBooking.event_type,
                 status: syncedStatus,
                 client_status: syncedStatus,
                 service_selections: serviceSelections,
@@ -1116,7 +1127,9 @@ export default function BookingDetailPage() {
                 description: customAddonDescription.trim() || null,
                 is_addon: true,
                 is_active: true,
-                event_types: booking.event_type ? [booking.event_type] : null,
+                event_types: booking.event_type
+                    ? [normalizeEventTypeName(booking.event_type) || booking.event_type]
+                    : null,
             })
             .select("id, name, price, description, event_types")
             .single();

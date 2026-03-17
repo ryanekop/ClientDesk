@@ -24,6 +24,8 @@ import {
 import {
     getActiveEventTypes,
     getBuiltInEventTypes,
+    isShowAllPackagesEventType,
+    normalizeEventTypeName,
     normalizeEventTypeList,
 } from "@/lib/event-type-config";
 import {
@@ -150,8 +152,14 @@ function compareServicesByCatalogOrder(a: Service, b: Service) {
 
 function isServiceAvailableForEvent(service: Service, eventType: string) {
     if (!eventType) return false;
+    if (isShowAllPackagesEventType(eventType)) return true;
     if (!service.event_types || service.event_types.length === 0) return true;
-    return service.event_types.includes(eventType);
+    const normalizedEventType = normalizeEventTypeName(eventType);
+    if (!normalizedEventType) return false;
+    return service.event_types.some(
+        (serviceEventType) =>
+            normalizeEventTypeName(serviceEventType) === normalizedEventType,
+    );
 }
 
 export default function NewBookingPage() {
@@ -270,12 +278,16 @@ export default function NewBookingPage() {
                 setFormSectionsByEventType({ Umum: normalizeStoredFormLayout(rawSections, "Umum") });
             } else if (rawSections && typeof rawSections === "object") {
                 setFormSectionsByEventType(
-                    Object.fromEntries(
-                        Object.entries(rawSections as Record<string, unknown>).map(([key, value]) => [
-                            key,
-                            normalizeStoredFormLayout(value, key),
-                        ]),
-                    ) as Record<string, FormLayoutItem[]>,
+                    Object.entries(rawSections as Record<string, unknown>).reduce(
+                        (acc, [key, value]) => {
+                            const normalizedKey = normalizeEventTypeName(key) || key;
+                            if (!(normalizedKey in acc) || key === normalizedKey) {
+                                acc[normalizedKey] = normalizeStoredFormLayout(value, normalizedKey);
+                            }
+                            return acc;
+                        },
+                        {} as Record<string, FormLayoutItem[]>,
+                    ),
                 );
             }
         }

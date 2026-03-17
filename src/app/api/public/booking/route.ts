@@ -28,6 +28,12 @@ import {
     isDuplicateBookingCodeError,
 } from "@/lib/booking-code";
 import { normalizeCoordinate } from "@/utils/location";
+import {
+    isShowAllPackagesEventType,
+    LEGACY_PUBLIC_CUSTOM_EVENT_TYPE,
+    normalizeEventTypeName,
+    PUBLIC_CUSTOM_EVENT_TYPE,
+} from "@/lib/event-type-config";
 
 type VendorRecord = {
     id: string;
@@ -294,6 +300,7 @@ export async function POST(request: NextRequest) {
 
         const normalizedClientName = (clientName || "").trim() || "Klien";
         const normalizedClientWhatsapp = (clientWhatsapp || "").trim();
+        const normalizedEventType = normalizeEventTypeName(eventType);
         const normalizedLocationLat = normalizeStoredCoordinate(locationLat);
         const normalizedLocationLng = normalizeStoredCoordinate(locationLng);
         const rawExtraData =
@@ -414,13 +421,16 @@ export async function POST(request: NextRequest) {
                 .order("sort_order", { ascending: true })
                 .order("created_at", { ascending: true });
 
-            const normalizedEventType = (eventType || "").trim();
             const preferredService = normalizedEventType
-                ? (availableMainServices || []).find((service) => {
+                ? isShowAllPackagesEventType(normalizedEventType)
+                    ? (availableMainServices || [])[0]
+                    : (availableMainServices || []).find((service) => {
                     const eventTypes = Array.isArray((service as any).event_types)
                         ? ((service as any).event_types as string[])
                         : [];
-                    return eventTypes.length === 0 || eventTypes.includes(normalizedEventType);
+                    return eventTypes.length === 0 || eventTypes.some(
+                        (type) => normalizeEventTypeName(type) === normalizedEventType,
+                    );
                 }) || (availableMainServices || [])[0]
                 : (availableMainServices || [])[0];
 
@@ -466,8 +476,14 @@ export async function POST(request: NextRequest) {
             (typeof vendor.min_dp_map === "object" && vendor.min_dp_map !== null)
                 ? vendor.min_dp_map as Record<string, number | { mode?: string; value?: number }>
                 : {};
-        const dpEntry = eventType && dpMap[eventType] !== undefined
-            ? dpMap[eventType]
+        const dpEntry = normalizedEventType
+            ? (
+                dpMap[normalizedEventType] ??
+                (normalizedEventType === PUBLIC_CUSTOM_EVENT_TYPE
+                    ? dpMap[LEGACY_PUBLIC_CUSTOM_EVENT_TYPE]
+                    : undefined) ??
+                (vendor.min_dp_percent ?? 50)
+            )
             : (vendor.min_dp_percent ?? 50);
         const dpMode = typeof dpEntry === "number" ? "percent" : (dpEntry.mode || "percent");
         const dpValue = typeof dpEntry === "number" ? dpEntry : (dpEntry.value ?? (vendor.min_dp_percent ?? 50));
@@ -495,7 +511,7 @@ export async function POST(request: NextRequest) {
             user_id: vendor.id,
             client_name: normalizedClientName,
             client_whatsapp: normalizedClientWhatsapp || null,
-            event_type: eventType || null,
+            event_type: normalizedEventType || null,
             session_date: resolvedSessionDate || null,
             service_id: mainServices[0]?.id || null,
             total_price: computedTotalPrice,
@@ -582,7 +598,7 @@ export async function POST(request: NextRequest) {
                     studioName: vendor.studio_name ?? null,
                     bookingCode: booking.booking_code,
                     clientName: normalizedClientName,
-                    eventType,
+                    eventType: normalizedEventType,
                     sessionDate: resolvedSessionDate,
                     extraFields: sanitizedExtraData,
                     fileName: paymentProofFile.name || `${booking.booking_code}_proof`,
@@ -605,7 +621,7 @@ export async function POST(request: NextRequest) {
         }
 
         const shouldSyncCalendar = hasBookingCalendarSessions({
-            eventType,
+            eventType: normalizedEventType,
             sessionDate: resolvedSessionDate || null,
             extraFields: sanitizedExtraData,
             defaultLocation: location,
@@ -681,7 +697,7 @@ export async function POST(request: NextRequest) {
                         locationLat: normalizedLocationLat,
                         locationLng: normalizedLocationLng,
                         locationDetail,
-                        eventType,
+                        eventType: normalizedEventType,
                         notes,
                         extraFields: sanitizedExtraData,
                         googleCalendarEventIds: null,
@@ -746,7 +762,7 @@ export async function POST(request: NextRequest) {
                 normalizedTemplates,
                 "whatsapp_booking_confirm",
                 "id",
-                eventType,
+                normalizedEventType,
             );
             bookingConfirmTemplate = content.trim() || null;
         } catch {

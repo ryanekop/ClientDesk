@@ -77,6 +77,8 @@ import {
   getBuiltInEventTypes,
   getEventTypeSettings,
   mergeCustomEventTypes,
+  normalizeEventTypeName,
+  PUBLIC_CUSTOM_EVENT_TYPE,
 } from "@/lib/event-type-config";
 import {
   SortableConfigList,
@@ -484,6 +486,16 @@ function GoogleDriveLogo({ className }: { className?: string }) {
   );
 }
 
+function normalizeTemplateEventTypeValue(
+  eventType: string | null | undefined,
+): string | null {
+  const normalized = normalizeEventTypeName(eventType);
+  if (normalized) return normalized;
+  if (typeof eventType !== "string") return null;
+  const trimmed = eventType.trim();
+  return trimmed || null;
+}
+
 export default function SettingsPage() {
   const supabase = createClient();
   const t = useTranslations("Settings");
@@ -675,22 +687,25 @@ export default function SettingsPage() {
   );
   const eventTypeItems = React.useMemo<SortableConfigItem[]>(
     () =>
-      eventTypeSettings.map((item) => ({
-        id: item.name,
-        label: item.name,
-        active: item.active,
-        editable: !item.builtIn,
-        removable: !item.builtIn,
-        badge: item.builtIn ? (
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-            Bawaan
-          </span>
-        ) : (
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
-            Custom
-          </span>
-        ),
-      })),
+      eventTypeSettings.map((item) => {
+        const isCustomShowAll = item.name === PUBLIC_CUSTOM_EVENT_TYPE;
+        return {
+          id: item.name,
+          label: item.name,
+          active: isCustomShowAll ? undefined : item.active,
+          editable: !item.builtIn,
+          removable: !item.builtIn,
+          badge: item.builtIn ? (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+              Bawaan
+            </span>
+          ) : (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+              Custom
+            </span>
+          ),
+        } satisfies SortableConfigItem;
+      }),
     [eventTypeSettings],
   );
   const clientStatusItems = React.useMemo<SortableConfigItem[]>(
@@ -717,68 +732,92 @@ export default function SettingsPage() {
       orderedNames.filter((name) => prev.includes(name)),
     );
     setActiveEventTypes((prev) =>
-      orderedNames.filter((name) => prev.includes(name)),
+      Array.from(
+        new Set([
+          ...orderedNames.filter((name) => prev.includes(name)),
+          PUBLIC_CUSTOM_EVENT_TYPE,
+        ]),
+      ),
     );
   }
 
   function renameEventType(oldName: string, nextName: string) {
+    if (oldName === PUBLIC_CUSTOM_EVENT_TYPE) return;
+    const normalizedNextName = normalizeEventTypeName(nextName);
     if (
-      !nextName ||
-      oldName === nextName ||
-      availableEventTypes.includes(nextName)
+      !normalizedNextName ||
+      oldName === normalizedNextName ||
+      availableEventTypes.includes(normalizedNextName)
     )
       return;
     setCustomEventTypes((prev) =>
-      prev.map((item) => (item === oldName ? nextName : item)),
+      prev.map((item) => (item === oldName ? normalizedNextName : item)),
     );
     setActiveEventTypes((prev) =>
-      prev.map((item) => (item === oldName ? nextName : item)),
+      prev.map((item) => (item === oldName ? normalizedNextName : item)),
     );
     setCalendarEventFormats((prev) => {
       if (!(oldName in prev)) return prev;
-      const next = { ...prev, [nextName]: prev[oldName] };
+      const next = { ...prev, [normalizedNextName]: prev[oldName] };
       delete next[oldName];
       return next;
     });
     setCalendarEventDescriptions((prev) => {
       if (!(oldName in prev)) return prev;
-      const next = { ...prev, [nextName]: prev[oldName] };
+      const next = { ...prev, [normalizedNextName]: prev[oldName] };
       delete next[oldName];
       return next;
     });
     setDriveFolderFormats((prev) => {
       if (!(oldName in prev)) return prev;
-      const next = { ...prev, [nextName]: prev[oldName] };
+      const next = { ...prev, [normalizedNextName]: prev[oldName] };
       delete next[oldName];
       return next;
     });
     setDriveFolderStructures((prev) => {
       if (!(oldName in prev)) return prev;
-      const next = { ...prev, [nextName]: prev[oldName] };
+      const next = { ...prev, [normalizedNextName]: prev[oldName] };
       delete next[oldName];
       return next;
     });
     setFormSectionsByEventType((prev) => {
       if (!(oldName in prev)) return prev;
-      const next = { ...prev, [nextName]: prev[oldName] };
+      const next = { ...prev, [normalizedNextName]: prev[oldName] };
       delete next[oldName];
       return next;
     });
   }
 
   function toggleEventTypeActive(name: string) {
+    if (name === PUBLIC_CUSTOM_EVENT_TYPE) return;
     setActiveEventTypes((prev) =>
       prev.includes(name)
-        ? prev.filter((item) => item !== name)
-        : eventTypeSettings
+        ? Array.from(
+            new Set([
+              ...prev.filter((item) => item !== name),
+              PUBLIC_CUSTOM_EVENT_TYPE,
+            ]),
+          )
+        : [
+            ...eventTypeSettings
             .map((item) => item.name)
             .filter((item) => item === name || prev.includes(item)),
+            PUBLIC_CUSTOM_EVENT_TYPE,
+          ],
     );
   }
 
   function removeEventType(name: string) {
+    if (name === PUBLIC_CUSTOM_EVENT_TYPE) return;
     setCustomEventTypes((prev) => prev.filter((item) => item !== name));
-    setActiveEventTypes((prev) => prev.filter((item) => item !== name));
+    setActiveEventTypes((prev) =>
+      Array.from(
+        new Set([
+          ...prev.filter((item) => item !== name),
+          PUBLIC_CUSTOM_EVENT_TYPE,
+        ]),
+      ),
+    );
     setCalendarEventFormats((prev) => {
       const next = { ...prev };
       delete next[name];
@@ -982,11 +1021,19 @@ export default function SettingsPage() {
       });
     } else if (rawSections && typeof rawSections === "object") {
       setFormSectionsByEventType(
-        Object.fromEntries(
-          Object.entries(rawSections as Record<string, unknown>).map(
-            ([key, value]) => [key, normalizeStoredFormLayout(value, key)],
-          ),
-        ) as Record<string, FormLayoutItem[]>,
+        Object.entries(rawSections as Record<string, unknown>).reduce(
+          (acc, [key, value]) => {
+            const normalizedKey = normalizeEventTypeName(key) || key;
+            if (!(normalizedKey in acc) || key === normalizedKey) {
+              acc[normalizedKey] = normalizeStoredFormLayout(
+                value,
+                normalizedKey,
+              );
+            }
+            return acc;
+          },
+          {} as Record<string, FormLayoutItem[]>,
+        ),
       );
     } else {
       setFormSectionsByEventType({});
@@ -1082,7 +1129,7 @@ export default function SettingsPage() {
           const existing = allTemplates.find(
             (tmpl: Template) =>
               resolveTemplateType(tmpl) === tt.value &&
-              (tmpl.event_type || "Umum") === et,
+              (normalizeTemplateEventTypeValue(tmpl.event_type) || "Umum") === et,
           );
           contents[key] = existing?.content || "";
           contentsEn[key] = existing?.content_en || "";
@@ -1399,10 +1446,19 @@ export default function SettingsPage() {
   async function handleSaveEventTypes() {
     setEventTypeSaving(true);
     try {
-      await saveProfilePatch({
-        form_event_types: activeEventTypes,
-        custom_event_types: customEventTypes,
+      const normalizedCustomEventTypes = mergeCustomEventTypes(customEventTypes);
+      const normalizedActiveEventTypes = getActiveEventTypes({
+        customEventTypes: normalizedCustomEventTypes,
+        activeEventTypes: Array.from(
+          new Set([...activeEventTypes, PUBLIC_CUSTOM_EVENT_TYPE]),
+        ),
       });
+      await saveProfilePatch({
+        form_event_types: normalizedActiveEventTypes,
+        custom_event_types: normalizedCustomEventTypes,
+      });
+      setCustomEventTypes(normalizedCustomEventTypes);
+      setActiveEventTypes(normalizedActiveEventTypes);
       setEventTypeSaved(true);
       setTimeout(() => setEventTypeSaved(false), 3000);
       void fetchAll(true);
@@ -1464,7 +1520,8 @@ export default function SettingsPage() {
           (item) =>
             resolveTemplateType(item) === type &&
             (eventType
-              ? (item.event_type || "Umum") === eventType
+              ? (normalizeTemplateEventTypeValue(item.event_type) || "Umum") ===
+                eventType
               : !item.event_type || item.event_type === null),
         );
         const storedType = getStoredTemplateType(type);
@@ -3554,10 +3611,18 @@ export default function SettingsPage() {
                     onKeyDown={(e) => {
                       if (e.key !== "Enter") return;
                       e.preventDefault();
-                      const value = newCustomEventType.trim();
+                      const value = normalizeEventTypeName(newCustomEventType);
                       if (!value || availableEventTypes.includes(value)) return;
                       setCustomEventTypes((prev) => [...prev, value]);
-                      setActiveEventTypes((prev) => [...prev, value]);
+                      setActiveEventTypes((prev) =>
+                        Array.from(
+                          new Set([
+                            ...prev,
+                            value,
+                            PUBLIC_CUSTOM_EVENT_TYPE,
+                          ]),
+                        ),
+                      );
                       setNewCustomEventType("");
                     }}
                     placeholder="Tambah jenis acara custom..."
@@ -3567,10 +3632,18 @@ export default function SettingsPage() {
                     type="button"
                     variant="outline"
                     onClick={() => {
-                      const value = newCustomEventType.trim();
+                      const value = normalizeEventTypeName(newCustomEventType);
                       if (!value || availableEventTypes.includes(value)) return;
                       setCustomEventTypes((prev) => [...prev, value]);
-                      setActiveEventTypes((prev) => [...prev, value]);
+                      setActiveEventTypes((prev) =>
+                        Array.from(
+                          new Set([
+                            ...prev,
+                            value,
+                            PUBLIC_CUSTOM_EVENT_TYPE,
+                          ]),
+                        ),
+                      );
                       setNewCustomEventType("");
                     }}
                   >

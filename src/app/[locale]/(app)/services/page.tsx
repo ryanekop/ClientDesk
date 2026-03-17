@@ -57,6 +57,8 @@ import { TablePagination, paginateArray } from "@/components/ui/table-pagination
 import {
   getActiveEventTypes,
   getBuiltInEventTypes,
+  isShowAllPackagesEventType,
+  normalizeEventTypeName,
   normalizeEventTypeList,
 } from "@/lib/event-type-config";
 
@@ -93,6 +95,19 @@ function compareServices(a: Service, b: Service) {
   if (createdAtDiff !== 0) return createdAtDiff;
 
   return a.name.localeCompare(b.name);
+}
+
+function serviceHasEventType(
+  service: Pick<Service, "event_types">,
+  eventType: string,
+) {
+  if (!service.event_types || service.event_types.length === 0) return false;
+  const normalizedEventType = normalizeEventTypeName(eventType);
+  if (!normalizedEventType) return false;
+  return service.event_types.some(
+    (serviceEventType) =>
+      normalizeEventTypeName(serviceEventType) === normalizedEventType,
+  );
 }
 
 function normalizeServiceOrder(group: Service[]) {
@@ -830,10 +845,9 @@ export default function ServicesPage() {
   const filteredServices = React.useMemo(() => {
     let result = [...services];
 
-    if (selectedEventFilter) {
+    if (selectedEventFilter && !isShowAllPackagesEventType(selectedEventFilter)) {
       result = result.filter(
-        (service) =>
-          service.event_types && service.event_types.includes(selectedEventFilter),
+        (service) => serviceHasEventType(service, selectedEventFilter),
       );
     }
 
@@ -856,8 +870,16 @@ export default function ServicesPage() {
 
   const usedEventTypes = React.useMemo(() => {
     const set = new Set<string>();
-    services.forEach((service) => service.event_types?.forEach((eventType) => set.add(eventType)));
-    return eventTypeOptions.filter((eventType) => set.has(eventType));
+    services.forEach((service) =>
+      service.event_types?.forEach((eventType) => {
+        const normalized = normalizeEventTypeName(eventType);
+        if (normalized) set.add(normalized);
+      }),
+    );
+    return eventTypeOptions.filter(
+      (eventType) =>
+        isShowAllPackagesEventType(eventType) || set.has(eventType),
+    );
   }, [eventTypeOptions, services]);
 
   const groupedServices = React.useMemo(() => splitServicesByGroup(services), [services]);
@@ -1489,7 +1511,7 @@ export default function ServicesPage() {
                         type="checkbox"
                         name="event_types"
                         value={eventType}
-                        defaultChecked={editingService.event_types?.includes(eventType)}
+                        defaultChecked={serviceHasEventType(editingService, eventType)}
                         className="h-3 w-3 accent-foreground"
                       />
                       {eventType}

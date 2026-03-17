@@ -26,6 +26,8 @@ import {
 import {
     getActiveEventTypes,
     getBuiltInEventTypes,
+    isShowAllPackagesEventType,
+    normalizeEventTypeName,
     normalizeEventTypeList,
 } from "@/lib/event-type-config";
 import {
@@ -160,8 +162,14 @@ function compareServicesByCatalogOrder(a: Service, b: Service) {
 
 function isServiceAvailableForEvent(service: Service, eventType: string) {
     if (!eventType) return false;
+    if (isShowAllPackagesEventType(eventType)) return true;
     if (!service.event_types || service.event_types.length === 0) return true;
-    return service.event_types.includes(eventType);
+    const normalizedEventType = normalizeEventTypeName(eventType);
+    if (!normalizedEventType) return false;
+    return service.event_types.some(
+        (serviceEventType) =>
+            normalizeEventTypeName(serviceEventType) === normalizedEventType,
+    );
 }
 function parseExistingPhone(full: string | null): { code: string; number: string } {
     if (!full) return { code: "+62", number: "" };
@@ -303,12 +311,16 @@ export default function EditBookingPage() {
                 setFormSectionsByEventType({ Umum: normalizeStoredFormLayout(rawSections, "Umum") });
             } else if (rawSections && typeof rawSections === "object") {
                 setFormSectionsByEventType(
-                    Object.fromEntries(
-                        Object.entries(rawSections as Record<string, unknown>).map(([key, value]) => [
-                            key,
-                            normalizeStoredFormLayout(value, key),
-                        ]),
-                    ) as Record<string, FormLayoutItem[]>,
+                    Object.entries(rawSections as Record<string, unknown>).reduce(
+                        (acc, [key, value]) => {
+                            const normalizedKey = normalizeEventTypeName(key) || key;
+                            if (!(normalizedKey in acc) || key === normalizedKey) {
+                                acc[normalizedKey] = normalizeStoredFormLayout(value, normalizedKey);
+                            }
+                            return acc;
+                        },
+                        {} as Record<string, FormLayoutItem[]>,
+                    ),
                 );
             }
             if (booking) {
@@ -317,7 +329,7 @@ export default function EditBookingPage() {
                 setCountryCode(parsed.code);
                 setPhoneNumber(parsed.number);
                 setInstagram(booking.instagram || "");
-                setEventType(booking.event_type || "Umum");
+                setEventType(normalizeEventTypeName(booking.event_type) || "Umum");
                 setSessionDate(booking.session_date ? booking.session_date.slice(0, 16) : "");
                 setLocation(booking.location || "");
                 setLocationCoords({

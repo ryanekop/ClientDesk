@@ -57,6 +57,8 @@ import {
   getAllEventTypes,
   getBuiltInEventTypes,
   mergeCustomEventTypes,
+  normalizeEventTypeMap,
+  normalizeEventTypeName,
 } from "@/lib/event-type-config";
 import { isGoogleDriveConnected } from "@/utils/google/connection";
 const ALL_EVENT_TYPES = getBuiltInEventTypes();
@@ -428,27 +430,31 @@ export default function FormBookingPage() {
         const loadedMinDpPercent = p.min_dp_percent ?? DEFAULTS.minDpPercent;
         setMinDpPercent(loadedMinDpPercent);
         // Load per-event-type DP map
-        const savedMap: Record<string, { mode: "percent" | "fixed"; value: number }> =
+        const rawMinDpMap =
           typeof p.min_dp_map === "object" && p.min_dp_map !== null
-            ? Object.fromEntries(
-                Object.entries(p.min_dp_map as Record<string, unknown>).map(([k, v]) => {
-                  if (typeof v === "number") {
-                    return [k, { mode: "percent" as const, value: v }];
-                  }
-                  if (v && typeof v === "object") {
-                    const cfg = v as { mode?: unknown; value?: unknown };
-                    return [
-                      k,
-                      {
-                        mode: cfg.mode === "fixed" ? "fixed" : "percent",
-                        value: typeof cfg.value === "number" ? cfg.value : 50,
-                      },
-                    ];
-                  }
-                  return [k, { mode: "percent" as const, value: 50 }];
-                }),
+            ? normalizeEventTypeMap(
+                p.min_dp_map as Record<string, unknown>,
               )
             : {};
+        const savedMap: Record<string, { mode: "percent" | "fixed"; value: number }> =
+          Object.fromEntries(
+            Object.entries(rawMinDpMap).map(([key, value]) => {
+              if (typeof value === "number") {
+                return [key, { mode: "percent" as const, value }];
+              }
+              if (value && typeof value === "object") {
+                const cfg = value as { mode?: unknown; value?: unknown };
+                return [
+                  key,
+                  {
+                    mode: cfg.mode === "fixed" ? "fixed" : "percent",
+                    value: typeof cfg.value === "number" ? cfg.value : 50,
+                  },
+                ];
+              }
+              return [key, { mode: "percent" as const, value: 50 }];
+            }),
+          );
         setMinDpMap(savedMap);
         const loadedBrandColor = p.form_brand_color || DEFAULTS.brandColor;
         const loadedGreeting = p.form_greeting || DEFAULTS.greeting;
@@ -472,12 +478,18 @@ export default function FormBookingPage() {
             Umum: normalizeStoredFormLayout(rawSections, "Umum"),
           };
         } else if (rawSections && typeof rawSections === "object") {
-          normalizedSections = Object.fromEntries(
-            Object.entries(rawSections as Record<string, unknown>).map(([k, v]) => [
-              k,
-              normalizeStoredFormLayout(v, k),
-            ]),
-          ) as FormSectionsByEventType;
+          normalizedSections = Object.entries(
+            rawSections as Record<string, unknown>,
+          ).reduce((acc, [key, value]) => {
+            const normalizedKey = normalizeEventTypeName(key) || key;
+            if (!(normalizedKey in acc) || key === normalizedKey) {
+              acc[normalizedKey] = normalizeStoredFormLayout(
+                value,
+                normalizedKey,
+              );
+            }
+            return acc;
+          }, {} as FormSectionsByEventType);
         }
         setFormSectionsByEventType(normalizedSections);
         const loadedShowNotes = p.form_show_notes ?? DEFAULTS.showNotes;

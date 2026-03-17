@@ -776,7 +776,7 @@
         "eventNewborn": "Newborn",
         "eventFamily": "Family",
         "eventKomersil": "Commercial",
-        "eventLainnya": "Other"
+        "eventLainnya": "Custom/Lainnya"
     },
     "FinancePage": {
         "clickToEditDP": "Click to edit DP amount",
