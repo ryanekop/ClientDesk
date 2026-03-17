@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
 import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
+import { resolveBookingFreelancerAttendeeEmails } from "@/lib/google-calendar-attendees";
 import {
     getGoogleCalendarSyncErrorMessage,
     isNoScheduleSyncError,
@@ -11,7 +12,11 @@ import {
 
 export async function POST(req: NextRequest) {
     try {
-        const { bookingId, attendeeEmails } = await req.json();
+        const payload = (await req.json()) as {
+            bookingId?: string;
+            attendeeEmails?: unknown;
+        };
+        const bookingId = typeof payload.bookingId === "string" ? payload.bookingId : "";
 
         if (!bookingId) {
             return NextResponse.json({ error: "Missing bookingId" }, { status: 400 });
@@ -74,6 +79,29 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Booking not found" }, { status: 404 });
         }
 
+        let attendeeEmails: string[] = [];
+        try {
+            const attendeeMap = await resolveBookingFreelancerAttendeeEmails({
+                supabase,
+                userId: user.id,
+                bookingIds: [booking.id],
+            });
+            attendeeEmails = attendeeMap[booking.id] || [];
+        } catch (error) {
+            const message = getGoogleCalendarSyncErrorMessage(
+                error,
+                "Gagal memuat assignment freelancer untuk sinkronisasi kalender.",
+            );
+            await updateBookingCalendarSyncState({
+                supabase,
+                bookingId: booking.id,
+                userId: user.id,
+                status: "failed",
+                errorMessage: message,
+            });
+            return NextResponse.json({ error: message }, { status: 500 });
+        }
+
         try {
             const syncedEvent = await syncBookingCalendarEvent({
                 profile: {
@@ -103,7 +131,7 @@ export async function POST(req: NextRequest) {
                     services: booking.services,
                     bookingServices: (booking as any).booking_services,
                 },
-                attendeeEmails: Array.isArray(attendeeEmails) ? attendeeEmails : [],
+                attendeeEmails,
             });
 
             const updated = await updateBookingCalendarSyncState({
