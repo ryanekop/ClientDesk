@@ -702,15 +702,14 @@ export default function FinancePage() {
                                         type="button"
                                         title={tf("openInvoiceOptions")}
                                         onClick={(event) => {
+                                            const anchorEl = event.currentTarget;
+                                            const shouldClose = invoiceMenuBookingId === booking.id;
                                             setCopyMenuBookingId(null);
                                             setWaMenuBookingId(null);
                                             setCopyMenuAnchorEl(null);
                                             setWaMenuAnchorEl(null);
-                                            setInvoiceMenuBookingId((prev) => {
-                                                const next = prev === booking.id ? null : booking.id;
-                                                setInvoiceMenuAnchorEl(next ? event.currentTarget : null);
-                                                return next;
-                                            });
+                                            setInvoiceMenuBookingId(shouldClose ? null : booking.id);
+                                            setInvoiceMenuAnchorEl(shouldClose ? null : anchorEl);
                                         }}
                                         className="inline-flex h-8 w-6 items-center justify-center border-l border-indigo-200 transition-colors hover:bg-indigo-100 dark:border-indigo-700 dark:hover:bg-indigo-800/60"
                                     >
@@ -767,15 +766,14 @@ export default function FinancePage() {
                                         type="button"
                                         title={tf("copyInvoiceTemplateOptions")}
                                         onClick={(event) => {
+                                            const anchorEl = event.currentTarget;
+                                            const shouldClose = copyMenuBookingId === booking.id;
                                             setInvoiceMenuBookingId(null);
                                             setWaMenuBookingId(null);
                                             setInvoiceMenuAnchorEl(null);
                                             setWaMenuAnchorEl(null);
-                                            setCopyMenuBookingId((prev) => {
-                                                const next = prev === booking.id ? null : booking.id;
-                                                setCopyMenuAnchorEl(next ? event.currentTarget : null);
-                                                return next;
-                                            });
+                                            setCopyMenuBookingId(shouldClose ? null : booking.id);
+                                            setCopyMenuAnchorEl(shouldClose ? null : anchorEl);
                                         }}
                                         className="inline-flex h-8 w-6 items-center justify-center border-l border-violet-200 transition-colors hover:bg-violet-100 dark:border-violet-700 dark:hover:bg-violet-800/60"
                                     >
@@ -828,15 +826,14 @@ export default function FinancePage() {
                                         title={tf("sendInvoiceWAOptions")}
                                         disabled={!booking.client_whatsapp}
                                         onClick={(event) => {
+                                            const anchorEl = event.currentTarget;
+                                            const shouldClose = waMenuBookingId === booking.id;
                                             setInvoiceMenuBookingId(null);
                                             setCopyMenuBookingId(null);
                                             setInvoiceMenuAnchorEl(null);
                                             setCopyMenuAnchorEl(null);
-                                            setWaMenuBookingId((prev) => {
-                                                const next = prev === booking.id ? null : booking.id;
-                                                setWaMenuAnchorEl(next ? event.currentTarget : null);
-                                                return next;
-                                            });
+                                            setWaMenuBookingId(shouldClose ? null : booking.id);
+                                            setWaMenuAnchorEl(shouldClose ? null : anchorEl);
                                         }}
                                         className="inline-flex h-8 w-6 items-center justify-center border-l border-emerald-200 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:hover:bg-emerald-800/60"
                                     >

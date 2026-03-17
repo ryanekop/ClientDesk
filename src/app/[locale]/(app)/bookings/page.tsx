@@ -823,13 +823,12 @@ export default function BookingsPage() {
                                         type="button"
                                         title={tb("copyMoreActions")}
                                         onClick={(event) => {
+                                            const anchorEl = event.currentTarget;
+                                            const shouldClose = copyMenuBookingId === booking.id;
                                             setWaMenuBookingId(null);
                                             setWaMenuAnchorEl(null);
-                                            setCopyMenuBookingId((prev) => {
-                                                const next = prev === booking.id ? null : booking.id;
-                                                setCopyMenuAnchorEl(next ? event.currentTarget : null);
-                                                return next;
-                                            });
+                                            setCopyMenuBookingId(shouldClose ? null : booking.id);
+                                            setCopyMenuAnchorEl(shouldClose ? null : anchorEl);
                                         }}
                                         className="inline-flex h-8 w-6 items-center justify-center border-l border-violet-200 transition-colors hover:bg-violet-100 dark:border-violet-700 dark:hover:bg-violet-800/60"
                                     >
@@ -882,13 +881,12 @@ export default function BookingsPage() {
                                         title={tb("waMoreActions")}
                                         disabled={booking.booking_freelancers.length === 0 && !booking.client_whatsapp}
                                         onClick={(event) => {
+                                            const anchorEl = event.currentTarget;
+                                            const shouldClose = waMenuBookingId === booking.id;
                                             setCopyMenuBookingId(null);
                                             setCopyMenuAnchorEl(null);
-                                            setWaMenuBookingId((prev) => {
-                                                const next = prev === booking.id ? null : booking.id;
-                                                setWaMenuAnchorEl(next ? event.currentTarget : null);
-                                                return next;
-                                            });
+                                            setWaMenuBookingId(shouldClose ? null : booking.id);
+                                            setWaMenuAnchorEl(shouldClose ? null : anchorEl);
                                         }}
                                         className="inline-flex h-8 w-6 items-center justify-center border-l border-green-200 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-700 dark:hover:bg-green-800/60"
                                     >

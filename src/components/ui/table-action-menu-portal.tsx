@@ -125,7 +125,7 @@ export function TableActionMenuPortal({
       ref={menuRef}
       data-table-action-menu-root="true"
       className={cn(
-        "fixed z-[120] rounded-md border border-border bg-card p-1 shadow-lg transition-all duration-150 ease-out",
+        "fixed z-[120] rounded-md border border-border bg-card p-1 shadow-lg transition-[opacity,transform] duration-150 ease-out",
         position.ready
           ? "pointer-events-auto opacity-100 scale-100"
           : "pointer-events-none opacity-0 scale-95",
