@@ -10,6 +10,7 @@ import {
     resolveUnifiedBookingStatus,
     shouldShowFinalInvoiceForClientStatus,
 } from "@/lib/client-status";
+import { normalizeFastpikLinkDisplayMode } from "@/lib/fastpik-link-display";
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,15 +43,20 @@ export async function GET(request: NextRequest) {
     let vendorName = "";
     let customClientStatuses: string[] | null = null;
     let finalInvoiceVisibleFromStatus: string | null = null;
+    let profileLinkMode: "both" | "prefer_fastpik" | "drive_only" =
+        "prefer_fastpik";
     if (bookingOwner?.user_id) {
         const { data: v } = await supabaseAdmin
             .from("profiles")
-            .select("studio_name, custom_client_statuses, final_invoice_visible_from_status")
+            .select("studio_name, custom_client_statuses, final_invoice_visible_from_status, fastpik_link_display_mode")
             .eq("id", bookingOwner.user_id)
             .single();
         vendorName = v?.studio_name || "";
         customClientStatuses = (v?.custom_client_statuses as string[] | null) || null;
         finalInvoiceVisibleFromStatus = v?.final_invoice_visible_from_status || null;
+        profileLinkMode = normalizeFastpikLinkDisplayMode(
+            v?.fastpik_link_display_mode,
+        );
     }
 
     const finalAdjustments = normalizeFinalAdjustments(booking.final_adjustments);
@@ -74,6 +80,7 @@ export async function GET(request: NextRequest) {
             serviceName: (booking.services as { name?: string } | null)?.name || null,
             fastpikUrl: booking.fastpik_project_link,
             driveUrl: booking.drive_folder_url,
+            fastpikLinkDisplayMode: profileLinkMode,
             createdAt: booking.created_at,
             totalPrice: booking.total_price || 0,
             dpPaid: booking.dp_paid || 0,

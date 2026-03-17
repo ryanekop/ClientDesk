@@ -53,6 +53,11 @@ import {
     getBookingStatusOptions,
     resolveUnifiedBookingStatus,
 } from "@/lib/client-status";
+import {
+    normalizeFastpikLinkDisplayMode,
+    resolveFastpikLinkDisplay,
+    type FastpikLinkDisplayMode,
+} from "@/lib/fastpik-link-display";
 import { isGoogleDriveConnected } from "@/utils/google/connection";
 import {
     buildGoogleMapsDirectionUrl,
@@ -174,6 +179,7 @@ type DrivePathProfile = {
 
 type BookingProfileRow = {
     custom_client_statuses?: string[] | null;
+    fastpik_link_display_mode?: FastpikLinkDisplayMode | null;
 };
 
 type EditableAdjustment = {
@@ -398,6 +404,8 @@ export default function BookingDetailPage() {
     const [markingDpVerified, setMarkingDpVerified] = React.useState(false);
     const [markingDpUnverified, setMarkingDpUnverified] = React.useState(false);
     const [syncingFastpik, setSyncingFastpik] = React.useState(false);
+    const [fastpikLinkDisplayMode, setFastpikLinkDisplayMode] =
+        React.useState<FastpikLinkDisplayMode>("prefer_fastpik");
     const [editingDp, setEditingDp] = React.useState(false);
     const [dpInput, setDpInput] = React.useState("");
     const [savingDp, setSavingDp] = React.useState(false);
@@ -423,6 +431,19 @@ export default function BookingDetailPage() {
     }>({ open: false, title: "", message: "" });
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const currentDpValue = booking?.dp_paid ?? 0;
+    const fastpikLinkVisibility = React.useMemo(
+        () =>
+            resolveFastpikLinkDisplay({
+                mode: fastpikLinkDisplayMode,
+                fastpikUrl: booking?.fastpik_project_link,
+                driveUrl: booking?.drive_folder_url,
+            }),
+        [
+            fastpikLinkDisplayMode,
+            booking?.fastpik_project_link,
+            booking?.drive_folder_url,
+        ],
+    );
 
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
@@ -520,7 +541,7 @@ export default function BookingDetailPage() {
                 supabase.from("bookings")
                     .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
-                supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map").eq("id", user.id).single(),
+                supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode").eq("id", user.id).single(),
                 supabase.from("services")
                     .select("id, name, price, description, event_types")
                     .eq("user_id", user.id)
@@ -537,6 +558,9 @@ export default function BookingDetailPage() {
             );
             const profileRow = (profile ?? null) as BookingProfileRow | null;
             const statusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
+            setFastpikLinkDisplayMode(
+                normalizeFastpikLinkDisplayMode(profileRow?.fastpik_link_display_mode),
+            );
             setBookingStatuses(statusOptions);
             const syncedStatus = resolveUnifiedBookingStatus({
                 status: rawBooking?.status,
@@ -1437,6 +1461,34 @@ export default function BookingDetailPage() {
     const otherExtraEntries = extraEntries.filter(
         ([key]) => key !== "nama_pasangan" && !HIDDEN_EXTRA_FIELD_KEYS.has(key),
     );
+    const renderGalleryLinkCard = (
+        label: string,
+        url: string,
+        iconClassName: string,
+        mutedBackground = false,
+    ) => (
+        <div className="space-y-1.5">
+            <p className="text-[11px] text-muted-foreground">{label}</p>
+            <div className={`flex items-center gap-2 p-3 rounded-lg border text-sm ${mutedBackground ? "bg-muted/20" : "bg-muted/30"}`}>
+                <Link2 className={`w-4 h-4 shrink-0 ${iconClassName}`} />
+                <span className="flex-1 truncate text-xs text-muted-foreground">{url}</span>
+                <button
+                    onClick={() => { navigator.clipboard.writeText(url); }}
+                    className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer"
+                    title="Salin Link"
+                >
+                    <Copy className="w-3.5 h-3.5" />
+                </button>
+                <button
+                    onClick={() => window.open(url, "_blank")}
+                    className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer"
+                    title="Buka di Tab Baru"
+                >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+            </div>
+        </div>
+    );
 
     return (
         <>
@@ -1853,7 +1905,7 @@ export default function BookingDetailPage() {
                 </div>
             )}
 
-            {/* Link Pilih Foto (Prioritas Fastpik, Drive fallback) */}
+            {/* Link Pilih Foto (mengikuti mode tampilan link Fastpik) */}
             {(booking.fastpik_project_link || booking.drive_folder_url) && (
                 <div className="rounded-xl border bg-card p-6 space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1877,53 +1929,37 @@ export default function BookingDetailPage() {
                         </Button>
                     </div>
 
-                    {booking.fastpik_project_link ? (
-                        <div className="space-y-1.5">
-                            <p className="text-[11px] text-muted-foreground">Fastpik (utama)</p>
-                            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
-                                <Link2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                                <span className="flex-1 truncate text-xs text-muted-foreground">{booking.fastpik_project_link}</span>
-                                <button onClick={() => { navigator.clipboard.writeText(booking.fastpik_project_link!); }} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
-                                    <Copy className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={() => window.open(booking.fastpik_project_link!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
-                        booking.drive_folder_url && (
-                            <div className="space-y-1.5">
-                                <p className="text-[11px] text-muted-foreground">Google Drive (fallback)</p>
-                                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
-                                    <Link2 className="w-4 h-4 text-blue-500 shrink-0" />
-                                    <span className="flex-1 truncate text-xs text-muted-foreground">{booking.drive_folder_url}</span>
-                                    <button onClick={() => { navigator.clipboard.writeText(booking.drive_folder_url!); }} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
-                                        <Copy className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button onClick={() => window.open(booking.drive_folder_url!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">
-                                        <ExternalLink className="w-3.5 h-3.5" />
-                                    </button>
-                                </div>
-                            </div>
-                        )
-                    )}
+                    {fastpikLinkVisibility.showFastpik &&
+                        fastpikLinkVisibility.fastpikUrl &&
+                        renderGalleryLinkCard(
+                            fastpikLinkVisibility.mode === "both"
+                                ? "Fastpik"
+                                : "Fastpik (utama)",
+                            fastpikLinkVisibility.fastpikUrl,
+                            "text-emerald-500",
+                        )}
 
-                    {booking.fastpik_project_link && booking.drive_folder_url && (
-                        <div className="space-y-1.5">
-                            <p className="text-[11px] text-muted-foreground">Google Drive (opsional)</p>
-                            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/20 border text-sm">
-                                <Link2 className="w-4 h-4 text-blue-500 shrink-0" />
-                                <span className="flex-1 truncate text-xs text-muted-foreground">{booking.drive_folder_url}</span>
-                                <button onClick={() => { navigator.clipboard.writeText(booking.drive_folder_url!); }} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
-                                    <Copy className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={() => window.open(booking.drive_folder_url!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                    {fastpikLinkVisibility.showDrive &&
+                        fastpikLinkVisibility.driveUrl &&
+                        renderGalleryLinkCard(
+                            fastpikLinkVisibility.mode === "both"
+                                ? "Google Drive"
+                                : fastpikLinkVisibility.mode === "drive_only"
+                                  ? "Google Drive (utama)"
+                                  : "Google Drive (fallback)",
+                            fastpikLinkVisibility.driveUrl,
+                            "text-blue-500",
+                            fastpikLinkVisibility.mode === "both" &&
+                              fastpikLinkVisibility.showFastpik,
+                        )}
+
+                    {!fastpikLinkVisibility.showFastpik &&
+                        !fastpikLinkVisibility.showDrive &&
+                        fastpikLinkVisibility.mode === "drive_only" && (
+                            <p className="text-xs text-muted-foreground">
+                                Mode "Google Drive saja" aktif, tetapi link Google Drive belum tersedia.
+                            </p>
+                        )}
                 </div>
             )}
 

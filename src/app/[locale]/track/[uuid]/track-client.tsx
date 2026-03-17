@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, Clock, HardDrive, ExternalLink, Download } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
+import { resolveFastpikLinkDisplay } from "@/lib/fastpik-link-display";
 
 type BookingData = {
     bookingCode: string;
@@ -17,6 +18,7 @@ type BookingData = {
     serviceName: string | null;
     fastpikUrl: string | null;
     driveUrl: string | null;
+    fastpikLinkDisplayMode: "both" | "prefer_fastpik" | "drive_only";
     createdAt: string;
     totalPrice: number;
     dpPaid: number;
@@ -67,8 +69,11 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
     const sessionDate = booking.sessionDate
         ? formatSessionDate(booking.sessionDate)
         : "-";
-    const galleryUrl = booking.fastpikUrl || booking.driveUrl;
-    const galleryLabel = booking.fastpikUrl ? t("openFastpik") : t("openGoogleDrive");
+    const galleryLinks = resolveFastpikLinkDisplay({
+        mode: booking.fastpikLinkDisplayMode,
+        fastpikUrl: booking.fastpikUrl,
+        driveUrl: booking.driveUrl,
+    });
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 py-8 sm:py-12 px-4">
@@ -191,20 +196,36 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                     </div>
                 </div>
 
-                {/* Drive Link - only show if status >= Sesi Foto */}
-                {galleryUrl && currentIdx >= 1 && (
+                {/* Gallery Link - only show if status >= Sesi Foto */}
+                {(galleryLinks.showFastpik || galleryLinks.showDrive) && currentIdx >= 1 && (
                     <div className="bg-background rounded-2xl shadow-lg border p-6">
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("fileResults")}</h3>
-                        <a
-                            href={galleryUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 text-sm text-primary hover:underline"
-                        >
-                            <HardDrive className="w-4 h-4" />
-                            {galleryLabel}
-                            <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
+                        <div className="space-y-2">
+                            {galleryLinks.showFastpik && galleryLinks.fastpikUrl && (
+                                <a
+                                    href={galleryLinks.fastpikUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                                >
+                                    <HardDrive className="w-4 h-4" />
+                                    {t("openFastpik")}
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                            )}
+                            {galleryLinks.showDrive && galleryLinks.driveUrl && (
+                                <a
+                                    href={galleryLinks.driveUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                                >
+                                    <HardDrive className="w-4 h-4" />
+                                    {t("openGoogleDrive")}
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                            )}
+                        </div>
                     </div>
                 )}
 

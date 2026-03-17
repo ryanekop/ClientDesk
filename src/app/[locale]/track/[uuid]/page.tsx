@@ -11,6 +11,10 @@ import {
     resolveUnifiedBookingStatus,
     shouldShowFinalInvoiceForClientStatus,
 } from "@/lib/client-status";
+import {
+    normalizeFastpikLinkDisplayMode,
+    type FastpikLinkDisplayMode,
+} from "@/lib/fastpik-link-display";
 
 // Admin client — runs server-side only, never exposed to browser
 const supabaseAdmin = createClient(
@@ -52,6 +56,7 @@ type ProfileRow = {
     studio_name: string | null;
     custom_client_statuses: string[] | null;
     final_invoice_visible_from_status: string | null;
+    fastpik_link_display_mode: FastpikLinkDisplayMode | null;
 };
 
 async function getBookingData(uuid: string) {
@@ -66,15 +71,25 @@ async function getBookingData(uuid: string) {
     let vendorName = "";
     let customClientStatuses: string[] | null = null;
     let finalInvoiceVisibleFromStatus: string | null = null;
+    let fastpikLinkDisplayMode: FastpikLinkDisplayMode = "prefer_fastpik";
     if (booking.user_id) {
-        const { data: v } = await supabaseAdmin.from("profiles").select("studio_name, custom_client_statuses, final_invoice_visible_from_status").eq("id", booking.user_id).single();
+        const { data: v } = await supabaseAdmin.from("profiles").select("studio_name, custom_client_statuses, final_invoice_visible_from_status, fastpik_link_display_mode").eq("id", booking.user_id).single();
         const profile = v as ProfileRow | null;
         vendorName = profile?.studio_name || "";
         customClientStatuses = profile?.custom_client_statuses || null;
         finalInvoiceVisibleFromStatus = profile?.final_invoice_visible_from_status || null;
+        fastpikLinkDisplayMode = normalizeFastpikLinkDisplayMode(
+            profile?.fastpik_link_display_mode,
+        );
     }
 
-    return { booking, vendorName, customClientStatuses, finalInvoiceVisibleFromStatus };
+    return {
+        booking,
+        vendorName,
+        customClientStatuses,
+        finalInvoiceVisibleFromStatus,
+        fastpikLinkDisplayMode,
+    };
 }
 
 // ── Dynamic metadata for SEO & WhatsApp link previews ──────────────────────
@@ -155,6 +170,7 @@ export default async function TrackingPage({ params }: PageProps) {
         serviceName: (booking.services as { name?: string } | null)?.name || null,
         fastpikUrl: booking.fastpik_project_link,
         driveUrl: booking.drive_folder_url,
+        fastpikLinkDisplayMode: result.fastpikLinkDisplayMode,
         createdAt: booking.created_at,
         totalPrice: booking.total_price || 0,
         dpPaid: booking.dp_paid || 0,

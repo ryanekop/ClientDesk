@@ -82,6 +82,10 @@ import {
   SortableConfigList,
   type SortableConfigItem,
 } from "@/components/ui/sortable-config-list";
+import {
+  normalizeFastpikLinkDisplayMode,
+  type FastpikLinkDisplayMode,
+} from "@/lib/fastpik-link-display";
 
 const COUNTRY_CODES = [
   { code: "+62", flag: "🇮🇩", name: "Indonesia" },
@@ -127,6 +131,7 @@ type Profile = {
   fastpik_default_download_days?: number | null;
   fastpik_default_detect_subfolders?: boolean | null;
   fastpik_default_password?: string | null;
+  fastpik_link_display_mode?: FastpikLinkDisplayMode | null;
 };
 
 type Template = {
@@ -390,6 +395,7 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "fastpik_default_download_days",
   "fastpik_default_detect_subfolders",
   "fastpik_default_password",
+  "fastpik_link_display_mode",
 ] as const;
 
 // Google Calendar SVG Logo (official 2020)
@@ -566,6 +572,8 @@ export default function SettingsPage() {
   const [fastpikDefaultPassword, setFastpikDefaultPassword] = React.useState(
     "",
   );
+  const [fastpikLinkDisplayMode, setFastpikLinkDisplayMode] =
+    React.useState<FastpikLinkDisplayMode>("prefer_fastpik");
   const [fastpikTesting, setFastpikTesting] = React.useState(false);
   const [fastpikBatchSyncing, setFastpikBatchSyncing] = React.useState(false);
   const [fastpikActionMessage, setFastpikActionMessage] = React.useState("");
@@ -1050,6 +1058,11 @@ export default function SettingsPage() {
       Boolean((prof as any)?.fastpik_default_detect_subfolders),
     );
     setFastpikDefaultPassword((prof as any)?.fastpik_default_password || "");
+    setFastpikLinkDisplayMode(
+      normalizeFastpikLinkDisplayMode(
+        (prof as any)?.fastpik_link_display_mode,
+      ),
+    );
 
     const allTemplates = (templatesResponse.data || []) as Template[];
     setTemplates(allTemplates);
@@ -1271,6 +1284,7 @@ export default function SettingsPage() {
           : 14,
       fastpik_default_detect_subfolders: fastpikDefaultDetectSubfolders,
       fastpik_default_password: fastpikDefaultPassword.trim() || null,
+      fastpik_link_display_mode: fastpikLinkDisplayMode,
     };
   }
 
@@ -3001,7 +3015,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <div className="p-6 space-y-5">
-                  <div className="rounded-lg border bg-muted/20 p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="rounded-lg border bg-muted/20 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm font-medium">
                         {tp("fastpikIntegrationStatus")}
@@ -3011,21 +3025,28 @@ export default function SettingsPage() {
                           ? tp("connected")
                           : tp("notConnected")}
                       </p>
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        {tp("fastpikToggleHint")}
+                      </p>
                     </div>
                     <button
                       type="button"
+                      role="switch"
+                      aria-checked={fastpikIntegrationEnabled}
                       onClick={() =>
                         setFastpikIntegrationEnabled((prev) => !prev)
                       }
-                      className={`px-3 py-1.5 text-xs rounded-md border transition-colors cursor-pointer ${
-                        fastpikIntegrationEnabled
-                          ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/20 dark:text-green-300 dark:border-green-500/40"
-                          : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-500/20 dark:text-slate-300 dark:border-slate-500/40"
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+                        fastpikIntegrationEnabled ? "bg-primary" : "bg-muted"
                       }`}
                     >
-                      {fastpikIntegrationEnabled
-                        ? tp("fastpikEnabled")
-                        : tp("fastpikDisabled")}
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                          fastpikIntegrationEnabled
+                            ? "translate-x-6"
+                            : "translate-x-1"
+                        }`}
+                      />
                     </button>
                   </div>
 
@@ -3085,6 +3106,32 @@ export default function SettingsPage() {
                     />
                     <p className="text-xs text-muted-foreground">
                       {tp("fastpikApiKeyHint")}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      {tp("fastpikLinkDisplayMode")}
+                    </label>
+                    <select
+                      value={fastpikLinkDisplayMode}
+                      onChange={(e) =>
+                        setFastpikLinkDisplayMode(
+                          normalizeFastpikLinkDisplayMode(e.target.value),
+                        )
+                      }
+                      className={inputClass}
+                    >
+                      <option value="both">{tp("fastpikLinkModeBoth")}</option>
+                      <option value="prefer_fastpik">
+                        {tp("fastpikLinkModePreferFastpik")}
+                      </option>
+                      <option value="drive_only">
+                        {tp("fastpikLinkModeDriveOnly")}
+                      </option>
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      {tp("fastpikLinkDisplayModeHint")}
                     </p>
                   </div>
 
