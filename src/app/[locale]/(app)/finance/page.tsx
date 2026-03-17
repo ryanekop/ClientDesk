@@ -43,6 +43,7 @@ import {
     getWhatsAppTemplateContent,
     normalizeWhatsAppNumber,
 } from "@/lib/whatsapp-template";
+import { buildMultiSessionTemplateVars } from "@/utils/form-extra-fields";
 import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
 import {
     buildWhatsAppUrl,
@@ -450,6 +451,9 @@ export default function FinancePage() {
                 notes: "-",
                 tracking_link: trackingLink || "-",
                 invoice_url: invoiceLink,
+                ...buildMultiSessionTemplateVars(booking.extra_fields, {
+                    locale: locale === "en" ? "en" : "id",
+                }),
             });
         }
 
@@ -483,6 +487,9 @@ export default function FinancePage() {
                 tracking_link: trackingLink || "-",
                 invoice_url: invoiceLink,
                 settlement_link: settlementLink || "-",
+                ...buildMultiSessionTemplateVars(booking.extra_fields, {
+                    locale: locale === "en" ? "en" : "id",
+                }),
             });
         }
 

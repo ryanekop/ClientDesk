@@ -1,6 +1,8 @@
 import {
     buildExtraFieldTemplateVars,
     getEventExtraFieldTemplateTokens,
+    getMultiSessionTemplateTokens,
+    buildMultiSessionTemplateVars,
 } from "@/utils/form-extra-fields";
 
 export const GOOGLE_TEMPLATE_TIMEZONE = "Asia/Jakarta";
@@ -125,6 +127,7 @@ export function getCalendarTemplateVariables(eventType: string | null | undefine
     return Array.from(
         new Set([
             ...CALENDAR_TEMPLATE_VARIABLES,
+            ...getMultiSessionTemplateTokens("calendar"),
             ...getEventExtraFieldTemplateTokens(eventType, "calendar"),
         ]),
     );
@@ -149,6 +152,7 @@ export function buildCalendarTemplateVars(
 ): Record<string, string | null | undefined> {
     return {
         ...baseVars,
+        ...buildMultiSessionTemplateVars(extraFields, { locale: "id" }),
         ...buildExtraFieldTemplateVars(extraFields),
         ...buildGoogleCustomFieldTemplateVars(extraFields),
     };

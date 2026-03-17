@@ -33,6 +33,7 @@ import {
 } from "@/lib/whatsapp-template";
 import { formatSessionDate, formatTemplateSessionDate } from "@/utils/format-date";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
+import { buildMultiSessionTemplateVars } from "@/utils/form-extra-fields";
 
 type BookingData = {
   bookingCode: string;
@@ -60,6 +61,7 @@ type BookingData = {
   finalPaidAt: string | null;
   finalInvoiceSentAt: string | null;
   serviceName: string | null;
+  extraFields?: Record<string, unknown> | null;
 };
 
 type VendorData = {
@@ -398,6 +400,9 @@ export default function SettlementClient({
       studio_name: effectiveVendor.studioName,
       invoice_url: invoiceUrl,
       settlement_link: settlementUrl,
+      ...buildMultiSessionTemplateVars(booking.extraFields, {
+        locale: locale === "en" ? "en" : "id",
+      }),
     });
 
     openWhatsAppUrl(buildWhatsAppUrl(normalizedAdminWhatsapp, message));

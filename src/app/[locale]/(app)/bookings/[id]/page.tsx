@@ -18,7 +18,10 @@ import {
     extractCustomFieldSnapshots,
     type CustomFieldSnapshot,
 } from "@/components/form-builder/booking-form-layout";
-import { buildExtraFieldTemplateVars } from "@/utils/form-extra-fields";
+import {
+    buildExtraFieldTemplateVars,
+    buildMultiSessionTemplateVars,
+} from "@/utils/form-extra-fields";
 import { buildDriveImageUrl, type PaymentSource } from "@/lib/payment-config";
 import {
     getFinalAdjustmentsTotal,
@@ -771,6 +774,9 @@ export default function BookingDetailPage() {
                 notes: booking?.notes || "-",
                 tracking_link: trackingLink || "-",
                 invoice_url: `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking?.booking_code || "")}&lang=${locale}&stage=${activeInvoiceStage}`,
+                ...buildMultiSessionTemplateVars(booking?.extra_fields, {
+                    locale: locale === "en" ? "en" : "id",
+                }),
             };
             msg = fillWhatsAppTemplate(content, vars);
         } else {
@@ -815,6 +821,9 @@ export default function BookingDetailPage() {
                 detail_location: booking?.location_detail || "-",
                 notes: booking?.notes || "-",
                 ...buildExtraFieldTemplateVars(booking?.extra_fields),
+                ...buildMultiSessionTemplateVars(booking?.extra_fields, {
+                    locale: locale === "en" ? "en" : "id",
+                }),
                 ...buildCustomFieldTemplateVars(booking?.extra_fields),
             };
             msg = fillWhatsAppTemplate(content, vars);
@@ -1111,6 +1120,9 @@ export default function BookingDetailPage() {
                 tracking_link: booking.tracking_uuid ? `${window.location.origin}/${locale}/track/${booking.tracking_uuid}` : "-",
                 invoice_url: invoiceUrl,
                 settlement_link: settlementUrl,
+                ...buildMultiSessionTemplateVars(booking.extra_fields, {
+                    locale: locale === "en" ? "en" : "id",
+                }),
             })
             : `Halo ${booking.client_name}, invoice final untuk booking ${booking.booking_code} sudah kami siapkan.\n\n` +
                 `Paket: ${booking.service_label || booking.services?.name || "-"}\n` +

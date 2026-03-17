@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
-import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2, CheckCircle2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
@@ -116,6 +116,8 @@ type Service = {
     description?: string | null;
     is_addon?: boolean | null;
     is_public?: boolean | null;
+    sort_order?: number | null;
+    event_types?: string[] | null;
 };
 type Freelance = { id: string; name: string; google_email?: string | null };
 type LocationCoords = { lat: number | null; lng: number | null };
@@ -147,6 +149,19 @@ function sanitizePhone(raw: string): string {
     if (cleaned.startsWith("62")) cleaned = cleaned.slice(2);
     if (cleaned.startsWith("0")) cleaned = cleaned.slice(1);
     return cleaned;
+}
+
+function compareServicesByCatalogOrder(a: Service, b: Service) {
+    const aSort = typeof a.sort_order === "number" ? a.sort_order : Number.MAX_SAFE_INTEGER;
+    const bSort = typeof b.sort_order === "number" ? b.sort_order : Number.MAX_SAFE_INTEGER;
+    if (aSort !== bSort) return aSort - bSort;
+    return a.name.localeCompare(b.name);
+}
+
+function isServiceAvailableForEvent(service: Service, eventType: string) {
+    if (!eventType) return false;
+    if (!service.event_types || service.event_types.length === 0) return true;
+    return service.event_types.includes(eventType);
 }
 function parseExistingPhone(full: string | null): { code: string; number: string } {
     if (!full) return { code: "+62", number: "" };
@@ -187,8 +202,11 @@ export default function EditBookingPage() {
     const [selectedAddonIds, setSelectedAddonIds] = React.useState<string[]>([]);
     const [packageDialogOpen, setPackageDialogOpen] = React.useState(false);
     const [addonDialogOpen, setAddonDialogOpen] = React.useState(false);
+    const [packageSearchQuery, setPackageSearchQuery] = React.useState("");
+    const [addonSearchQuery, setAddonSearchQuery] = React.useState("");
     const [freelancerIds, setFreelancerIds] = React.useState<string[]>([]);
     const [totalPrice, setTotalPrice] = React.useState<number | "">("");
+    const [isTotalPriceAuto, setIsTotalPriceAuto] = React.useState(true);
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
     const [initialDpPaid, setInitialDpPaid] = React.useState(0);
     const [dpVerifiedAmount, setDpVerifiedAmount] = React.useState(0);
@@ -246,7 +264,7 @@ export default function EditBookingPage() {
             if (!user) return;
             const [{ data: booking }, { data: svcs }, { data: frees }, { data: bfRows }, { data: bsRows }, { data: prof }] = await Promise.all([
                 supabase.from("bookings").select("*").eq("id", id).single(),
-                supabase.from("services").select("id, name, price, original_price, description, is_addon, is_public").eq("user_id", user.id).eq("is_active", true),
+                supabase.from("services").select("id, name, price, original_price, description, is_addon, is_public, sort_order, event_types").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
                 supabase.from("booking_services").select("service_id, kind, sort_order").eq("booking_id", id).order("sort_order", { ascending: true }),
@@ -303,6 +321,20 @@ export default function EditBookingPage() {
                     .map((row) => row.freelance_id)
                     .filter((freelanceId): freelanceId is string => Boolean(freelanceId));
                 setFreelancerIds(junctionIds.length > 0 ? junctionIds : booking.freelance_id ? [booking.freelance_id] : []);
+                const availableServices = ((svcs || []) as Service[]).sort(compareServicesByCatalogOrder);
+                const selectedServiceIdsForTotal = selectedMainIds.length > 0 ? selectedMainIds : booking.service_id ? [booking.service_id] : [];
+                const selectedAddonIdsForTotal = selectedAddons.length > 0
+                    ? selectedAddons
+                    : (Array.isArray(booking.extra_fields?.addon_ids)
+                        ? booking.extra_fields.addon_ids.filter((addonId: unknown): addonId is string => typeof addonId === "string")
+                        : []);
+                const computedServiceTotal = [...selectedServiceIdsForTotal, ...selectedAddonIdsForTotal]
+                    .reduce((sum, serviceId) => {
+                        const service = availableServices.find((item) => item.id === serviceId);
+                        return sum + (service?.price || 0);
+                    }, 0);
+                const storedTotal = Number(booking.total_price) || 0;
+                setIsTotalPriceAuto(Math.abs(computedServiceTotal - storedTotal) < 1);
                 setTotalPrice(booking.total_price || "");
                 setDpPaid(booking.dp_paid || "");
                 setInitialDpPaid(Number(booking.dp_paid) || 0);
@@ -350,21 +382,41 @@ export default function EditBookingPage() {
                     setResepsiDate(booking.extra_fields.tanggal_resepsi || "");
                 }
             }
-            setServices((svcs || []) as Service[]);
+            setServices(((svcs || []) as Service[]).sort(compareServicesByCatalogOrder));
             setFreelancers((frees || []) as Freelance[]);
             setLoading(false);
         }
         load();
     }, [id]);
 
-    const mainServices = React.useMemo(
-        () => services.filter((service) => !service.is_addon),
+    const sortedServices = React.useMemo(
+        () => [...services].sort(compareServicesByCatalogOrder),
         [services],
+    );
+    const mainServices = React.useMemo(
+        () => sortedServices.filter((service) => !service.is_addon && isServiceAvailableForEvent(service, eventType)),
+        [eventType, sortedServices],
     );
     const addonServices = React.useMemo(
-        () => services.filter((service) => service.is_addon),
-        [services],
+        () => sortedServices.filter((service) => service.is_addon && isServiceAvailableForEvent(service, eventType)),
+        [eventType, sortedServices],
     );
+    const searchedMainServices = React.useMemo(() => {
+        const query = packageSearchQuery.trim().toLowerCase();
+        if (!query) return mainServices;
+        return mainServices.filter((service) =>
+            service.name.toLowerCase().includes(query) ||
+            (service.description || "").toLowerCase().includes(query),
+        );
+    }, [mainServices, packageSearchQuery]);
+    const searchedAddonServices = React.useMemo(() => {
+        const query = addonSearchQuery.trim().toLowerCase();
+        if (!query) return addonServices;
+        return addonServices.filter((service) =>
+            service.name.toLowerCase().includes(query) ||
+            (service.description || "").toLowerCase().includes(query),
+        );
+    }, [addonServices, addonSearchQuery]);
     const selectedMainServices = React.useMemo(
         () => mainServices.filter((service) => selectedServiceIds.includes(service.id)),
         [mainServices, selectedServiceIds],
@@ -398,6 +450,7 @@ export default function EditBookingPage() {
         );
     }, [addonServices]);
     React.useEffect(() => {
+        if (!isTotalPriceAuto) return;
         if (selectedMainServices.length === 0 && selectedAddonServices.length === 0) {
             setTotalPrice("");
             return;
@@ -406,7 +459,7 @@ export default function EditBookingPage() {
             selectedMainServices.reduce((sum, service) => sum + service.price, 0) +
             selectedAddonServices.reduce((sum, service) => sum + service.price, 0),
         );
-    }, [selectedAddonServices, selectedMainServices]);
+    }, [isTotalPriceAuto, selectedAddonServices, selectedMainServices]);
 
     React.useEffect(() => {
         if (!statusOptions.includes(status)) {
@@ -445,15 +498,12 @@ export default function EditBookingPage() {
             is_active: true,
             is_addon: false,
             is_public: true,
-        }).select("id, name, price, original_price, description, is_addon, is_public").single();
+            sort_order: services.filter((service) => !service.is_addon).length,
+        }).select("id, name, price, original_price, description, is_addon, is_public, sort_order, event_types").single();
         if (!error && data) {
             const s = data as Service;
-            setServices(prev => [...prev, s]);
+            setServices(prev => [...prev, s].sort(compareServicesByCatalogOrder));
             setSelectedServiceIds(prev => (prev.includes(s.id) ? prev : [...prev, s.id]));
-            setTotalPrice(prev => {
-                const current = typeof prev === "number" ? prev : 0;
-                return current > 0 ? current + s.price : s.price;
-            });
             setCustomServiceName(""); setCustomServicePrice(""); setCustomServiceDesc("");
             setShowCustomServicePopup(false);
         } else { showFeedback("Gagal menyimpan paket."); }
@@ -824,7 +874,7 @@ export default function EditBookingPage() {
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
-                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setExtraLocationCoords({}); setCustomFieldValues({}); }} className={selectClass} required>
+                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setExtraLocationCoords({}); setCustomFieldValues({}); setPackageSearchQuery(""); setAddonSearchQuery(""); }} className={selectClass} required>
                                 {eventTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
@@ -1083,7 +1133,7 @@ export default function EditBookingPage() {
                             <label className="text-xs font-medium text-muted-foreground">Harga Total{reqMark}</label>
                             <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
-                                <input required type="text" inputMode="numeric" value={formatNumber(totalPrice)} onChange={e => setTotalPrice(parseFormattedNumber(e.target.value))} placeholder="0" className={cn(inputClass, "flex-1")} />
+                                <input required type="text" inputMode="numeric" value={formatNumber(totalPrice)} onChange={e => { setIsTotalPriceAuto(false); setTotalPrice(parseFormattedNumber(e.target.value)); }} placeholder="0" className={cn(inputClass, "flex-1")} />
                             </div>
                         </div>
                         <div className="space-y-1.5">
@@ -1145,48 +1195,63 @@ export default function EditBookingPage() {
                     <DialogHeader>
                         <DialogTitle>Paket / Layanan</DialogTitle>
                     </DialogHeader>
-                    <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-                        {mainServices.length === 0 ? (
-                            <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
-                                Belum ada paket utama aktif.
-                            </div>
-                        ) : (
-                            mainServices.map((service) => {
-                                const selected = selectedServiceIds.includes(service.id);
-                                return (
-                                    <button
-                                        key={service.id}
-                                        type="button"
-                                        onClick={() => toggleService(service.id)}
-                                        className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
-                                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                            </span>
-                                            <div className="min-w-0">
-                                                <p className="text-sm font-medium">{service.name}</p>
-                                                {service.description ? (
-                                                    <p className="text-[11px] text-muted-foreground">
-                                                        {service.description}
+                    <div className="space-y-2">
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <input
+                                value={packageSearchQuery}
+                                onChange={(event) => setPackageSearchQuery(event.target.value)}
+                                placeholder="Cari paket..."
+                                className={cn(inputClass, "pl-9")}
+                            />
+                        </div>
+                        <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+                            {mainServices.length === 0 ? (
+                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                    Belum ada paket untuk tipe acara ini.
+                                </div>
+                            ) : searchedMainServices.length === 0 ? (
+                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                    Tidak ada hasil pencarian paket.
+                                </div>
+                            ) : (
+                                searchedMainServices.map((service) => {
+                                    const selected = selectedServiceIds.includes(service.id);
+                                    return (
+                                        <button
+                                            key={service.id}
+                                            type="button"
+                                            onClick={() => toggleService(service.id)}
+                                            className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
+                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium">{service.name}</p>
+                                                    {service.description ? (
+                                                        <p className="text-[11px] text-muted-foreground">
+                                                            {service.description}
+                                                        </p>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+                                            <div className="shrink-0 text-right">
+                                                <p className="text-sm font-semibold text-primary">
+                                                    {formatCurrency(service.price)}
+                                                </p>
+                                                {service.original_price && service.original_price > service.price ? (
+                                                    <p className="text-[11px] text-muted-foreground line-through">
+                                                        {formatCurrency(service.original_price)}
                                                     </p>
                                                 ) : null}
                                             </div>
-                                        </div>
-                                        <div className="shrink-0 text-right">
-                                            <p className="text-sm font-semibold text-primary">
-                                                {formatCurrency(service.price)}
-                                            </p>
-                                            {service.original_price && service.original_price > service.price ? (
-                                                <p className="text-[11px] text-muted-foreground line-through">
-                                                    {formatCurrency(service.original_price)}
-                                                </p>
-                                            ) : null}
-                                        </div>
-                                    </button>
-                                );
-                            })
-                        )}
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
                     </div>
                     <div className="flex justify-end">
                         <button
@@ -1205,43 +1270,58 @@ export default function EditBookingPage() {
                     <DialogHeader>
                         <DialogTitle>Paket Add-on</DialogTitle>
                     </DialogHeader>
-                    <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-                        {addonServices.length === 0 ? (
-                            <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
-                                Belum ada add-on aktif.
-                            </div>
-                        ) : (
-                            addonServices.map((addon) => {
-                                const selected = selectedAddonIds.includes(addon.id);
-                                return (
-                                    <button
-                                        key={addon.id}
-                                        type="button"
-                                        onClick={() => toggleAddon(addon.id)}
-                                        className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
-                                    >
-                                        <div className="flex items-start gap-3">
-                                            <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
-                                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                            </span>
-                                            <div className="min-w-0">
-                                                <p className="text-sm font-medium">{addon.name}</p>
-                                                {addon.description ? (
-                                                    <p className="text-[11px] text-muted-foreground">
-                                                        {addon.description}
-                                                    </p>
-                                                ) : null}
+                    <div className="space-y-2">
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <input
+                                value={addonSearchQuery}
+                                onChange={(event) => setAddonSearchQuery(event.target.value)}
+                                placeholder="Cari add-on..."
+                                className={cn(inputClass, "pl-9")}
+                            />
+                        </div>
+                        <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+                            {addonServices.length === 0 ? (
+                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                    Belum ada add-on untuk tipe acara ini.
+                                </div>
+                            ) : searchedAddonServices.length === 0 ? (
+                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                    Tidak ada hasil pencarian add-on.
+                                </div>
+                            ) : (
+                                searchedAddonServices.map((addon) => {
+                                    const selected = selectedAddonIds.includes(addon.id);
+                                    return (
+                                        <button
+                                            key={addon.id}
+                                            type="button"
+                                            onClick={() => toggleAddon(addon.id)}
+                                            className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
+                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium">{addon.name}</p>
+                                                    {addon.description ? (
+                                                        <p className="text-[11px] text-muted-foreground">
+                                                            {addon.description}
+                                                        </p>
+                                                    ) : null}
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div className="shrink-0 text-right">
-                                            <p className="text-sm font-semibold text-primary">
-                                                +{formatCurrency(addon.price)}
-                                            </p>
-                                        </div>
-                                    </button>
-                                );
-                            })
-                        )}
+                                            <div className="shrink-0 text-right">
+                                                <p className="text-sm font-semibold text-primary">
+                                                    +{formatCurrency(addon.price)}
+                                                </p>
+                                            </div>
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
                     </div>
                     <div className="flex justify-end">
                         <button

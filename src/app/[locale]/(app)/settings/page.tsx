@@ -56,6 +56,7 @@ import {
 import {
   getEventExtraFieldPreviewVars,
   getEventExtraFieldTemplateTokens,
+  getMultiSessionTemplateTokens,
 } from "@/utils/form-extra-fields";
 import {
   getCustomFieldPreviewVars,
@@ -203,6 +204,7 @@ const templateHeaderToneByType: Record<string, string> = {
 const DEFAULT_QUEUE_TRIGGER_STATUS = "Antrian Edit";
 const DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS = "Sesi Foto / Acara";
 const SETTINGS_SAVED_MESSAGE = "✅ Pengaturan berhasil disimpan";
+const MULTI_SESSION_WHATSAPP_VARS = getMultiSessionTemplateTokens("whatsapp");
 
 const variableHints: Record<string, string[]> = {
   whatsapp_client: [
@@ -220,6 +222,7 @@ const variableHints: Record<string, string[]> = {
     "{{notes}}",
     "{{tracking_link}}",
     "{{invoice_url}}",
+    ...MULTI_SESSION_WHATSAPP_VARS,
   ],
   whatsapp_booking_confirm: [
     "{{client_name}}",
@@ -232,6 +235,7 @@ const variableHints: Record<string, string[]> = {
     "{{event_type}}",
     "{{location}}",
     "{{tracking_link}}",
+    ...MULTI_SESSION_WHATSAPP_VARS,
   ],
   whatsapp_settlement_client: [
     "{{client_name}}",
@@ -249,6 +253,7 @@ const variableHints: Record<string, string[]> = {
     "{{tracking_link}}",
     "{{invoice_url}}",
     "{{settlement_link}}",
+    ...MULTI_SESSION_WHATSAPP_VARS,
   ],
   whatsapp_settlement_confirm: [
     "{{client_name}}",
@@ -261,6 +266,7 @@ const variableHints: Record<string, string[]> = {
     "{{studio_name}}",
     "{{invoice_url}}",
     "{{settlement_link}}",
+    ...MULTI_SESSION_WHATSAPP_VARS,
   ],
   whatsapp_freelancer: [
     "{{freelancer_name}}",
@@ -276,6 +282,7 @@ const variableHints: Record<string, string[]> = {
     "{{location_maps_url}}",
     "{{detail_location}}",
     "{{notes}}",
+    ...MULTI_SESSION_WHATSAPP_VARS,
   ],
   invoice: [
     "{{client_name}}",
@@ -1620,6 +1627,12 @@ export default function SettingsPage() {
     event_type: selectedEventType,
     day_name: "Rabu",
     location: "Jakarta Convention Center",
+    akad_location: "Masjid Raya Jakarta",
+    akad_date: "15 April 2026",
+    akad_time: "08.00",
+    resepsi_location: "Grand Ballroom Jakarta",
+    resepsi_date: "15 April 2026",
+    resepsi_time: "18.00",
     location_maps_url:
       "https://maps.google.com/maps?q=Jakarta+Convention+Center",
     detail_location: "Gedung Utama, Lt. 3, Ruang Ballroom A",

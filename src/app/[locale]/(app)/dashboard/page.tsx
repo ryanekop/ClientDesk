@@ -65,7 +65,6 @@ export default async function DashboardPage() {
     { count: totalBookings },
     { count: monthlyBookings },
     { count: todaySessions },
-    { count: pendingCount },
     { data: recentBookings },
     { data: upcomingBooking },
     { data: financeRows },
@@ -91,12 +90,6 @@ export default async function DashboardPage() {
       .neq("status", "Batal"),
     supabase
       .from("bookings")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user!.id)
-      .eq("settlement_status", "submitted")
-      .neq("status", "Batal"),
-    supabase
-      .from("bookings")
       .select(
         "id, client_name, booking_code, session_date, status, total_price, created_at, services(name)",
       )
@@ -118,7 +111,7 @@ export default async function DashboardPage() {
     supabase
       .from("bookings")
       .select(
-        "total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, created_at, status, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at",
+        "total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, created_at, status, client_status, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at",
       )
       .eq("user_id", user!.id),
     supabase
@@ -130,6 +123,16 @@ export default async function DashboardPage() {
 
   const isCancelledStatus = (value?: string | null) =>
     (value || "").trim().toLowerCase() === "batal";
+  const resolveProgressStatus = (value: { client_status?: string | null; status?: string | null }) => {
+    const clientStatus = (value.client_status || "").trim();
+    return clientStatus || (value.status || "").trim();
+  };
+  const pendingConfirmationCount = (financeRows || []).reduce((count, booking) => {
+    if (isCancelledStatus(booking.status)) return count;
+    return resolveProgressStatus(booking).toLowerCase() === "pending"
+      ? count + 1
+      : count;
+  }, 0);
 
   const pendingAmount = (financeRows || []).reduce((sum, booking) => {
     if (isCancelledStatus(booking.status)) return sum;
@@ -358,7 +361,7 @@ export default async function DashboardPage() {
                     {t("perluKonfirmasi")}
                   </h4>
                   <div className="text-xl font-bold text-foreground">
-                    {pendingCount || 0}{" "}
+                    {pendingConfirmationCount || 0}{" "}
                     <span className="text-sm font-medium text-muted-foreground">
                       Pending
                     </span>

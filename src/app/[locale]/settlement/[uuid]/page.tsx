@@ -22,7 +22,7 @@ async function getSettlementData(uuid: string) {
   const { data: booking } = await supabaseAdmin
     .from("bookings")
     .select(
-      "id, booking_code, tracking_uuid, client_name, client_whatsapp, session_date, event_type, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_payment_method, final_payment_source, final_payment_proof_url, final_paid_at, final_invoice_sent_at, user_id, services(name)",
+      "id, booking_code, tracking_uuid, client_name, client_whatsapp, session_date, event_type, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_payment_method, final_payment_source, final_payment_proof_url, final_paid_at, final_invoice_sent_at, extra_fields, user_id, services(name)",
     )
     .eq("tracking_uuid", uuid)
     .single();
@@ -68,6 +68,7 @@ async function getSettlementData(uuid: string) {
       finalPaidAt: booking.final_paid_at || null,
       finalInvoiceSentAt: booking.final_invoice_sent_at || null,
       serviceName: (booking.services as { name?: string } | null)?.name || null,
+      extraFields: (booking.extra_fields as Record<string, unknown> | null) || null,
     },
     vendor: {
       studioName: profile?.studio_name || "Studio",

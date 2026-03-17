@@ -1,3 +1,8 @@
+import {
+  formatSessionTime,
+  formatTemplateSessionDate,
+} from "@/utils/format-date";
+
 export type EventExtraField = {
   key: string;
   label: string;
@@ -108,6 +113,15 @@ export const EVENT_EXTRA_FIELDS: Record<string, EventExtraField[]> = {
   Family: [{ key: "jumlah_anggota", label: "Jumlah Anggota" }],
 };
 
+export const MULTI_SESSION_TEMPLATE_KEYS = [
+  "akad_location",
+  "akad_date",
+  "akad_time",
+  "resepsi_location",
+  "resepsi_date",
+  "resepsi_time",
+] as const;
+
 const EXTRA_FIELD_PREVIEW_VALUES: Record<string, string> = {
   universitas: "Universitas Indonesia",
   fakultas: "FISIP",
@@ -141,6 +155,15 @@ export function getEventExtraFieldTemplateTokens(
   return getEventExtraFields(eventType).map((field) => wrap(field.key));
 }
 
+export function getMultiSessionTemplateTokens(
+  format: "calendar" | "drive" | "whatsapp" = "calendar",
+): string[] {
+  const wrap = format === "drive"
+    ? (key: string) => `{${key}}`
+    : (key: string) => `{{${key}}}`;
+  return MULTI_SESSION_TEMPLATE_KEYS.map((key) => wrap(key));
+}
+
 export function buildExtraFieldTemplateVars(raw: unknown): Record<string, string> {
   if (!raw || typeof raw !== "object") return {};
 
@@ -152,6 +175,56 @@ export function buildExtraFieldTemplateVars(raw: unknown): Record<string, string
         value.trim().length > 0,
     ),
   ) as Record<string, string>;
+}
+
+function readStringField(source: Record<string, unknown>, key: string) {
+  const value = source[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function buildSessionDateTimeVars(
+  source: Record<string, unknown>,
+  key: string,
+  locale: "id" | "en",
+) {
+  const raw = readStringField(source, key);
+  if (!raw) {
+    return { date: "", time: "" };
+  }
+
+  const formattedDate = formatTemplateSessionDate(raw, { locale });
+  const formattedTime = formatSessionTime(raw);
+
+  return {
+    date: formattedDate === "-" ? raw : formattedDate,
+    time: formattedTime === "-" ? "" : formattedTime,
+  };
+}
+
+export function buildMultiSessionTemplateVars(
+  raw: unknown,
+  options: { locale?: "id" | "en" } = {},
+): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+
+  const locale = options.locale || "id";
+  const source = raw as Record<string, unknown>;
+
+  const akad = buildSessionDateTimeVars(source, "tanggal_akad", locale);
+  const resepsi = buildSessionDateTimeVars(source, "tanggal_resepsi", locale);
+  const akadLocation = readStringField(source, "tempat_akad");
+  const resepsiLocation = readStringField(source, "tempat_resepsi");
+
+  const entries = [
+    ["akad_location", akadLocation],
+    ["akad_date", akad.date],
+    ["akad_time", akad.time],
+    ["resepsi_location", resepsiLocation],
+    ["resepsi_date", resepsi.date],
+    ["resepsi_time", resepsi.time],
+  ].filter(([, value]) => value.length > 0) as Array<[string, string]>;
+
+  return Object.fromEntries(entries);
 }
 
 export function getEventExtraFieldPreviewVars(

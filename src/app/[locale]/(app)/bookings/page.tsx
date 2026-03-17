@@ -17,7 +17,11 @@ import { cn } from "@/lib/utils";
 import { BatchImportButton } from "@/components/batch-import";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
-import { buildExtraFieldTemplateVars, getEventExtraFields } from "@/utils/form-extra-fields";
+import {
+    buildExtraFieldTemplateVars,
+    buildMultiSessionTemplateVars,
+    getEventExtraFields,
+} from "@/utils/form-extra-fields";
 import {
     buildCustomFieldTemplateVars,
     extractBuiltInExtraFieldValues,
@@ -139,6 +143,7 @@ type SavedTemplate = {
 };
 
 function generateWATemplate(booking: Booking, locale: string, savedTemplates: SavedTemplate[], studioName: string, freelancerName?: string) {
+    const templateLocale = locale === "en" ? "en" : "id";
     const sessionStr = booking.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-";
     const sessionTime = booking.session_date ? formatSessionTime(booking.session_date) : "-";
     const serviceName = booking.service_label || booking.services?.name || "-";
@@ -171,6 +176,9 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
         tracking_link: booking.tracking_uuid ? `${siteUrl}/id/track/${booking.tracking_uuid}` : "-",
         invoice_url: `${siteUrl}/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}`,
         ...buildExtraFieldTemplateVars(booking.extra_fields),
+        ...buildMultiSessionTemplateVars(booking.extra_fields, {
+            locale: templateLocale,
+        }),
         ...buildCustomFieldTemplateVars(booking.extra_fields),
     };
 

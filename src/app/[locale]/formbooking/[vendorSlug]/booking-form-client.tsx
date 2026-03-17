@@ -29,7 +29,10 @@ import {
 } from "@/components/form-builder/booking-form-layout";
 import { FileDropzone } from "@/components/public/file-dropzone";
 import { PaymentMethodSection } from "@/components/public/payment-method-section";
-import { EVENT_EXTRA_FIELDS } from "@/utils/form-extra-fields";
+import {
+  EVENT_EXTRA_FIELDS,
+  buildMultiSessionTemplateVars,
+} from "@/utils/form-extra-fields";
 import { isRichTextEmpty, sanitizeRichTextHtml } from "@/utils/rich-text";
 import {
   createPaymentSourceFromBank,
@@ -132,6 +135,16 @@ function parseFormatted(s: string): number | "" {
   return isNaN(num) ? "" : num;
 }
 
+function compareServicesByCatalogOrder(a: Service, b: Service) {
+  const aSort = typeof a.sort_order === "number" ? a.sort_order : Number.MAX_SAFE_INTEGER;
+  const bSort = typeof b.sort_order === "number" ? b.sort_order : Number.MAX_SAFE_INTEGER;
+  if (aSort !== bSort) return aSort - bSort;
+  const aCreatedAt = a.created_at || "";
+  const bCreatedAt = b.created_at || "";
+  if (aCreatedAt !== bCreatedAt) return aCreatedAt.localeCompare(bCreatedAt);
+  return a.name.localeCompare(b.name);
+}
+
 function extractSlugFromPath(pathname: string) {
   const match = pathname.match(/\/formbooking\/([^/?#]+)/i);
   if (match && match[1]) {
@@ -190,6 +203,7 @@ export function BookingFormClient({
   const params = useParams();
   const searchParams = useSearchParams();
   const slug = params?.vendorSlug as string;
+  const localeCode = params?.locale === "en" ? "en" : "id";
   const t = useTranslations("BookingForm");
   const previewMode = searchParams.get("preview") === "1";
   const previewStorageKey = searchParams.get("previewKey") || "";
@@ -318,6 +332,8 @@ export function BookingFormClient({
   const [termsDialogOpen, setTermsDialogOpen] = React.useState(false);
   const [packageDialogOpen, setPackageDialogOpen] = React.useState(false);
   const [addonDialogOpen, setAddonDialogOpen] = React.useState(false);
+  const [packageSearchQuery, setPackageSearchQuery] = React.useState("");
+  const [addonSearchQuery, setAddonSearchQuery] = React.useState("");
   const [error, setError] = React.useState("");
 
   const autoDpAmountRef = React.useRef<number | null>(null);
@@ -675,6 +691,15 @@ export function BookingFormClient({
       },
       "-",
     );
+    const mergedExtraForTemplate = {
+      ...extraData,
+      ...(eventType === "Wedding" && splitDates
+        ? {
+            tanggal_akad: akadDate || "",
+            tanggal_resepsi: resepsiDate || "",
+          }
+        : {}),
+    };
 
     const msg =
       (resultData.bookingConfirmTemplate || "").trim()
@@ -694,6 +719,9 @@ export function BookingFormClient({
             notes: notes || "-",
             tracking_link: "-",
             invoice_url: "-",
+            ...buildMultiSessionTemplateVars(mergedExtraForTemplate, {
+              locale: localeCode,
+            }),
           })
         : `Halo ${resultData.vendorName || "Admin"}, saya baru saja booking melalui form online.\n\n` +
           `📋 *Detail Booking*\n` +
@@ -791,21 +819,41 @@ export function BookingFormClient({
     () => getEnabledBankAccounts(effectiveVendor.bank_accounts || []),
     [effectiveVendor.bank_accounts],
   );
+  const sortedServices = React.useMemo(
+    () => [...services].sort(compareServicesByCatalogOrder),
+    [services],
+  );
   const filteredServices = !eventType
     ? []
     : showAllActivePackages
-      ? services.filter((service) => !service.is_addon)
-      : services.filter((service) => !service.is_addon && (!service.event_types || service.event_types.length === 0 || service.event_types.includes(eventType)));
+      ? sortedServices.filter((service) => !service.is_addon)
+      : sortedServices.filter((service) => !service.is_addon && (!service.event_types || service.event_types.length === 0 || service.event_types.includes(eventType)));
   const addonServices = !eventType
     ? []
     : showAllActivePackages
-      ? services.filter((service) => service.is_addon)
-      : services.filter((service) => service.is_addon && (!service.event_types || service.event_types.length === 0 || service.event_types.includes(eventType)));
+      ? sortedServices.filter((service) => service.is_addon)
+      : sortedServices.filter((service) => service.is_addon && (!service.event_types || service.event_types.length === 0 || service.event_types.includes(eventType)));
+  const searchedMainServices = React.useMemo(() => {
+    const query = packageSearchQuery.trim().toLowerCase();
+    if (!query) return filteredServices;
+    return filteredServices.filter((service) =>
+      service.name.toLowerCase().includes(query) ||
+      (service.description || "").toLowerCase().includes(query),
+    );
+  }, [filteredServices, packageSearchQuery]);
+  const searchedAddonServices = React.useMemo(() => {
+    const query = addonSearchQuery.trim().toLowerCase();
+    if (!query) return addonServices;
+    return addonServices.filter((service) =>
+      service.name.toLowerCase().includes(query) ||
+      (service.description || "").toLowerCase().includes(query),
+    );
+  }, [addonServices, addonSearchQuery]);
   const selectedMainServices = filteredServices.filter((service) =>
     selectedServiceIds.includes(service.id),
   );
   const selectedService = selectedMainServices[0] || null;
-  const selectedAddonServices = services.filter((service) =>
+  const selectedAddonServices = addonServices.filter((service) =>
     selectedAddons.has(service.id),
   );
   const selectedAddonTotal = selectedAddonServices.reduce(
@@ -1119,6 +1167,8 @@ export function BookingFormClient({
                 setCustomFields({});
                 setSelectedServiceIds([]);
                 setSelectedAddons(new Set());
+                setPackageSearchQuery("");
+                setAddonSearchQuery("");
                 autoDpAmountRef.current = null;
                 setDpDisplay("");
               }}
@@ -1725,49 +1775,61 @@ export function BookingFormClient({
                 Pilih satu atau lebih paket utama sesuai kebutuhan.
               </DialogDescription>
             </DialogHeader>
-            <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-              {filteredServices.length === 0 ? (
-                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
-                  Belum ada paket untuk tipe acara ini.
-                </div>
-              ) : (
-                filteredServices.map((service) => {
-                  const selected = selectedServiceIds.includes(service.id);
-                  return (
-                    <button
-                      key={service.id}
-                      type="button"
-                      onClick={() => handleServiceChange(service.id)}
-                      className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{service.name}</p>
-                          {service.description ? (
-                            <p className="text-[11px] text-muted-foreground">
-                              {service.description}
+            <div className="space-y-2">
+              <input
+                value={packageSearchQuery}
+                onChange={(event) => setPackageSearchQuery(event.target.value)}
+                placeholder={t("searchPackagePlaceholder")}
+                className={inputClass}
+              />
+              <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+                {filteredServices.length === 0 ? (
+                  <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                    Belum ada paket untuk tipe acara ini.
+                  </div>
+                ) : searchedMainServices.length === 0 ? (
+                  <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                    {t("noPackageSearchResults")}
+                  </div>
+                ) : (
+                  searchedMainServices.map((service) => {
+                    const selected = selectedServiceIds.includes(service.id);
+                    return (
+                      <button
+                        key={service.id}
+                        type="button"
+                        onClick={() => handleServiceChange(service.id)}
+                        className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">{service.name}</p>
+                            {service.description ? (
+                              <p className="text-[11px] text-muted-foreground">
+                                {service.description}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-sm font-semibold text-primary">
+                            {formatCurrency(service.price)}
+                          </p>
+                          {service.original_price &&
+                          service.original_price > service.price ? (
+                            <p className="text-[11px] text-muted-foreground line-through">
+                              {formatCurrency(service.original_price)}
                             </p>
                           ) : null}
                         </div>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-sm font-semibold text-primary">
-                          {formatCurrency(service.price)}
-                        </p>
-                        {service.original_price &&
-                        service.original_price > service.price ? (
-                          <p className="text-[11px] text-muted-foreground line-through">
-                            {formatCurrency(service.original_price)}
-                          </p>
-                        ) : null}
-                      </div>
-                    </button>
-                  );
-                })
-              )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
             <div className="flex justify-end">
               <button
@@ -1789,43 +1851,55 @@ export function BookingFormClient({
                 Pilih add-on tambahan, bisa pilih lebih dari satu.
               </DialogDescription>
             </DialogHeader>
-            <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-              {addonServices.length === 0 ? (
-                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
-                  Belum ada add-on untuk tipe acara ini.
-                </div>
-              ) : (
-                addonServices.map((addon) => {
-                  const selected = selectedAddons.has(addon.id);
-                  return (
-                    <button
-                      key={addon.id}
-                      type="button"
-                      onClick={() => handleAddonToggle(addon.id)}
-                      className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">{addon.name}</p>
-                          {addon.description ? (
-                            <p className="text-[11px] text-muted-foreground">
-                              {addon.description}
-                            </p>
-                          ) : null}
+            <div className="space-y-2">
+              <input
+                value={addonSearchQuery}
+                onChange={(event) => setAddonSearchQuery(event.target.value)}
+                placeholder={t("searchAddonPlaceholder")}
+                className={inputClass}
+              />
+              <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+                {addonServices.length === 0 ? (
+                  <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                    Belum ada add-on untuk tipe acara ini.
+                  </div>
+                ) : searchedAddonServices.length === 0 ? (
+                  <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                    {t("noAddonSearchResults")}
+                  </div>
+                ) : (
+                  searchedAddonServices.map((addon) => {
+                    const selected = selectedAddons.has(addon.id);
+                    return (
+                      <button
+                        key={addon.id}
+                        type="button"
+                        onClick={() => handleAddonToggle(addon.id)}
+                        className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">{addon.name}</p>
+                            {addon.description ? (
+                              <p className="text-[11px] text-muted-foreground">
+                                {addon.description}
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-sm font-semibold text-primary">
-                          +{formatCurrency(addon.price)}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
+                        <div className="shrink-0 text-right">
+                          <p className="text-sm font-semibold text-primary">
+                            +{formatCurrency(addon.price)}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
             <div className="flex justify-end">
               <button
