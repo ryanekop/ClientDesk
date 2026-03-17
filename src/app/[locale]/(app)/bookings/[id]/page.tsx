@@ -1257,7 +1257,6 @@ export default function BookingDetailPage() {
 
         openWhatsAppUrl(buildWhatsAppUrl(cleaned, message), {
             preOpenedWindow,
-            fallbackToSameTab: true,
         });
     }
 

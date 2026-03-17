@@ -132,6 +132,30 @@ const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
     { id: "price", label: "Harga", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true },
 ];
+const BOOKING_FILTER_STORAGE_PREFIX = "clientdesk:bookings:filters";
+const BOOKING_SORT_ORDERS = [
+    "booking_newest",
+    "booking_oldest",
+    "session_newest",
+    "session_oldest",
+] as const;
+type BookingSortOrder = (typeof BOOKING_SORT_ORDERS)[number];
+
+type BookingFilterStoragePayload = {
+    searchQuery: string;
+    statusFilter: string;
+    packageFilter: string;
+    freelanceFilter: string;
+    eventTypeFilter: string;
+    dateFromFilter: string;
+    dateToFilter: string;
+    extraFieldFilters: Record<string, string>;
+    sortOrder: BookingSortOrder;
+};
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
 
 type SavedTemplate = {
     id: string;
@@ -214,6 +238,8 @@ export default function BookingsPage() {
     const [packages, setPackages] = React.useState<string[]>([]);
     const [freelancerNames, setFreelancerNames] = React.useState<string[]>([]);
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
+    const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
+    const [filtersHydrated, setFiltersHydrated] = React.useState(false);
     const [loading, setLoading] = React.useState(true);
     const [copiedClientTemplateId, setCopiedClientTemplateId] = React.useState<string | null>(null);
     const [copiedFreelancerTemplateId, setCopiedFreelancerTemplateId] = React.useState<string | null>(null);
@@ -234,7 +260,7 @@ export default function BookingsPage() {
     const [dateFromFilter, setDateFromFilter] = React.useState("");
     const [dateToFilter, setDateToFilter] = React.useState("");
     const [extraFieldFilters, setExtraFieldFilters] = React.useState<Record<string, string>>({});
-    const [sortOrder, setSortOrder] = React.useState<"booking_newest" | "booking_oldest" | "session_newest" | "session_oldest">("booking_newest");
+    const [sortOrder, setSortOrder] = React.useState<BookingSortOrder>("booking_newest");
     const [showFilterPanel, setShowFilterPanel] = React.useState(false);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
@@ -281,6 +307,18 @@ export default function BookingsPage() {
         setCopyMenuAnchorEl(null);
     }, []);
 
+    const resetFilters = React.useCallback(() => {
+        setStatusFilter("All");
+        setPackageFilter("All");
+        setFreelanceFilter("All");
+        setEventTypeFilter("All");
+        setDateFromFilter("");
+        setDateToFilter("");
+        setExtraFieldFilters({});
+        setSearchQuery("");
+        setSortOrder("booking_newest");
+    }, []);
+
     const triggerFastpikAutoSync = React.useCallback(
         async (bookingId: string) => {
             if (!bookingId) return;
@@ -316,6 +354,7 @@ export default function BookingsPage() {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+        setCurrentUserId(user.id);
 
         // Fetch studio name for WA templates
         const { data: profile } = await supabase
@@ -420,6 +459,63 @@ export default function BookingsPage() {
         void fetchData();
         void fetchTemplates();
     }, [fetchData, fetchTemplates]);
+
+    React.useEffect(() => {
+        if (!currentUserId) return;
+        setFiltersHydrated(false);
+        const storageKey = `${BOOKING_FILTER_STORAGE_PREFIX}:${currentUserId}`;
+
+        try {
+            const raw = window.localStorage.getItem(storageKey);
+            if (!raw) {
+                resetFilters();
+                return;
+            }
+
+            const parsed = JSON.parse(raw) as unknown;
+            if (!isObjectRecord(parsed)) {
+                resetFilters();
+                return;
+            }
+
+            const readString = (key: keyof BookingFilterStoragePayload, fallback: string) => {
+                const value = parsed[key];
+                return typeof value === "string" ? value : fallback;
+            };
+
+            setSearchQuery(readString("searchQuery", ""));
+            setStatusFilter(readString("statusFilter", "All") || "All");
+            setPackageFilter(readString("packageFilter", "All") || "All");
+            setFreelanceFilter(readString("freelanceFilter", "All") || "All");
+            setEventTypeFilter(readString("eventTypeFilter", "All") || "All");
+            setDateFromFilter(readString("dateFromFilter", ""));
+            setDateToFilter(readString("dateToFilter", ""));
+
+            const rawExtraFieldFilters = parsed.extraFieldFilters;
+            if (isObjectRecord(rawExtraFieldFilters)) {
+                const normalizedExtraFilters = Object.fromEntries(
+                    Object.entries(rawExtraFieldFilters).filter(
+                        ([, value]) => typeof value === "string",
+                    ),
+                ) as Record<string, string>;
+                setExtraFieldFilters(normalizedExtraFilters);
+            } else {
+                setExtraFieldFilters({});
+            }
+
+            const parsedSortOrder = parsed.sortOrder;
+            setSortOrder(
+                typeof parsedSortOrder === "string" &&
+                    BOOKING_SORT_ORDERS.includes(parsedSortOrder as BookingSortOrder)
+                    ? (parsedSortOrder as BookingSortOrder)
+                    : "booking_newest",
+            );
+        } catch {
+            resetFilters();
+        } finally {
+            setFiltersHydrated(true);
+        }
+    }, [currentUserId, resetFilters]);
 
     React.useEffect(() => {
         if (!waMenuBookingId && !copyMenuBookingId) return;
@@ -1041,15 +1137,111 @@ export default function BookingsPage() {
         }));
     }, [bookings, eventTypeFilter, formSectionsByEventType]);
 
-    React.useEffect(() => {
-        setExtraFieldFilters((prev) =>
-            Object.fromEntries(
-                Object.entries(prev).filter(([key]) =>
-                    activeExtraFilterFields.some((field) => field.key === key),
+    const availableEventTypes = React.useMemo(
+        () =>
+            Array.from(
+                new Set(
+                    bookings
+                        .map((booking) => booking.event_type)
+                        .filter((eventType): eventType is string => Boolean(eventType)),
                 ),
             ),
-        );
-    }, [activeExtraFilterFields]);
+        [bookings],
+    );
+
+    React.useEffect(() => {
+        if (!filtersHydrated || loading) return;
+
+        if (statusFilter !== "All" && !statusOpts.includes(statusFilter)) {
+            setStatusFilter("All");
+        }
+        if (packageFilter !== "All" && !packages.includes(packageFilter)) {
+            setPackageFilter("All");
+        }
+        if (freelanceFilter !== "All" && !freelancerNames.includes(freelanceFilter)) {
+            setFreelanceFilter("All");
+        }
+        if (eventTypeFilter !== "All" && !availableEventTypes.includes(eventTypeFilter)) {
+            setEventTypeFilter("All");
+        }
+
+        setExtraFieldFilters((prev) => {
+            const fieldMap = new Map(
+                activeExtraFilterFields.map((field) => [field.key, field]),
+            );
+            let changed = false;
+            const next: Record<string, string> = {};
+
+            for (const [key, value] of Object.entries(prev)) {
+                const field = fieldMap.get(key);
+                if (!field || typeof value !== "string") {
+                    changed = true;
+                    continue;
+                }
+
+                if (
+                    field.mode === "exact" &&
+                    value.length > 0 &&
+                    Array.isArray(field.options) &&
+                    !field.options.includes(value)
+                ) {
+                    changed = true;
+                    next[key] = "";
+                    continue;
+                }
+
+                next[key] = value;
+            }
+
+            return changed ? next : prev;
+        });
+    }, [
+        activeExtraFilterFields,
+        availableEventTypes,
+        eventTypeFilter,
+        filtersHydrated,
+        freelanceFilter,
+        freelancerNames,
+        loading,
+        packageFilter,
+        packages,
+        statusFilter,
+        statusOpts,
+    ]);
+
+    React.useEffect(() => {
+        if (!filtersHydrated || !currentUserId) return;
+        const storageKey = `${BOOKING_FILTER_STORAGE_PREFIX}:${currentUserId}`;
+        const payload: BookingFilterStoragePayload = {
+            searchQuery,
+            statusFilter,
+            packageFilter,
+            freelanceFilter,
+            eventTypeFilter,
+            dateFromFilter,
+            dateToFilter,
+            extraFieldFilters,
+            sortOrder,
+        };
+
+        try {
+            window.localStorage.setItem(storageKey, JSON.stringify(payload));
+        } catch {
+            // Ignore storage write failures.
+        }
+    }, [
+        currentUserId,
+        dateFromFilter,
+        dateToFilter,
+        eventTypeFilter,
+        extraFieldFilters,
+        filtersHydrated,
+        freelanceFilter,
+        packageFilter,
+        searchQuery,
+        sortOrder,
+        statusFilter,
+    ]);
 
     React.useEffect(() => {
         setCurrentPage(1);
@@ -1179,7 +1371,7 @@ export default function BookingsPage() {
                             <ListOrdered className="w-4 h-4" />
                             Filter
                         </Button>
-                        <select value={sortOrder} onChange={e => setSortOrder(e.target.value as typeof sortOrder)} className={selectFilterClass}>
+                        <select value={sortOrder} onChange={e => setSortOrder(e.target.value as BookingSortOrder)} className={selectFilterClass}>
                             <option value="booking_newest">Urutkan: Booking Terbaru</option>
                             <option value="booking_oldest">Urutkan: Booking Terlama</option>
                             <option value="session_newest">Urutkan: Jadwal Sesi Terdekat</option>
@@ -1187,17 +1379,7 @@ export default function BookingsPage() {
                         </select>
                         {(statusFilter !== "All" || packageFilter !== "All" || freelanceFilter !== "All" || eventTypeFilter !== "All" || dateFromFilter || dateToFilter || Object.values(extraFieldFilters).some(Boolean) || searchQuery || sortOrder !== "booking_newest") && (
                             <button
-                                onClick={() => {
-                                    setStatusFilter("All");
-                                    setPackageFilter("All");
-                                    setFreelanceFilter("All");
-                                    setEventTypeFilter("All");
-                                    setDateFromFilter("");
-                                    setDateToFilter("");
-                                    setExtraFieldFilters({});
-                                    setSearchQuery("");
-                                    setSortOrder("booking_newest");
-                                }}
+                                onClick={resetFilters}
                                 className="h-9 px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center gap-1.5 cursor-pointer"
                             >
                                 <X className="w-3.5 h-3.5" /> Reset

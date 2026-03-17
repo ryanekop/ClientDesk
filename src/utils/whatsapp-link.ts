@@ -1,6 +1,5 @@
 export type OpenWhatsAppUrlOptions = {
   preOpenedWindow?: Window | null;
-  fallbackToSameTab?: boolean;
 };
 
 function sanitizeWhatsAppPhone(phone: string) {
@@ -30,7 +29,6 @@ export function buildWhatsAppUrl(phone: string, message?: string) {
 
 export function preopenWindowForDeferredNavigation() {
   if (typeof window === "undefined") return null;
-  if (isMobileDevice()) return null;
   const preOpenedWindow = window.open("about:blank", "_blank", "noopener,noreferrer");
   if (preOpenedWindow) {
     try {
@@ -53,14 +51,9 @@ export function closePreopenedWindow(preOpenedWindow?: Window | null) {
 
 export function openWhatsAppUrl(
   url: string,
-  { preOpenedWindow = null, fallbackToSameTab = true }: OpenWhatsAppUrlOptions = {},
+  { preOpenedWindow = null }: OpenWhatsAppUrlOptions = {},
 ) {
   if (typeof window === "undefined") return false;
-
-  if (isMobileDevice()) {
-    window.location.assign(url);
-    return true;
-  }
 
   if (preOpenedWindow && !preOpenedWindow.closed) {
     try {
@@ -82,7 +75,7 @@ export function openWhatsAppUrl(
     return true;
   }
 
-  if (fallbackToSameTab) {
+  if (isMobileDevice()) {
     window.location.assign(url);
     return true;
   }

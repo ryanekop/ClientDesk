@@ -523,7 +523,6 @@ export default function FinancePage() {
         const message = buildFinalInvoiceMessage(openedBooking);
         openWhatsAppUrl(buildWhatsAppUrl(cleaned, message), {
             preOpenedWindow,
-            fallbackToSameTab: true,
         });
     }
 
