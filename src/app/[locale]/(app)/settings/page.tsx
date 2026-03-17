@@ -1249,34 +1249,48 @@ export default function SettingsPage() {
     return "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300";
   }
 
+  function buildFastpikProfilePatch() {
+    return {
+      fastpik_integration_enabled: fastpikIntegrationEnabled,
+      fastpik_sync_mode: fastpikSyncMode,
+      fastpik_preset_source: fastpikPresetSource,
+      fastpik_api_key: fastpikApiKey.trim() || null,
+      fastpik_default_max_photos:
+        Number.isFinite(fastpikDefaultMaxPhotos) && fastpikDefaultMaxPhotos > 0
+          ? Math.floor(fastpikDefaultMaxPhotos)
+          : 50,
+      fastpik_default_selection_days:
+        Number.isFinite(fastpikDefaultSelectionDays) &&
+        fastpikDefaultSelectionDays > 0
+          ? Math.floor(fastpikDefaultSelectionDays)
+          : 14,
+      fastpik_default_download_days:
+        Number.isFinite(fastpikDefaultDownloadDays) &&
+        fastpikDefaultDownloadDays > 0
+          ? Math.floor(fastpikDefaultDownloadDays)
+          : 14,
+      fastpik_default_detect_subfolders: fastpikDefaultDetectSubfolders,
+      fastpik_default_password: fastpikDefaultPassword.trim() || null,
+    };
+  }
+
+  async function persistFastpikSettings(options?: { showSavedMessage?: boolean }) {
+    if (!profile) {
+      throw new Error("Profil tidak ditemukan.");
+    }
+
+    await saveProfilePatch(buildFastpikProfilePatch());
+    if (options?.showSavedMessage) {
+      setSavedMsg(SETTINGS_SAVED_MESSAGE);
+      setTimeout(() => setSavedMsg(""), 3000);
+    }
+  }
+
   async function handleSaveFastpikSettings() {
     if (!profile) return;
     setSaving(true);
     try {
-      await saveProfilePatch({
-        fastpik_integration_enabled: fastpikIntegrationEnabled,
-        fastpik_sync_mode: fastpikSyncMode,
-        fastpik_preset_source: fastpikPresetSource,
-        fastpik_api_key: fastpikApiKey.trim() || null,
-        fastpik_default_max_photos:
-          Number.isFinite(fastpikDefaultMaxPhotos) && fastpikDefaultMaxPhotos > 0
-            ? Math.floor(fastpikDefaultMaxPhotos)
-            : 50,
-        fastpik_default_selection_days:
-          Number.isFinite(fastpikDefaultSelectionDays) &&
-          fastpikDefaultSelectionDays > 0
-            ? Math.floor(fastpikDefaultSelectionDays)
-            : 14,
-        fastpik_default_download_days:
-          Number.isFinite(fastpikDefaultDownloadDays) &&
-          fastpikDefaultDownloadDays > 0
-            ? Math.floor(fastpikDefaultDownloadDays)
-            : 14,
-        fastpik_default_detect_subfolders: fastpikDefaultDetectSubfolders,
-        fastpik_default_password: fastpikDefaultPassword.trim() || null,
-      });
-      setSavedMsg(SETTINGS_SAVED_MESSAGE);
-      setTimeout(() => setSavedMsg(""), 3000);
+      await persistFastpikSettings({ showSavedMessage: true });
       void fetchAll(true);
     } catch (error) {
       console.error("Fastpik settings save error:", error);
@@ -1291,6 +1305,7 @@ export default function SettingsPage() {
     setFastpikTesting(true);
     setFastpikActionMessage("");
     try {
+      await persistFastpikSettings();
       const response = await fetch("/api/integrations/fastpik/test", {
         method: "POST",
       });
@@ -1329,6 +1344,7 @@ export default function SettingsPage() {
     setFastpikBatchSyncing(true);
     setFastpikActionMessage("");
     try {
+      await persistFastpikSettings();
       const response = await fetch("/api/integrations/fastpik/sync-batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
