@@ -51,15 +51,15 @@ BEGIN
       AND table_name = 'services'
       AND column_name = 'event_types'
   ) THEN
-    UPDATE public.services AS s
-    SET event_types = normalized.event_types
-    FROM LATERAL (
+    WITH normalized AS (
       SELECT
+        s.id,
         CASE
-          WHEN COUNT(*) = 0 THEN NULL::text[]
-          ELSE array_agg(item ORDER BY first_ord)
+          WHEN COUNT(d.item) = 0 THEN NULL::text[]
+          ELSE array_agg(d.item ORDER BY d.first_ord)
         END AS event_types
-      FROM (
+      FROM public.services AS s
+      LEFT JOIN LATERAL (
         SELECT item, MIN(ord) AS first_ord
         FROM (
           SELECT
@@ -73,9 +73,14 @@ BEGIN
             AND btrim(value) <> ''
         ) normalized_items
         GROUP BY item
-      ) deduped
-    ) AS normalized
-    WHERE s.event_types IS DISTINCT FROM normalized.event_types;
+      ) AS d ON true
+      GROUP BY s.id
+    )
+    UPDATE public.services AS s
+    SET event_types = n.event_types
+    FROM normalized AS n
+    WHERE n.id = s.id
+      AND s.event_types IS DISTINCT FROM n.event_types;
   END IF;
 END $$;
 
@@ -89,20 +94,15 @@ BEGIN
       AND table_name = 'profiles'
       AND column_name = 'form_event_types'
   ) THEN
-    UPDATE public.profiles AS p
-    SET form_event_types =
-      CASE
-        WHEN normalized.form_event_types IS NULL THEN NULL
-        WHEN 'Custom/Lainnya' = ANY(normalized.form_event_types) THEN normalized.form_event_types
-        ELSE normalized.form_event_types || ARRAY['Custom/Lainnya']::text[]
-      END
-    FROM LATERAL (
+    WITH normalized AS (
       SELECT
+        p.id,
         CASE
-          WHEN COUNT(*) = 0 THEN NULL::text[]
-          ELSE array_agg(item ORDER BY first_ord)
+          WHEN COUNT(d.item) = 0 THEN NULL::text[]
+          ELSE array_agg(d.item ORDER BY d.first_ord)
         END AS form_event_types
-      FROM (
+      FROM public.profiles AS p
+      LEFT JOIN LATERAL (
         SELECT item, MIN(ord) AS first_ord
         FROM (
           SELECT
@@ -116,15 +116,25 @@ BEGIN
             AND btrim(value) <> ''
         ) normalized_items
         GROUP BY item
-      ) deduped
-    ) AS normalized
-    WHERE p.form_event_types IS DISTINCT FROM (
+      ) AS d ON true
+      GROUP BY p.id
+    )
+    UPDATE public.profiles AS p
+    SET form_event_types =
       CASE
-        WHEN normalized.form_event_types IS NULL THEN NULL
-        WHEN 'Custom/Lainnya' = ANY(normalized.form_event_types) THEN normalized.form_event_types
-        ELSE normalized.form_event_types || ARRAY['Custom/Lainnya']::text[]
+        WHEN n.form_event_types IS NULL THEN NULL
+        WHEN 'Custom/Lainnya' = ANY(n.form_event_types) THEN n.form_event_types
+        ELSE n.form_event_types || ARRAY['Custom/Lainnya']::text[]
       END
-    );
+    FROM normalized AS n
+    WHERE n.id = p.id
+      AND p.form_event_types IS DISTINCT FROM (
+        CASE
+          WHEN n.form_event_types IS NULL THEN NULL
+          WHEN 'Custom/Lainnya' = ANY(n.form_event_types) THEN n.form_event_types
+          ELSE n.form_event_types || ARRAY['Custom/Lainnya']::text[]
+        END
+      );
   END IF;
 END $$;
 
@@ -138,15 +148,15 @@ BEGIN
       AND table_name = 'profiles'
       AND column_name = 'custom_event_types'
   ) THEN
-    UPDATE public.profiles AS p
-    SET custom_event_types = normalized.custom_event_types
-    FROM LATERAL (
+    WITH normalized AS (
       SELECT
+        p.id,
         CASE
-          WHEN COUNT(*) = 0 THEN ARRAY[]::text[]
-          ELSE array_agg(item ORDER BY first_ord)
+          WHEN COUNT(d.item) = 0 THEN ARRAY[]::text[]
+          ELSE array_agg(d.item ORDER BY d.first_ord)
         END AS custom_event_types
-      FROM (
+      FROM public.profiles AS p
+      LEFT JOIN LATERAL (
         SELECT item, MIN(ord) AS first_ord
         FROM (
           SELECT
@@ -160,9 +170,14 @@ BEGIN
             AND btrim(value) <> ''
         ) normalized_items
         GROUP BY item
-      ) deduped
-    ) AS normalized
-    WHERE p.custom_event_types IS DISTINCT FROM normalized.custom_event_types;
+      ) AS d ON true
+      GROUP BY p.id
+    )
+    UPDATE public.profiles AS p
+    SET custom_event_types = n.custom_event_types
+    FROM normalized AS n
+    WHERE n.id = p.id
+      AND p.custom_event_types IS DISTINCT FROM n.custom_event_types;
   END IF;
 END $$;
 
