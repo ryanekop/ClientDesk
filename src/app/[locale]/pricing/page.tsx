@@ -60,13 +60,17 @@ export default function PricingPage() {
         "featurePrioritySupport"
     ]
 
+    const bundleExtraFeatures = pricingMode === "bundle"
+        ? ["featureBundleAllFastpik", "featureBundleSyncFastpik"]
+        : []
+
     const plans = [
         {
             nameKey: "plan1Month",
             tier: "pro_monthly",
             price: pricingMode === "bundle" ? "49rb" : "39rb",
             durationKey: "perMonth",
-            features: [...sharedFeatures],
+            features: [...bundleExtraFeatures, ...sharedFeatures],
             link: pricingMode === "bundle" ? BUNDLE_CHECKOUT_LINK : CLIENT_DESK_CHECKOUT_LINK,
             popular: false,
             icon: Zap,
@@ -77,7 +81,11 @@ export default function PricingPage() {
             tier: "pro_quarterly",
             price: pricingMode === "bundle" ? "125rb" : "99rb",
             durationKey: "per3Months",
-            features: [pricingMode === "bundle" ? "featurePerMonthBundle3" : "featurePerMonth3", ...sharedFeatures],
+            features: [
+                pricingMode === "bundle" ? "featurePerMonthBundle3" : "featurePerMonth3",
+                ...bundleExtraFeatures,
+                ...sharedFeatures
+            ],
             link: pricingMode === "bundle" ? BUNDLE_CHECKOUT_LINK : CLIENT_DESK_CHECKOUT_LINK,
             popular: false,
             icon: Star,
@@ -88,7 +96,11 @@ export default function PricingPage() {
             tier: "pro_yearly",
             price: pricingMode === "bundle" ? "399rb" : "349rb",
             durationKey: "perYear",
-            features: [pricingMode === "bundle" ? "featurePerMonthBundle12" : "featurePerMonth12", ...sharedFeatures],
+            features: [
+                pricingMode === "bundle" ? "featurePerMonthBundle12" : "featurePerMonth12",
+                ...bundleExtraFeatures,
+                ...sharedFeatures
+            ],
             link: pricingMode === "bundle" ? BUNDLE_CHECKOUT_LINK : CLIENT_DESK_CHECKOUT_LINK,
             popular: true,
             icon: Crown,
@@ -99,7 +111,7 @@ export default function PricingPage() {
             tier: "lifetime",
             price: pricingMode === "bundle" ? "749rb" : "549rb",
             durationKey: "oneTime",
-            features: ["featurePayOnce", "featureLimitedSlot", ...sharedFeatures, "featureFutureUpdates"],
+            features: ["featurePayOnce", ...bundleExtraFeatures, "featureLimitedSlot", ...sharedFeatures, "featureFutureUpdates"],
             link: pricingMode === "bundle" ? BUNDLE_CHECKOUT_LINK : CLIENT_DESK_CHECKOUT_LINK,
             popular: false,
             icon: InfinityIcon,

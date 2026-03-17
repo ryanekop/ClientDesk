@@ -480,6 +480,8 @@
         "featurePerMonth12": "Only ~29k/month",
         "featurePerMonthBundle3": "Only ~42k/month",
         "featurePerMonthBundle12": "Only ~33k/month",
+        "featureBundleAllFastpik": "And all Fastpik features",
+        "featureBundleSyncFastpik": "Can sync data to Fastpik",
         "featureLimitedSlot": "Limited to 100 users only",
         "billingAuto": "Auto-renewal",
         "billingManualRenew": "No auto-debit. Renewal is done manually.",

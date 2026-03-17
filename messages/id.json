@@ -480,6 +480,8 @@
         "featurePerMonth12": "Hanya ~29rb/bulan",
         "featurePerMonthBundle3": "Hanya ~42rb/bulan",
         "featurePerMonthBundle12": "Hanya ~33rb/bulan",
+        "featureBundleAllFastpik": "Dan semua fitur Fastpik",
+        "featureBundleSyncFastpik": "Bisa sync data ke Fastpik",
         "featureLimitedSlot": "Terbatas hanya 100 user",
         "billingAuto": "Perpanjangan otomatis",
         "billingManualRenew": "Tidak auto-debit. Perpanjangan dilakukan manual.",
