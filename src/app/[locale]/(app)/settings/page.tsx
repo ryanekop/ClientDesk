@@ -67,6 +67,7 @@ import {
 } from "@/components/form-builder/booking-form-layout";
 import { normalizeDriveFolderStructureSettings } from "@/lib/drive-folder-structure";
 import {
+  COMPLETED_BOOKING_STATUS,
   DEFAULT_CLIENT_STATUSES,
   INITIAL_BOOKING_STATUS,
   getDefaultFinalInvoiceVisibleFromStatus,
@@ -754,19 +755,23 @@ export default function SettingsPage() {
   );
   const clientStatusItems = React.useMemo<SortableConfigItem[]>(
     () =>
-      customClientStatuses.map((status) => ({
-        id: status,
-        label: status,
-        locked: status === INITIAL_BOOKING_STATUS,
-        editable: status !== INITIAL_BOOKING_STATUS,
-        removable: status !== INITIAL_BOOKING_STATUS,
-        badge:
-          status === INITIAL_BOOKING_STATUS ? (
+      customClientStatuses.map((status) => {
+        const isRequiredStatus =
+          status === INITIAL_BOOKING_STATUS ||
+          status === COMPLETED_BOOKING_STATUS;
+        return {
+          id: status,
+          label: status,
+          locked: isRequiredStatus,
+          editable: !isRequiredStatus,
+          removable: !isRequiredStatus,
+          badge: isRequiredStatus ? (
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
               Wajib
             </span>
           ) : null,
-      })),
+        };
+      }),
     [customClientStatuses],
   );
 
@@ -3689,11 +3694,25 @@ export default function SettingsPage() {
                     setNormalizedClientStatuses(items.map((item) => item.id))
                   }
                   onRename={(id, label) =>
-                    setNormalizedClientStatuses((prev) =>
-                      prev.map((status) => (status === id ? label : status)),
-                    )
+                    setNormalizedClientStatuses((prev) => {
+                      if (
+                        id === INITIAL_BOOKING_STATUS ||
+                        id === COMPLETED_BOOKING_STATUS
+                      ) {
+                        return prev;
+                      }
+                      return prev.map((status) =>
+                        status === id ? label : status,
+                      );
+                    })
                   }
                   onDelete={(id) => {
+                    if (
+                      id === INITIAL_BOOKING_STATUS ||
+                      id === COMPLETED_BOOKING_STATUS
+                    ) {
+                      return;
+                    }
                     if (customClientStatuses.length <= 2) {
                       showFeedback("Minimal 2 status harus ada.");
                       return;

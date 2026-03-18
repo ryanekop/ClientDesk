@@ -1,4 +1,5 @@
 export const INITIAL_BOOKING_STATUS = "Pending";
+export const COMPLETED_BOOKING_STATUS = "Selesai";
 
 export const DEFAULT_CLIENT_STATUSES = [
   INITIAL_BOOKING_STATUS,
@@ -8,7 +9,7 @@ export const DEFAULT_CLIENT_STATUSES = [
   "Proses Edit",
   "Revisi",
   "File Siap",
-  "Selesai",
+  COMPLETED_BOOKING_STATUS,
 ];
 
 export const CANCELLED_BOOKING_STATUS = "Batal";
@@ -25,6 +26,10 @@ function isInitialBookingStatus(status?: string | null) {
   return normalizeStatusValue(status || "").toLowerCase() === INITIAL_BOOKING_STATUS.toLowerCase();
 }
 
+function isCompletedBookingStatus(status?: string | null) {
+  return normalizeStatusValue(status || "").toLowerCase() === COMPLETED_BOOKING_STATUS.toLowerCase();
+}
+
 export function isCancelledBookingStatus(status?: string | null) {
   return normalizeStatusValue(status || "").toLowerCase() === CANCELLED_BOOKING_STATUS.toLowerCase();
 }
@@ -39,8 +44,10 @@ export function normalizeClientProgressStatuses(statuses?: string[] | null) {
     : DEFAULT_CLIENT_STATUSES
   ).filter((item) => !isCancelledBookingStatus(item));
 
-  const withoutInitial = progressStatuses.filter((item) => !isInitialBookingStatus(item));
-  return [INITIAL_BOOKING_STATUS, ...withoutInitial];
+  const middleStatuses = progressStatuses.filter(
+    (item) => !isInitialBookingStatus(item) && !isCompletedBookingStatus(item),
+  );
+  return [INITIAL_BOOKING_STATUS, ...middleStatuses, COMPLETED_BOOKING_STATUS];
 }
 
 export function getClientProgressStatuses(statuses?: string[] | null) {

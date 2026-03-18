@@ -16,6 +16,7 @@ import {
 import { useLocale } from "next-intl";
 import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
+import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { getActiveEventTypes, normalizeEventTypeList } from "@/lib/event-type-config";
 import { useSuccessToast } from "@/components/ui/success-toast";
 import {
@@ -76,6 +77,10 @@ export default function SpecialBookingFormPage() {
   const [services, setServices] = React.useState<ServiceOption[]>([]);
   const [formError, setFormError] = React.useState("");
   const [editingLinkId, setEditingLinkId] = React.useState<string | null>(null);
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = React.useState<{
+    open: boolean;
+    link: BookingSpecialLinkRule | null;
+  }>({ open: false, link: null });
 
   const [name, setName] = React.useState("");
   const [eventTypeLocked, setEventTypeLocked] = React.useState(false);
@@ -402,10 +407,9 @@ export default function SpecialBookingFormPage() {
     await loadData();
   }
 
-  async function deleteLink(link: BookingSpecialLinkRule) {
-    const confirmed = window.confirm(`Hapus link "${link.name}"?`);
-    if (!confirmed) return;
-
+  async function confirmDeleteLink() {
+    const link = deleteConfirmDialog.link;
+    if (!link) return;
     clearMessage();
     setActionLoadingId(link.id);
     const { error } = await supabase
@@ -423,6 +427,8 @@ export default function SpecialBookingFormPage() {
       resetForm();
     }
     await loadData();
+    setDeleteConfirmDialog({ open: false, link: null });
+    showSuccessToast("Link booking khusus berhasil dihapus.");
   }
 
   if (loading) {
@@ -814,7 +820,9 @@ export default function SpecialBookingFormPage() {
                       variant="destructive"
                       size="sm"
                       className="gap-1.5"
-                      onClick={() => void deleteLink(link)}
+                      onClick={() =>
+                        setDeleteConfirmDialog({ open: true, link })
+                      }
                       disabled={isBusy}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -827,6 +835,26 @@ export default function SpecialBookingFormPage() {
           )}
         </div>
       </div>
+
+      <ActionConfirmDialog
+        open={deleteConfirmDialog.open}
+        onOpenChange={(open) =>
+          setDeleteConfirmDialog((prev) => ({
+            open,
+            link: open ? prev.link : null,
+          }))
+        }
+        title="Konfirmasi"
+        message={`Hapus link "${deleteConfirmDialog.link?.name || ""}"?`}
+        cancelLabel="Batal"
+        confirmLabel="Hapus"
+        confirmVariant="destructive"
+        onConfirm={confirmDeleteLink}
+        loading={
+          Boolean(deleteConfirmDialog.link) &&
+          actionLoadingId === deleteConfirmDialog.link?.id
+        }
+      />
     </div>
   );
 }
