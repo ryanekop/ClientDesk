@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { normalizeVendorSlug } from "@/lib/booking-url-mode";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -18,6 +19,8 @@ type ProfileAccount = {
 type TenantRow = {
   id: string;
   name: string;
+  disable_booking_slug?: boolean | null;
+  default_booking_vendor_slug?: string | null;
 };
 
 function corsResponse(data: unknown, init?: { status?: number }) {
@@ -170,7 +173,7 @@ export async function PUT(request: NextRequest) {
 
     const { data: targetTenant, error: targetTenantError } = await supabase
       .from("tenants")
-      .select("id, name")
+      .select("id, name, disable_booking_slug, default_booking_vendor_slug")
       .eq("id", tenantId)
       .maybeSingle();
     if (targetTenantError) {
@@ -201,6 +204,62 @@ export async function PUT(request: NextRequest) {
 
     if (updateError) {
       return corsResponse({ error: updateError.message }, { status: 500 });
+    }
+
+    const sluglessEnabled = targetTenant.disable_booking_slug === true;
+    if (sluglessEnabled) {
+      const currentDefaultSlug = normalizeVendorSlug(
+        targetTenant.default_booking_vendor_slug || "",
+      );
+      let defaultSlugExists = false;
+
+      if (currentDefaultSlug) {
+        const { data: mappedVendor, error: mappedVendorError } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .eq("vendor_slug", currentDefaultSlug)
+          .maybeSingle();
+        if (mappedVendorError) {
+          return corsResponse({ error: mappedVendorError.message }, { status: 500 });
+        }
+        defaultSlugExists = Boolean(mappedVendor);
+      }
+
+      if (!defaultSlugExists) {
+        let replacementSlug = normalizeVendorSlug(updatedProfile.vendor_slug || "");
+
+        if (!replacementSlug) {
+          const { data: firstTenantVendor, error: firstTenantVendorError } =
+            await supabase
+              .from("profiles")
+              .select("vendor_slug")
+              .eq("tenant_id", tenantId)
+              .not("vendor_slug", "is", null)
+              .order("created_at", { ascending: true })
+              .limit(1)
+              .maybeSingle();
+
+          if (firstTenantVendorError) {
+            return corsResponse({ error: firstTenantVendorError.message }, { status: 500 });
+          }
+
+          replacementSlug = normalizeVendorSlug(
+            firstTenantVendor?.vendor_slug || "",
+          );
+        }
+
+        const { error: syncDefaultSlugError } = await supabase
+          .from("tenants")
+          .update({
+            default_booking_vendor_slug: replacementSlug || null,
+          })
+          .eq("id", tenantId);
+
+        if (syncDefaultSlugError) {
+          return corsResponse({ error: syncDefaultSlugError.message }, { status: 500 });
+        }
+      }
     }
 
     return corsResponse({
