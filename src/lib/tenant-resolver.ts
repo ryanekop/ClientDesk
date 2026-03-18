@@ -29,17 +29,27 @@ const DEFAULT_TENANT: TenantConfig = {
 };
 
 const tenantCache = new Map<string, { tenant: TenantConfig; expiry: number }>();
-const CACHE_TTL_MS = 30 * 1000;
+const CACHE_TTL_MS = 5 * 1000;
 
-export async function resolveTenant(hostname: string): Promise<TenantConfig> {
+type ResolveTenantOptions = {
+  bypassCache?: boolean;
+};
+
+export async function resolveTenant(
+  hostname: string,
+  options: ResolveTenantOptions = {},
+): Promise<TenantConfig> {
   const cleanHost = hostname.split(":")[0].toLowerCase();
+  const bypassCache = options.bypassCache === true;
   if (!cleanHost) {
     return DEFAULT_TENANT;
   }
 
-  const cached = tenantCache.get(cleanHost);
-  if (cached && Date.now() < cached.expiry) {
-    return cached.tenant;
+  if (!bypassCache) {
+    const cached = tenantCache.get(cleanHost);
+    if (cached && Date.now() < cached.expiry) {
+      return cached.tenant;
+    }
   }
 
   try {
@@ -100,17 +110,21 @@ export async function resolveTenant(hostname: string): Promise<TenantConfig> {
             ? data.default_booking_vendor_slug
             : null,
       };
-      tenantCache.set(cleanHost, { tenant, expiry: Date.now() + CACHE_TTL_MS });
+      if (!bypassCache) {
+        tenantCache.set(cleanHost, { tenant, expiry: Date.now() + CACHE_TTL_MS });
+      }
       return tenant;
     }
   } catch (error) {
     console.error("[Tenant Resolver] DB lookup failed:", error);
   }
 
-  tenantCache.set(cleanHost, {
-    tenant: DEFAULT_TENANT,
-    expiry: Date.now() + CACHE_TTL_MS,
-  });
+  if (!bypassCache) {
+    tenantCache.set(cleanHost, {
+      tenant: DEFAULT_TENANT,
+      expiry: Date.now() + CACHE_TTL_MS,
+    });
+  }
   return DEFAULT_TENANT;
 }
 

@@ -51,7 +51,7 @@ async function resolveTenantAndProfile(
   }
 
   const host = getHostFromRequest(request);
-  const tenant = await resolveTenant(host);
+  const tenant = await resolveTenant(host, { bypassCache: true });
   if (tenant.id === "default") {
     return {
       error: NextResponse.json(

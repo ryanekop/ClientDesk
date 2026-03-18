@@ -25,11 +25,21 @@ function setTenantHeaders(headers: Headers, tenant: TenantConfig) {
     );
 }
 
+function shouldBypassTenantCache(pathname: string) {
+    if (/^\/(id|en)\/settings(?:\/|$)/.test(pathname)) {
+        return true;
+    }
+
+    return pathname === '/api/settings/booking-url-mode';
+}
+
 export default async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     const hostname = request.headers.get('host') || '';
-    const tenant = await resolveTenant(hostname);
+    const tenant = await resolveTenant(hostname, {
+        bypassCache: shouldBypassTenantCache(pathname),
+    });
 
     // Make tenant info readable by server components/routes.
     setTenantHeaders(request.headers, tenant);
