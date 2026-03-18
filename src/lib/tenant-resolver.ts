@@ -29,7 +29,7 @@ const DEFAULT_TENANT: TenantConfig = {
 };
 
 const tenantCache = new Map<string, { tenant: TenantConfig; expiry: number }>();
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 30 * 1000;
 
 export async function resolveTenant(hostname: string): Promise<TenantConfig> {
   const cleanHost = hostname.split(":")[0].toLowerCase();
