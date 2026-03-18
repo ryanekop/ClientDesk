@@ -54,7 +54,12 @@ import {
     getVerifiedDpAmount,
     normalizeFinalAdjustments,
 } from "@/lib/final-settlement";
-import { getInitialBookingPriceBreakdown } from "@/lib/booking-special-offer";
+import {
+    buildEditableSpecialOfferSnapshot,
+    computeSpecialOfferTotal,
+    mergeSpecialOfferSnapshotIntoExtraFields,
+    resolveSpecialOfferSnapshotFromExtraFields,
+} from "@/lib/booking-special-offer";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -225,9 +230,9 @@ export default function EditBookingPage() {
     const [packageSearchQuery, setPackageSearchQuery] = React.useState("");
     const [addonSearchQuery, setAddonSearchQuery] = React.useState("");
     const [freelancerIds, setFreelancerIds] = React.useState<string[]>([]);
-    const [totalPrice, setTotalPrice] = React.useState<number | "">("");
-    const [isTotalPriceAuto, setIsTotalPriceAuto] = React.useState(true);
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
+    const [accommodationFee, setAccommodationFee] = React.useState<number | "">("");
+    const [discountAmount, setDiscountAmount] = React.useState<number | "">("");
     const [initialDpPaid, setInitialDpPaid] = React.useState(0);
     const [dpVerifiedAmount, setDpVerifiedAmount] = React.useState(0);
     const [dpVerifiedAt, setDpVerifiedAt] = React.useState<string | null>(null);
@@ -376,22 +381,10 @@ export default function EditBookingPage() {
                     .map((row) => row.freelance_id)
                     .filter((freelanceId): freelanceId is string => Boolean(freelanceId));
                 setFreelancerIds(junctionIds.length > 0 ? junctionIds : booking.freelance_id ? [booking.freelance_id] : []);
-                const availableServices = ((svcs || []) as Service[]).sort(compareServicesByCatalogOrder);
-                const selectedServiceIdsForTotal = selectedMainIds.length > 0 ? selectedMainIds : booking.service_id ? [booking.service_id] : [];
-                const selectedAddonIdsForTotal = selectedAddons.length > 0
-                    ? selectedAddons
-                    : (Array.isArray(booking.extra_fields?.addon_ids)
-                        ? booking.extra_fields.addon_ids.filter((addonId: unknown): addonId is string => typeof addonId === "string")
-                        : []);
-                const computedServiceTotal = [...selectedServiceIdsForTotal, ...selectedAddonIdsForTotal]
-                    .reduce((sum, serviceId) => {
-                        const service = availableServices.find((item) => item.id === serviceId);
-                        return sum + (service?.price || 0);
-                    }, 0);
-                const storedTotal = Number(booking.total_price) || 0;
-                setIsTotalPriceAuto(Math.abs(computedServiceTotal - storedTotal) < 1);
-                setTotalPrice(booking.total_price || "");
+                const existingSpecialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
                 setDpPaid(booking.dp_paid || "");
+                setAccommodationFee(existingSpecialOffer?.accommodation_fee ?? "");
+                setDiscountAmount(existingSpecialOffer?.discount_amount ?? "");
                 setInitialDpPaid(Number(booking.dp_paid) || 0);
                 setDpVerifiedAmount(Number((booking as Record<string, unknown>).dp_verified_amount) || 0);
                 setDpVerifiedAt(((booking as Record<string, unknown>).dp_verified_at as string | null) || null);
@@ -522,18 +515,6 @@ export default function EditBookingPage() {
         );
     }, [addonServices]);
     React.useEffect(() => {
-        if (!isTotalPriceAuto) return;
-        if (selectedMainServices.length === 0 && selectedAddonServices.length === 0) {
-            setTotalPrice("");
-            return;
-        }
-        setTotalPrice(
-            selectedMainServices.reduce((sum, service) => sum + service.price, 0) +
-            selectedAddonServices.reduce((sum, service) => sum + service.price, 0),
-        );
-    }, [isTotalPriceAuto, selectedAddonServices, selectedMainServices]);
-
-    React.useEffect(() => {
         if (!statusOptions.includes(status)) {
             setStatus(getInitialBookingStatus(statusOptions));
         }
@@ -628,7 +609,22 @@ export default function EditBookingPage() {
         }
 
         const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
-        const tPrice = parseFloat(totalPrice.toString()) || 0;
+        const packageTotalValue = selectedMainServices.reduce(
+            (sum, service) => sum + (service.price || 0),
+            0,
+        );
+        const addonTotalValue = selectedAddonServices.reduce(
+            (sum, service) => sum + (service.price || 0),
+            0,
+        );
+        const accommodationFeeValue = typeof accommodationFee === "number" ? accommodationFee : 0;
+        const discountAmountValue = typeof discountAmount === "number" ? discountAmount : 0;
+        const tPrice = computeSpecialOfferTotal({
+            packageTotal: packageTotalValue,
+            addonTotal: addonTotalValue,
+            accommodationFee: accommodationFeeValue,
+            discountAmount: discountAmountValue,
+        });
         const dPaid = parseFloat(dpPaid.toString()) || 0;
 
         // Determine session_date: if split, use earliest; merge extra_fields with dates
@@ -652,18 +648,35 @@ export default function EditBookingPage() {
             eventType,
             customFieldValues,
         );
+        const existingSpecialOffer = resolveSpecialOfferSnapshotFromExtraFields(
+            baseExtraFieldsObject,
+        );
+        const nextSpecialOffer = buildEditableSpecialOfferSnapshot({
+            existingSnapshot: existingSpecialOffer,
+            selectedEventType: eventType,
+            selectedPackageServiceIds: selectedServiceIds,
+            selectedAddonServiceIds: selectedAddonIds,
+            packageTotal: packageTotalValue,
+            addonTotal: addonTotalValue,
+            accommodationFee: accommodationFeeValue,
+            discountAmount: discountAmountValue,
+            includeWhenZero: Boolean(existingSpecialOffer),
+        });
         const preservedStructuredExtraFields = Object.fromEntries(
             Object.entries(baseExtraFieldsObject || {}).filter(
-                ([key, value]) => key !== "custom_fields" && typeof value !== "string",
+                ([key, value]) =>
+                    key !== "custom_fields" &&
+                    key !== "special_offer" &&
+                    typeof value !== "string",
             ),
         ) as Record<string, unknown>;
-        const nextExtraFieldsPayload: Record<string, unknown> = {
+        const nextExtraFieldsPayload = mergeSpecialOfferSnapshotIntoExtraFields({
             ...preservedStructuredExtraFields,
             ...mergedExtra,
             ...(customFieldSnapshots.length > 0
                 ? { custom_fields: customFieldSnapshots }
                 : {}),
-        };
+        }, nextSpecialOffer);
         const resolvedLocation = resolvePreferredLocation(
             eventType === "Wedding"
                 ? [
@@ -735,10 +748,7 @@ export default function EditBookingPage() {
             notes: notes || null,
             drive_folder_url: driveFolderUrl || null,
             portfolio_url: portfolioUrl || null,
-            extra_fields:
-                Object.keys(nextExtraFieldsPayload).length > 0
-                    ? nextExtraFieldsPayload
-                    : null,
+            extra_fields: nextExtraFieldsPayload,
             updated_at: new Date().toISOString(),
         }).eq("id", id);
         setSaving(false);
@@ -902,7 +912,24 @@ export default function EditBookingPage() {
         setDpRefundedAt(null);
     }
 
-    const totalPriceValue = typeof totalPrice === "number" ? totalPrice : 0;
+    const packageTotalValue = selectedMainServices.reduce(
+        (sum, service) => sum + (service.price || 0),
+        0,
+    );
+    const addonTotalValue = selectedAddonServices.reduce(
+        (sum, service) => sum + (service.price || 0),
+        0,
+    );
+    const accommodationFeeValue =
+        typeof accommodationFee === "number" ? accommodationFee : 0;
+    const discountAmountValue =
+        typeof discountAmount === "number" ? discountAmount : 0;
+    const totalPriceValue = computeSpecialOfferTotal({
+        packageTotal: packageTotalValue,
+        addonTotal: addonTotalValue,
+        accommodationFee: accommodationFeeValue,
+        discountAmount: discountAmountValue,
+    });
     const dpPaidValue = typeof dpPaid === "number" ? dpPaid : 0;
     const fullyPaidByCurrentDp = dpPaidValue >= totalPriceValue && totalPriceValue > 0;
     const normalizedFinalAdjustments = normalizeFinalAdjustments(finalAdjustmentsRaw);
@@ -934,38 +961,12 @@ export default function EditBookingPage() {
                 ? "DP Menunggu Verifikasi"
                 : "Belum Dibayar";
     const settlementStatus = getSettlementStatus(settlementStatusValue);
-    const serviceSelectionsForBreakdown = [
-        ...selectedMainServices.map((service) => ({
-            id: `${service.id}:main`,
-            service: {
-                id: service.id,
-                name: service.name,
-                description: service.description || null,
-                price: service.price || 0,
-                is_addon: false,
-            },
-            kind: "main" as const,
-            sort_order: 0,
-        })),
-        ...selectedAddonServices.map((service) => ({
-            id: `${service.id}:addon`,
-            service: {
-                id: service.id,
-                name: service.name,
-                description: service.description || null,
-                price: service.price || 0,
-                is_addon: true,
-            },
-            kind: "addon" as const,
-            sort_order: 0,
-        })),
-    ];
-    const initialPriceBreakdown = getInitialBookingPriceBreakdown({
-        totalPrice: totalPriceValue,
-        serviceSelections: serviceSelectionsForBreakdown,
-        legacyServicePrice: selectedMainServices[0]?.price ?? totalPriceValue,
-        extraFields: baseExtraFieldsObject,
-    });
+    const initialPriceBreakdown = {
+        packageTotal: packageTotalValue,
+        addonTotal: addonTotalValue,
+        accommodationFee: accommodationFeeValue,
+        discountAmount: discountAmountValue,
+    };
 
     const currentExtraFields = EXTRA_FIELDS_DEF[eventType] || [];
     const reqMark = <span className="text-red-500 ml-0.5">*</span>;
@@ -1277,7 +1278,7 @@ export default function EditBookingPage() {
                                     ))}
                                     <div className="flex justify-between font-bold border-t pt-1 mt-1">
                                         <span>Total</span>
-                                        <span>{formatCurrency((typeof totalPrice === "number" ? totalPrice : 0))}</span>
+                                        <span>{formatCurrency(totalPriceValue)}</span>
                                     </div>
                                 </div>
                             )}
@@ -1334,7 +1335,14 @@ export default function EditBookingPage() {
                             <label className="text-xs font-medium text-muted-foreground">Harga Total{reqMark}</label>
                             <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
-                                <input required type="text" inputMode="numeric" value={formatNumber(totalPrice)} onChange={e => { setIsTotalPriceAuto(false); setTotalPrice(parseFormattedNumber(e.target.value)); }} placeholder="0" className={cn(inputClass, "flex-1")} />
+                                <input
+                                    required
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={totalPriceValue > 0 ? formatNumber(totalPriceValue) : "0"}
+                                    readOnly
+                                    className={cn(inputClass, "flex-1 bg-muted/40")}
+                                />
                             </div>
                         </div>
                         <div className="space-y-1.5">
@@ -1342,6 +1350,34 @@ export default function EditBookingPage() {
                             <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
                                 <input required type="text" inputMode="numeric" value={formatNumber(dpPaid)} onChange={e => setDpPaid(parseFormattedNumber(e.target.value))} placeholder="0" className={cn(inputClass, "flex-1")} />
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Biaya Akomodasi (Rp)</label>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={formatNumber(accommodationFee)}
+                                    onChange={(e) => setAccommodationFee(parseFormattedNumber(e.target.value))}
+                                    placeholder="0"
+                                    className={cn(inputClass, "flex-1")}
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Diskon Nominal (Rp)</label>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={formatNumber(discountAmount)}
+                                    onChange={(e) => setDiscountAmount(parseFormattedNumber(e.target.value))}
+                                    placeholder="0"
+                                    className={cn(inputClass, "flex-1")}
+                                />
                             </div>
                         </div>
                         <div className="col-span-full flex flex-wrap items-center gap-2">

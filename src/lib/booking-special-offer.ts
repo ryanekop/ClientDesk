@@ -201,6 +201,84 @@ export function buildSpecialOfferSnapshot(input: {
   } satisfies BookingSpecialOfferSnapshot;
 }
 
+export function buildEditableSpecialOfferSnapshot(input: {
+  existingSnapshot?: BookingSpecialOfferSnapshot | null;
+  selectedEventType?: string | null;
+  selectedPackageServiceIds: string[];
+  selectedAddonServiceIds: string[];
+  packageTotal: number;
+  addonTotal: number;
+  accommodationFee?: number;
+  discountAmount?: number;
+  includeWhenZero?: boolean;
+}): BookingSpecialOfferSnapshot | null {
+  const packageTotal = toNonNegativeMoney(input.packageTotal);
+  const addonTotal = toNonNegativeMoney(input.addonTotal);
+  const accommodationFee = toNonNegativeMoney(input.accommodationFee);
+  const discountAmount = toNonNegativeMoney(input.discountAmount);
+  const existingSnapshot = input.existingSnapshot || null;
+
+  const shouldPersist =
+    Boolean(existingSnapshot) ||
+    Boolean(input.includeWhenZero) ||
+    accommodationFee > 0 ||
+    discountAmount > 0;
+  if (!shouldPersist) return null;
+
+  const selectedEventType =
+    typeof input.selectedEventType === "string" && input.selectedEventType.trim()
+      ? input.selectedEventType.trim()
+      : existingSnapshot?.selected_event_type || null;
+
+  const selectedPackageServiceIds = normalizeUuidList(input.selectedPackageServiceIds);
+  const selectedAddonServiceIds = normalizeUuidList(input.selectedAddonServiceIds);
+
+  return {
+    link_id: existingSnapshot?.link_id || "manual-special-offer",
+    link_name: existingSnapshot?.link_name || "Penyesuaian Admin",
+    event_type_locked: existingSnapshot?.event_type_locked === true,
+    event_types: normalizeStringList(existingSnapshot?.event_types || []),
+    selected_event_type: selectedEventType,
+    package_locked: existingSnapshot?.package_locked === true,
+    addon_locked: existingSnapshot?.addon_locked === true,
+    package_service_ids:
+      normalizeUuidList(existingSnapshot?.package_service_ids || []).length > 0
+        ? normalizeUuidList(existingSnapshot?.package_service_ids || [])
+        : selectedPackageServiceIds,
+    addon_service_ids:
+      normalizeUuidList(existingSnapshot?.addon_service_ids || []).length > 0
+        ? normalizeUuidList(existingSnapshot?.addon_service_ids || [])
+        : selectedAddonServiceIds,
+    selected_package_service_ids: selectedPackageServiceIds,
+    selected_addon_service_ids: selectedAddonServiceIds,
+    package_total: packageTotal,
+    addon_total: addonTotal,
+    accommodation_fee: accommodationFee,
+    discount_amount: discountAmount,
+    final_total: computeSpecialOfferTotal({
+      packageTotal,
+      addonTotal,
+      accommodationFee,
+      discountAmount,
+    }),
+    applied_at: new Date().toISOString(),
+  };
+}
+
+export function mergeSpecialOfferSnapshotIntoExtraFields(
+  extraFields: unknown,
+  snapshot: BookingSpecialOfferSnapshot | null,
+): Record<string, unknown> | null {
+  const current = asRecord(extraFields);
+  const next: Record<string, unknown> = current ? { ...current } : {};
+  if (snapshot) {
+    next.special_offer = snapshot;
+  } else {
+    delete next.special_offer;
+  }
+  return Object.keys(next).length > 0 ? next : null;
+}
+
 export function resolveSpecialOfferSnapshotFromExtraFields(
   extraFields: unknown,
 ): BookingSpecialOfferSnapshot | null {
