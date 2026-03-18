@@ -145,6 +145,46 @@ export async function PUT(request: NextRequest) {
     : null;
 
   const service = createServiceClient();
+  if (effectiveDisable) {
+    if (!effectiveDefaultSlug) {
+      return NextResponse.json(
+        {
+          error:
+            "Default booking vendor slug is required when slugless mode is enabled.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const { data: mappedVendor, error: mappedVendorError } = await service
+      .from("profiles")
+      .select("id")
+      .eq("tenant_id", resolved.tenant.id)
+      .eq("vendor_slug", effectiveDefaultSlug)
+      .maybeSingle();
+
+    if (mappedVendorError) {
+      return NextResponse.json(
+        {
+          error:
+            mappedVendorError.message ||
+            "Failed to validate default booking vendor slug.",
+        },
+        { status: 500 },
+      );
+    }
+
+    if (!mappedVendor) {
+      return NextResponse.json(
+        {
+          error:
+            "Default booking vendor slug does not exist in this tenant.",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   const { data: updatedTenant, error: updateError } = await service
     .from("tenants")
     .update({
