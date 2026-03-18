@@ -29,7 +29,9 @@ export function buildWhatsAppUrl(phone: string, message?: string) {
 
 export function preopenWindowForDeferredNavigation() {
   if (typeof window === "undefined") return null;
-  const preOpenedWindow = window.open("about:blank", "_blank", "noopener,noreferrer");
+  // Avoid `noopener,noreferrer` at pre-open time because some browsers may still
+  // open the tab but return `null`, which can cause a second tab to open later.
+  const preOpenedWindow = window.open("about:blank", "_blank");
   if (preOpenedWindow) {
     try {
       preOpenedWindow.opener = null;
