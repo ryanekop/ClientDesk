@@ -1,3 +1,10 @@
+import {
+  buildFastpikProjectInfoSnapshot,
+  mergeFastpikProjectInfoIntoExtraFields,
+  resolveFastpikProjectInfoFromExtraFields,
+  type FastpikProjectInfoSnapshot,
+} from "@/lib/fastpik-project-info";
+
 type FastpikSyncStatus = "idle" | "success" | "warning" | "failed" | "syncing";
 
 type ProfileFastpikSettings = {
@@ -28,6 +35,7 @@ type BookingFastpikSyncRow = {
   fastpik_sync_status: FastpikSyncStatus | null;
   fastpik_last_synced_at: string | null;
   fastpik_sync_message: string | null;
+  extra_fields: Record<string, unknown> | null;
 };
 
 type SyncResult = {
@@ -38,6 +46,7 @@ type SyncResult = {
   projectId?: string | null;
   projectLink?: string | null;
   projectEditLink?: string | null;
+  fastpikProjectInfo?: FastpikProjectInfoSnapshot | null;
 };
 
 type FastpikDeleteAction = "deleted" | "not_found";
@@ -106,6 +115,7 @@ async function patchBookingSyncState(
     projectId?: string | null;
     projectLink?: string | null;
     projectEditLink?: string | null;
+    extraFields?: Record<string, unknown> | null;
     at?: string;
   },
 ) {
@@ -122,6 +132,8 @@ async function patchBookingSyncState(
         payload.projectEditLink !== undefined
           ? payload.projectEditLink
           : undefined,
+      extra_fields:
+        payload.extraFields !== undefined ? payload.extraFields : undefined,
       fastpik_last_synced_at: payload.at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
@@ -148,7 +160,7 @@ async function getBookingForSync(supabase: any, userId: string, bookingId: strin
   const { data, error } = await supabase
     .from("bookings")
     .select(
-      "id, user_id, client_name, client_whatsapp, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, fastpik_sync_message",
+      "id, user_id, client_name, client_whatsapp, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, fastpik_sync_message, extra_fields",
     )
     .eq("id", bookingId)
     .eq("user_id", userId)
@@ -406,6 +418,9 @@ export async function syncBookingToFastpik(params: {
   }
 
   const booking = await getBookingForSync(supabase, userId, bookingId);
+  const existingFastpikProjectInfo = resolveFastpikProjectInfoFromExtraFields(
+    booking.extra_fields,
+  );
 
   if (!booking.drive_folder_url || !booking.drive_folder_url.trim()) {
     const warningMessage =
@@ -428,6 +443,7 @@ export async function syncBookingToFastpik(params: {
       projectId: booking.fastpik_project_id,
       projectLink: booking.fastpik_project_link,
       projectEditLink: booking.fastpik_project_edit_link,
+      fastpikProjectInfo: existingFastpikProjectInfo,
       message: warningMessage,
     };
   }
@@ -462,12 +478,26 @@ export async function syncBookingToFastpik(params: {
         action === "updated"
           ? "Project Fastpik berhasil diperbarui."
           : "Project Fastpik berhasil dibuat.";
+      const fastpikProjectInfo = buildFastpikProjectInfoSnapshot({
+        responsePayload: body,
+        defaults: {
+          password: profile.fastpik_default_password,
+          selection_days: profile.fastpik_default_selection_days,
+          download_days: profile.fastpik_default_download_days,
+          max_photos: profile.fastpik_default_max_photos,
+        },
+        syncedAt,
+      });
       await patchBookingSyncState(supabase, booking.id, {
         status: "success",
         message,
         projectId: projectId || null,
         projectLink: projectLink || null,
         projectEditLink: projectEditLink || null,
+        extraFields: mergeFastpikProjectInfoIntoExtraFields(
+          booking.extra_fields,
+          fastpikProjectInfo,
+        ),
         at: syncedAt,
       });
       await patchProfileSyncLog(supabase, userId, {
@@ -482,6 +512,7 @@ export async function syncBookingToFastpik(params: {
         projectId: projectId || null,
         projectLink: projectLink || null,
         projectEditLink: projectEditLink || null,
+        fastpikProjectInfo,
         message,
       };
     }
@@ -505,6 +536,7 @@ export async function syncBookingToFastpik(params: {
       success: false,
       status,
       bookingId: booking.id,
+      fastpikProjectInfo: existingFastpikProjectInfo,
       message,
     };
   } catch (error: any) {
@@ -525,6 +557,7 @@ export async function syncBookingToFastpik(params: {
       success: false,
       status: "failed",
       bookingId: booking.id,
+      fastpikProjectInfo: existingFastpikProjectInfo,
       message,
     };
   }

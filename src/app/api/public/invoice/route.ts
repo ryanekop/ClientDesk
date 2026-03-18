@@ -630,7 +630,12 @@ export async function GET(request: NextRequest) {
       9,
       colX[1] - colX[0] - 16,
     );
-    const scheduleText = scheduleEntries.length > 0 ? scheduleEntries.join("\n") : "-";
+    const scheduleText =
+      serviceRow.group === "addon"
+        ? "-"
+        : scheduleEntries.length > 0
+          ? scheduleEntries.join("\n")
+          : "-";
     const scheduleLines = wrapTextLines(
       scheduleText,
       helvetica,

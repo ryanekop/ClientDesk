@@ -35,6 +35,14 @@ type BookingData = {
         accommodationFee: number;
         discountAmount: number;
     } | null;
+    fastpikProjectInfo: {
+        password: string | null;
+        selection_days: number | null;
+        download_days: number | null;
+        max_photos: number | null;
+        source: string | null;
+        synced_at: string | null;
+    } | null;
     showFinalInvoice: boolean;
     showFileResults: boolean;
 };
@@ -59,6 +67,7 @@ interface TrackingClientProps {
 export default function TrackingClient({ booking, vendorName, customStatuses }: TrackingClientProps) {
     const t = useTranslations("Track");
     const locale = useLocale();
+    const [passwordCopied, setPasswordCopied] = React.useState(false);
 
     // Build steps from custom statuses or fallback to defaults
     const steps = React.useMemo(() => {
@@ -81,6 +90,19 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
         fastpikUrl: booking.fastpikUrl,
         driveUrl: booking.driveUrl,
     });
+    const handleCopyFastpikPassword = React.useCallback(() => {
+        const password = booking.fastpikProjectInfo?.password || "";
+        if (!password) return;
+        navigator.clipboard
+            .writeText(password)
+            .then(() => {
+                setPasswordCopied(true);
+                window.setTimeout(() => setPasswordCopied(false), 1800);
+            })
+            .catch(() => {
+                setPasswordCopied(false);
+            });
+    }, [booking.fastpikProjectInfo?.password]);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 py-8 sm:py-12 px-4">
@@ -233,6 +255,52 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                                 </a>
                             )}
                         </div>
+                        {booking.fastpikProjectInfo && (
+                            <div className="mt-4 rounded-lg border bg-muted/20 p-3 space-y-2 text-sm">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {t("fastpikProjectInfo")}
+                                </p>
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-muted-foreground">{t("fastpikPassword")}</span>
+                                    <span className="font-medium flex items-center gap-2">
+                                        {booking.fastpikProjectInfo.password || t("notAvailable")}
+                                        {booking.fastpikProjectInfo.password ? (
+                                            <button
+                                                type="button"
+                                                onClick={handleCopyFastpikPassword}
+                                                className="rounded border px-2 py-0.5 text-[11px] text-primary hover:bg-muted/70 transition-colors"
+                                            >
+                                                {passwordCopied ? t("copied") : t("copy")}
+                                            </button>
+                                        ) : null}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-muted-foreground">{t("selectionDuration")}</span>
+                                    <span className="font-medium">
+                                        {booking.fastpikProjectInfo.selection_days !== null
+                                            ? t("days", { count: booking.fastpikProjectInfo.selection_days })
+                                            : t("notAvailable")}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-muted-foreground">{t("downloadDuration")}</span>
+                                    <span className="font-medium">
+                                        {booking.fastpikProjectInfo.download_days !== null
+                                            ? t("days", { count: booking.fastpikProjectInfo.download_days })
+                                            : t("notAvailable")}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-muted-foreground">{t("maxPhotos")}</span>
+                                    <span className="font-medium">
+                                        {booking.fastpikProjectInfo.max_photos !== null
+                                            ? t("photosCount", { count: booking.fastpikProjectInfo.max_photos })
+                                            : t("notAvailable")}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 

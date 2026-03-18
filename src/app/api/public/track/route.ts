@@ -13,6 +13,7 @@ import {
 } from "@/lib/client-status";
 import { normalizeFastpikLinkDisplayMode } from "@/lib/fastpik-link-display";
 import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
+import { resolveFastpikProjectInfoFromExtraFields } from "@/lib/fastpik-project-info";
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -89,6 +90,7 @@ export async function GET(request: NextRequest) {
 
     const finalAdjustments = normalizeFinalAdjustments(booking.final_adjustments);
     const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
+    const fastpikProjectInfo = resolveFastpikProjectInfoFromExtraFields(booking.extra_fields);
     const effectiveClientStatus = resolveUnifiedBookingStatus({
         status: booking.status,
         clientStatus: booking.client_status,
@@ -136,6 +138,7 @@ export async function GET(request: NextRequest) {
                     discountAmount: specialOffer.discount_amount,
                 }
                 : null,
+            fastpikProjectInfo,
             showFinalInvoice: shouldShowFinalInvoiceForClientStatus({
                 statuses: customClientStatuses,
                 currentStatus: effectiveClientStatus,

@@ -43,6 +43,18 @@ import {
     syncGoogleCalendarForStatusTransition,
 } from "@/utils/google-calendar-status-sync";
 import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
+import {
+    getDpRefundAmount,
+    getFinalAdjustmentsTotal,
+    getFinalInvoiceTotal,
+    getNetVerifiedRevenueAmount,
+    getRemainingFinalPayment,
+    getSettlementLabel,
+    getSettlementStatus,
+    getVerifiedDpAmount,
+    normalizeFinalAdjustments,
+} from "@/lib/final-settlement";
+import { getInitialBookingPriceBreakdown } from "@/lib/booking-special-offer";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -219,6 +231,16 @@ export default function EditBookingPage() {
     const [initialDpPaid, setInitialDpPaid] = React.useState(0);
     const [dpVerifiedAmount, setDpVerifiedAmount] = React.useState(0);
     const [dpVerifiedAt, setDpVerifiedAt] = React.useState<string | null>(null);
+    const [dpRefundAmount, setDpRefundAmount] = React.useState(0);
+    const [dpRefundedAt, setDpRefundedAt] = React.useState<string | null>(null);
+    const [settlementStatusValue, setSettlementStatusValue] = React.useState("draft");
+    const [isFullyPaid, setIsFullyPaid] = React.useState(false);
+    const [finalAdjustmentsRaw, setFinalAdjustmentsRaw] = React.useState<unknown>(null);
+    const [finalPaymentAmount, setFinalPaymentAmount] = React.useState(0);
+    const [finalPaidAt, setFinalPaidAt] = React.useState<string | null>(null);
+    const [baseExtraFieldsObject, setBaseExtraFieldsObject] = React.useState<Record<string, unknown> | null>(null);
+    const [markingDpVerified, setMarkingDpVerified] = React.useState(false);
+    const [markingDpUnverified, setMarkingDpUnverified] = React.useState(false);
     const [statusOptions, setStatusOptions] = React.useState<string[]>(
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
     );
@@ -373,6 +395,18 @@ export default function EditBookingPage() {
                 setInitialDpPaid(Number(booking.dp_paid) || 0);
                 setDpVerifiedAmount(Number((booking as Record<string, unknown>).dp_verified_amount) || 0);
                 setDpVerifiedAt(((booking as Record<string, unknown>).dp_verified_at as string | null) || null);
+                setDpRefundAmount(Number((booking as Record<string, unknown>).dp_refund_amount) || 0);
+                setDpRefundedAt(((booking as Record<string, unknown>).dp_refunded_at as string | null) || null);
+                setSettlementStatusValue(
+                    typeof (booking as Record<string, unknown>).settlement_status === "string" &&
+                    String((booking as Record<string, unknown>).settlement_status).trim().length > 0
+                        ? String((booking as Record<string, unknown>).settlement_status)
+                        : "draft",
+                );
+                setIsFullyPaid(Boolean((booking as Record<string, unknown>).is_fully_paid));
+                setFinalAdjustmentsRaw((booking as Record<string, unknown>).final_adjustments ?? null);
+                setFinalPaymentAmount(Number((booking as Record<string, unknown>).final_payment_amount) || 0);
+                setFinalPaidAt(((booking as Record<string, unknown>).final_paid_at as string | null) || null);
                 const unifiedStatus = resolveUnifiedBookingStatus({
                     status: booking.status,
                     clientStatus: booking.client_status,
@@ -386,6 +420,11 @@ export default function EditBookingPage() {
                 const nextExtraFields = (booking.extra_fields ? Object.fromEntries(
                     Object.entries(booking.extra_fields).filter(([key, value]) => key !== "custom_fields" && typeof value === "string")
                 ) : {}) as Record<string, string>;
+                setBaseExtraFieldsObject(
+                    booking.extra_fields && typeof booking.extra_fields === "object" && !Array.isArray(booking.extra_fields)
+                        ? { ...(booking.extra_fields as Record<string, unknown>) }
+                        : null,
+                );
                 setExtraFields(nextExtraFields);
                 const seededExtraCoords: Record<string, LocationCoords> = {};
                 if (
@@ -613,6 +652,18 @@ export default function EditBookingPage() {
             eventType,
             customFieldValues,
         );
+        const preservedStructuredExtraFields = Object.fromEntries(
+            Object.entries(baseExtraFieldsObject || {}).filter(
+                ([key, value]) => key !== "custom_fields" && typeof value !== "string",
+            ),
+        ) as Record<string, unknown>;
+        const nextExtraFieldsPayload: Record<string, unknown> = {
+            ...preservedStructuredExtraFields,
+            ...mergedExtra,
+            ...(customFieldSnapshots.length > 0
+                ? { custom_fields: customFieldSnapshots }
+                : {}),
+        };
         const resolvedLocation = resolvePreferredLocation(
             eventType === "Wedding"
                 ? [
@@ -685,11 +736,8 @@ export default function EditBookingPage() {
             drive_folder_url: driveFolderUrl || null,
             portfolio_url: portfolioUrl || null,
             extra_fields:
-                Object.keys(mergedExtra).length > 0 || customFieldSnapshots.length > 0
-                    ? {
-                        ...mergedExtra,
-                        ...(customFieldSnapshots.length > 0 ? { custom_fields: customFieldSnapshots } : {}),
-                    }
+                Object.keys(nextExtraFieldsPayload).length > 0
+                    ? nextExtraFieldsPayload
                     : null,
             updated_at: new Date().toISOString(),
         }).eq("id", id);
@@ -789,6 +837,8 @@ export default function EditBookingPage() {
         if (shouldResetVerifiedDp) {
             setDpVerifiedAmount(0);
             setDpVerifiedAt(null);
+            setDpRefundAmount(0);
+            setDpRefundedAt(null);
         }
         setCancelStatusConfirmOpen(false);
         void triggerFastpikAutoSync(id);
@@ -799,6 +849,123 @@ export default function EditBookingPage() {
         e.preventDefault();
         await submitBookingUpdate();
     }
+
+    async function handleMarkDpVerified() {
+        const dpValue = Math.max(
+            Number(typeof dpPaid === "number" ? dpPaid : parseFloat(String(dpPaid || 0))) || 0,
+            0,
+        );
+        if (dpValue <= 0) return;
+
+        setMarkingDpVerified(true);
+        const verifiedAt = new Date().toISOString();
+        const patch = {
+            dp_verified_amount: dpValue,
+            dp_verified_at: verifiedAt,
+            dp_refund_amount: 0,
+            dp_refunded_at: null,
+        };
+
+        const { error } = await supabase.from("bookings").update(patch).eq("id", id);
+        setMarkingDpVerified(false);
+
+        if (error) {
+            showFeedback("Gagal menandai DP sebagai terverifikasi.");
+            return;
+        }
+
+        setDpVerifiedAmount(dpValue);
+        setDpVerifiedAt(verifiedAt);
+        setDpRefundAmount(0);
+        setDpRefundedAt(null);
+    }
+
+    async function handleMarkDpUnverified() {
+        setMarkingDpUnverified(true);
+        const patch = {
+            dp_verified_amount: 0,
+            dp_verified_at: null,
+            dp_refund_amount: 0,
+            dp_refunded_at: null,
+        };
+        const { error } = await supabase.from("bookings").update(patch).eq("id", id);
+        setMarkingDpUnverified(false);
+
+        if (error) {
+            showFeedback("Gagal membatalkan verifikasi DP.");
+            return;
+        }
+
+        setDpVerifiedAmount(0);
+        setDpVerifiedAt(null);
+        setDpRefundAmount(0);
+        setDpRefundedAt(null);
+    }
+
+    const totalPriceValue = typeof totalPrice === "number" ? totalPrice : 0;
+    const dpPaidValue = typeof dpPaid === "number" ? dpPaid : 0;
+    const fullyPaidByCurrentDp = dpPaidValue >= totalPriceValue && totalPriceValue > 0;
+    const normalizedFinalAdjustments = normalizeFinalAdjustments(finalAdjustmentsRaw);
+    const finalAdjustmentsTotal = getFinalAdjustmentsTotal(normalizedFinalAdjustments);
+    const finalInvoiceTotal = getFinalInvoiceTotal(totalPriceValue, normalizedFinalAdjustments);
+    const verifiedPaymentInput = {
+        total_price: totalPriceValue,
+        dp_paid: dpPaidValue,
+        dp_verified_amount: dpVerifiedAmount,
+        dp_verified_at: dpVerifiedAt,
+        dp_refund_amount: dpRefundAmount,
+        dp_refunded_at: dpRefundedAt,
+        final_adjustments: normalizedFinalAdjustments,
+        final_payment_amount: finalPaymentAmount,
+        final_paid_at: finalPaidAt,
+        settlement_status: settlementStatusValue,
+        is_fully_paid: isFullyPaid || fullyPaidByCurrentDp,
+    };
+    const verifiedDpAmount = getVerifiedDpAmount(verifiedPaymentInput);
+    const resolvedDpRefundAmount = getDpRefundAmount(verifiedPaymentInput);
+    const verifiedFinalPayment = finalPaidAt ? finalPaymentAmount || 0 : 0;
+    const netVerifiedRevenue = getNetVerifiedRevenueAmount(verifiedPaymentInput);
+    const remainingPayment = getRemainingFinalPayment(verifiedPaymentInput);
+    const initialPaymentStatus = fullyPaidByCurrentDp || isFullyPaid
+        ? "Lunas"
+        : verifiedDpAmount > 0
+            ? "DP Terverifikasi"
+            : dpPaidValue > 0
+                ? "DP Menunggu Verifikasi"
+                : "Belum Dibayar";
+    const settlementStatus = getSettlementStatus(settlementStatusValue);
+    const serviceSelectionsForBreakdown = [
+        ...selectedMainServices.map((service) => ({
+            id: `${service.id}:main`,
+            service: {
+                id: service.id,
+                name: service.name,
+                description: service.description || null,
+                price: service.price || 0,
+                is_addon: false,
+            },
+            kind: "main" as const,
+            sort_order: 0,
+        })),
+        ...selectedAddonServices.map((service) => ({
+            id: `${service.id}:addon`,
+            service: {
+                id: service.id,
+                name: service.name,
+                description: service.description || null,
+                price: service.price || 0,
+                is_addon: true,
+            },
+            kind: "addon" as const,
+            sort_order: 0,
+        })),
+    ];
+    const initialPriceBreakdown = getInitialBookingPriceBreakdown({
+        totalPrice: totalPriceValue,
+        serviceSelections: serviceSelectionsForBreakdown,
+        legacyServicePrice: selectedMainServices[0]?.price ?? totalPriceValue,
+        extraFields: baseExtraFieldsObject,
+    });
 
     const currentExtraFields = EXTRA_FIELDS_DEF[eventType] || [];
     const reqMark = <span className="text-red-500 ml-0.5">*</span>;
@@ -1177,6 +1344,41 @@ export default function EditBookingPage() {
                                 <input required type="text" inputMode="numeric" value={formatNumber(dpPaid)} onChange={e => setDpPaid(parseFormattedNumber(e.target.value))} placeholder="0" className={cn(inputClass, "flex-1")} />
                             </div>
                         </div>
+                        <div className="col-span-full flex flex-wrap items-center gap-2">
+                            {verifiedDpAmount > 0 ? (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1.5"
+                                    onClick={() => void handleMarkDpUnverified()}
+                                    disabled={markingDpUnverified}
+                                >
+                                    {markingDpUnverified ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                    )}
+                                    Batal Tandai Lunas DP
+                                </Button>
+                            ) : (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1.5"
+                                    onClick={() => void handleMarkDpVerified()}
+                                    disabled={markingDpVerified || dpPaidValue <= 0}
+                                >
+                                    {markingDpVerified ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                    )}
+                                    Tandai Lunas DP
+                                </Button>
+                            )}
+                        </div>
                         {paymentCustomItems.length > 0 && (
                             <BookingAdminCustomFields
                                 items={paymentCustomItems}
@@ -1187,6 +1389,55 @@ export default function EditBookingPage() {
                                 selectClass={selectClass}
                             />
                         )}
+                    </div>
+                    <div className="rounded-xl border bg-muted/30 p-4 space-y-3 text-sm">
+                        <div className="flex justify-between gap-4">
+                            <span className="text-muted-foreground">Status Pembayaran Awal</span>
+                            <span className="font-medium">{initialPaymentStatus}</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                            <span className="text-muted-foreground">Status Pelunasan</span>
+                            <span className="font-medium">{getSettlementLabel(settlementStatus)}</span>
+                        </div>
+
+                        <div className="border-t pt-3 space-y-2">
+                            <div className="flex justify-between gap-4"><span className="text-muted-foreground">Paket Awal</span><span>{formatCurrency(initialPriceBreakdown.packageTotal)}</span></div>
+                            <div className="flex justify-between gap-4"><span className="text-muted-foreground">Add-on Awal</span><span>{formatCurrency(initialPriceBreakdown.addonTotal)}</span></div>
+                            <div className="flex justify-between gap-4"><span className="text-muted-foreground">Akomodasi</span><span>{formatCurrency(initialPriceBreakdown.accommodationFee)}</span></div>
+                            <div className="flex justify-between gap-4"><span className="text-muted-foreground">Diskon</span><span>- {formatCurrency(initialPriceBreakdown.discountAmount)}</span></div>
+                            <div className="flex justify-between gap-4"><span className="text-muted-foreground">DP Dibayar</span><span>- {formatCurrency(dpPaidValue)}</span></div>
+                            <div className="flex justify-between gap-4"><span className="text-muted-foreground">DP Terverifikasi</span><span>{formatCurrency(verifiedDpAmount)}</span></div>
+                            <div className="flex justify-between gap-4"><span className="text-muted-foreground">Refund DP</span><span>{formatCurrency(resolvedDpRefundAmount)}</span></div>
+                            <div className="flex justify-between gap-4 border-t pt-2">
+                                <span className="font-semibold text-green-700 dark:text-green-400">Total Awal</span>
+                                <span className="font-semibold text-green-700 dark:text-green-400">{formatCurrency(totalPriceValue)}</span>
+                            </div>
+                        </div>
+
+                        <div className="border-t pt-3 space-y-2">
+                            <div className="flex justify-between gap-4"><span className="text-muted-foreground">Add-on Akhir</span><span>{formatCurrency(finalAdjustmentsTotal)}</span></div>
+                            <div className="flex justify-between gap-4">
+                                <span className="font-semibold text-green-700 dark:text-green-400">Total Final</span>
+                                <span className="font-semibold text-green-700 dark:text-green-400">{formatCurrency(finalInvoiceTotal)}</span>
+                            </div>
+                        </div>
+
+                        <div className="border-t pt-3 space-y-2">
+                            <div className="flex justify-between gap-4"><span className="text-muted-foreground">Pelunasan Terverifikasi</span><span>{formatCurrency(verifiedFinalPayment)}</span></div>
+                            <div className="flex justify-between gap-4">
+                                <span className="font-semibold text-green-700 dark:text-green-400">Total Terverifikasi Bersih</span>
+                                <span className="font-semibold text-green-700 dark:text-green-400">{formatCurrency(netVerifiedRevenue)}</span>
+                            </div>
+                        </div>
+
+                        <div className="border-t pt-3">
+                            <div className="flex justify-between gap-4">
+                                <span className="font-semibold">Sisa</span>
+                                <span className={remainingPayment > 0 ? "font-semibold text-amber-600 dark:text-amber-400" : "font-semibold text-green-600 dark:text-green-400"}>
+                                    {formatCurrency(remainingPayment)}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
       projectId: result.projectId || null,
       projectLink: result.projectLink || null,
       projectEditLink: result.projectEditLink || null,
+      fastpikProjectInfo: result.fastpikProjectInfo || null,
       message: result.message,
     });
   } catch (error: any) {

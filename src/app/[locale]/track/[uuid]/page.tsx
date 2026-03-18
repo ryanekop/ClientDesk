@@ -17,6 +17,7 @@ import {
     type FastpikLinkDisplayMode,
 } from "@/lib/fastpik-link-display";
 import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
+import { resolveFastpikProjectInfoFromExtraFields } from "@/lib/fastpik-project-info";
 
 // Admin client — runs server-side only, never exposed to browser
 const supabaseAdmin = createClient(
@@ -169,6 +170,7 @@ export default async function TrackingPage({ params }: PageProps) {
     } = result;
     const finalAdjustments = normalizeFinalAdjustments(booking.final_adjustments);
     const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
+    const fastpikProjectInfo = resolveFastpikProjectInfoFromExtraFields(booking.extra_fields);
     const finalAdjustmentsTotal = getFinalAdjustmentsTotal(finalAdjustments);
     const finalInvoiceTotal = getFinalInvoiceTotal(booking.total_price || 0, finalAdjustments);
     const remainingFinalPayment = getRemainingFinalPayment({
@@ -218,6 +220,7 @@ export default async function TrackingPage({ params }: PageProps) {
                 discountAmount: specialOffer.discount_amount,
             }
             : null,
+        fastpikProjectInfo,
         showFinalInvoice: shouldShowFinalInvoiceForClientStatus({
             statuses: customClientStatuses,
             currentStatus: effectiveClientStatus,

@@ -58,6 +58,7 @@ import {
     resolveFastpikLinkDisplay,
     type FastpikLinkDisplayMode,
 } from "@/lib/fastpik-link-display";
+import { resolveFastpikProjectInfoFromExtraFields } from "@/lib/fastpik-project-info";
 import { isGoogleDriveConnected } from "@/utils/google/connection";
 import {
     buildGoogleMapsDirectionUrl,
@@ -545,6 +546,15 @@ export default function BookingDetailPage() {
                                       ? payload.status
                                       : prev.fastpik_sync_status,
                               fastpik_last_synced_at: nowIso,
+                              extra_fields:
+                                  payload?.fastpikProjectInfo &&
+                                  typeof payload.fastpikProjectInfo === "object" &&
+                                  !Array.isArray(payload.fastpikProjectInfo)
+                                      ? {
+                                            ...(prev.extra_fields || {}),
+                                            fastpik_project: payload.fastpikProjectInfo,
+                                        }
+                                      : prev.extra_fields,
                           }
                         : prev,
                 );
@@ -1587,6 +1597,7 @@ export default function BookingDetailPage() {
     const customFieldSnapshots = extractCustomFieldSnapshots(booking.extra_fields)
         .filter((field) => !HIDDEN_EXTRA_FIELD_KEYS.has(field.id));
     const customFieldsBySection = groupCustomSnapshotsBySection(customFieldSnapshots);
+    const fastpikProjectInfo = resolveFastpikProjectInfoFromExtraFields(booking.extra_fields);
 
     // Separate nama_pasangan from other extra fields (show right after Nama for Wedding)
     const namaPasangan = builtInExtraFields.nama_pasangan;
@@ -1645,6 +1656,19 @@ export default function BookingDetailPage() {
             return <LocationValue address={rawValue} />;
         }
         return rawValue;
+    };
+    const copyFastpikPassword = () => {
+        const password = fastpikProjectInfo?.password || "";
+        if (!password) {
+            showFeedback("Password Fastpik belum tersedia.");
+            return;
+        }
+        navigator.clipboard
+            .writeText(password)
+            .then(() => showFeedback("Password Fastpik berhasil disalin."))
+            .catch(() =>
+                showFeedback("Gagal menyalin password Fastpik.", "Peringatan"),
+            );
     };
     const renderGalleryLinkCard = (
         label: string,
@@ -1808,80 +1832,109 @@ export default function BookingDetailPage() {
                 </div>
                 <InfoRow label="Status Pembayaran Awal" value={initialPaymentStatus} />
                 <InfoRow label="Status Pelunasan" value={getSettlementLabel(settlementStatus)} />
-                <InfoRow label="Paket Awal" value={formatCurrency(initialPriceBreakdown.packageTotal)} />
-                <InfoRow label="Add-on Awal" value={formatCurrency(initialPriceBreakdown.addonTotal)} />
-                <InfoRow label="Akomodasi" value={formatCurrency(initialPriceBreakdown.accommodationFee)} />
-                <InfoRow label="Diskon" value={`- ${formatCurrency(initialPriceBreakdown.discountAmount)}`} />
-                <InfoRow label="Total Awal" value={<span className="font-semibold">{formatCurrency(booking.total_price)}</span>} />
-                <InfoRow label="Addon Akhir" value={formatCurrency(finalAdjustmentsTotal)} />
-                <InfoRow label="Total Final" value={<span className="font-semibold">{formatCurrency(finalInvoiceTotal)}</span>} />
-                <InfoRow
-                    label="DP Dibayar"
-                    value={editingDp ? (
-                        <div className="flex flex-wrap items-center gap-2">
-                            <input
-                                type="number"
-                                min={0}
-                                value={dpInput}
-                                onChange={(e) => setDpInput(e.target.value)}
-                                className="h-9 w-40 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                            />
-                            <Button size="sm" onClick={() => { void handleSaveDp(); }} disabled={savingDp}>
-                                {savingDp ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                    setDpInput(String(booking.dp_paid || 0));
-                                    setEditingDp(false);
-                                }}
-                                disabled={savingDp}
-                            >
-                                Batal
-                            </Button>
-                        </div>
-                    ) : (
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span>{formatCurrency(booking.dp_paid)}</span>
-                            <Button variant="outline" size="sm" className="h-8 px-2.5" onClick={() => setEditingDp(true)}>
-                                Edit DP
-                            </Button>
-                            {verifiedDpAmount > 0 ? (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 px-2.5"
-                                    onClick={handleMarkDpUnverified}
-                                    disabled={markingDpUnverified}
-                                >
-                                    {markingDpUnverified ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Batal Tandai Lunas DP"}
+                <div className="border-t pt-3 space-y-3">
+                    <InfoRow label="Paket Awal" value={formatCurrency(initialPriceBreakdown.packageTotal)} />
+                    <InfoRow label="Add-on Awal" value={formatCurrency(initialPriceBreakdown.addonTotal)} />
+                    <InfoRow label="Akomodasi" value={formatCurrency(initialPriceBreakdown.accommodationFee)} />
+                    <InfoRow label="Diskon" value={`- ${formatCurrency(initialPriceBreakdown.discountAmount)}`} />
+                    <InfoRow
+                        label="DP Dibayar"
+                        value={editingDp ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <input
+                                    type="number"
+                                    min={0}
+                                    value={dpInput}
+                                    onChange={(e) => setDpInput(e.target.value)}
+                                    className="h-9 w-40 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                />
+                                <Button size="sm" onClick={() => { void handleSaveDp(); }} disabled={savingDp}>
+                                    {savingDp ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
                                 </Button>
-                            ) : (
                                 <Button
-                                    variant="outline"
+                                    variant="ghost"
                                     size="sm"
-                                    className="h-8 px-2.5"
-                                    onClick={handleMarkDpVerified}
-                                    disabled={markingDpVerified || booking.dp_paid <= 0}
+                                    onClick={() => {
+                                        setDpInput(String(booking.dp_paid || 0));
+                                        setEditingDp(false);
+                                    }}
+                                    disabled={savingDp}
                                 >
-                                    {markingDpVerified ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Tandai Lunas DP"}
+                                    Batal
                                 </Button>
-                            )}
-                        </div>
-                    )}
-                />
-                <InfoRow label="DP Terverifikasi" value={formatCurrency(verifiedDpAmount)} />
-                <InfoRow label="Refund DP" value={formatCurrency(dpRefundAmount)} />
-                <InfoRow label="Pelunasan Terverifikasi" value={formatCurrency(verifiedFinalPayment)} />
-                <InfoRow label="Total Terverifikasi Bersih" value={<span className="font-semibold">{formatCurrency(netVerifiedRevenue)}</span>} />
-                <InfoRow label="Metode Pembayaran" value={formatPaymentMethod(booking.payment_method)} />
-                <InfoRow label="Sumber Pembayaran" value={formatPaymentSource(booking.payment_source)} />
-                <InfoRow label="Sisa" value={
-                    <span className={remaining > 0 ? "font-semibold text-amber-600 dark:text-amber-400" : "font-semibold text-green-600 dark:text-green-400"}>
-                        {formatCurrency(remaining)}
-                    </span>
-                } />
+                            </div>
+                        ) : (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span>{formatCurrency(booking.dp_paid)}</span>
+                                <Button variant="outline" size="sm" className="h-8 px-2.5" onClick={() => setEditingDp(true)}>
+                                    Edit DP
+                                </Button>
+                                {verifiedDpAmount > 0 ? (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 px-2.5"
+                                        onClick={handleMarkDpUnverified}
+                                        disabled={markingDpUnverified}
+                                    >
+                                        {markingDpUnverified ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Batal Tandai Lunas DP"}
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 px-2.5"
+                                        onClick={handleMarkDpVerified}
+                                        disabled={markingDpVerified || booking.dp_paid <= 0}
+                                    >
+                                        {markingDpVerified ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Tandai Lunas DP"}
+                                    </Button>
+                                )}
+                            </div>
+                        )}
+                    />
+                    <InfoRow label="DP Terverifikasi" value={formatCurrency(verifiedDpAmount)} />
+                    <InfoRow label="Refund DP" value={formatCurrency(dpRefundAmount)} />
+                    <InfoRow
+                        label="Total Awal"
+                        value={
+                            <span className="font-semibold text-green-700 dark:text-green-400">
+                                {formatCurrency(booking.total_price)}
+                            </span>
+                        }
+                    />
+                </div>
+                <div className="border-t pt-3 space-y-3">
+                    <InfoRow label="Addon Akhir" value={formatCurrency(finalAdjustmentsTotal)} />
+                    <InfoRow
+                        label="Total Final"
+                        value={
+                            <span className="font-semibold text-green-700 dark:text-green-400">
+                                {formatCurrency(finalInvoiceTotal)}
+                            </span>
+                        }
+                    />
+                </div>
+                <div className="border-t pt-3 space-y-3">
+                    <InfoRow label="Pelunasan Terverifikasi" value={formatCurrency(verifiedFinalPayment)} />
+                    <InfoRow
+                        label="Total Terverifikasi Bersih"
+                        value={
+                            <span className="font-semibold text-green-700 dark:text-green-400">
+                                {formatCurrency(netVerifiedRevenue)}
+                            </span>
+                        }
+                    />
+                </div>
+                <div className="border-t pt-3 space-y-3">
+                    <InfoRow label="Metode Pembayaran" value={formatPaymentMethod(booking.payment_method)} />
+                    <InfoRow label="Sumber Pembayaran" value={formatPaymentSource(booking.payment_source)} />
+                    <InfoRow label="Sisa" value={
+                        <span className={remaining > 0 ? "font-semibold text-amber-600 dark:text-amber-400" : "font-semibold text-green-600 dark:text-green-400"}>
+                            {formatCurrency(remaining)}
+                        </span>
+                    } />
+                </div>
                 {(customFieldsBySection.payment_details || []).map((field) => (
                     <InfoRow key={field.id} label={field.label} value={field.value} />
                 ))}
@@ -2159,6 +2212,59 @@ export default function BookingDetailPage() {
                             fastpikLinkVisibility.mode === "both" &&
                               fastpikLinkVisibility.showFastpik,
                         )}
+
+                    {fastpikProjectInfo && (
+                        <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                Informasi Project Fastpik
+                            </p>
+                            <InfoRow
+                                label="Password"
+                                value={
+                                    fastpikProjectInfo.password ? (
+                                        <div className="flex items-center gap-2">
+                                            <span>{fastpikProjectInfo.password}</span>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-7 px-2"
+                                                onClick={copyFastpikPassword}
+                                            >
+                                                Salin
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        "-"
+                                    )
+                                }
+                            />
+                            <InfoRow
+                                label="Durasi Link Pilih"
+                                value={
+                                    fastpikProjectInfo.selection_days !== null
+                                        ? `${fastpikProjectInfo.selection_days} hari`
+                                        : "-"
+                                }
+                            />
+                            <InfoRow
+                                label="Durasi Link Download"
+                                value={
+                                    fastpikProjectInfo.download_days !== null
+                                        ? `${fastpikProjectInfo.download_days} hari`
+                                        : "-"
+                                }
+                            />
+                            <InfoRow
+                                label="Maksimal Jumlah Foto"
+                                value={
+                                    fastpikProjectInfo.max_photos !== null
+                                        ? `${fastpikProjectInfo.max_photos} foto`
+                                        : "-"
+                                }
+                            />
+                        </div>
+                    )}
 
                     {!fastpikLinkVisibility.showFastpik &&
                         !fastpikLinkVisibility.showDrive &&
