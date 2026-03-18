@@ -5,12 +5,15 @@ import {
   type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
 import { getEventExtraFields } from "@/utils/form-extra-fields";
+import { formatSessionDate } from "@/utils/format-date";
 import type { TableColumnPreference } from "@/lib/table-column-prefs";
 
 type BookingMetadataRow = {
   event_type?: string | null;
   extra_fields?: unknown;
 };
+
+const FORMATTED_DATE_METADATA_KEYS = new Set(["tanggal_akad", "tanggal_resepsi"]);
 
 function humanizeKey(value: string) {
   return value
@@ -88,10 +91,19 @@ export function buildBookingMetadataColumns(
 export function getBookingMetadataValue(
   extraFields: unknown,
   columnId: string,
+  options: { locale?: "id" | "en" } = {},
 ): string {
   if (columnId.startsWith("extra:")) {
     const key = columnId.replace(/^extra:/, "");
-    return extractBuiltInExtraFieldValues(extraFields)[key] || "-";
+    const value = extractBuiltInExtraFieldValues(extraFields)[key] || "-";
+
+    if (value !== "-" && FORMATTED_DATE_METADATA_KEYS.has(key)) {
+      return formatSessionDate(value, {
+        locale: options.locale || "id",
+      });
+    }
+
+    return value;
   }
 
   if (columnId.startsWith("custom:")) {

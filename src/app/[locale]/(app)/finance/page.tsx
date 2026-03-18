@@ -96,6 +96,18 @@ const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true },
 ];
+const FINANCE_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:finance:items_per_page";
+const FINANCE_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
+const FINANCE_DEFAULT_ITEMS_PER_PAGE = 10;
+
+function normalizeFinanceItemsPerPage(value: unknown) {
+    const parsed = typeof value === "number" ? value : Number(value);
+    return FINANCE_PER_PAGE_OPTIONS.includes(
+        parsed as (typeof FINANCE_PER_PAGE_OPTIONS)[number],
+    )
+        ? parsed
+        : FINANCE_DEFAULT_ITEMS_PER_PAGE;
+}
 
 export default function FinancePage() {
     const supabase = createClient();
@@ -107,6 +119,8 @@ export default function FinancePage() {
     const [filter, setFilter] = React.useState<"all" | "pending" | "paid">("all");
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
+    const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
+    const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
     const [studioName, setStudioName] = React.useState("");
     const [savedTemplates, setSavedTemplates] = React.useState<
         { id: string; type: string; name?: string | null; content: string; content_en: string; event_type: string | null }[]
@@ -142,6 +156,7 @@ export default function FinancePage() {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+        setCurrentUserId(user.id);
 
         const [{ data }, { data: templates }, { data: profile }] = await Promise.all([
             supabase
@@ -202,6 +217,44 @@ export default function FinancePage() {
     React.useEffect(() => {
         void fetchBookings();
     }, [fetchBookings]);
+
+    React.useEffect(() => {
+        if (!currentUserId) {
+            setItemsPerPageHydrated(false);
+            return;
+        }
+        const storageKey = `${FINANCE_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+        try {
+            const raw = window.localStorage.getItem(storageKey);
+            setItemsPerPage(normalizeFinanceItemsPerPage(raw));
+        } catch {
+            setItemsPerPage(FINANCE_DEFAULT_ITEMS_PER_PAGE);
+        } finally {
+            setItemsPerPageHydrated(true);
+        }
+    }, [currentUserId]);
+
+    React.useEffect(() => {
+        if (!currentUserId || !itemsPerPageHydrated) return;
+        const storageKey = `${FINANCE_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+        try {
+            window.localStorage.setItem(storageKey, String(normalizeFinanceItemsPerPage(itemsPerPage)));
+        } catch {
+            // Ignore storage write failures.
+        }
+    }, [currentUserId, itemsPerPage, itemsPerPageHydrated]);
+
+    React.useEffect(() => {
+        if (!currentUserId) return;
+        const storageKey = `${FINANCE_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+        function handleStorage(event: StorageEvent) {
+            if (event.storageArea !== window.localStorage) return;
+            if (event.key !== storageKey) return;
+            setItemsPerPage(normalizeFinanceItemsPerPage(event.newValue));
+        }
+        window.addEventListener("storage", handleStorage);
+        return () => window.removeEventListener("storage", handleStorage);
+    }, [currentUserId]);
 
     React.useEffect(() => {
         if (!invoiceMenuBookingId && !copyMenuBookingId && !waMenuBookingId) return;
@@ -887,8 +940,8 @@ export default function FinancePage() {
                 );
             default:
                 return (
-                    <td key={column.id} className="px-6 py-4 max-w-[180px] truncate text-muted-foreground" title={getBookingMetadataValue(booking.extra_fields, column.id)}>
-                        {getBookingMetadataValue(booking.extra_fields, column.id)}
+                    <td key={column.id} className="px-6 py-4 max-w-[180px] truncate text-muted-foreground" title={getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" })}>
+                        {getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" })}
                     </td>
                 );
         }
@@ -913,7 +966,7 @@ export default function FinancePage() {
             case "status":
                 return getFinanceStatusLabel(booking);
             default:
-                return getBookingMetadataValue(booking.extra_fields, column.id);
+                return getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" });
         }
     }
 
@@ -1007,6 +1060,10 @@ export default function FinancePage() {
     const filtered = filter === "all" ? bookings
         : filter === "paid" ? bookings.filter(b => !isCancelledBooking(b) && b.is_fully_paid)
             : bookings.filter(b => !isCancelledBooking(b) && !b.is_fully_paid);
+
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [filter, itemsPerPage]);
 
     return (
         <div className="space-y-6">
@@ -1275,7 +1332,7 @@ export default function FinancePage() {
                         </tbody>
                     </table>
                 </div>
-                <TablePagination totalItems={filtered.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
+                <TablePagination totalItems={filtered.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...FINANCE_PER_PAGE_OPTIONS]} />
             </div>
         </div>
     );

@@ -79,6 +79,18 @@ const BASE_CLIENT_STATUS_COLUMNS: TableColumnPreference[] = [
     { id: "queue", label: "Antrian", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true },
 ];
+const CLIENT_STATUS_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:client_status:items_per_page";
+const CLIENT_STATUS_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
+const CLIENT_STATUS_DEFAULT_ITEMS_PER_PAGE = 10;
+
+function normalizeClientStatusItemsPerPage(value: unknown) {
+    const parsed = typeof value === "number" ? value : Number(value);
+    return CLIENT_STATUS_PER_PAGE_OPTIONS.includes(
+        parsed as (typeof CLIENT_STATUS_PER_PAGE_OPTIONS)[number],
+    )
+        ? parsed
+        : CLIENT_STATUS_DEFAULT_ITEMS_PER_PAGE;
+}
 
 export default function ClientStatusPage() {
     const supabase = createClient();
@@ -91,6 +103,8 @@ export default function ClientStatusPage() {
     const [savingId, setSavingId] = React.useState<string | null>(null);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
+    const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
+    const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
     const [clientStatuses, setClientStatuses] = React.useState<string[]>(DEFAULT_CLIENT_STATUSES);
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_CLIENT_STATUS_COLUMNS));
@@ -126,6 +140,7 @@ export default function ClientStatusPage() {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
+            setCurrentUserId(user.id);
 
             // Load custom client statuses from profile
             const { data: profile } = await supabase.from("profiles").select("custom_client_statuses, queue_trigger_status, table_column_preferences, form_sections").eq("id", user.id).single();
@@ -182,6 +197,44 @@ export default function ClientStatusPage() {
         }
         load();
     }, [supabase]);
+
+    React.useEffect(() => {
+        if (!currentUserId) {
+            setItemsPerPageHydrated(false);
+            return;
+        }
+        const storageKey = `${CLIENT_STATUS_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+        try {
+            const raw = window.localStorage.getItem(storageKey);
+            setItemsPerPage(normalizeClientStatusItemsPerPage(raw));
+        } catch {
+            setItemsPerPage(CLIENT_STATUS_DEFAULT_ITEMS_PER_PAGE);
+        } finally {
+            setItemsPerPageHydrated(true);
+        }
+    }, [currentUserId]);
+
+    React.useEffect(() => {
+        if (!currentUserId || !itemsPerPageHydrated) return;
+        const storageKey = `${CLIENT_STATUS_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+        try {
+            window.localStorage.setItem(storageKey, String(normalizeClientStatusItemsPerPage(itemsPerPage)));
+        } catch {
+            // Ignore storage write failures.
+        }
+    }, [currentUserId, itemsPerPage, itemsPerPageHydrated]);
+
+    React.useEffect(() => {
+        if (!currentUserId) return;
+        const storageKey = `${CLIENT_STATUS_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+        function handleStorage(event: StorageEvent) {
+            if (event.storageArea !== window.localStorage) return;
+            if (event.key !== storageKey) return;
+            setItemsPerPage(normalizeClientStatusItemsPerPage(event.newValue));
+        }
+        window.addEventListener("storage", handleStorage);
+        return () => window.removeEventListener("storage", handleStorage);
+    }, [currentUserId]);
 
     React.useEffect(() => {
         const nextDefaults = lockBoundaryColumns([
@@ -350,6 +403,11 @@ export default function ClientStatusPage() {
         if (search && !b.client_name.toLowerCase().includes(search.toLowerCase()) && !b.booking_code.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
     });
+
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [filter, search, itemsPerPage]);
+
     const orderedVisibleColumns = React.useMemo(
         () => columns.filter((column) => column.visible),
         [columns],
@@ -472,8 +530,8 @@ export default function ClientStatusPage() {
                 );
             default:
                 return (
-                    <td key={column.id} className="px-4 py-3 max-w-[180px] truncate text-muted-foreground" title={getBookingMetadataValue(booking.extra_fields, column.id)}>
-                        {getBookingMetadataValue(booking.extra_fields, column.id)}
+                    <td key={column.id} className="px-4 py-3 max-w-[180px] truncate text-muted-foreground" title={getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" })}>
+                        {getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" })}
                     </td>
                 );
         }
@@ -488,7 +546,7 @@ export default function ClientStatusPage() {
             case "queue":
                 return booking.queue_position ?? "-";
             default:
-                return getBookingMetadataValue(booking.extra_fields, column.id);
+                return getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" });
         }
     }
 
@@ -627,7 +685,7 @@ export default function ClientStatusPage() {
                         </tbody>
                     </table>
                 </div>
-                <TablePagination totalItems={filtered.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
+                <TablePagination totalItems={filtered.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...CLIENT_STATUS_PER_PAGE_OPTIONS]} />
             </div>
 
             <CancelStatusPaymentDialog

@@ -136,6 +136,9 @@ const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
     { id: "actions", label: "Aksi", visible: true, locked: true },
 ];
 const BOOKING_FILTER_STORAGE_PREFIX = "clientdesk:bookings:filters";
+const BOOKING_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:bookings:items_per_page";
+const PAGINATION_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
+const DEFAULT_ITEMS_PER_PAGE = 10;
 const BOOKING_SORT_ORDERS = [
     "booking_newest",
     "booking_oldest",
@@ -158,6 +161,15 @@ type BookingFilterStoragePayload = {
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeItemsPerPageValue(value: unknown) {
+    const parsed = typeof value === "number" ? value : Number(value);
+    return PAGINATION_PER_PAGE_OPTIONS.includes(
+        parsed as (typeof PAGINATION_PER_PAGE_OPTIONS)[number],
+    )
+        ? parsed
+        : DEFAULT_ITEMS_PER_PAGE;
 }
 
 type SavedTemplate = {
@@ -267,6 +279,7 @@ export default function BookingsPage() {
     const [showFilterPanel, setShowFilterPanel] = React.useState(false);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
+    const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
 
     // Modals
     const [statusModal, setStatusModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
@@ -519,6 +532,46 @@ export default function BookingsPage() {
             setFiltersHydrated(true);
         }
     }, [currentUserId, resetFilters]);
+
+    React.useEffect(() => {
+        if (!currentUserId) {
+            setItemsPerPageHydrated(false);
+            return;
+        }
+        const storageKey = `${BOOKING_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+
+        try {
+            const raw = window.localStorage.getItem(storageKey);
+            setItemsPerPage(normalizeItemsPerPageValue(raw));
+        } catch {
+            setItemsPerPage(DEFAULT_ITEMS_PER_PAGE);
+        } finally {
+            setItemsPerPageHydrated(true);
+        }
+    }, [currentUserId]);
+
+    React.useEffect(() => {
+        if (!currentUserId || !itemsPerPageHydrated) return;
+        const storageKey = `${BOOKING_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+
+        try {
+            window.localStorage.setItem(storageKey, String(normalizeItemsPerPageValue(itemsPerPage)));
+        } catch {
+            // Ignore storage write failures.
+        }
+    }, [currentUserId, itemsPerPage, itemsPerPageHydrated]);
+
+    React.useEffect(() => {
+        if (!currentUserId) return;
+        const storageKey = `${BOOKING_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+        function handleStorage(event: StorageEvent) {
+            if (event.storageArea !== window.localStorage) return;
+            if (event.key !== storageKey) return;
+            setItemsPerPage(normalizeItemsPerPageValue(event.newValue));
+        }
+        window.addEventListener("storage", handleStorage);
+        return () => window.removeEventListener("storage", handleStorage);
+    }, [currentUserId]);
 
     React.useEffect(() => {
         if (!waMenuBookingId && !copyMenuBookingId) return;
@@ -1126,8 +1179,8 @@ export default function BookingsPage() {
                 );
             default:
                 return (
-                    <td key={column.id} className="px-4 py-3 max-w-[180px] truncate text-muted-foreground" title={getBookingMetadataValue(booking.extra_fields, column.id)}>
-                        {getBookingMetadataValue(booking.extra_fields, column.id)}
+                    <td key={column.id} className="px-4 py-3 max-w-[180px] truncate text-muted-foreground" title={getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" })}>
+                        {getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" })}
                     </td>
                 );
         }
@@ -1152,7 +1205,7 @@ export default function BookingsPage() {
             case "price":
                 return formatCurrency(booking.total_price);
             default:
-                return getBookingMetadataValue(booking.extra_fields, column.id);
+                return getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" });
         }
     }
 
@@ -1301,7 +1354,7 @@ export default function BookingsPage() {
 
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, statusFilter, packageFilter, freelanceFilter, eventTypeFilter, dateFromFilter, dateToFilter, extraFieldFilters, sortOrder]);
+    }, [searchQuery, statusFilter, packageFilter, freelanceFilter, eventTypeFilter, dateFromFilter, dateToFilter, extraFieldFilters, sortOrder, itemsPerPage]);
 
     const orderedVisibleColumns = React.useMemo(
         () => columns.filter((column) => column.visible),
@@ -1593,7 +1646,7 @@ export default function BookingsPage() {
                         </tbody>
                     </table>
                 </div>
-                <TablePagination totalItems={filteredBookings.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
+                <TablePagination totalItems={filteredBookings.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...PAGINATION_PER_PAGE_OPTIONS]} />
             </div>
 
             {/* Status Change Modal */}

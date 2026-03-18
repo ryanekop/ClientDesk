@@ -59,6 +59,18 @@ const TEAM_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true },
 ]);
+const TEAM_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:team:items_per_page";
+const TEAM_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
+const TEAM_DEFAULT_ITEMS_PER_PAGE = 10;
+
+function normalizeTeamItemsPerPage(value: unknown) {
+    const parsed = typeof value === "number" ? value : Number(value);
+    return TEAM_PER_PAGE_OPTIONS.includes(
+        parsed as (typeof TEAM_PER_PAGE_OPTIONS)[number],
+    )
+        ? parsed
+        : TEAM_DEFAULT_ITEMS_PER_PAGE;
+}
 
 function TagInput({ tags, setTags, input, setInput, inputClass }: TagInputProps) {
     return (
@@ -100,6 +112,8 @@ export default function TeamPage() {
     const [isEditOpen, setIsEditOpen] = React.useState(false);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
+    const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
+    const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
     const [addCountryCode, setAddCountryCode] = React.useState("+62");
     const [editCountryCode, setEditCountryCode] = React.useState("+62");
     const [addTags, setAddTags] = React.useState<string[]>([]);
@@ -120,6 +134,7 @@ export default function TeamPage() {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+        setCurrentUserId(user.id);
 
         const { data } = await supabase
             .from("freelance")
@@ -145,6 +160,44 @@ export default function TeamPage() {
     }, [supabase]);
 
     React.useEffect(() => { void fetchMembers(); }, [fetchMembers]);
+
+    React.useEffect(() => {
+        if (!currentUserId) {
+            setItemsPerPageHydrated(false);
+            return;
+        }
+        const storageKey = `${TEAM_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+        try {
+            const raw = window.localStorage.getItem(storageKey);
+            setItemsPerPage(normalizeTeamItemsPerPage(raw));
+        } catch {
+            setItemsPerPage(TEAM_DEFAULT_ITEMS_PER_PAGE);
+        } finally {
+            setItemsPerPageHydrated(true);
+        }
+    }, [currentUserId]);
+
+    React.useEffect(() => {
+        if (!currentUserId || !itemsPerPageHydrated) return;
+        const storageKey = `${TEAM_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+        try {
+            window.localStorage.setItem(storageKey, String(normalizeTeamItemsPerPage(itemsPerPage)));
+        } catch {
+            // Ignore storage write failures.
+        }
+    }, [currentUserId, itemsPerPage, itemsPerPageHydrated]);
+
+    React.useEffect(() => {
+        if (!currentUserId) return;
+        const storageKey = `${TEAM_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+        function handleStorage(event: StorageEvent) {
+            if (event.storageArea !== window.localStorage) return;
+            if (event.key !== storageKey) return;
+            setItemsPerPage(normalizeTeamItemsPerPage(event.newValue));
+        }
+        window.addEventListener("storage", handleStorage);
+        return () => window.removeEventListener("storage", handleStorage);
+    }, [currentUserId]);
 
     async function handleAdd(formData: FormData) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -227,6 +280,10 @@ export default function TeamPage() {
             return matchSearch && matchTag;
         });
     }, [members, searchQuery, tagFilter]);
+
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, tagFilter, itemsPerPage]);
 
     const orderedVisibleColumns = React.useMemo(
         () => columns.filter((column) => column.visible),
@@ -543,7 +600,7 @@ export default function TeamPage() {
                                 </tbody>
                             </table>
                         </div>
-                        <TablePagination totalItems={filteredMembers.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
+                        <TablePagination totalItems={filteredMembers.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...TEAM_PER_PAGE_OPTIONS]} />
                     </div>
                 </>
             )}

@@ -1585,6 +1585,59 @@ export default function BookingDetailPage() {
     const otherExtraEntries = extraEntries.filter(
         ([key]) => key !== "nama_pasangan" && !HIDDEN_EXTRA_FIELD_KEYS.has(key),
     );
+    const normalizeInstagramValue = (rawValue: string) => {
+        const trimmed = rawValue.trim();
+        if (!trimmed) return { url: null, label: rawValue };
+
+        const compact = trimmed.replace(/\s+/g, "");
+        const isInstagramUrl = /^(?:https?:\/\/)?(?:www\.)?instagram\.com\//i.test(compact);
+        if (isInstagramUrl) {
+            const url = /^https?:\/\//i.test(compact) ? compact : `https://${compact}`;
+            try {
+                const parsed = new URL(url);
+                const firstPath = parsed.pathname.split("/").filter(Boolean)[0] || "";
+                const reservedPaths = new Set(["p", "reel", "reels", "stories", "tv", "explore"]);
+                const handle = reservedPaths.has(firstPath.toLowerCase())
+                    ? ""
+                    : firstPath.replace(/^@+/, "");
+                return {
+                    url,
+                    label: handle ? `@${handle}` : trimmed,
+                };
+            } catch {
+                return { url, label: trimmed };
+            }
+        }
+
+        const handle = compact.replace(/^@+/, "");
+        if (!handle) return { url: null, label: trimmed };
+        return {
+            url: `https://instagram.com/${handle}`,
+            label: `@${handle}`,
+        };
+    };
+    const renderInstagramFieldValue = (rawValue: string) => {
+        const instagramValue = normalizeInstagramValue(rawValue);
+        if (!instagramValue.url) return rawValue;
+        return (
+            <a href={instagramValue.url} target="_blank" rel="noreferrer"
+                className="text-blue-600 hover:underline flex items-center gap-1">
+                <Instagram className="w-3.5 h-3.5" /> {instagramValue.label}
+            </a>
+        );
+    };
+    const renderExtraFieldValue = (key: string, rawValue: string) => {
+        if (key === "tanggal_akad" || key === "tanggal_resepsi") {
+            return formatDate(rawValue);
+        }
+        if (key === "instagram_pasangan") {
+            return renderInstagramFieldValue(rawValue);
+        }
+        if (LOCATION_FIELDS.has(key)) {
+            return <LocationValue address={rawValue} />;
+        }
+        return rawValue;
+    };
     const renderGalleryLinkCard = (
         label: string,
         url: string,
@@ -1690,20 +1743,13 @@ export default function BookingDetailPage() {
                 )}
                 <InfoRow label="WhatsApp" value={booking.client_whatsapp || "-"} />
                 {booking.instagram && (
-                    <InfoRow label="Instagram" value={
-                        <a href={`https://instagram.com/${booking.instagram.replace("@", "")}`} target="_blank" rel="noreferrer"
-                            className="text-blue-600 hover:underline flex items-center gap-1">
-                            <Instagram className="w-3.5 h-3.5" /> {booking.instagram}
-                        </a>
-                    } />
+                    <InfoRow label="Instagram" value={renderInstagramFieldValue(booking.instagram)} />
                 )}
                 {booking.event_type && booking.event_type !== "Umum" && (
                     <InfoRow label="Tipe Acara" value={booking.event_type} />
                 )}
                 {otherExtraEntries.map(([key, val]) => (
-                    <InfoRow key={key} label={EXTRA_FIELD_LABELS[key] || key} value={
-                        LOCATION_FIELDS.has(key) ? <LocationValue address={val} /> : val
-                    } />
+                    <InfoRow key={key} label={EXTRA_FIELD_LABELS[key] || key} value={renderExtraFieldValue(key, val)} />
                 ))}
                 {(customFieldsBySection.client_info || []).map((field) => (
                     <InfoRow key={field.id} label={field.label} value={field.value} />

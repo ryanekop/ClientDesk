@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { formatSessionDate } from "@/utils/format-date";
+import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import {
   getFinalAdjustmentsTotal,
   getFinalInvoiceTotal,
@@ -155,7 +156,7 @@ export async function GET(request: NextRequest) {
   const { data: booking, error } = await supabaseAdmin
     .from("bookings")
     .select(
-      "id, booking_code, client_name, client_whatsapp, session_date, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, user_id, services(id, name, price, description, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, description, is_addon))",
+      "id, booking_code, client_name, client_whatsapp, session_date, event_type, extra_fields, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, user_id, services(id, name, price, description, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, description, is_addon))",
     )
     .eq("booking_code", code)
     .single();
@@ -195,6 +196,25 @@ export async function GET(request: NextRequest) {
         dateOnly: true,
       })
     : "-";
+  const sessionRows = resolveBookingCalendarSessions({
+    eventType: booking.event_type,
+    sessionDate: booking.session_date,
+    extraFields: booking.extra_fields,
+  });
+  const scheduleEntries = (
+    sessionRows.length > 0
+      ? sessionRows.map((session) => {
+          const formattedDate = formatSessionDate(session.sessionDate, {
+            locale: lang === "en" ? "en" : "id",
+            dateOnly: true,
+          });
+          if (session.label) {
+            return `${session.label}: ${formattedDate}`;
+          }
+          return formattedDate;
+        })
+      : [sessionDate]
+  ).filter((value) => value && value.trim().length > 0);
   const now = new Date().toLocaleDateString(dateLocale, {
     day: "numeric",
     month: "long",
@@ -515,8 +535,17 @@ export async function GET(request: NextRequest) {
       9,
       colX[1] - colX[0] - 16,
     );
+    const scheduleText = scheduleEntries.length > 0 ? scheduleEntries.join("\n") : "-";
+    const scheduleLines = wrapTextLines(
+      scheduleText,
+      helvetica,
+      9,
+      colX[2] - colX[1] - 16,
+    );
     const detailLines = Math.max(descriptionLines.length, 1);
-    const rowHeight = 14 + detailLines * 12 + 8;
+    const scheduleLineCount = Math.max(scheduleLines.length, 1);
+    const contentLines = Math.max(detailLines, scheduleLineCount);
+    const rowHeight = 14 + contentLines * 12 + 8;
 
     ensureSpace(rowHeight + 4);
     y -= 20;
@@ -528,12 +557,16 @@ export async function GET(request: NextRequest) {
       size: 10,
       color: black,
     });
-    page.drawText(sessionDate, {
-      x: colX[1] + 8,
-      y,
-      font: helvetica,
-      size: 10,
-      color: black,
+    scheduleLines.forEach((line, index) => {
+      const textLine = line || (index === 0 ? "-" : "");
+      if (!textLine) return;
+      page.drawText(textLine, {
+        x: colX[1] + 8,
+        y: y - index * 12,
+        font: helvetica,
+        size: 9,
+        color: black,
+      });
     });
     page.drawText(paymentStatus, {
       x: colX[2] + 8,
@@ -565,6 +598,10 @@ export async function GET(request: NextRequest) {
       });
       y -= 12;
     });
+
+    if (contentLines > detailLines) {
+      y -= (contentLines - detailLines) * 12;
+    }
 
     y -= 8;
     drawHorizontalLine(
