@@ -106,6 +106,7 @@ const HIDDEN_EXTRA_FIELD_KEYS = new Set([
     "addon_ids",
     "addon_names",
 ]);
+const FASTPIK_APP_BASE_URL = (process.env.NEXT_PUBLIC_FASTPIK_BASE_URL || "https://fastpik.ryanekoapp.web.id").replace(/\/+$/, "");
 
 type FreelancerDetail = { id: string; name: string; whatsapp_number: string | null };
 type BookingRow = Booking & {
@@ -134,6 +135,7 @@ type Booking = {
     drive_folder_url: string | null;
     fastpik_project_id: string | null;
     fastpik_project_link: string | null;
+    fastpik_project_edit_link: string | null;
     fastpik_sync_status: string | null;
     fastpik_last_synced_at: string | null;
     portfolio_url: string | null;
@@ -463,6 +465,33 @@ export default function BookingDetailPage() {
             message,
         });
     }, [locale]);
+    const fastpikDashboardUrl = React.useMemo(
+        () => `${FASTPIK_APP_BASE_URL}/${locale}/dashboard`,
+        [locale],
+    );
+
+    const handleOpenFastpikDashboard = React.useCallback(() => {
+        window.open(fastpikDashboardUrl, "_blank", "noopener,noreferrer");
+        const projectId = booking?.fastpik_project_id?.trim();
+        if (!projectId) return;
+        navigator.clipboard
+            .writeText(projectId)
+            .then(() => {
+                showFeedback(
+                    locale === "en"
+                        ? "Fastpik project ID copied."
+                        : "ID project Fastpik berhasil disalin.",
+                );
+            })
+            .catch(() => {
+                showFeedback(
+                    locale === "en"
+                        ? "Failed to copy Fastpik project ID."
+                        : "Gagal menyalin ID project Fastpik.",
+                    locale === "en" ? "Warning" : "Peringatan",
+                );
+            });
+    }, [booking?.fastpik_project_id, fastpikDashboardUrl, locale, showFeedback]);
 
     const handleSyncFastpikManual = React.useCallback(async () => {
         if (!booking) return;
@@ -484,18 +513,35 @@ export default function BookingDetailPage() {
                     ? "Sinkronisasi Fastpik selesai."
                     : payload?.error || "Sinkronisasi Fastpik gagal.");
 
-            if (response.ok && payload?.projectLink) {
+            const hasSyncState =
+                typeof payload?.status === "string" && payload.status !== "idle";
+            const hasProjectPayload =
+                typeof payload?.projectId === "string" ||
+                typeof payload?.projectLink === "string" ||
+                typeof payload?.projectEditLink === "string";
+
+            if (response.ok && (hasSyncState || hasProjectPayload)) {
                 const nowIso = new Date().toISOString();
                 setBooking((prev) =>
                     prev
                         ? {
                               ...prev,
                               fastpik_project_id:
-                                  payload?.projectId || prev.fastpik_project_id,
+                                  typeof payload?.projectId === "string"
+                                      ? payload.projectId
+                                      : prev.fastpik_project_id,
                               fastpik_project_link:
-                                  payload?.projectLink || prev.fastpik_project_link,
+                                  typeof payload?.projectLink === "string"
+                                      ? payload.projectLink
+                                      : prev.fastpik_project_link,
+                              fastpik_project_edit_link:
+                                  typeof payload?.projectEditLink === "string"
+                                      ? payload.projectEditLink
+                                      : prev.fastpik_project_edit_link,
                               fastpik_sync_status:
-                                  payload?.status || prev.fastpik_sync_status,
+                                  typeof payload?.status === "string"
+                                      ? payload.status
+                                      : prev.fastpik_sync_status,
                               fastpik_last_synced_at: nowIso,
                           }
                         : prev,
@@ -550,7 +596,7 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }, { data: addonServiceRows }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode").eq("id", user.id).single(),
                 supabase.from("services")
@@ -1932,27 +1978,52 @@ export default function BookingDetailPage() {
             )}
 
             {/* Link Pilih Foto (mengikuti mode tampilan link Fastpik) */}
-            {(booking.fastpik_project_link || booking.drive_folder_url) && (
+            {(booking.fastpik_project_link || booking.drive_folder_url || booking.fastpik_project_edit_link || booking.fastpik_project_id) && (
                 <div className="rounded-xl border bg-card p-6 space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                             <Folder className="w-4 h-4" /> Link Pilih Foto
                         </h3>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="gap-1.5"
-                            onClick={() => void handleSyncFastpikManual()}
-                            disabled={syncingFastpik}
-                        >
-                            {syncingFastpik ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                        <div className="flex flex-wrap items-center gap-2">
+                            {booking.fastpik_project_edit_link ? (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1.5"
+                                    onClick={() => window.open(booking.fastpik_project_edit_link!, "_blank", "noopener,noreferrer")}
+                                >
+                                    <ExternalLink className="w-4 h-4" />
+                                    Edit Project di Fastpik
+                                </Button>
                             ) : (
-                                <RefreshCcw className="w-4 h-4" />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1.5"
+                                    onClick={handleOpenFastpikDashboard}
+                                >
+                                    <ExternalLink className="w-4 h-4" />
+                                    Buka Dashboard Fastpik
+                                </Button>
                             )}
-                            Sync Fastpik
-                        </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => void handleSyncFastpikManual()}
+                                disabled={syncingFastpik}
+                            >
+                                {syncingFastpik ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <RefreshCcw className="w-4 h-4" />
+                                )}
+                                Sync Fastpik
+                            </Button>
+                        </div>
                     </div>
 
                     {fastpikLinkVisibility.showFastpik &&

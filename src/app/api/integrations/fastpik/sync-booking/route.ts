@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
       bookingId: result.bookingId,
       projectId: result.projectId || null,
       projectLink: result.projectLink || null,
+      projectEditLink: result.projectEditLink || null,
       message: result.message,
     });
   } catch (error: any) {

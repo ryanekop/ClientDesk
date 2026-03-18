@@ -24,6 +24,7 @@ type BookingFastpikSyncRow = {
   drive_folder_url: string | null;
   fastpik_project_id: string | null;
   fastpik_project_link: string | null;
+  fastpik_project_edit_link: string | null;
   fastpik_sync_status: FastpikSyncStatus | null;
   fastpik_last_synced_at: string | null;
   fastpik_sync_message: string | null;
@@ -36,6 +37,7 @@ type SyncResult = {
   bookingId?: string;
   projectId?: string | null;
   projectLink?: string | null;
+  projectEditLink?: string | null;
 };
 
 const FASTPIK_REQUEST_TIMEOUT_MS = 15000;
@@ -92,6 +94,7 @@ async function patchBookingSyncState(
     message: string;
     projectId?: string | null;
     projectLink?: string | null;
+    projectEditLink?: string | null;
     at?: string;
   },
 ) {
@@ -104,6 +107,10 @@ async function patchBookingSyncState(
         payload.projectId !== undefined ? payload.projectId : undefined,
       fastpik_project_link:
         payload.projectLink !== undefined ? payload.projectLink : undefined,
+      fastpik_project_edit_link:
+        payload.projectEditLink !== undefined
+          ? payload.projectEditLink
+          : undefined,
       fastpik_last_synced_at: payload.at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
@@ -130,7 +137,7 @@ async function getBookingForSync(supabase: any, userId: string, bookingId: strin
   const { data, error } = await supabase
     .from("bookings")
     .select(
-      "id, user_id, client_name, client_whatsapp, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_sync_status, fastpik_last_synced_at, fastpik_sync_message",
+      "id, user_id, client_name, client_whatsapp, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, fastpik_sync_message",
     )
     .eq("id", bookingId)
     .eq("user_id", userId)
@@ -355,6 +362,7 @@ export async function syncBookingToFastpik(params: {
       bookingId: booking.id,
       projectId: booking.fastpik_project_id,
       projectLink: booking.fastpik_project_link,
+      projectEditLink: booking.fastpik_project_edit_link,
       message: warningMessage,
     };
   }
@@ -378,6 +386,12 @@ export async function syncBookingToFastpik(params: {
         typeof body.project_link === "string"
           ? body.project_link
           : booking.fastpik_project_link;
+      const projectEditLink =
+        typeof body.project_edit_link === "string"
+          ? body.project_edit_link
+          : typeof body.projectEditLink === "string"
+            ? body.projectEditLink
+            : booking.fastpik_project_edit_link;
       const action = body?.action === "updated" ? "updated" : "created";
       const message =
         action === "updated"
@@ -388,6 +402,7 @@ export async function syncBookingToFastpik(params: {
         message,
         projectId: projectId || null,
         projectLink: projectLink || null,
+        projectEditLink: projectEditLink || null,
         at: syncedAt,
       });
       await patchProfileSyncLog(supabase, userId, {
@@ -401,6 +416,7 @@ export async function syncBookingToFastpik(params: {
         bookingId: booking.id,
         projectId: projectId || null,
         projectLink: projectLink || null,
+        projectEditLink: projectEditLink || null,
         message,
       };
     }
