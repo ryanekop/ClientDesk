@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { getLocale } from "next-intl/server";
+import { getTenantConfig } from "@/lib/tenant-config";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import { ProblemSection } from "@/components/landing/problem-section";
 export default async function Home() {
   const t = await getTranslations("Landing");
   const locale = await getLocale();
+  const tenant = await getTenantConfig();
 
   return (
     <LandingUserProvider>
@@ -39,11 +41,11 @@ export default async function Home() {
             className="font-bold text-xl tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity"
           >
             <img
-              src="/icon-192.png"
-              alt="Client Desk"
+              src={tenant.logoUrl || "/icon-192.png"}
+              alt={tenant.name}
               className="h-8 w-8 rounded-lg"
             />
-            Client Desk
+            {tenant.name}
           </Link>
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
             <DesktopNav />
@@ -170,7 +172,7 @@ export default async function Home() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
               {/* Brand */}
               <div className="col-span-2 md:col-span-1">
-                <h3 className="font-bold text-lg mb-3">Client Desk</h3>
+                <h3 className="font-bold text-lg mb-3">{tenant.name}</h3>
                 <p className="text-sm text-muted-foreground">
                   {t("description").substring(0, 80)}...
                 </p>
@@ -255,26 +257,30 @@ export default async function Home() {
             </div>
 
             <div className="border-t pt-6 text-center text-sm text-muted-foreground">
-              <p>
-                © {new Date().getFullYear()} Client Desk. {t("footerMadeWith")}{" "}
-                <a
-                  href="https://instagram.com/ryanekopram"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  @ryanekopram
-                </a>{" "}
-                &{" "}
-                <a
-                  href="https://instagram.com/ryanekoapps"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  @ryanekoapps
-                </a>
-              </p>
+              {tenant.footerText ? (
+                <p dangerouslySetInnerHTML={{ __html: tenant.footerText }} />
+              ) : (
+                <p>
+                  © {new Date().getFullYear()} {tenant.name}. {t("footerMadeWith")}{" "}
+                  <a
+                    href="https://instagram.com/ryanekopram"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    @ryanekopram
+                  </a>{" "}
+                  &{" "}
+                  <a
+                    href="https://instagram.com/ryanekoapps"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    @ryanekoapps
+                  </a>
+                </p>
+              )}
             </div>
           </div>
         </footer>

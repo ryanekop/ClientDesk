@@ -17,6 +17,10 @@ export async function updateSession(request: NextRequest, response: NextResponse
                     supabaseResponse = NextResponse.next({
                         request,
                     })
+                    // Preserve existing response headers (e.g. tenant headers, i18n headers)
+                    response.headers.forEach((value, key) => {
+                        supabaseResponse.headers.set(key, value)
+                    })
                     cookiesToSet.forEach(({ name, value, options }) =>
                         supabaseResponse.cookies.set(name, value, options)
                     )

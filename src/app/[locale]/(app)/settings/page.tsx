@@ -88,6 +88,11 @@ import {
   normalizeFastpikLinkDisplayMode,
   type FastpikLinkDisplayMode,
 } from "@/lib/fastpik-link-display";
+import { useTenant } from "@/lib/tenant-context";
+import {
+  isMainClientDeskDomain,
+  normalizeVendorSlug,
+} from "@/lib/booking-url-mode";
 
 const COUNTRY_CODES = [
   { code: "+62", flag: "🇮🇩", name: "Indonesia" },
@@ -101,6 +106,8 @@ const COUNTRY_CODES = [
 type Profile = {
   id: string;
   full_name: string;
+  role?: string | null;
+  tenant_id?: string | null;
   studio_name: string | null;
   whatsapp_number: string | null;
   vendor_slug: string | null;
@@ -501,6 +508,7 @@ export default function SettingsPage() {
   const t = useTranslations("Settings");
   const tp = useTranslations("SettingsPage");
   const locale = useLocale();
+  const tenant = useTenant();
   const builtInEventTypes = React.useMemo(() => getBuiltInEventTypes(), []);
   const [profile, setProfile] = React.useState<Profile | null>(null);
   const [templates, setTemplates] = React.useState<Template[]>([]);
@@ -521,6 +529,10 @@ export default function SettingsPage() {
   const [countryCode, setCountryCode] = React.useState("+62");
   const [waNumber, setWaNumber] = React.useState("");
   const [vendorSlug, setVendorSlug] = React.useState("");
+  const [disableBookingSlug, setDisableBookingSlug] = React.useState(false);
+  const [defaultBookingVendorSlug, setDefaultBookingVendorSlug] =
+    React.useState("");
+  const [bookingModeSaving, setBookingModeSaving] = React.useState(false);
 
   // Template form
   const [activeTab, setActiveTab] = React.useState("umum");
@@ -685,6 +697,13 @@ export default function SettingsPage() {
     () => eventTypeSettings.map((item) => item.name),
     [eventTypeSettings],
   );
+  const tenantDomain = (tenant.domain || "").trim().toLowerCase();
+  const isMainTenantDomain = isMainClientDeskDomain(tenantDomain);
+  const isCustomTenantDomain = Boolean(tenantDomain) && !isMainTenantDomain;
+  const profileRole = (profile?.role || "").trim().toLowerCase();
+  const isTenantAdmin = profileRole === "admin";
+  const canEditTenantBookingMode = isCustomTenantDomain && isTenantAdmin;
+  const slugInputReadOnly = isCustomTenantDomain && disableBookingSlug;
   const eventTypeItems = React.useMemo<SortableConfigItem[]>(
     () =>
       eventTypeSettings.map((item) => {
@@ -902,6 +921,15 @@ export default function SettingsPage() {
     selectedDriveEventType,
     selectedEventType,
   ]);
+
+  React.useEffect(() => {
+    setDisableBookingSlug(
+      isMainClientDeskDomain(tenant.domain)
+        ? false
+        : Boolean(tenant.disableBookingSlug),
+    );
+    setDefaultBookingVendorSlug(tenant.defaultBookingVendorSlug || "");
+  }, [tenant.defaultBookingVendorSlug, tenant.disableBookingSlug, tenant.domain]);
 
   const loadSettingsProfile = React.useEffectEvent(async (userId: string) => {
     const { data, error } = await supabase
@@ -1234,6 +1262,58 @@ export default function SettingsPage() {
       throw new Error("Gagal menyimpan profil.");
     },
   );
+
+  async function updateTenantBookingMode(
+    nextDisableBookingSlug: boolean,
+    previousDisableBookingSlug: boolean,
+  ) {
+    if (!isCustomTenantDomain) return;
+
+    const fallbackVendorSlug = normalizeVendorSlug(
+      defaultBookingVendorSlug || vendorSlug || studioName,
+    );
+
+    setBookingModeSaving(true);
+    try {
+      const response = await fetch("/api/settings/booking-url-mode", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          disableBookingSlug: nextDisableBookingSlug,
+          defaultBookingVendorSlug: nextDisableBookingSlug
+            ? fallbackVendorSlug
+            : null,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            error?: string;
+            tenant?: {
+              disable_booking_slug?: boolean;
+              default_booking_vendor_slug?: string | null;
+            };
+          }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Gagal memperbarui mode URL booking.");
+      }
+
+      setDisableBookingSlug(payload?.tenant?.disable_booking_slug === true);
+      setDefaultBookingVendorSlug(
+        payload?.tenant?.default_booking_vendor_slug || "",
+      );
+      setSavedMsg(SETTINGS_SAVED_MESSAGE);
+      setTimeout(() => setSavedMsg(""), 3000);
+    } catch (error) {
+      console.error("Tenant booking mode update error:", error);
+      setDisableBookingSlug(previousDisableBookingSlug);
+      setSavedMsg("Gagal menyimpan mode URL booking.");
+      setTimeout(() => setSavedMsg(""), 3000);
+    } finally {
+      setBookingModeSaving(false);
+    }
+  }
 
   async function handleSaveGeneralSettings() {
     if (!profile) return;
@@ -1882,8 +1962,15 @@ export default function SettingsPage() {
     typeof window !== "undefined"
       ? window.location.origin
       : "https://clientdesk.ryanekoapp.web.id";
-  const localizedFormPath = `${siteUrl}/${locale || "id"}/formbooking/`;
-  const slugPreview = slugify(vendorSlug || studioName) || "nama-vendor";
+  const slugPreview = normalizeVendorSlug(vendorSlug || studioName) || "nama-vendor";
+  const sluglessModeActive = isCustomTenantDomain && disableBookingSlug;
+  const localizedFormBasePath = `${siteUrl}/${locale || "id"}/formbooking`;
+  const localizedFormPath = sluglessModeActive
+    ? `${localizedFormBasePath}/`
+    : `${localizedFormBasePath}/${slugPreview}`;
+  const sluglessDefaultVendorSlug = normalizeVendorSlug(
+    defaultBookingVendorSlug || vendorSlug || studioName,
+  );
 
   if (loading) {
     return (
@@ -2376,14 +2463,81 @@ export default function SettingsPage() {
                       )
                     }
                     placeholder={slugify(studioName) || "nama-vendor"}
-                    className={inputClass}
+                    readOnly={slugInputReadOnly}
+                    aria-readonly={slugInputReadOnly}
+                    className={`${inputClass} ${
+                      slugInputReadOnly
+                        ? "bg-muted/60 text-muted-foreground cursor-not-allowed"
+                        : ""
+                    }`}
                   />
                   <div className="text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md break-all">
-                    {localizedFormPath}
                     <span className="text-primary font-semibold">
-                      {slugPreview}
+                      {localizedFormPath}
                     </span>
                   </div>
+                  {Boolean(tenantDomain) && (
+                    <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">
+                            {tp("disableBookingSlugLabel")}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {tp("disableBookingSlugHint")}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={disableBookingSlug}
+                          disabled={
+                            !canEditTenantBookingMode ||
+                            bookingModeSaving ||
+                            isMainTenantDomain
+                          }
+                          onClick={() => {
+                            const previousValue = disableBookingSlug;
+                            const nextValue = !disableBookingSlug;
+                            setDisableBookingSlug(nextValue);
+                            void updateTenantBookingMode(nextValue, previousValue);
+                          }}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            disableBookingSlug ? "bg-primary" : "bg-muted"
+                          } ${
+                            canEditTenantBookingMode &&
+                            !bookingModeSaving &&
+                            !isMainTenantDomain
+                              ? "cursor-pointer"
+                              : "cursor-not-allowed opacity-60"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                              disableBookingSlug ? "translate-x-6" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                      {isMainTenantDomain && (
+                        <p className="text-[11px] text-muted-foreground">
+                          {tp("bookingSlugMainDomainNote")}
+                        </p>
+                      )}
+                      {!isMainTenantDomain && !canEditTenantBookingMode && (
+                        <p className="text-[11px] text-muted-foreground">
+                          {tp("disableBookingSlugAdminOnly")}
+                        </p>
+                      )}
+                      {disableBookingSlug && (
+                        <p className="text-[11px] text-muted-foreground">
+                          {tp("disableBookingSlugMappedVendor", {
+                            slug: sluglessDefaultVendorSlug || "-",
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Logo Studio */}

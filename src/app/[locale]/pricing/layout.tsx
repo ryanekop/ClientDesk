@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
+import { getTenantConfig } from "@/lib/tenant-config";
 
-export const metadata: Metadata = {
-    title: "Pricing — Client Desk",
-    description: "Pilih paket Client Desk yang sesuai kebutuhan Anda. Mulai dari Rp 39.000/bulan.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+    const tenant = await getTenantConfig();
+    return {
+        title: `Pricing — ${tenant.name}`,
+        description: `Pilih paket ${tenant.name} yang sesuai kebutuhan Anda.`,
+    };
+}
 
 export default function PricingLayout({ children }: { children: React.ReactNode }) {
     return children;

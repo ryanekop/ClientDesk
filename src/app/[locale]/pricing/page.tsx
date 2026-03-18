@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LanguageSwitcher } from "@/components/language-switcher"
+import { useTenant } from "@/lib/tenant-context"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from 'next/link'
@@ -30,6 +31,7 @@ export default function PricingPage() {
     const t = useTranslations('Pricing')
     const tl = useTranslations('Landing')
     const locale = useLocale()
+    const tenant = useTenant()
     const supabase = createClient()
     const [currentTier, setCurrentTier] = useState<string | null>(null)
     const [pricingMode, setPricingMode] = useState<PricingMode>("single")
@@ -123,8 +125,8 @@ export default function PricingPage() {
         <div className="flex flex-col min-h-screen font-sans">
             <header className="sticky top-0 z-50 flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm">
                 <Link href={`/${locale}`} className="font-bold text-xl tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity">
-                    <img src="/icon-192.png" alt="Client Desk" className="h-8 w-8 rounded-lg" />
-                    Client Desk
+                    <img src={tenant.logoUrl || "/icon-192.png"} alt={tenant.name} className="h-8 w-8 rounded-lg" />
+                    {tenant.name}
                 </Link>
                 <div className="flex items-center gap-2">
                     <LanguageSwitcher />
@@ -281,9 +283,13 @@ export default function PricingPage() {
             </main>
 
             <footer className="py-8 border-t text-center text-sm text-muted-foreground">
-                <p>
-                    © {new Date().getFullYear()} Client Desk. {tl('footerMadeWith')} <a href="https://instagram.com/ryanekopram" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@ryanekopram</a> & <a href="https://instagram.com/ryanekoapps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@ryanekoapps</a>
-                </p>
+                {tenant.footerText ? (
+                    <p dangerouslySetInnerHTML={{ __html: tenant.footerText }} />
+                ) : (
+                    <p>
+                        © {new Date().getFullYear()} {tenant.name}. {tl('footerMadeWith')} <a href="https://instagram.com/ryanekopram" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@ryanekopram</a> & <a href="https://instagram.com/ryanekoapps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@ryanekoapps</a>
+                    </p>
+                )}
             </footer>
         </div>
     )

@@ -3,6 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import { useLocale } from "next-intl";
+import { useTenant } from "@/lib/tenant-context";
 import {
   ExternalLink,
   Copy,
@@ -61,6 +62,10 @@ import {
   normalizeEventTypeName,
 } from "@/lib/event-type-config";
 import { isGoogleDriveConnected } from "@/utils/google/connection";
+import {
+  isMainClientDeskDomain,
+  normalizeVendorSlug,
+} from "@/lib/booking-url-mode";
 const ALL_EVENT_TYPES = getBuiltInEventTypes();
 
 type FormSectionsByEventType = Record<string, FormLayoutItem[]>;
@@ -189,6 +194,7 @@ function createFormBookingSnapshot({
 export default function FormBookingPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const locale = useLocale();
+  const tenant = useTenant();
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [vendorSlug, setVendorSlug] = React.useState("");
@@ -259,14 +265,37 @@ export default function FormBookingPage() {
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
   const qrisInputRef = React.useRef<HTMLInputElement>(null);
 
-  const formUrl = vendorSlug
-    ? `${siteUrl}/${formLang}/formbooking/${vendorSlug}`
-    : "";
-  const formPath = vendorSlug ? `/${formLang}/formbooking/${vendorSlug}` : "";
-  const previewStorageKey = React.useMemo(
-    () => (vendorSlug ? `clientdesk:form-preview:${vendorSlug}` : ""),
-    [vendorSlug],
+  const tenantDomain = (tenant.domain || "").trim().toLowerCase();
+  const isMainTenantDomain = isMainClientDeskDomain(tenantDomain);
+  const isCustomTenantDomain = Boolean(tenantDomain) && !isMainTenantDomain;
+  const sluglessModeEnabled = isCustomTenantDomain && tenant.disableBookingSlug;
+  const normalizedVendorSlug = normalizeVendorSlug(vendorSlug);
+  const defaultSluglessVendorSlug = normalizeVendorSlug(
+    tenant.defaultBookingVendorSlug || normalizedVendorSlug,
   );
+  const formPath = sluglessModeEnabled
+    ? `/${formLang}/formbooking`
+    : normalizedVendorSlug
+      ? `/${formLang}/formbooking/${normalizedVendorSlug}`
+      : "";
+  const formUrl = formPath ? `${siteUrl}${formPath}` : "";
+  const previewStorageKey = React.useMemo(() => {
+    if (!formPath) return "";
+    if (sluglessModeEnabled) {
+      return `clientdesk:form-preview:tenant:${tenant.id}:${
+        defaultSluglessVendorSlug || "default"
+      }`;
+    }
+    return normalizedVendorSlug
+      ? `clientdesk:form-preview:${normalizedVendorSlug}`
+      : "";
+  }, [
+    defaultSluglessVendorSlug,
+    formPath,
+    normalizedVendorSlug,
+    sluglessModeEnabled,
+    tenant.id,
+  ]);
   const previewPath = React.useMemo(() => {
     if (!formPath || !previewStorageKey) return "";
     return `${formPath}?preview=1&previewKey=${encodeURIComponent(previewStorageKey)}`;
@@ -576,7 +605,7 @@ export default function FormBookingPage() {
   }, [supabase]);
 
   React.useEffect(() => {
-    if (typeof window === "undefined" || !previewStorageKey || !vendorSlug) return;
+    if (typeof window === "undefined" || !previewStorageKey) return;
 
     window.localStorage.setItem(
       previewStorageKey,
@@ -594,7 +623,6 @@ export default function FormBookingPage() {
   }, [
     previewPayload,
     previewStorageKey,
-    vendorSlug,
   ]);
 
   const customFormEventTypes = React.useMemo(
@@ -640,13 +668,9 @@ export default function FormBookingPage() {
     setSaving(true);
     setSaveMessageTone("success");
 
-    let slug = vendorSlug;
+    let slug = normalizeVendorSlug(vendorSlug);
     if (!slug && studioName) {
-      slug = studioName
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "");
+      slug = normalizeVendorSlug(studioName);
       setVendorSlug(slug);
     }
 
@@ -763,13 +787,9 @@ export default function FormBookingPage() {
     setSaving(true);
     setSaveMessageTone("success");
 
-    let slug = vendorSlug;
+    let slug = normalizeVendorSlug(vendorSlug);
     if (!slug && studioName) {
-      slug = studioName
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "");
+      slug = normalizeVendorSlug(studioName);
       setVendorSlug(slug);
     }
 
@@ -1940,7 +1960,7 @@ export default function FormBookingPage() {
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                 </Button>
-                {vendorSlug && (
+                {formUrl && (
                   <>
                     <Button
                       variant="ghost"
@@ -1969,7 +1989,7 @@ export default function FormBookingPage() {
               </div>
             </div>
 
-            {vendorSlug ? (
+            {formUrl ? (
               <div className="flex justify-center flex-1 min-h-0">
                 {/* Linktree-style phone preview */}
                 <div className="w-full max-w-[380px] flex flex-col min-h-0">

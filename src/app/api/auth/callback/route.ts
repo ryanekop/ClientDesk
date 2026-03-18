@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
+import { resolveTenant } from '@/lib/tenant-resolver'
 import { getSubscription, createTrialSubscription } from '@/utils/subscription-service'
 import { notifyNewSignup } from '@/utils/telegram'
 
@@ -50,6 +51,28 @@ export async function GET(request: Request) {
                         { id: userId, full_name: fullName },
                         { onConflict: 'id' }
                     )
+                }
+
+                // =============================================
+                // MULTI-TENANT: Auto-assign tenant_id to profile
+                // =============================================
+                const hostname = request.headers.get('host') || ''
+                const tenant = await resolveTenant(hostname)
+
+                if (tenant.id !== 'default') {
+                    const { data: existingProfile } = await supabase
+                        .from('profiles')
+                        .select('id, tenant_id')
+                        .eq('id', userId)
+                        .single()
+
+                    if (existingProfile && !existingProfile.tenant_id) {
+                        await supabase
+                            .from('profiles')
+                            .update({ tenant_id: tenant.id })
+                            .eq('id', userId)
+                    }
+                    // If tenant_id already exists, do not override.
                 }
             }
 

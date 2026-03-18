@@ -173,6 +173,7 @@ function extractSlugFromPath(pathname: string) {
 interface BookingFormClientProps {
   vendor: Vendor;
   services: Service[];
+  vendorSlug?: string;
 }
 
 type PreviewVendorPayload = Partial<
@@ -214,10 +215,13 @@ function toStringArray(value: unknown): string[] {
 export function BookingFormClient({
   vendor,
   services,
+  vendorSlug,
 }: BookingFormClientProps) {
   const params = useParams();
   const searchParams = useSearchParams();
-  const slug = params?.vendorSlug as string;
+  const slugFromParams =
+    typeof params?.vendorSlug === "string" ? params.vendorSlug : "";
+  const slug = vendorSlug || slugFromParams;
   const localeCode = params?.locale === "en" ? "en" : "id";
   const t = useTranslations("BookingForm");
   const previewMode = searchParams.get("preview") === "1";

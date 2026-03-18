@@ -153,6 +153,7 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
   // Render form — data sudah tersedia, langsung tampil tanpa loading
   return (
     <BookingFormClient
+      vendorSlug={vendorSlug}
       vendor={vendorData}
       services={(services ?? []) as Service[]}
     />
