@@ -10,6 +10,11 @@ import {
   normalizePaymentMethods,
   resolveDriveImageUrl,
 } from "@/lib/payment-config";
+import {
+  isBookingSpecialLinkAvailable,
+  normalizeBookingSpecialLinkRule,
+  normalizeSpecialOfferToken,
+} from "@/lib/booking-special-offer";
 
 type RawVendor = {
   id: string;
@@ -47,6 +52,7 @@ const supabaseAdmin = createClient(
 
 interface PageProps {
   params: Promise<{ vendorSlug: string; locale: string }>;
+  searchParams?: Promise<{ offer?: string | string[] }>;
 }
 
 // ── Dynamic metadata for SEO & link previews ──────────────────────────────────
@@ -79,7 +85,10 @@ export async function generateMetadata({
 // ── Page — Server Component ───────────────────────────────────────────────────
 // Data di-fetch langsung di server, bukan di client lewat useEffect.
 // Hasilnya: form langsung tampil tanpa loading spinner, tanpa extra round-trip.
-export default async function PublicBookingFormPage({ params }: PageProps) {
+export default async function PublicBookingFormPage({
+  params,
+  searchParams,
+}: PageProps) {
   const { vendorSlug } = await params;
 
   // Fetch vendor data server-side (no useEffect, no API route needed for initial load)
@@ -150,12 +159,56 @@ export default async function PublicBookingFormPage({ params }: PageProps) {
     bank_accounts: normalizeBankAccounts(vendor.bank_accounts),
   };
 
+  const resolvedSearchParams = searchParams ? await searchParams : null;
+  const offerQueryValue = Array.isArray(resolvedSearchParams?.offer)
+    ? resolvedSearchParams?.offer[0]
+    : resolvedSearchParams?.offer;
+  const offerToken = normalizeSpecialOfferToken(offerQueryValue);
+
+  let specialOfferRule: {
+    id: string;
+    name: string;
+    packageLocked: boolean;
+    packageServiceIds: string[];
+    addonLocked: boolean;
+    addonServiceIds: string[];
+    accommodationFee: number;
+    discountAmount: number;
+  } | null = null;
+
+  if (offerToken) {
+    const { data: specialOfferRow } = await supabaseAdmin
+      .from("booking_special_links")
+      .select(
+        "id, token, user_id, name, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, is_active, consumed_at, consumed_booking_id",
+      )
+      .eq("token", offerToken)
+      .eq("user_id", vendor.id)
+      .maybeSingle();
+
+    const normalizedRule = normalizeBookingSpecialLinkRule(specialOfferRow);
+    if (normalizedRule && isBookingSpecialLinkAvailable(normalizedRule)) {
+      specialOfferRule = {
+        id: normalizedRule.id,
+        name: normalizedRule.name,
+        packageLocked: normalizedRule.packageLocked,
+        packageServiceIds: normalizedRule.packageServiceIds,
+        addonLocked: normalizedRule.addonLocked,
+        addonServiceIds: normalizedRule.addonServiceIds,
+        accommodationFee: normalizedRule.accommodationFee,
+        discountAmount: normalizedRule.discountAmount,
+      };
+    }
+  }
+
   // Render form — data sudah tersedia, langsung tampil tanpa loading
   return (
     <BookingFormClient
       vendorSlug={vendorSlug}
       vendor={vendorData}
       services={(services ?? []) as Service[]}
+      specialOfferToken={offerToken || null}
+      specialOfferRule={specialOfferRule}
     />
   );
 }

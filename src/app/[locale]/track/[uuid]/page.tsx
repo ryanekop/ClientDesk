@@ -15,6 +15,7 @@ import {
     normalizeFastpikLinkDisplayMode,
     type FastpikLinkDisplayMode,
 } from "@/lib/fastpik-link-display";
+import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
 
 // Admin client — runs server-side only, never exposed to browser
 const supabaseAdmin = createClient(
@@ -47,6 +48,7 @@ type BookingRow = {
     final_paid_at: string | null;
     final_invoice_sent_at: string | null;
     location: string | null;
+    extra_fields: Record<string, unknown> | null;
     created_at: string;
     user_id: string;
     services: { name: string } | null;
@@ -63,7 +65,7 @@ type ProfileRow = {
 async function getBookingData(uuid: string) {
     const { data: booking } = await supabaseAdmin
         .from("bookings")
-        .select("id, booking_code, tracking_uuid, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, fastpik_project_link, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, location, user_id, services(name), created_at")
+        .select("id, booking_code, tracking_uuid, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, fastpik_project_link, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, location, extra_fields, user_id, services(name), created_at")
         .eq("tracking_uuid", uuid)
         .single() as { data: BookingRow | null; error: unknown };
 
@@ -154,6 +156,7 @@ export default async function TrackingPage({ params }: PageProps) {
 
     const { booking, vendorName, customClientStatuses, finalInvoiceVisibleFromStatus } = result;
     const finalAdjustments = normalizeFinalAdjustments(booking.final_adjustments);
+    const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
     const finalAdjustmentsTotal = getFinalAdjustmentsTotal(finalAdjustments);
     const finalInvoiceTotal = getFinalInvoiceTotal(booking.total_price || 0, finalAdjustments);
     const remainingFinalPayment = getRemainingFinalPayment({
@@ -195,6 +198,14 @@ export default async function TrackingPage({ params }: PageProps) {
         remainingFinalPayment,
         finalInvoiceSentAt: booking.final_invoice_sent_at,
         location: booking.location || null,
+        initialBreakdown: specialOffer
+            ? {
+                packageTotal: specialOffer.package_total,
+                addonTotal: specialOffer.addon_total,
+                accommodationFee: specialOffer.accommodation_fee,
+                discountAmount: specialOffer.discount_amount,
+            }
+            : null,
         showFinalInvoice: shouldShowFinalInvoiceForClientStatus({
             statuses: customClientStatuses,
             currentStatus: effectiveClientStatus,

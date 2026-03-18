@@ -14,6 +14,7 @@ import {
   normalizeLegacyServiceRecord,
   normalizeBookingServiceSelections,
 } from "@/lib/booking-services";
+import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -115,6 +116,11 @@ const labels: Record<string, Record<string, string>> = {
     adjustments: "Penyesuaian Akhir",
     adjustmentTotal: "Total Penyesuaian",
     noReason: "Tanpa catatan",
+    initialBreakdown: "Rincian Harga Awal",
+    initialPackage: "Paket Awal",
+    initialAddon: "Add-on Awal",
+    accommodationFee: "Akomodasi",
+    specialDiscount: "Diskon Khusus",
   },
   en: {
     clientDetail: "CLIENT DETAIL",
@@ -140,6 +146,11 @@ const labels: Record<string, Record<string, string>> = {
     adjustments: "Final Adjustments",
     adjustmentTotal: "Adjustment Total",
     noReason: "No note",
+    initialBreakdown: "Initial Price Breakdown",
+    initialPackage: "Initial Package",
+    initialAddon: "Initial Add-on",
+    accommodationFee: "Accommodation",
+    specialDiscount: "Special Discount",
   },
 };
 
@@ -173,6 +184,7 @@ export async function GET(request: NextRequest) {
 
   const studioName = profile?.studio_name || "Studio";
   const logoBase64 = profile?.invoice_logo_url || null;
+  const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
   const adjustments = normalizeFinalAdjustments(booking.final_adjustments);
   const adjustmentsTotal = getFinalAdjustmentsTotal(adjustments);
   const finalInvoiceTotal = getFinalInvoiceTotal(booking.total_price, adjustments);
@@ -611,6 +623,47 @@ export async function GET(request: NextRequest) {
       rgb(0.95, 0.96, 0.96),
     );
   });
+
+  if (specialOffer) {
+    y -= 20;
+    ensureSpace(92);
+    page.drawText(t.initialBreakdown, {
+      x: MARGIN_X,
+      y,
+      font: helveticaBold,
+      size: 10,
+      color: black,
+    });
+
+    const breakdownRows: Array<{ label: string; value: string }> = [
+      { label: t.initialPackage, value: formatCurrency(specialOffer.package_total) },
+      { label: t.initialAddon, value: formatCurrency(specialOffer.addon_total) },
+      { label: t.accommodationFee, value: formatCurrency(specialOffer.accommodation_fee) },
+      { label: t.specialDiscount, value: `- ${formatCurrency(specialOffer.discount_amount)}` },
+    ];
+
+    y -= 16;
+    breakdownRows.forEach((row) => {
+      ensureSpace(14);
+      page.drawText(row.label, {
+        x: MARGIN_X + 8,
+        y,
+        font: helvetica,
+        size: 9,
+        color: gray,
+      });
+      page.drawText(row.value, {
+        x: PAGE_WIDTH - MARGIN_X - helvetica.widthOfTextAtSize(row.value, 9),
+        y,
+        font: helvetica,
+        size: 9,
+        color: black,
+      });
+      y -= 14;
+    });
+    y -= 4;
+    drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 0.5, rgb(0.95, 0.96, 0.96));
+  }
 
   if (isFinalStage) {
     y -= 22;

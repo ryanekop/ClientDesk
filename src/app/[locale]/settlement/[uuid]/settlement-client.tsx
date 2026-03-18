@@ -62,6 +62,12 @@ type BookingData = {
   finalInvoiceSentAt: string | null;
   serviceName: string | null;
   extraFields?: Record<string, unknown> | null;
+  initialBreakdown: {
+    packageTotal: number;
+    addonTotal: number;
+    accommodationFee: number;
+    discountAmount: number;
+  } | null;
 };
 
 type VendorData = {
@@ -550,6 +556,26 @@ export default function SettlementClient({
               <span className="text-slate-500">{t("baseTotal")}</span>
               <span className="font-medium">{formatCurrency(booking.totalPrice)}</span>
             </div>
+            {booking.initialBreakdown ? (
+              <>
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-500">{t("initialPackage")}</span>
+                  <span className="font-medium">{formatCurrency(booking.initialBreakdown.packageTotal)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-500">{t("initialAddon")}</span>
+                  <span className="font-medium">{formatCurrency(booking.initialBreakdown.addonTotal)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-500">{t("accommodationFee")}</span>
+                  <span className="font-medium">{formatCurrency(booking.initialBreakdown.accommodationFee)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-500">{t("specialDiscount")}</span>
+                  <span className="font-medium">- {formatCurrency(booking.initialBreakdown.discountAmount)}</span>
+                </div>
+              </>
+            ) : null}
           </div>
 
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 space-y-3">

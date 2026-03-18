@@ -8,6 +8,7 @@ import {
 } from "@/lib/payment-config";
 import { normalizeFinalAdjustments } from "@/lib/final-settlement";
 import { resolveTemplateType } from "@/lib/whatsapp-template";
+import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -46,6 +47,7 @@ async function getSettlementData(uuid: string) {
   const settlementConfirmTemplate = Array.isArray(templates)
     ? templates.find((template) => resolveTemplateType(template) === "whatsapp_settlement_confirm")
     : null;
+  const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
 
   return {
     booking: {
@@ -69,6 +71,14 @@ async function getSettlementData(uuid: string) {
       finalInvoiceSentAt: booking.final_invoice_sent_at || null,
       serviceName: (booking.services as { name?: string } | null)?.name || null,
       extraFields: (booking.extra_fields as Record<string, unknown> | null) || null,
+      initialBreakdown: specialOffer
+        ? {
+            packageTotal: specialOffer.package_total,
+            addonTotal: specialOffer.addon_total,
+            accommodationFee: specialOffer.accommodation_fee,
+            discountAmount: specialOffer.discount_amount,
+          }
+        : null,
     },
     vendor: {
       studioName: profile?.studio_name || "Studio",

@@ -59,6 +59,11 @@ import {
   type LocationCoordinates,
 } from "@/utils/location";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
+import {
+  computeSpecialOfferTotal,
+  normalizeSpecialOfferToken,
+  normalizeUuidList,
+} from "@/lib/booking-special-offer";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -174,6 +179,17 @@ interface BookingFormClientProps {
   vendor: Vendor;
   services: Service[];
   vendorSlug?: string;
+  specialOfferToken?: string | null;
+  specialOfferRule?: {
+    id: string;
+    name: string;
+    packageLocked: boolean;
+    packageServiceIds: string[];
+    addonLocked: boolean;
+    addonServiceIds: string[];
+    accommodationFee: number;
+    discountAmount: number;
+  } | null;
 }
 
 type PreviewVendorPayload = Partial<
@@ -216,6 +232,8 @@ export function BookingFormClient({
   vendor,
   services,
   vendorSlug,
+  specialOfferToken,
+  specialOfferRule,
 }: BookingFormClientProps) {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -224,6 +242,7 @@ export function BookingFormClient({
   const slug = vendorSlug || slugFromParams;
   const localeCode = params?.locale === "en" ? "en" : "id";
   const t = useTranslations("BookingForm");
+  const normalizedOfferToken = normalizeSpecialOfferToken(specialOfferToken);
   const previewMode = searchParams.get("preview") === "1";
   const previewStorageKey = searchParams.get("previewKey") || "";
   const [previewVendor, setPreviewVendor] = React.useState<PreviewVendorPayload | null>(null);
@@ -356,15 +375,83 @@ export function BookingFormClient({
   const [error, setError] = React.useState("");
 
   const autoDpAmountRef = React.useRef<number | null>(null);
+  const isSpecialOfferActive = Boolean(normalizedOfferToken && specialOfferRule);
+  const packageLocked = isSpecialOfferActive && specialOfferRule?.packageLocked === true;
+  const addonLocked = isSpecialOfferActive && specialOfferRule?.addonLocked === true;
+  const accommodationFee = isSpecialOfferActive ? specialOfferRule?.accommodationFee || 0 : 0;
+  const discountAmount = isSpecialOfferActive ? specialOfferRule?.discountAmount || 0 : 0;
+  const specialPackageServiceIds = React.useMemo(() => {
+    if (!specialOfferRule) return [];
+    const mainIds = services
+      .filter((service) => !service.is_addon)
+      .map((service) => service.id);
+    const mainIdSet = new Set(mainIds);
+    return normalizeUuidList(specialOfferRule.packageServiceIds).filter((id) =>
+      mainIdSet.has(id),
+    );
+  }, [services, specialOfferRule]);
+  const specialAddonServiceIds = React.useMemo(() => {
+    if (!specialOfferRule) return [];
+    const addonIds = services
+      .filter((service) => service.is_addon)
+      .map((service) => service.id);
+    const addonIdSet = new Set(addonIds);
+    return normalizeUuidList(specialOfferRule.addonServiceIds).filter((id) =>
+      addonIdSet.has(id),
+    );
+  }, [services, specialOfferRule]);
 
   React.useEffect(() => {
-    if (effectiveVendor.form_show_addons === false && selectedAddons.size > 0) {
+    if (
+      effectiveVendor.form_show_addons === false &&
+      selectedAddons.size > 0 &&
+      !isSpecialOfferActive
+    ) {
       setSelectedAddons(new Set());
     }
     if (effectiveVendor.form_show_addons === false && addonDialogOpen) {
       setAddonDialogOpen(false);
     }
-  }, [addonDialogOpen, effectiveVendor.form_show_addons, selectedAddons.size]);
+  }, [
+    addonDialogOpen,
+    effectiveVendor.form_show_addons,
+    isSpecialOfferActive,
+    selectedAddons.size,
+  ]);
+
+  React.useEffect(() => {
+    if (!isSpecialOfferActive) return;
+    if (packageLocked) {
+      setSelectedServiceIds((prev) => {
+        const prevNormalized = normalizeUuidList(prev);
+        if (
+          prevNormalized.length === specialPackageServiceIds.length &&
+          prevNormalized.every((id) => specialPackageServiceIds.includes(id))
+        ) {
+          return prev;
+        }
+        return [...specialPackageServiceIds];
+      });
+    }
+    if (addonLocked) {
+      setSelectedAddons((prev) => {
+        const prevNormalized = normalizeUuidList(Array.from(prev));
+        if (
+          prevNormalized.length === specialAddonServiceIds.length &&
+          prevNormalized.every((id) => specialAddonServiceIds.includes(id))
+        ) {
+          return prev;
+        }
+        return new Set(specialAddonServiceIds);
+      });
+    }
+  }, [
+    addonLocked,
+    isSpecialOfferActive,
+    packageLocked,
+    specialAddonServiceIds,
+    specialPackageServiceIds,
+  ]);
 
   React.useEffect(() => {
     if (!eventType) {
@@ -400,6 +487,7 @@ export function BookingFormClient({
   }
 
   function handleServiceChange(id: string) {
+    if (packageLocked) return;
     setSelectedServiceIds((prev) => {
       const next = prev.includes(id)
         ? prev.filter((serviceId) => serviceId !== id)
@@ -409,6 +497,7 @@ export function BookingFormClient({
   }
 
   function handleAddonToggle(id: string) {
+    if (addonLocked) return;
     setSelectedAddons((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -537,16 +626,23 @@ export function BookingFormClient({
           ],
     );
     const finalLocation = resolvedLocation.location;
-    const activeSelectedMainServices = filteredServices.filter((service) =>
-      selectedServiceIds.includes(service.id),
+    const activeSelectedMainServices = services.filter(
+      (service) => !service.is_addon && selectedServiceIds.includes(service.id),
     );
     const activeSelectedService = activeSelectedMainServices[0] || null;
     const activeSelectedAddonTotal = services
-      .filter((service) => selectedAddons.has(service.id))
+      .filter((service) => service.is_addon && selectedAddons.has(service.id))
       .reduce((sum, service) => sum + service.price, 0);
-    const activeSelectedBookingTotal =
-      activeSelectedMainServices.reduce((sum, service) => sum + service.price, 0) +
-      activeSelectedAddonTotal;
+    const activeSelectedPackageTotal = activeSelectedMainServices.reduce(
+      (sum, service) => sum + service.price,
+      0,
+    );
+    const activeSelectedBookingTotal = computeSpecialOfferTotal({
+      packageTotal: activeSelectedPackageTotal,
+      addonTotal: activeSelectedAddonTotal,
+      accommodationFee,
+      discountAmount,
+    });
 
     const minDP = getMinDpForEvent();
     if (activeSelectedService) {
@@ -604,6 +700,9 @@ export function BookingFormClient({
       formData.append("sessionDate", finalSessionDate);
       formData.append("serviceId", selectedServiceIds[0] || "");
       formData.append("serviceIds", JSON.stringify(selectedServiceIds));
+      if (normalizedOfferToken) {
+        formData.append("offerToken", normalizedOfferToken);
+      }
       formData.append("dpPaid", String(dpValue));
       formData.append("location", finalLocation || "");
       formData.append("locationLat", String(resolvedLocation.locationLat ?? ""));
@@ -875,21 +974,23 @@ export function BookingFormClient({
       (service.description || "").toLowerCase().includes(query),
     );
   }, [addonServices, addonSearchQuery]);
-  const selectedMainServices = filteredServices.filter((service) =>
-    selectedServiceIds.includes(service.id),
+  const selectedMainServices = sortedServices.filter(
+    (service) => !service.is_addon && selectedServiceIds.includes(service.id),
   );
   const selectedService = selectedMainServices[0] || null;
-  const selectedAddonServices = addonServices.filter((service) =>
-    selectedAddons.has(service.id),
+  const selectedAddonServices = sortedServices.filter(
+    (service) => service.is_addon && selectedAddons.has(service.id),
   );
   const selectedAddonTotal = selectedAddonServices.reduce(
     (sum, service) => sum + service.price,
     0,
   );
-  const selectedBookingTotal = selectedMainServices.reduce(
-    (sum, service) => sum + service.price,
-    0,
-  ) + selectedAddonTotal;
+  const selectedBookingTotal = computeSpecialOfferTotal({
+    packageTotal: selectedMainServices.reduce((sum, service) => sum + service.price, 0),
+    addonTotal: selectedAddonTotal,
+    accommodationFee,
+    discountAmount,
+  });
   const currentMinDpAmount = selectedService
     ? calcMinDpAmount(selectedBookingTotal, minDP)
     : 0;
@@ -1191,8 +1292,14 @@ export function BookingFormClient({
                 setExtraData({});
                 setExtraLocationCoords({});
                 setCustomFields({});
-                setSelectedServiceIds([]);
-                setSelectedAddons(new Set());
+                setSelectedServiceIds(
+                  isSpecialOfferActive ? [...specialPackageServiceIds] : [],
+                );
+                setSelectedAddons(
+                  isSpecialOfferActive
+                    ? new Set(specialAddonServiceIds)
+                    : new Set(),
+                );
                 setPackageSearchQuery("");
                 setAddonSearchQuery("");
                 autoDpAmountRef.current = null;
@@ -1391,8 +1498,11 @@ export function BookingFormClient({
               ) : (
                 <button
                   type="button"
-                  onClick={() => setPackageDialogOpen(true)}
-                  className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all hover:bg-muted/30 cursor-pointer"
+                  onClick={() => {
+                    if (packageLocked) return;
+                    setPackageDialogOpen(true);
+                  }}
+                  className={`flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all ${packageLocked ? "cursor-not-allowed opacity-80" : "hover:bg-muted/30 cursor-pointer"}`}
                 >
                   <span className="text-left">
                     {selectedMainServices.length > 0
@@ -1400,7 +1510,7 @@ export function BookingFormClient({
                       : "Pilih Paket / Layanan"}
                   </span>
                   <span className="text-xs font-medium text-primary">
-                    Buka Daftar
+                    {packageLocked ? "Terkunci" : "Buka Daftar"}
                   </span>
                 </button>
               )}
@@ -1428,7 +1538,13 @@ export function BookingFormClient({
           </div>
         );
       case "addon_packages":
-        if (!eventType || effectiveVendor.form_show_addons === false || addonServices.length === 0) return null;
+        if (
+          !eventType ||
+          (
+            (effectiveVendor.form_show_addons === false || addonServices.length === 0) &&
+            !(isSpecialOfferActive && (selectedAddonServices.length > 0 || specialAddonServiceIds.length > 0))
+          )
+        ) return null;
         return (
           <div key={item.id} className="space-y-2">
             <div className="flex items-center gap-2 pt-1">
@@ -1438,8 +1554,11 @@ export function BookingFormClient({
             </div>
             <button
               type="button"
-              onClick={() => setAddonDialogOpen(true)}
-              className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all hover:bg-muted/30 cursor-pointer"
+              onClick={() => {
+                if (addonLocked) return;
+                setAddonDialogOpen(true);
+              }}
+              className={`flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all ${addonLocked ? "cursor-not-allowed opacity-80" : "hover:bg-muted/30 cursor-pointer"}`}
             >
               <span className="text-left">
                 {selectedAddonServices.length > 0
@@ -1447,7 +1566,7 @@ export function BookingFormClient({
                   : "Pilih Add-on"}
               </span>
               <span className="text-xs font-medium text-primary">
-                Buka Daftar
+                {addonLocked ? "Terkunci" : "Buka Daftar"}
               </span>
             </button>
             {selectedAddonServices.length > 0 && (
@@ -1472,7 +1591,7 @@ export function BookingFormClient({
                 ))}
               </div>
             )}
-            {selectedAddons.size > 0 && selectedMainServices.length > 0 && (
+            {(selectedMainServices.length > 0 && (selectedAddons.size > 0 || isSpecialOfferActive)) && (
               <div className="rounded-lg bg-muted/50 p-3 text-sm">
                 {selectedMainServices.map((service) => (
                   <div key={service.id} className="flex justify-between">
@@ -1486,6 +1605,18 @@ export function BookingFormClient({
                       <span>{formatCurrency(service.price)}</span>
                     </div>
                   ))}
+                {isSpecialOfferActive && accommodationFee > 0 ? (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>+ Akomodasi</span>
+                    <span>{formatCurrency(accommodationFee)}</span>
+                  </div>
+                ) : null}
+                {isSpecialOfferActive && discountAmount > 0 ? (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>- Diskon</span>
+                    <span>{formatCurrency(discountAmount)}</span>
+                  </div>
+                ) : null}
                 <div className="flex justify-between font-bold border-t pt-1 mt-1">
                   <span>Total</span>
                   <span>{formatCurrency(selectedBookingTotal)}</span>

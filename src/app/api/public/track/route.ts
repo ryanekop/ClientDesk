@@ -11,6 +11,7 @@ import {
     shouldShowFinalInvoiceForClientStatus,
 } from "@/lib/client-status";
 import { normalizeFastpikLinkDisplayMode } from "@/lib/fastpik-link-display";
+import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
 
     const { data: booking } = await supabaseAdmin
         .from("bookings")
-        .select("id, booking_code, tracking_uuid, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, fastpik_project_link, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, location, services(name), created_at")
+        .select("id, booking_code, tracking_uuid, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, fastpik_project_link, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, location, extra_fields, services(name), created_at")
         .eq("tracking_uuid", uuid)
         .single();
 
@@ -82,6 +83,7 @@ export async function GET(request: NextRequest) {
     }
 
     const finalAdjustments = normalizeFinalAdjustments(booking.final_adjustments);
+    const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
     const effectiveClientStatus = resolveUnifiedBookingStatus({
         status: booking.status,
         clientStatus: booking.client_status,
@@ -121,6 +123,14 @@ export async function GET(request: NextRequest) {
             }),
             finalInvoiceSentAt: booking.final_invoice_sent_at || null,
             location: booking.location || null,
+            initialBreakdown: specialOffer
+                ? {
+                    packageTotal: specialOffer.package_total,
+                    addonTotal: specialOffer.addon_total,
+                    accommodationFee: specialOffer.accommodation_fee,
+                    discountAmount: specialOffer.discount_amount,
+                }
+                : null,
             showFinalInvoice: shouldShowFinalInvoiceForClientStatus({
                 statuses: customClientStatuses,
                 currentStatus: effectiveClientStatus,

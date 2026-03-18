@@ -34,6 +34,15 @@ import {
     normalizeEventTypeName,
     PUBLIC_CUSTOM_EVENT_TYPE,
 } from "@/lib/event-type-config";
+import {
+    buildSpecialOfferSnapshot,
+    computeSpecialOfferTotal,
+    isBookingSpecialLinkAvailable,
+    normalizeBookingSpecialLinkRule,
+    normalizeSpecialOfferToken,
+    normalizeUuidList,
+    type BookingSpecialLinkRule,
+} from "@/lib/booking-special-offer";
 
 type VendorRecord = {
     id: string;
@@ -81,6 +90,7 @@ type BookingRequestBody = {
     paymentMethod: PaymentMethod | null;
     paymentSource: PaymentSource | null;
     instagram: string | null;
+    offerToken?: string | null;
 };
 
 function isValidUuid(value: string | null | undefined) {
@@ -268,6 +278,9 @@ export async function POST(request: NextRequest) {
                     ? (JSON.parse(String(formData.get("paymentSource"))) as PaymentSource)
                     : null,
                 instagram: formData.get("instagram") ? String(formData.get("instagram")) : null,
+                offerToken: formData.get("offerToken")
+                    ? String(formData.get("offerToken"))
+                    : null,
             };
             const nextFile = formData.get("paymentProofFile");
             paymentProofFile = nextFile instanceof File && nextFile.size > 0 ? nextFile : null;
@@ -296,6 +309,7 @@ export async function POST(request: NextRequest) {
             paymentMethod,
             paymentSource,
             instagram,
+            offerToken,
         } = body;
 
         const normalizedClientName = (clientName || "").trim() || "Klien";
@@ -348,6 +362,40 @@ export async function POST(request: NextRequest) {
 
         if (!vendor) {
             return NextResponse.json({ success: false, error: "Vendor tidak ditemukan. Pastikan link form adalah link terbaru." }, { status: 404 });
+        }
+
+        const normalizedOfferToken = normalizeSpecialOfferToken(offerToken);
+        let specialOfferRule: BookingSpecialLinkRule | null = null;
+        if (normalizedOfferToken) {
+            const { data: specialOfferRow, error: specialOfferError } = await supabaseAdmin
+                .from("booking_special_links")
+                .select(
+                    "id, token, user_id, name, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, is_active, consumed_at, consumed_booking_id",
+                )
+                .eq("token", normalizedOfferToken)
+                .eq("user_id", vendor.id)
+                .maybeSingle();
+
+            if (specialOfferError || !specialOfferRow) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "Link booking khusus tidak valid atau sudah kedaluwarsa.",
+                    },
+                    { status: 400 },
+                );
+            }
+
+            specialOfferRule = normalizeBookingSpecialLinkRule(specialOfferRow);
+            if (!isBookingSpecialLinkAvailable(specialOfferRule)) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "Link booking khusus tidak aktif atau sudah digunakan.",
+                    },
+                    { status: 400 },
+                );
+            }
         }
 
         const availablePaymentMethods = normalizePaymentMethods(vendor.form_payment_methods);
@@ -406,9 +454,24 @@ export async function POST(request: NextRequest) {
         const mainServiceIds = Array.isArray(serviceIds)
             ? serviceIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
             : [];
-        let normalizedMainServiceIds = Array.from(
-            new Set(mainServiceIds.length > 0 ? mainServiceIds : (serviceId ? [serviceId] : [])),
+        let normalizedMainServiceIds = normalizeUuidList(
+            mainServiceIds.length > 0 ? mainServiceIds : (serviceId ? [serviceId] : []),
         );
+
+        if (specialOfferRule) {
+            if (specialOfferRule.packageLocked) {
+                normalizedMainServiceIds = normalizeUuidList(
+                    specialOfferRule.packageServiceIds,
+                );
+            } else if (
+                normalizedMainServiceIds.length === 0 &&
+                specialOfferRule.packageServiceIds.length > 0
+            ) {
+                normalizedMainServiceIds = normalizeUuidList(
+                    specialOfferRule.packageServiceIds,
+                );
+            }
+        }
 
         if (normalizedMainServiceIds.length === 0) {
             const { data: availableMainServices } = await supabaseAdmin
@@ -446,9 +509,22 @@ export async function POST(request: NextRequest) {
         const addonIdsRaw = Array.isArray(rawExtraData.addon_ids)
             ? rawExtraData.addon_ids.filter((value): value is string => typeof value === "string")
             : [];
-        const addonIds = (vendor.form_show_addons ?? true) ? addonIdsRaw : [];
+        let addonIds = (vendor.form_show_addons ?? true)
+            ? normalizeUuidList(addonIdsRaw)
+            : [];
 
-        const requestedServiceIds = Array.from(new Set([...normalizedMainServiceIds, ...addonIds]));
+        if (specialOfferRule) {
+            if (specialOfferRule.addonLocked) {
+                addonIds = normalizeUuidList(specialOfferRule.addonServiceIds);
+            } else if (addonIds.length === 0 && specialOfferRule.addonServiceIds.length > 0) {
+                addonIds = normalizeUuidList(specialOfferRule.addonServiceIds);
+            }
+        }
+
+        const requestedServiceIds = normalizeUuidList([
+            ...normalizedMainServiceIds,
+            ...addonIds,
+        ]);
         const { data: selectedServices } = await supabaseAdmin
             .from("services")
             .select("id, name, price, duration_minutes, is_addon")
@@ -467,9 +543,18 @@ export async function POST(request: NextRequest) {
         const addonServices = selectedServices?.filter(
             (service) => addonIds.includes(service.id) && service.is_addon,
         ) ?? [];
-        const computedTotalPrice =
-            mainServices.reduce((sum, service) => sum + service.price, 0) +
+        const packageTotal =
+            mainServices.reduce((sum, service) => sum + service.price, 0);
+        const addonTotal =
             addonServices.reduce((sum, service) => sum + service.price, 0);
+        const accommodationFee = specialOfferRule?.accommodationFee || 0;
+        const discountAmount = specialOfferRule?.discountAmount || 0;
+        const computedTotalPrice = computeSpecialOfferTotal({
+            packageTotal,
+            addonTotal,
+            accommodationFee,
+            discountAmount,
+        });
 
         // Validate minimum DP (supports percent/fixed mode + backward compatibility)
         const dpMap =
@@ -504,6 +589,18 @@ export async function POST(request: NextRequest) {
         } else {
             delete sanitizedExtraData.addon_ids;
             delete sanitizedExtraData.addon_names;
+        }
+
+        if (specialOfferRule) {
+            sanitizedExtraData.special_offer = buildSpecialOfferSnapshot({
+                rule: specialOfferRule,
+                selectedPackageServiceIds: normalizedMainServiceIds,
+                selectedAddonServiceIds: addonIds,
+                packageTotal,
+                addonTotal,
+            });
+        } else {
+            delete sanitizedExtraData.special_offer;
         }
 
         const initialStatus = getInitialBookingStatus(vendor.custom_client_statuses);
@@ -567,7 +664,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        await supabaseAdmin.from("booking_services").insert([
+        const { error: bookingServicesError } = await supabaseAdmin.from("booking_services").insert([
             ...mainServices.map((service, index) => ({
                 booking_id: booking.id,
                 service_id: service.id,
@@ -581,6 +678,16 @@ export async function POST(request: NextRequest) {
                 sort_order: index,
             })),
         ]);
+        if (bookingServicesError) {
+            await supabaseAdmin.from("bookings").delete().eq("id", booking.id);
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: bookingServicesError.message || "Gagal menyimpan layanan booking.",
+                },
+                { status: 500 },
+            );
+        }
 
         if (proofEnabled && selectedPaymentMethod !== "cash" && paymentProofFile) {
             try {
@@ -617,6 +724,34 @@ export async function POST(request: NextRequest) {
             } catch (uploadError) {
                 await supabaseAdmin.from("bookings").delete().eq("id", booking.id);
                 throw uploadError;
+            }
+        }
+
+        if (specialOfferRule) {
+            const { data: consumeData, error: consumeError } = await supabaseAdmin
+                .from("booking_special_links")
+                .update({
+                    consumed_at: new Date().toISOString(),
+                    consumed_booking_id: booking.id,
+                })
+                .eq("id", specialOfferRule.id)
+                .eq("user_id", vendor.id)
+                .eq("token", specialOfferRule.token)
+                .eq("is_active", true)
+                .is("consumed_at", null)
+                .is("consumed_booking_id", null)
+                .select("id")
+                .maybeSingle();
+
+            if (consumeError || !consumeData) {
+                await supabaseAdmin.from("bookings").delete().eq("id", booking.id);
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "Link booking khusus sudah digunakan. Silakan minta link baru.",
+                    },
+                    { status: 409 },
+                );
             }
         }
 

@@ -43,6 +43,7 @@ import {
     getWhatsAppTemplateContent,
     normalizeWhatsAppNumber,
 } from "@/lib/whatsapp-template";
+import { getInitialBookingPriceBreakdown } from "@/lib/booking-special-offer";
 import { buildMultiSessionTemplateVars } from "@/utils/form-extra-fields";
 import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
 import {
@@ -412,14 +413,14 @@ export default function FinancePage() {
     }
 
     function getAddonTotal(booking: BookingFinance) {
-        const baseServicePrice = booking.service_selections && booking.service_selections.length > 0
-            ? booking.service_selections
-                .filter((item) => item.kind === "main")
-                .reduce((sum, item) => sum + (item.service.price || 0), 0)
-            : (booking.services?.price ?? booking.total_price);
-        const publicAddonTotal = Math.max(booking.total_price - baseServicePrice, 0);
+        const initialBreakdown = getInitialBookingPriceBreakdown({
+            totalPrice: booking.total_price,
+            serviceSelections: booking.service_selections,
+            legacyServicePrice: booking.services?.price ?? booking.total_price,
+            extraFields: booking.extra_fields,
+        });
         const finalAddonTotal = Math.max(getFinalInvoiceTotal(booking.total_price, booking.final_adjustments) - booking.total_price, 0);
-        return publicAddonTotal + finalAddonTotal;
+        return initialBreakdown.addonTotal + finalAddonTotal;
     }
 
     function openInvoice(booking: BookingFinance, stage: "initial" | "final") {

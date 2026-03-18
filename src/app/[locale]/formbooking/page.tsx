@@ -17,6 +17,11 @@ import {
   normalizeHost,
   normalizeVendorSlug,
 } from "@/lib/booking-url-mode";
+import {
+  isBookingSpecialLinkAvailable,
+  normalizeBookingSpecialLinkRule,
+  normalizeSpecialOfferToken,
+} from "@/lib/booking-special-offer";
 
 type RawVendor = {
   id: string;
@@ -53,6 +58,7 @@ const supabaseAdmin = createClient(
 
 interface PageProps {
   params: Promise<{ locale: string }>;
+  searchParams?: Promise<{ offer?: string | string[] }>;
 }
 
 function getCopy(locale: string) {
@@ -233,7 +239,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default async function SluglessBookingPage({ params }: PageProps) {
+export default async function SluglessBookingPage({
+  params,
+  searchParams,
+}: PageProps) {
   const { locale } = await params;
   const resolved = await resolveSluglessVendor(locale);
 
@@ -264,11 +273,55 @@ export default async function SluglessBookingPage({ params }: PageProps) {
     );
   }
 
+  const resolvedSearchParams = searchParams ? await searchParams : null;
+  const offerQueryValue = Array.isArray(resolvedSearchParams?.offer)
+    ? resolvedSearchParams.offer[0]
+    : resolvedSearchParams?.offer;
+  const offerToken = normalizeSpecialOfferToken(offerQueryValue);
+
+  let specialOfferRule: {
+    id: string;
+    name: string;
+    packageLocked: boolean;
+    packageServiceIds: string[];
+    addonLocked: boolean;
+    addonServiceIds: string[];
+    accommodationFee: number;
+    discountAmount: number;
+  } | null = null;
+
+  if (offerToken) {
+    const { data: specialOfferRow } = await supabaseAdmin
+      .from("booking_special_links")
+      .select(
+        "id, token, user_id, name, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, is_active, consumed_at, consumed_booking_id",
+      )
+      .eq("token", offerToken)
+      .eq("user_id", resolved.vendor.id)
+      .maybeSingle();
+
+    const normalizedRule = normalizeBookingSpecialLinkRule(specialOfferRow);
+    if (normalizedRule && isBookingSpecialLinkAvailable(normalizedRule)) {
+      specialOfferRule = {
+        id: normalizedRule.id,
+        name: normalizedRule.name,
+        packageLocked: normalizedRule.packageLocked,
+        packageServiceIds: normalizedRule.packageServiceIds,
+        addonLocked: normalizedRule.addonLocked,
+        addonServiceIds: normalizedRule.addonServiceIds,
+        accommodationFee: normalizedRule.accommodationFee,
+        discountAmount: normalizedRule.discountAmount,
+      };
+    }
+  }
+
   return (
     <BookingFormClient
       vendorSlug={resolved.vendorSlug}
       vendor={resolved.vendor}
       services={resolved.services}
+      specialOfferToken={offerToken || null}
+      specialOfferRule={specialOfferRule}
     />
   );
 }

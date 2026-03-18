@@ -20,6 +20,7 @@ import {
     FileEdit,
     Activity,
     ReceiptText,
+    TicketPercent,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -38,6 +39,7 @@ const mainNavItems = [
     { titleKey: "team" as const, href: "/team", icon: Users },
     { titleKey: "formBooking" as const, href: "/form-booking", icon: FileEdit },
     { titleKey: "formSettlement" as const, href: "/settlement-form", icon: ReceiptText },
+    { titleKey: "formSpecialBooking" as const, href: "/special-booking-form", icon: TicketPercent },
 ];
 
 export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {

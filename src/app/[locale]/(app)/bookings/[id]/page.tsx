@@ -79,6 +79,7 @@ import {
     isShowAllPackagesEventType,
     normalizeEventTypeName,
 } from "@/lib/event-type-config";
+import { getInitialBookingPriceBreakdown } from "@/lib/booking-special-offer";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -1564,6 +1565,12 @@ export default function BookingDetailPage() {
         settlement_status: booking.settlement_status,
         is_fully_paid: booking.is_fully_paid,
     });
+    const initialPriceBreakdown = getInitialBookingPriceBreakdown({
+        totalPrice: booking.total_price,
+        serviceSelections: booking.service_selections,
+        legacyServicePrice: booking.services?.price ?? booking.total_price,
+        extraFields: booking.extra_fields,
+    });
     const trackingLink = booking.tracking_uuid ? `${window.location.origin}/${locale}/track/${booking.tracking_uuid}` : "";
     const settlementLink = booking.tracking_uuid ? `${window.location.origin}/${locale}/settlement/${booking.tracking_uuid}` : "";
     const builtInExtraFields = extractBuiltInExtraFieldValues(booking.extra_fields);
@@ -1800,6 +1807,10 @@ export default function BookingDetailPage() {
                 </div>
                 <InfoRow label="Status Pembayaran Awal" value={initialPaymentStatus} />
                 <InfoRow label="Status Pelunasan" value={getSettlementLabel(settlementStatus)} />
+                <InfoRow label="Paket Awal" value={formatCurrency(initialPriceBreakdown.packageTotal)} />
+                <InfoRow label="Add-on Awal" value={formatCurrency(initialPriceBreakdown.addonTotal)} />
+                <InfoRow label="Akomodasi" value={formatCurrency(initialPriceBreakdown.accommodationFee)} />
+                <InfoRow label="Diskon" value={`- ${formatCurrency(initialPriceBreakdown.discountAmount)}`} />
                 <InfoRow label="Total Awal" value={<span className="font-semibold">{formatCurrency(booking.total_price)}</span>} />
                 <InfoRow label="Addon Akhir" value={formatCurrency(finalAdjustmentsTotal)} />
                 <InfoRow label="Total Final" value={<span className="font-semibold">{formatCurrency(finalInvoiceTotal)}</span>} />
