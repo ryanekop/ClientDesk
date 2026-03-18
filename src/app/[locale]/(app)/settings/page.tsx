@@ -141,6 +141,8 @@ type Profile = {
   fastpik_default_detect_subfolders?: boolean | null;
   fastpik_default_password?: string | null;
   fastpik_link_display_mode?: FastpikLinkDisplayMode | null;
+  fastpik_link_display_mode_booking_detail?: FastpikLinkDisplayMode | null;
+  fastpik_link_display_mode_tracking?: FastpikLinkDisplayMode | null;
 };
 
 type Template = {
@@ -405,6 +407,8 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "fastpik_default_detect_subfolders",
   "fastpik_default_password",
   "fastpik_link_display_mode",
+  "fastpik_link_display_mode_booking_detail",
+  "fastpik_link_display_mode_tracking",
 ] as const;
 
 // Google Calendar SVG Logo (official 2020)
@@ -596,7 +600,9 @@ export default function SettingsPage() {
   const [fastpikDefaultPassword, setFastpikDefaultPassword] = React.useState(
     "",
   );
-  const [fastpikLinkDisplayMode, setFastpikLinkDisplayMode] =
+  const [fastpikLinkDisplayModeBookingDetail, setFastpikLinkDisplayModeBookingDetail] =
+    React.useState<FastpikLinkDisplayMode>("prefer_fastpik");
+  const [fastpikLinkDisplayModeTracking, setFastpikLinkDisplayModeTracking] =
     React.useState<FastpikLinkDisplayMode>("prefer_fastpik");
   const [fastpikTesting, setFastpikTesting] = React.useState(false);
   const [fastpikBatchSyncing, setFastpikBatchSyncing] = React.useState(false);
@@ -1133,9 +1139,19 @@ export default function SettingsPage() {
       Boolean((prof as any)?.fastpik_default_detect_subfolders),
     );
     setFastpikDefaultPassword((prof as any)?.fastpik_default_password || "");
-    setFastpikLinkDisplayMode(
+    const legacyFastpikLinkDisplayMode = normalizeFastpikLinkDisplayMode(
+      (prof as any)?.fastpik_link_display_mode,
+    );
+    setFastpikLinkDisplayModeBookingDetail(
       normalizeFastpikLinkDisplayMode(
-        (prof as any)?.fastpik_link_display_mode,
+        (prof as any)?.fastpik_link_display_mode_booking_detail ??
+          legacyFastpikLinkDisplayMode,
+      ),
+    );
+    setFastpikLinkDisplayModeTracking(
+      normalizeFastpikLinkDisplayMode(
+        (prof as any)?.fastpik_link_display_mode_tracking ??
+          legacyFastpikLinkDisplayMode,
       ),
     );
 
@@ -1411,7 +1427,9 @@ export default function SettingsPage() {
           : 14,
       fastpik_default_detect_subfolders: fastpikDefaultDetectSubfolders,
       fastpik_default_password: fastpikDefaultPassword.trim() || null,
-      fastpik_link_display_mode: fastpikLinkDisplayMode,
+      fastpik_link_display_mode_booking_detail:
+        fastpikLinkDisplayModeBookingDetail,
+      fastpik_link_display_mode_tracking: fastpikLinkDisplayModeTracking,
     };
   }
 
@@ -3322,12 +3340,12 @@ export default function SettingsPage() {
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground">
-                      {tp("fastpikLinkDisplayMode")}
+                      {tp("fastpikLinkDisplayModeBookingDetail")}
                     </label>
                     <select
-                      value={fastpikLinkDisplayMode}
+                      value={fastpikLinkDisplayModeBookingDetail}
                       onChange={(e) =>
-                        setFastpikLinkDisplayMode(
+                        setFastpikLinkDisplayModeBookingDetail(
                           normalizeFastpikLinkDisplayMode(e.target.value),
                         )
                       }
@@ -3342,7 +3360,33 @@ export default function SettingsPage() {
                       </option>
                     </select>
                     <p className="text-xs text-muted-foreground">
-                      {tp("fastpikLinkDisplayModeHint")}
+                      {tp("fastpikLinkDisplayModeBookingDetailHint")}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      {tp("fastpikLinkDisplayModeTracking")}
+                    </label>
+                    <select
+                      value={fastpikLinkDisplayModeTracking}
+                      onChange={(e) =>
+                        setFastpikLinkDisplayModeTracking(
+                          normalizeFastpikLinkDisplayMode(e.target.value),
+                        )
+                      }
+                      className={inputClass}
+                    >
+                      <option value="both">{tp("fastpikLinkModeBoth")}</option>
+                      <option value="prefer_fastpik">
+                        {tp("fastpikLinkModePreferFastpik")}
+                      </option>
+                      <option value="drive_only">
+                        {tp("fastpikLinkModeDriveOnly")}
+                      </option>
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      {tp("fastpikLinkDisplayModeTrackingHint")}
                     </p>
                   </div>
 

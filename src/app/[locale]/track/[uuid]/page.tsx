@@ -57,6 +57,7 @@ type ProfileRow = {
     custom_client_statuses: string[] | null;
     final_invoice_visible_from_status: string | null;
     fastpik_link_display_mode: FastpikLinkDisplayMode | null;
+    fastpik_link_display_mode_tracking?: FastpikLinkDisplayMode | null;
 };
 
 async function getBookingData(uuid: string) {
@@ -73,13 +74,26 @@ async function getBookingData(uuid: string) {
     let finalInvoiceVisibleFromStatus: string | null = null;
     let fastpikLinkDisplayMode: FastpikLinkDisplayMode = "prefer_fastpik";
     if (booking.user_id) {
-        const { data: v } = await supabaseAdmin.from("profiles").select("studio_name, custom_client_statuses, final_invoice_visible_from_status, fastpik_link_display_mode").eq("id", booking.user_id).single();
-        const profile = v as ProfileRow | null;
+        const { data: profileWithSplitMode, error: profileWithSplitModeError } = await supabaseAdmin
+            .from("profiles")
+            .select("studio_name, custom_client_statuses, final_invoice_visible_from_status, fastpik_link_display_mode, fastpik_link_display_mode_tracking")
+            .eq("id", booking.user_id)
+            .single();
+        let profile = profileWithSplitMode as ProfileRow | null;
+        if (!profile && profileWithSplitModeError) {
+            const { data: legacyProfile } = await supabaseAdmin
+                .from("profiles")
+                .select("studio_name, custom_client_statuses, final_invoice_visible_from_status, fastpik_link_display_mode")
+                .eq("id", booking.user_id)
+                .single();
+            profile = legacyProfile as ProfileRow | null;
+        }
         vendorName = profile?.studio_name || "";
         customClientStatuses = profile?.custom_client_statuses || null;
         finalInvoiceVisibleFromStatus = profile?.final_invoice_visible_from_status || null;
         fastpikLinkDisplayMode = normalizeFastpikLinkDisplayMode(
-            profile?.fastpik_link_display_mode,
+            profile?.fastpik_link_display_mode_tracking ??
+                profile?.fastpik_link_display_mode,
         );
     }
 

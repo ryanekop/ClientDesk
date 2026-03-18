@@ -1,3 +1,5 @@
+import { parseSessionDateParts } from "@/utils/format-date";
+
 export type BookingCalendarSession = {
   key: string;
   label: string | null;
@@ -18,9 +20,21 @@ function normalizeDateValue(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
   if (!normalized) return null;
-  const parsed = new Date(normalized);
-  if (Number.isNaN(parsed.getTime())) return null;
+  if (!parseSessionDateParts(normalized)) return null;
   return normalized;
+}
+
+function getSessionSortValue(sessionDate: string) {
+  const parts = parseSessionDateParts(sessionDate);
+  if (!parts) return Number.MAX_SAFE_INTEGER;
+  return Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hours,
+    parts.minutes,
+    parts.seconds,
+  );
 }
 
 export function resolveBookingCalendarSessions({
@@ -70,8 +84,7 @@ export function resolveBookingCalendarSessions({
   }
 
   const sortedSplitSessions = sessions.sort(
-    (a, b) =>
-      new Date(a.sessionDate).getTime() - new Date(b.sessionDate).getTime(),
+    (a, b) => getSessionSortValue(a.sessionDate) - getSessionSortValue(b.sessionDate),
   );
   if (sortedSplitSessions.length > 0) {
     return sortedSplitSessions;

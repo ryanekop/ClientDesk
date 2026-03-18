@@ -184,6 +184,7 @@ type DrivePathProfile = {
 type BookingProfileRow = {
     custom_client_statuses?: string[] | null;
     fastpik_link_display_mode?: FastpikLinkDisplayMode | null;
+    fastpik_link_display_mode_booking_detail?: FastpikLinkDisplayMode | null;
 };
 
 type EditableAdjustment = {
@@ -567,9 +568,22 @@ export default function BookingDetailPage() {
                 rawBooking?.services || null,
             );
             const profileRow = (profile ?? null) as BookingProfileRow | null;
+            const { data: splitModeProfile } = await supabase
+                .from("profiles")
+                .select("fastpik_link_display_mode_booking_detail")
+                .eq("id", user.id)
+                .single();
+            const bookingDetailLinkMode = (
+                splitModeProfile as
+                    | { fastpik_link_display_mode_booking_detail?: FastpikLinkDisplayMode | null }
+                    | null
+            )?.fastpik_link_display_mode_booking_detail;
             const statusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
             setFastpikLinkDisplayMode(
-                normalizeFastpikLinkDisplayMode(profileRow?.fastpik_link_display_mode),
+                normalizeFastpikLinkDisplayMode(
+                    bookingDetailLinkMode ??
+                        profileRow?.fastpik_link_display_mode,
+                ),
             );
             setBookingStatuses(statusOptions);
             const syncedStatus = resolveUnifiedBookingStatus({

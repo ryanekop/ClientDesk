@@ -17,6 +17,18 @@ const supabaseAdmin = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+type ProfileTrackDisplayRow = {
+    studio_name: string | null;
+    custom_client_statuses: string[] | null;
+    final_invoice_visible_from_status: string | null;
+    fastpik_link_display_mode: "both" | "prefer_fastpik" | "drive_only" | null;
+    fastpik_link_display_mode_tracking?:
+        | "both"
+        | "prefer_fastpik"
+        | "drive_only"
+        | null;
+};
+
 export async function GET(request: NextRequest) {
     const uuid = request.nextUrl.searchParams.get("uuid");
     if (!uuid) {
@@ -46,16 +58,26 @@ export async function GET(request: NextRequest) {
     let profileLinkMode: "both" | "prefer_fastpik" | "drive_only" =
         "prefer_fastpik";
     if (bookingOwner?.user_id) {
-        const { data: v } = await supabaseAdmin
+        const { data: profileWithSplitMode, error: profileWithSplitModeError } = await supabaseAdmin
             .from("profiles")
-            .select("studio_name, custom_client_statuses, final_invoice_visible_from_status, fastpik_link_display_mode")
+            .select("studio_name, custom_client_statuses, final_invoice_visible_from_status, fastpik_link_display_mode, fastpik_link_display_mode_tracking")
             .eq("id", bookingOwner.user_id)
             .single();
+        let v = profileWithSplitMode as ProfileTrackDisplayRow | null;
+        if (!v && profileWithSplitModeError) {
+            const { data: legacyProfile } = await supabaseAdmin
+                .from("profiles")
+                .select("studio_name, custom_client_statuses, final_invoice_visible_from_status, fastpik_link_display_mode")
+                .eq("id", bookingOwner.user_id)
+                .single();
+            v = legacyProfile as ProfileTrackDisplayRow | null;
+        }
         vendorName = v?.studio_name || "";
         customClientStatuses = (v?.custom_client_statuses as string[] | null) || null;
         finalInvoiceVisibleFromStatus = v?.final_invoice_visible_from_status || null;
         profileLinkMode = normalizeFastpikLinkDisplayMode(
-            v?.fastpik_link_display_mode,
+            v?.fastpik_link_display_mode_tracking ??
+                v?.fastpik_link_display_mode,
         );
     }
 

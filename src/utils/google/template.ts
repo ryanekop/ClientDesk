@@ -4,6 +4,7 @@ import {
     getMultiSessionTemplateTokens,
     buildMultiSessionTemplateVars,
 } from "@/utils/form-extra-fields";
+import { parseSessionDateParts } from "@/utils/format-date";
 
 export const GOOGLE_TEMPLATE_TIMEZONE = "Asia/Jakarta";
 
@@ -289,19 +290,18 @@ function buildRange(startParts: DateParts, endParts: DateParts) {
 }
 
 function getStoredSessionParts(sessionDate: string): DateParts {
-    const date = new Date(sessionDate);
-
-    if (Number.isNaN(date.getTime())) {
+    const parts = parseSessionDateParts(sessionDate);
+    if (!parts) {
         throw new Error("Invalid stored session date");
     }
 
     return {
-        year: date.getUTCFullYear(),
-        month: date.getUTCMonth() + 1,
-        day: date.getUTCDate(),
-        hour: date.getUTCHours(),
-        minute: date.getUTCMinutes(),
-        second: date.getUTCSeconds(),
+        year: parts.year,
+        month: parts.month,
+        day: parts.day,
+        hour: parts.hours,
+        minute: parts.minutes,
+        second: parts.seconds,
     };
 }
 
