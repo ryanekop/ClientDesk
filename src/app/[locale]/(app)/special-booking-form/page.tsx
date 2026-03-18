@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   CheckCircle2,
   Copy,
+  ExternalLink,
   Loader2,
   Lock,
   LockOpen,
@@ -11,6 +12,7 @@ import {
   Power,
   RefreshCw,
   Trash2,
+  X,
 } from "lucide-react";
 import { useLocale } from "next-intl";
 import { createClient } from "@/utils/supabase/client";
@@ -66,6 +68,11 @@ export default function SpecialBookingFormPage() {
   const [formError, setFormError] = React.useState("");
   const [formSuccess, setFormSuccess] = React.useState("");
   const [editingLinkId, setEditingLinkId] = React.useState<string | null>(null);
+  const [copyToastMessage, setCopyToastMessage] = React.useState("");
+  const [copyToastVisible, setCopyToastVisible] = React.useState(false);
+  const [copyToastClosing, setCopyToastClosing] = React.useState(false);
+  const copyToastAutoCloseRef = React.useRef<number | null>(null);
+  const copyToastCloseRef = React.useRef<number | null>(null);
 
   const [name, setName] = React.useState("");
   const [packageLocked, setPackageLocked] = React.useState(false);
@@ -91,6 +98,41 @@ export default function SpecialBookingFormPage() {
     setFormError("");
     setFormSuccess("");
   }, []);
+
+  const clearCopyToastTimers = React.useCallback(() => {
+    if (copyToastAutoCloseRef.current !== null) {
+      window.clearTimeout(copyToastAutoCloseRef.current);
+      copyToastAutoCloseRef.current = null;
+    }
+    if (copyToastCloseRef.current !== null) {
+      window.clearTimeout(copyToastCloseRef.current);
+      copyToastCloseRef.current = null;
+    }
+  }, []);
+
+  const closeCopyToast = React.useCallback(() => {
+    clearCopyToastTimers();
+    setCopyToastClosing(true);
+    copyToastCloseRef.current = window.setTimeout(() => {
+      setCopyToastVisible(false);
+      setCopyToastClosing(false);
+      setCopyToastMessage("");
+      copyToastCloseRef.current = null;
+    }, 220);
+  }, [clearCopyToastTimers]);
+
+  const showCopyToast = React.useCallback(
+    (message: string) => {
+      clearCopyToastTimers();
+      setCopyToastMessage(message);
+      setCopyToastVisible(true);
+      setCopyToastClosing(false);
+      copyToastAutoCloseRef.current = window.setTimeout(() => {
+        closeCopyToast();
+      }, 2600);
+    },
+    [clearCopyToastTimers, closeCopyToast],
+  );
 
   const resetForm = React.useCallback(() => {
     setEditingLinkId(null);
@@ -172,6 +214,12 @@ export default function SpecialBookingFormPage() {
   React.useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  React.useEffect(() => {
+    return () => {
+      clearCopyToastTimers();
+    };
+  }, [clearCopyToastTimers]);
 
   function togglePackageSelection(serviceId: string) {
     setSelectedPackageIds((prev) => {
@@ -286,16 +334,35 @@ export default function SpecialBookingFormPage() {
     setFormSuccess("Link booking khusus berhasil dibuat.");
   }
 
+  function buildPublicOfferUrl(link: BookingSpecialLinkRule) {
+    if (typeof window === "undefined") return null;
+    if (!vendorSlug) return null;
+    return `${window.location.origin}/${locale}/formbooking/${vendorSlug}?offer=${encodeURIComponent(link.token)}`;
+  }
+
   async function copyLink(link: BookingSpecialLinkRule) {
     clearMessage();
-    if (typeof window === "undefined") return;
-    if (!vendorSlug) {
+    const url = buildPublicOfferUrl(link);
+    if (!url) {
       setFormError("Vendor slug belum tersedia. Cek profil dulu.");
       return;
     }
-    const url = `${window.location.origin}/${locale}/formbooking/${vendorSlug}?offer=${encodeURIComponent(link.token)}`;
-    await navigator.clipboard.writeText(url);
-    setFormSuccess("URL link berhasil disalin.");
+    try {
+      await navigator.clipboard.writeText(url);
+      showCopyToast("URL link berhasil disalin.");
+    } catch {
+      setFormError("Gagal menyalin URL link.");
+    }
+  }
+
+  function openLink(link: BookingSpecialLinkRule) {
+    clearMessage();
+    const url = buildPublicOfferUrl(link);
+    if (!url) {
+      setFormError("Vendor slug belum tersedia. Cek profil dulu.");
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   async function toggleActive(link: BookingSpecialLinkRule) {
@@ -369,6 +436,32 @@ export default function SpecialBookingFormPage() {
 
   return (
     <div className="space-y-6">
+      {copyToastVisible ? (
+        <div className="pointer-events-none fixed right-4 top-4 z-50">
+          <div
+            className={[
+              "pointer-events-auto flex max-w-sm items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-lg",
+              copyToastClosing
+                ? "animate-out fade-out slide-out-to-right-8 duration-200"
+                : "animate-in fade-in slide-in-from-right-8 duration-300",
+            ].join(" ")}
+            role="status"
+            aria-live="polite"
+          >
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+            <p className="flex-1">{copyToastMessage}</p>
+            <button
+              type="button"
+              className="shrink-0 rounded p-0.5 text-emerald-700/80 transition-colors hover:bg-emerald-100 hover:text-emerald-900"
+              onClick={closeCopyToast}
+              aria-label="Tutup notifikasi"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Form Booking Khusus</h2>
         <p className="text-muted-foreground">
@@ -654,6 +747,16 @@ export default function SpecialBookingFormPage() {
                     >
                       <Pencil className="h-3.5 w-3.5" />
                       Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => openLink(link)}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Buka Link
                     </Button>
                     <Button
                       type="button"

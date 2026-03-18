@@ -5,7 +5,6 @@ import { formatSessionDate } from "@/utils/format-date";
 import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import {
   getFinalAdjustmentsTotal,
-  getFinalInvoiceTotal,
   getRemainingFinalPayment,
   getSettlementStatus,
   normalizeFinalAdjustments,
@@ -14,7 +13,10 @@ import {
   normalizeLegacyServiceRecord,
   normalizeBookingServiceSelections,
 } from "@/lib/booking-services";
-import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
+import {
+  getInitialBookingPriceBreakdown,
+  resolveSpecialOfferSnapshotFromExtraFields,
+} from "@/lib/booking-special-offer";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -187,7 +189,6 @@ export async function GET(request: NextRequest) {
   const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
   const adjustments = normalizeFinalAdjustments(booking.final_adjustments);
   const adjustmentsTotal = getFinalAdjustmentsTotal(adjustments);
-  const finalInvoiceTotal = getFinalInvoiceTotal(booking.total_price, adjustments);
   const isFinalStage = stage === "final";
   const invoiceTitle = isFinalStage ? t.finalInvoice : t.invoice;
   const remaining = isFinalStage
@@ -237,20 +238,32 @@ export async function GET(request: NextRequest) {
     (booking as { booking_services?: unknown[] }).booking_services,
     booking.services,
   );
+  const initialBreakdown = getInitialBookingPriceBreakdown({
+    totalPrice: booking.total_price,
+    serviceSelections,
+    legacyServicePrice: legacyService?.price ?? booking.total_price,
+    extraFields: booking.extra_fields,
+  });
   const mainServiceSelections = serviceSelections.filter(
     (selection) => selection.kind === "main",
   );
-  const serviceRows =
-    mainServiceSelections.length > 0
-      ? mainServiceSelections.map((selection) => ({
-          id: selection.id,
-          name: selection.service.name || t.defaultServiceName,
-          description: selection.service.description?.trim() || "",
-          price:
-            typeof selection.service.price === "number"
-              ? Math.max(selection.service.price, 0)
-              : 0,
-        }))
+  const addonServiceSelections = serviceSelections.filter(
+    (selection) => selection.kind === "addon",
+  );
+  const mappedServiceRows = [...mainServiceSelections, ...addonServiceSelections].map(
+    (selection) => ({
+      id: selection.id,
+      name: selection.service.name || t.defaultServiceName,
+      description: selection.service.description?.trim() || "",
+      price:
+        typeof selection.service.price === "number"
+          ? Math.max(selection.service.price, 0)
+          : 0,
+    }),
+  );
+  let serviceRows =
+    mappedServiceRows.length > 0
+      ? mappedServiceRows
       : [
           {
             id: legacyService?.id || "",
@@ -262,6 +275,31 @@ export async function GET(request: NextRequest) {
                 : 0,
           },
         ];
+  const currentServiceRowsTotal = serviceRows.reduce(
+    (sum, row) => sum + row.price,
+    0,
+  );
+  const missingAddonTotal = Math.max(
+    Math.min(
+      initialBreakdown.addonTotal,
+      Math.max(booking.total_price - currentServiceRowsTotal, 0),
+    ),
+    0,
+  );
+  if (addonServiceSelections.length === 0 && missingAddonTotal > 0) {
+    serviceRows = [
+      ...serviceRows,
+      {
+        id: "initial-addon-fallback",
+        name: t.initialAddon,
+        description:
+          specialOffer?.link_name?.trim() && specialOffer.link_name.trim().length > 0
+            ? specialOffer.link_name.trim()
+            : "",
+        price: missingAddonTotal,
+      },
+    ];
+  }
   const serviceDescriptionById: Record<string, string> = {};
   serviceSelections.forEach((selection) => {
     const serviceId = selection.service.id;

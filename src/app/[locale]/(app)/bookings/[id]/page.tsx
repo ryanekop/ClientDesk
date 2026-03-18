@@ -106,6 +106,7 @@ const HIDDEN_EXTRA_FIELD_KEYS = new Set([
     "terms_accepted_at",
     "addon_ids",
     "addon_names",
+    "special_offer",
 ]);
 const FASTPIK_APP_BASE_URL = (process.env.NEXT_PUBLIC_FASTPIK_BASE_URL || "https://fastpik.ryanekoapp.web.id").replace(/\/+$/, "");
 

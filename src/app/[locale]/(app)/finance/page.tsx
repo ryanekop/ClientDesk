@@ -91,8 +91,10 @@ type BookingFinance = {
 const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
     { id: "name", label: "Nama", visible: true, locked: true },
     { id: "total_price", label: "Harga Total", visible: true },
+    { id: "package_price", label: "Harga Paket", visible: true },
     { id: "addon", label: "Add-on", visible: true },
     { id: "dp_paid", label: "DP Dibayar", visible: true },
+    { id: "discount", label: "Diskon", visible: true },
     { id: "remaining", label: "Sisa", visible: true },
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true },
@@ -412,13 +414,33 @@ export default function FinancePage() {
         return getFinalInvoiceTotal(booking.total_price, booking.final_adjustments);
     }
 
-    function getAddonTotal(booking: BookingFinance) {
-        const initialBreakdown = getInitialBookingPriceBreakdown({
+    function getInitialPriceBreakdown(booking: BookingFinance) {
+        return getInitialBookingPriceBreakdown({
             totalPrice: booking.total_price,
             serviceSelections: booking.service_selections,
             legacyServicePrice: booking.services?.price ?? booking.total_price,
             extraFields: booking.extra_fields,
         });
+    }
+
+    function getPackagePrice(
+        booking: BookingFinance,
+        initialBreakdown = getInitialPriceBreakdown(booking),
+    ) {
+        return initialBreakdown.packageTotal;
+    }
+
+    function getDiscountAmount(
+        booking: BookingFinance,
+        initialBreakdown = getInitialPriceBreakdown(booking),
+    ) {
+        return initialBreakdown.discountAmount;
+    }
+
+    function getAddonTotal(
+        booking: BookingFinance,
+        initialBreakdown = getInitialPriceBreakdown(booking),
+    ) {
         const finalAddonTotal = Math.max(getFinalInvoiceTotal(booking.total_price, booking.final_adjustments) - booking.total_price, 0);
         return initialBreakdown.addonTotal + finalAddonTotal;
     }
@@ -659,10 +681,14 @@ export default function FinancePage() {
                 return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("klien")}</th>;
             case "total_price":
                 return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("hargaTotal")}</th>;
+            case "package_price":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("hargaPaket")}</th>;
             case "addon":
                 return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("addOn")}</th>;
             case "dp_paid":
                 return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("dpDibayar")}</th>;
+            case "discount":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("diskon")}</th>;
             case "remaining":
                 return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("sisa")}</th>;
             case "status":
@@ -680,6 +706,8 @@ export default function FinancePage() {
         remaining: number,
         finalTotal: number,
         addonTotal: number,
+        packagePrice: number,
+        discountAmount: number,
     ) {
         switch (column.id) {
             case "name":
@@ -691,10 +719,18 @@ export default function FinancePage() {
                 );
             case "total_price":
                 return <td key={column.id} className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(finalTotal)}</td>;
+            case "package_price":
+                return <td key={column.id} className="px-6 py-4 whitespace-nowrap">{formatCurrency(packagePrice)}</td>;
             case "addon":
                 return <td key={column.id} className="px-6 py-4 whitespace-nowrap">{formatCurrency(addonTotal)}</td>;
             case "dp_paid":
                 return <td key={column.id} className="px-6 py-4 whitespace-nowrap font-medium">{formatCurrency(booking.dp_paid)}</td>;
+            case "discount":
+                return (
+                    <td key={column.id} className="px-6 py-4 whitespace-nowrap">
+                        {discountAmount > 0 ? `- ${formatCurrency(discountAmount)}` : formatCurrency(0)}
+                    </td>
+                );
             case "remaining":
                 return (
                     <td key={column.id} className="px-6 py-4 whitespace-nowrap font-medium">
@@ -954,14 +990,20 @@ export default function FinancePage() {
         remaining: number,
         finalTotal: number,
         addonTotal: number,
+        packagePrice: number,
+        discountAmount: number,
     ) {
         switch (column.id) {
             case "total_price":
                 return formatCurrency(finalTotal);
+            case "package_price":
+                return formatCurrency(packagePrice);
             case "addon":
                 return formatCurrency(addonTotal);
             case "dp_paid":
                 return formatCurrency(booking.dp_paid);
+            case "discount":
+                return discountAmount > 0 ? `- ${formatCurrency(discountAmount)}` : formatCurrency(0);
             case "remaining":
                 return formatCurrency(remaining);
             case "status":
@@ -1024,30 +1066,35 @@ export default function FinancePage() {
         XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
 
         // Sheet 2: Detail
-        const detailData = bookings.map(b => ({
-            "Kode Booking": b.booking_code,
-            "Nama Klien": b.client_name,
-            "Paket": b.service_label || b.services?.name || "-",
-            "Jadwal": b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "-",
-            "Total Harga": getFinalInvoiceTotal(b.total_price, b.final_adjustments),
-            "Total Add-on": getAddonTotal(b),
-            "DP Dibayar": b.dp_paid,
-            "DP Terverifikasi": b.dp_verified_amount || 0,
-            "Refund DP": b.dp_refund_amount || 0,
-            "Pemasukan Bersih": getNetVerifiedRevenue(b),
-            "Sisa": isCancelledBooking(b) ? 0 : getRemainingFinalPayment({
-                total_price: b.total_price,
-                dp_paid: b.dp_paid,
-                final_adjustments: b.final_adjustments,
-                final_payment_amount: b.final_payment_amount,
-                final_paid_at: b.final_paid_at,
-                settlement_status: b.settlement_status,
-                is_fully_paid: b.is_fully_paid,
-            }),
-            "Status": getFinanceStatusLabel(b),
-        }));
+        const detailData = bookings.map(b => {
+            const initialBreakdown = getInitialPriceBreakdown(b);
+            return {
+                "Kode Booking": b.booking_code,
+                "Nama Klien": b.client_name,
+                "Paket": b.service_label || b.services?.name || "-",
+                "Jadwal": b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "-",
+                "Total Harga": getFinalInvoiceTotal(b.total_price, b.final_adjustments),
+                "Harga Paket": getPackagePrice(b, initialBreakdown),
+                "Total Add-on": getAddonTotal(b, initialBreakdown),
+                "DP Dibayar": b.dp_paid,
+                "Diskon": -getDiscountAmount(b, initialBreakdown),
+                "DP Terverifikasi": b.dp_verified_amount || 0,
+                "Refund DP": b.dp_refund_amount || 0,
+                "Pemasukan Bersih": getNetVerifiedRevenue(b),
+                "Sisa": isCancelledBooking(b) ? 0 : getRemainingFinalPayment({
+                    total_price: b.total_price,
+                    dp_paid: b.dp_paid,
+                    final_adjustments: b.final_adjustments,
+                    final_payment_amount: b.final_payment_amount,
+                    final_paid_at: b.final_paid_at,
+                    settlement_status: b.settlement_status,
+                    is_fully_paid: b.is_fully_paid,
+                }),
+                "Status": getFinanceStatusLabel(b),
+            };
+        });
         const wsDetail = XLSX.utils.json_to_sheet(detailData);
-        wsDetail["!cols"] = [{ wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
+        wsDetail["!cols"] = [{ wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
         XLSX.utils.book_append_sheet(wb, wsDetail, "Detail Booking");
 
         XLSX.writeFile(wb, `keuangan_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -1141,7 +1188,10 @@ export default function FinancePage() {
                 ) : paginateArray(filtered, currentPage, itemsPerPage).map((b) => {
                     const remaining = getRemainingAmount(b);
                     const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
-                    const addonTotal = getAddonTotal(b);
+                    const initialBreakdown = getInitialPriceBreakdown(b);
+                    const packagePrice = getPackagePrice(b, initialBreakdown);
+                    const addonTotal = getAddonTotal(b, initialBreakdown);
+                    const discountAmount = getDiscountAmount(b, initialBreakdown);
                     return (
                         <div key={b.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
                             <div className="flex items-start justify-between">
@@ -1169,14 +1219,25 @@ export default function FinancePage() {
                             <div className="border-t pt-2 space-y-1.5 text-sm">
                                 {orderedVisibleColumns
                                     .filter((column) => column.id !== "name" && column.id !== "actions")
-                                    .map((column) => (
-                                        <div key={column.id} className="flex items-start justify-between gap-3">
-                                            <span className="text-muted-foreground">{column.label}</span>
-                                            <span className="max-w-[180px] truncate text-right font-medium text-foreground" title={String(renderMobileValue(b, column, remaining, finalTotal, addonTotal) ?? "-")}>
-                                                {renderMobileValue(b, column, remaining, finalTotal, addonTotal)}
-                                            </span>
-                                        </div>
-                                    ))}
+                                    .map((column) => {
+                                        const renderedValue = renderMobileValue(
+                                            b,
+                                            column,
+                                            remaining,
+                                            finalTotal,
+                                            addonTotal,
+                                            packagePrice,
+                                            discountAmount,
+                                        );
+                                        return (
+                                            <div key={column.id} className="flex items-start justify-between gap-3">
+                                                <span className="text-muted-foreground">{column.label}</span>
+                                                <span className="max-w-[180px] truncate text-right font-medium text-foreground" title={String(renderedValue ?? "-")}>
+                                                    {renderedValue}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
                             </div>
                             <div className="flex flex-wrap items-center gap-1 pt-1 border-t">
                                 <Link href={`/bookings/${b.id}`}>
@@ -1303,7 +1364,7 @@ export default function FinancePage() {
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-visible hidden md:block">
                 <div className="relative overflow-x-auto overflow-y-visible">
-                    <table className="min-w-[1260px] w-full text-sm text-left">
+                    <table className="min-w-[1420px] w-full text-sm text-left">
                         <thead className="text-xs uppercase bg-card border-b">
                             <tr>
                                 {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
@@ -1321,11 +1382,22 @@ export default function FinancePage() {
                             ) : paginateArray(filtered, currentPage, itemsPerPage).map((b) => {
                                 const remaining = getRemainingAmount(b);
                                 const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
-                                const addonTotal = getAddonTotal(b);
+                                const initialBreakdown = getInitialPriceBreakdown(b);
+                                const packagePrice = getPackagePrice(b, initialBreakdown);
+                                const addonTotal = getAddonTotal(b, initialBreakdown);
+                                const discountAmount = getDiscountAmount(b, initialBreakdown);
                                 return (
                                     <tr key={b.id} className="group hover:bg-muted/50 transition-colors">
                                         {orderedVisibleColumns.map((column) =>
-                                            renderDesktopCell(b, column, remaining, finalTotal, addonTotal),
+                                            renderDesktopCell(
+                                                b,
+                                                column,
+                                                remaining,
+                                                finalTotal,
+                                                addonTotal,
+                                                packagePrice,
+                                                discountAmount,
+                                            ),
                                         )}
                                     </tr>
                                 );
