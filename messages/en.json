@@ -628,7 +628,7 @@
         "changeStatusDesc": "Change status for client",
         "saveChanges": "Save Changes",
         "deleteBooking": "Delete Booking?",
-        "deleteBookingDesc": "This action cannot be undone. Booking for client {name} will be permanently deleted.",
+        "deleteBookingDesc": "This action cannot be undone. Booking for client {name} will be permanently deleted. Related Google Calendar event(s) and Fastpik project (if available) will also be attempted to be deleted.",
         "yesDelete": "Yes, Delete",
         "cancel": "Cancel",
         "setDriveLink": "Set Google Drive Link",

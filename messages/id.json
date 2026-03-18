@@ -628,7 +628,7 @@
         "changeStatusDesc": "Ubah status untuk klien",
         "saveChanges": "Simpan Perubahan",
         "deleteBooking": "Hapus Booking?",
-        "deleteBookingDesc": "Tindakan ini tidak dapat dibatalkan. Booking klien {name} akan dihapus permanen.",
+        "deleteBookingDesc": "Tindakan ini tidak dapat dibatalkan. Booking klien {name} akan dihapus permanen. Event Google Calendar terkait dan project Fastpik (jika ada) akan ikut dicoba dihapus.",
         "yesDelete": "Ya, Hapus",
         "cancel": "Batal",
         "setDriveLink": "Set Link Google Drive",

@@ -84,6 +84,9 @@ type Booking = {
     dp_refund_amount?: number | null;
     dp_refunded_at?: string | null;
     drive_folder_url: string | null;
+    fastpik_project_id: string | null;
+    fastpik_project_link: string | null;
+    fastpik_project_edit_link: string | null;
     location: string | null;
     location_lat: number | null;
     location_lng: number | null;
@@ -392,7 +395,7 @@ export default function BookingsPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, drive_folder_url, location, location_lat, location_lng, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+            .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, location, location_lat, location_lng, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
@@ -662,8 +665,8 @@ export default function BookingsPage() {
         if (!deleteModal.booking) return;
         setIsDeleting(true);
 
-        let calendarDeleteWarning: string | null = null;
         const bookingToDelete = deleteModal.booking;
+        const warningDetails: string[] = [];
 
         try {
             const calendarRes = await fetch("/api/google/calendar-delete-booking", {
@@ -679,27 +682,80 @@ export default function BookingsPage() {
             } | null;
 
             if (!calendarRes.ok) {
-                calendarDeleteWarning = locale === "en"
-                    ? `Booking deleted, but failed to remove Google Calendar event: ${calendarResult?.error || "Unknown error"}`
-                    : `Booking berhasil dihapus, tetapi event Google Calendar gagal dihapus: ${calendarResult?.error || "Unknown error"}`;
+                warningDetails.push(
+                    locale === "en"
+                        ? `Google Calendar event deletion failed: ${calendarResult?.error || "Unknown error"}`
+                        : `Event Google Calendar gagal dihapus: ${calendarResult?.error || "Unknown error"}`,
+                );
             } else if (calendarResult && calendarResult.success === false) {
                 const firstError = Array.isArray(calendarResult.errors) ? calendarResult.errors[0] : null;
-                calendarDeleteWarning = locale === "en"
-                    ? `Booking deleted, but some Google Calendar events failed to delete.${firstError ? ` ${firstError}` : ""}`
-                    : `Booking berhasil dihapus, tetapi sebagian event Google Calendar gagal dihapus.${firstError ? ` ${firstError}` : ""}`;
+                warningDetails.push(
+                    locale === "en"
+                        ? `Some Google Calendar events failed to delete.${firstError ? ` ${firstError}` : ""}`
+                        : `Sebagian event Google Calendar gagal dihapus.${firstError ? ` ${firstError}` : ""}`,
+                );
             }
         } catch {
-            calendarDeleteWarning = locale === "en"
-                ? "Booking deleted, but failed to remove Google Calendar event."
-                : "Booking berhasil dihapus, tetapi event Google Calendar gagal dihapus.";
+            warningDetails.push(
+                locale === "en"
+                    ? "Failed to remove Google Calendar event."
+                    : "Event Google Calendar gagal dihapus.",
+            );
+        }
+
+        const hasFastpikProject = Boolean(
+            bookingToDelete.fastpik_project_id?.trim() ||
+            bookingToDelete.fastpik_project_link?.trim() ||
+            bookingToDelete.fastpik_project_edit_link?.trim(),
+        );
+
+        if (hasFastpikProject) {
+            try {
+                const fastpikRes = await fetch("/api/integrations/fastpik/delete-booking-project", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        bookingId: bookingToDelete.id,
+                        locale,
+                    }),
+                });
+                const fastpikResult = await fastpikRes.json().catch(() => null) as {
+                    success?: boolean;
+                    message?: string;
+                    error?: string;
+                } | null;
+
+                if (!fastpikRes.ok || fastpikResult?.success === false) {
+                    const reason =
+                        (typeof fastpikResult?.message === "string" &&
+                            fastpikResult.message.trim()) ||
+                        (typeof fastpikResult?.error === "string" &&
+                            fastpikResult.error.trim()) ||
+                        "Unknown error";
+                    warningDetails.push(
+                        locale === "en"
+                            ? `Fastpik project deletion failed: ${reason}`
+                            : `Project Fastpik gagal dihapus: ${reason}`,
+                    );
+                }
+            } catch {
+                warningDetails.push(
+                    locale === "en"
+                        ? "Failed to delete Fastpik project."
+                        : "Project Fastpik gagal dihapus.",
+                );
+            }
         }
 
         const { error } = await supabase.from("bookings").delete().eq("id", bookingToDelete.id);
         if (!error) {
             setBookings(prev => prev.filter(b => b.id !== bookingToDelete.id));
             setDeleteModal({ open: false, booking: null });
-            if (calendarDeleteWarning) {
-                setFeedbackDialog({ open: true, message: calendarDeleteWarning });
+            if (warningDetails.length > 0) {
+                const warningMessage = locale === "en"
+                    ? `Booking deleted with warning${warningDetails.length > 1 ? "s" : ""}: ${warningDetails.join(" ")}`
+                    : `Booking berhasil dihapus dengan peringatan: ${warningDetails.join(" ")}`;
+                setFeedbackDialog({ open: true, message: warningMessage });
             }
         } else {
             setFeedbackDialog({ open: true, message: tb("failedDeleteBooking") });

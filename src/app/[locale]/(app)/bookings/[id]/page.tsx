@@ -1406,7 +1406,7 @@ export default function BookingDetailPage() {
         if (!booking) return;
 
         setDeletingBooking(true);
-        let calendarDeleteWarning: string | null = null;
+        const warningDetails: string[] = [];
 
         try {
             const calendarRes = await fetch("/api/google/calendar-delete-booking", {
@@ -1421,19 +1421,68 @@ export default function BookingDetailPage() {
             } | null;
 
             if (!calendarRes.ok) {
-                calendarDeleteWarning = locale === "en"
-                    ? `Booking deleted, but failed to remove Google Calendar event: ${calendarResult?.error || "Unknown error"}`
-                    : `Booking berhasil dihapus, tetapi event Google Calendar gagal dihapus: ${calendarResult?.error || "Unknown error"}`;
+                warningDetails.push(
+                    locale === "en"
+                        ? `Google Calendar event deletion failed: ${calendarResult?.error || "Unknown error"}`
+                        : `Event Google Calendar gagal dihapus: ${calendarResult?.error || "Unknown error"}`,
+                );
             } else if (calendarResult && calendarResult.success === false) {
                 const firstError = Array.isArray(calendarResult.errors) ? calendarResult.errors[0] : null;
-                calendarDeleteWarning = locale === "en"
-                    ? `Booking deleted, but some Google Calendar events failed to delete.${firstError ? ` ${firstError}` : ""}`
-                    : `Booking berhasil dihapus, tetapi sebagian event Google Calendar gagal dihapus.${firstError ? ` ${firstError}` : ""}`;
+                warningDetails.push(
+                    locale === "en"
+                        ? `Some Google Calendar events failed to delete.${firstError ? ` ${firstError}` : ""}`
+                        : `Sebagian event Google Calendar gagal dihapus.${firstError ? ` ${firstError}` : ""}`,
+                );
             }
         } catch {
-            calendarDeleteWarning = locale === "en"
-                ? "Booking deleted, but failed to remove Google Calendar event."
-                : "Booking berhasil dihapus, tetapi event Google Calendar gagal dihapus.";
+            warningDetails.push(
+                locale === "en"
+                    ? "Failed to remove Google Calendar event."
+                    : "Event Google Calendar gagal dihapus.",
+            );
+        }
+
+        const hasFastpikProject = Boolean(
+            booking.fastpik_project_id?.trim() ||
+            booking.fastpik_project_link?.trim() ||
+            booking.fastpik_project_edit_link?.trim(),
+        );
+        if (hasFastpikProject) {
+            try {
+                const fastpikRes = await fetch("/api/integrations/fastpik/delete-booking-project", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        bookingId: booking.id,
+                        locale,
+                    }),
+                });
+                const fastpikResult = await fastpikRes.json().catch(() => null) as {
+                    success?: boolean;
+                    message?: string;
+                    error?: string;
+                } | null;
+
+                if (!fastpikRes.ok || fastpikResult?.success === false) {
+                    const reason =
+                        (typeof fastpikResult?.message === "string" &&
+                            fastpikResult.message.trim()) ||
+                        (typeof fastpikResult?.error === "string" &&
+                            fastpikResult.error.trim()) ||
+                        "Unknown error";
+                    warningDetails.push(
+                        locale === "en"
+                            ? `Fastpik project deletion failed: ${reason}`
+                            : `Project Fastpik gagal dihapus: ${reason}`,
+                    );
+                }
+            } catch {
+                warningDetails.push(
+                    locale === "en"
+                        ? "Failed to delete Fastpik project."
+                        : "Project Fastpik gagal dihapus.",
+                );
+            }
         }
 
         const { error } = await supabase.from("bookings").delete().eq("id", booking.id);
@@ -1446,9 +1495,12 @@ export default function BookingDetailPage() {
         setDeleteBookingModalOpen(false);
         setDeletingBooking(false);
 
-        if (calendarDeleteWarning) {
+        if (warningDetails.length > 0) {
+            const warningMessage = locale === "en"
+                ? `Booking deleted with warning${warningDetails.length > 1 ? "s" : ""}: ${warningDetails.join(" ")}`
+                : `Booking berhasil dihapus dengan peringatan: ${warningDetails.join(" ")}`;
             setPendingRedirect(bookingsPath);
-            showFeedback(calendarDeleteWarning, locale === "en" ? "Warning" : "Peringatan");
+            showFeedback(warningMessage, locale === "en" ? "Warning" : "Peringatan");
             return;
         }
 
@@ -2341,8 +2393,8 @@ export default function BookingDetailPage() {
                 onOpenChange={setDeleteBookingModalOpen}
                 title={locale === "en" ? "Delete Booking" : "Hapus Booking"}
                 message={locale === "en"
-                    ? `Delete booking for ${booking.client_name}? Related Google Calendar event(s) will also be removed.`
-                    : `Yakin ingin menghapus booking ${booking.client_name}? Event Google Calendar terkait juga akan ikut dihapus.`}
+                    ? `Delete booking for ${booking.client_name}? Related Google Calendar event(s) and Fastpik project will also be deleted if available.`
+                    : `Yakin ingin menghapus booking ${booking.client_name}? Event Google Calendar terkait dan project Fastpik (jika ada) juga akan ikut dihapus.`}
                 cancelLabel={locale === "en" ? "Cancel" : "Batal"}
                 confirmLabel={deletingBooking ? (locale === "en" ? "Deleting..." : "Menghapus...") : (locale === "en" ? "Yes, Delete" : "Ya, Hapus")}
                 onConfirm={() => { void handleDeleteBooking(); }}

@@ -40,6 +40,17 @@ type SyncResult = {
   projectEditLink?: string | null;
 };
 
+type FastpikDeleteAction = "deleted" | "not_found";
+
+type DeleteProjectResult = {
+  success: boolean;
+  status: FastpikSyncStatus;
+  message: string;
+  bookingId?: string;
+  projectId?: string | null;
+  action?: FastpikDeleteAction | null;
+};
+
 const FASTPIK_REQUEST_TIMEOUT_MS = 15000;
 const FASTPIK_RETRY_COUNT = 1;
 export const FASTPIK_SYNC_CHUNK_SIZE = 50;
@@ -186,6 +197,60 @@ async function callFastpikUpsert(
     try {
       const response = await fetch(
         `${resolveFastpikBaseUrl()}/api/integrations/clientdesk/upsert`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-clientdesk-api-key": apiKey,
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        },
+      );
+
+      const body = await response.json().catch(() => null);
+      if (response.status >= 500 && attempt < FASTPIK_RETRY_COUNT) {
+        continue;
+      }
+      return { response, body };
+    } catch (error) {
+      lastError = error;
+      if (attempt >= FASTPIK_RETRY_COUNT) {
+        throw error;
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw lastError || new Error("Gagal menghubungi Fastpik.");
+}
+
+async function callFastpikDelete(
+  profile: ProfileFastpikSettings,
+  booking: BookingFastpikSyncRow,
+  options?: { locale?: string },
+) {
+  const apiKey = (profile.fastpik_api_key || "").trim();
+  if (!apiKey) {
+    throw new Error("API key Fastpik belum diisi.");
+  }
+
+  const payload = {
+    source_app: "clientdesk",
+    source_ref_id: booking.id,
+    booking_id: booking.id,
+    locale: options?.locale || "id",
+    project_id: booking.fastpik_project_id || undefined,
+  };
+
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt <= FASTPIK_RETRY_COUNT; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FASTPIK_REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(
+        `${resolveFastpikBaseUrl()}/api/integrations/clientdesk/delete`,
         {
           method: "POST",
           headers: {
@@ -460,6 +525,121 @@ export async function syncBookingToFastpik(params: {
       success: false,
       status: "failed",
       bookingId: booking.id,
+      message,
+    };
+  }
+}
+
+export async function deleteBookingProjectFromFastpik(params: {
+  supabase: any;
+  userId: string;
+  bookingId: string;
+  locale?: string;
+}): Promise<DeleteProjectResult> {
+  const { supabase, userId, bookingId, locale } = params;
+  const profile = await getProfileFastpikSettings(supabase, userId);
+
+  if (!profile.fastpik_integration_enabled) {
+    return {
+      success: false,
+      status: "idle",
+      bookingId,
+      action: null,
+      message: "Integrasi Fastpik belum diaktifkan.",
+    };
+  }
+
+  const booking = await getBookingForSync(supabase, userId, bookingId);
+  const hasFastpikIndicator = Boolean(
+    booking.fastpik_project_id?.trim() ||
+      booking.fastpik_project_link?.trim() ||
+      booking.fastpik_project_edit_link?.trim(),
+  );
+
+  if (!hasFastpikIndicator) {
+    return {
+      success: true,
+      status: "success",
+      bookingId: booking.id,
+      projectId: null,
+      action: "not_found",
+      message: "Project Fastpik tidak ditemukan (sudah terhapus).",
+    };
+  }
+
+  await patchProfileSyncLog(supabase, userId, {
+    status: "syncing",
+    message: `Menghapus project Fastpik untuk booking ${booking.id}...`,
+  });
+
+  const deletedAt = new Date().toISOString();
+  try {
+    const { response, body } = await callFastpikDelete(profile, booking, { locale });
+
+    if (response.ok && body?.success) {
+      const action: FastpikDeleteAction =
+        body?.action === "deleted" ? "deleted" : "not_found";
+      const projectId =
+        typeof body?.project_id === "string"
+          ? body.project_id
+          : booking.fastpik_project_id;
+      const message =
+        typeof body?.message === "string" && body.message.trim()
+          ? body.message
+          : action === "deleted"
+            ? "Project Fastpik berhasil dihapus."
+            : "Project Fastpik tidak ditemukan (sudah terhapus).";
+
+      await patchProfileSyncLog(supabase, userId, {
+        status: "success",
+        message: `${message} (booking ${booking.id})`,
+        at: deletedAt,
+      });
+
+      return {
+        success: true,
+        status: "success",
+        bookingId: booking.id,
+        projectId: projectId || null,
+        action,
+        message,
+      };
+    }
+
+    const message =
+      body?.error ||
+      body?.message ||
+      `Fastpik delete gagal (HTTP ${response.status}).`;
+    const status: FastpikSyncStatus =
+      response.status >= 500 ? "failed" : "warning";
+    await patchProfileSyncLog(supabase, userId, {
+      status,
+      message,
+      at: deletedAt,
+    });
+
+    return {
+      success: false,
+      status,
+      bookingId: booking.id,
+      action: null,
+      message,
+    };
+  } catch (error: any) {
+    const message =
+      error?.name === "AbortError"
+        ? "Timeout saat menghubungi Fastpik."
+        : error?.message || "Gagal menghapus project Fastpik.";
+    await patchProfileSyncLog(supabase, userId, {
+      status: "failed",
+      message,
+      at: deletedAt,
+    });
+    return {
+      success: false,
+      status: "failed",
+      bookingId: booking.id,
+      action: null,
       message,
     };
   }
