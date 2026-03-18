@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { BatchImportButton } from "@/components/batch-import";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
+import { useSuccessToast } from "@/components/ui/success-toast";
 import {
     buildExtraFieldTemplateVars,
     buildMultiSessionTemplateVars,
@@ -315,6 +316,7 @@ export default function BookingsPage() {
     const [waTargetPopup, setWaTargetPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [copyTargetPopup, setCopyTargetPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
+    const { showSuccessToast, successToastNode } = useSuccessToast();
 
     const closeDesktopMenus = React.useCallback(() => {
         setWaMenuBookingId(null);
@@ -886,16 +888,24 @@ export default function BookingsPage() {
         sendWhatsAppFreelancer(booking, freelancer);
     }
 
-    function copyClientTemplate(booking: Booking) {
+    async function copyClientTemplate(booking: Booking) {
         const template = generateWATemplate(booking, locale, savedTemplates, studioName);
-        navigator.clipboard.writeText(template);
-        setCopiedClientTemplateId(booking.id);
-        setTimeout(() => {
-            setCopiedClientTemplateId((current) => current === booking.id ? null : current);
-        }, 2000);
+        try {
+            await navigator.clipboard.writeText(template);
+            showSuccessToast("Template klien berhasil disalin.");
+            setCopiedClientTemplateId(booking.id);
+            setTimeout(() => {
+                setCopiedClientTemplateId((current) => current === booking.id ? null : current);
+            }, 2000);
+        } catch {
+            setFeedbackDialog({
+                open: true,
+                message: locale === "en" ? "Failed to copy client template." : "Gagal menyalin template klien.",
+            });
+        }
     }
 
-    function copyFreelancerTemplate(booking: Booking, freelancer: FreelancerInfo) {
+    async function copyFreelancerTemplate(booking: Booking, freelancer: FreelancerInfo) {
         const template = generateWATemplate(
             booking,
             locale,
@@ -903,20 +913,31 @@ export default function BookingsPage() {
             studioName,
             freelancer.name,
         );
-        navigator.clipboard.writeText(template);
-        setCopiedFreelancerTemplateId(booking.id);
-        setTimeout(() => {
-            setCopiedFreelancerTemplateId((current) => current === booking.id ? null : current);
-        }, 2000);
+        try {
+            await navigator.clipboard.writeText(template);
+            showSuccessToast("Template freelance berhasil disalin.");
+            setCopiedFreelancerTemplateId(booking.id);
+            setTimeout(() => {
+                setCopiedFreelancerTemplateId((current) => current === booking.id ? null : current);
+            }, 2000);
+        } catch {
+            setFeedbackDialog({
+                open: true,
+                message:
+                    locale === "en"
+                        ? "Failed to copy freelancer template."
+                        : "Gagal menyalin template freelance.",
+            });
+        }
     }
 
     function handleDefaultCopyAction(booking: Booking) {
-        copyClientTemplate(booking);
+        void copyClientTemplate(booking);
     }
 
     function handleExplicitCopyAction(booking: Booking, target: "client" | "freelancer") {
         if (target === "client") {
-            copyClientTemplate(booking);
+            void copyClientTemplate(booking);
             return;
         }
 
@@ -930,7 +951,7 @@ export default function BookingsPage() {
             return;
         }
 
-        copyFreelancerTemplate(booking, booking.booking_freelancers[0]);
+        void copyFreelancerTemplate(booking, booking.booking_freelancers[0]);
     }
 
     const formatDate = (d: string | null) => {
@@ -1413,6 +1434,7 @@ export default function BookingsPage() {
 
     return (
         <div className="space-y-6">
+            {successToastNode}
             {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -1867,7 +1889,7 @@ export default function BookingsPage() {
                                 key={f.id}
                                 onClick={() => {
                                     if (!copyFreelancerPopup.booking) return;
-                                    copyFreelancerTemplate(copyFreelancerPopup.booking, f);
+                                    void copyFreelancerTemplate(copyFreelancerPopup.booking, f);
                                     setCopyFreelancerPopup({ open: false, freelancers: [], booking: null });
                                 }}
                                 className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left cursor-pointer"

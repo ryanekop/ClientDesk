@@ -69,12 +69,33 @@ export function mergeTableColumnPreferences(
       });
       return acc;
     }, []);
+  const merged = [...ordered];
+  const existingIds = new Set(merged.map((item) => item.id));
 
-  const missing = defaults.filter(
-    (item) => !ordered.some((savedItem) => savedItem.id === item.id),
-  );
+  defaults.forEach((item, index) => {
+    if (existingIds.has(item.id)) return;
 
-  const merged = [...ordered, ...missing];
+    const nextExistingDefault = defaults
+      .slice(index + 1)
+      .find((candidate) => existingIds.has(candidate.id));
+
+    if (!nextExistingDefault) {
+      merged.push(item);
+      existingIds.add(item.id);
+      return;
+    }
+
+    const insertIndex = merged.findIndex(
+      (candidate) => candidate.id === nextExistingDefault.id,
+    );
+    if (insertIndex === -1) {
+      merged.push(item);
+    } else {
+      merged.splice(insertIndex, 0, item);
+    }
+    existingIds.add(item.id);
+  });
+
   return lockBoundaryColumns(merged);
 }
 

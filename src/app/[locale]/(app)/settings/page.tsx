@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
+import { useSuccessToast } from "@/components/ui/success-toast";
 import {
   Dialog,
   DialogContent,
@@ -69,8 +70,10 @@ import {
   DEFAULT_CLIENT_STATUSES,
   INITIAL_BOOKING_STATUS,
   getDefaultFinalInvoiceVisibleFromStatus,
+  getDefaultTrackingFileLinksVisibleFromStatus,
   normalizeClientProgressStatuses,
   resolveFinalInvoiceVisibleFromStatus,
+  resolveTrackingFileLinksVisibleFromStatus,
 } from "@/lib/client-status";
 import {
   getActiveEventTypes,
@@ -116,6 +119,7 @@ type Profile = {
   google_drive_access_token?: string | null;
   google_drive_refresh_token?: string | null;
   final_invoice_visible_from_status?: string | null;
+  tracking_file_links_visible_from_status?: string | null;
   form_event_types?: string[] | null;
   custom_event_types?: string[] | null;
   drive_folder_structure_map?: Record<string, string[]> | null;
@@ -237,6 +241,7 @@ const templateHeaderToneByType: Record<string, string> = {
 
 const DEFAULT_QUEUE_TRIGGER_STATUS = "Antrian Edit";
 const DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS = "Sesi Foto / Acara";
+const DEFAULT_TRACKING_FILE_LINKS_VISIBLE_FROM_STATUS = "Sesi Foto / Acara";
 const SETTINGS_SAVED_MESSAGE = "✅ Pengaturan berhasil disimpan";
 const MULTI_SESSION_WHATSAPP_VARS = getMultiSessionTemplateTokens("whatsapp");
 
@@ -391,6 +396,7 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "queue_trigger_status",
   "default_wa_target",
   "final_invoice_visible_from_status",
+  "tracking_file_links_visible_from_status",
   "form_event_types",
   "custom_event_types",
   "form_sections",
@@ -619,6 +625,7 @@ export default function SettingsPage() {
     title: string;
     message: string;
   }>({ open: false, title: "", message: "" });
+  const { showSuccessToast, successToastNode } = useSuccessToast();
 
   // Logo studio
   const [logoUrl, setLogoUrl] = React.useState<string | null>(null);
@@ -644,6 +651,10 @@ export default function SettingsPage() {
     React.useState(DEFAULT_QUEUE_TRIGGER_STATUS);
   const [finalInvoiceVisibleFromStatus, setFinalInvoiceVisibleFromStatus] =
     React.useState(DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS);
+  const [
+    trackingFileLinksVisibleFromStatus,
+    setTrackingFileLinksVisibleFromStatus,
+  ] = React.useState(DEFAULT_TRACKING_FILE_LINKS_VISIBLE_FROM_STATUS);
 
   // Default WA target
   const [defaultWaTarget, setDefaultWaTarget] = React.useState<
@@ -678,6 +689,8 @@ export default function SettingsPage() {
   const [resetSaving, setResetSaving] = React.useState(false);
   const unsupportedProfileColumnsRef = React.useRef<Set<string>>(new Set());
   const feedbackTitle = locale === "en" ? "Information" : "Informasi";
+  const defaultSettingsSavedToastMessage =
+    locale === "en" ? "Settings saved." : "Pengaturan berhasil disimpan.";
   const showFeedback = React.useCallback(
     (message: string, title?: string) => {
       setFeedbackDialog({
@@ -687,6 +700,12 @@ export default function SettingsPage() {
       });
     },
     [feedbackTitle],
+  );
+  const showSettingsSavedToast = React.useCallback(
+    (message?: string) => {
+      showSuccessToast(message || defaultSettingsSavedToastMessage);
+    },
+    [defaultSettingsSavedToastMessage, showSuccessToast],
   );
   const calendarFormatInputRef = React.useRef<HTMLInputElement>(null);
   const calendarDescriptionInputRef = React.useRef<HTMLTextAreaElement>(null);
@@ -1086,6 +1105,12 @@ export default function SettingsPage() {
         (prof as any)?.final_invoice_visible_from_status,
       ),
     );
+    setTrackingFileLinksVisibleFromStatus(
+      resolveTrackingFileLinksVisibleFromStatus(
+        loadedClientStatuses,
+        (prof as any)?.tracking_file_links_visible_from_status,
+      ),
+    );
     if ((prof as any)?.default_wa_target) {
       setDefaultWaTarget((prof as any).default_wa_target);
     }
@@ -1320,6 +1345,7 @@ export default function SettingsPage() {
         payload?.tenant?.default_booking_vendor_slug || "",
       );
       setSavedMsg(SETTINGS_SAVED_MESSAGE);
+      showSettingsSavedToast();
       setTimeout(() => setSavedMsg(""), 3000);
     } catch (error) {
       console.error("Tenant booking mode update error:", error);
@@ -1347,6 +1373,7 @@ export default function SettingsPage() {
 
       setVendorSlug(slug);
       setSavedMsg(SETTINGS_SAVED_MESSAGE);
+      showSettingsSavedToast();
       setTimeout(() => setSavedMsg(""), 3000);
       void fetchAll(true);
     } catch (error) {
@@ -1376,6 +1403,7 @@ export default function SettingsPage() {
         drive_folder_structure_map: driveFolderStructures,
       });
       setSavedMsg(SETTINGS_SAVED_MESSAGE);
+      showSettingsSavedToast();
       setTimeout(() => setSavedMsg(""), 3000);
       void fetchAll(true);
     } catch (error) {
@@ -1441,6 +1469,7 @@ export default function SettingsPage() {
     await saveProfilePatch(buildFastpikProfilePatch());
     if (options?.showSavedMessage) {
       setSavedMsg(SETTINGS_SAVED_MESSAGE);
+      showSettingsSavedToast();
       setTimeout(() => setSavedMsg(""), 3000);
     }
   }
@@ -1558,6 +1587,7 @@ export default function SettingsPage() {
       setCustomEventTypes(normalizedCustomEventTypes);
       setActiveEventTypes(normalizedActiveEventTypes);
       setEventTypeSaved(true);
+      showSettingsSavedToast();
       setTimeout(() => setEventTypeSaved(false), 3000);
       void fetchAll(true);
     } catch (error) {
@@ -1604,6 +1634,7 @@ export default function SettingsPage() {
 
       if (changedKeys.length === 0) {
         setTemplateSavedMsg(SETTINGS_SAVED_MESSAGE);
+        showSettingsSavedToast();
         setTimeout(() => setTemplateSavedMsg(""), 3000);
         return;
       }
@@ -1672,6 +1703,7 @@ export default function SettingsPage() {
 
       setTemplates(nextTemplates);
       setTemplateSavedMsg(SETTINGS_SAVED_MESSAGE);
+      showSettingsSavedToast();
       setTimeout(() => setTemplateSavedMsg(""), 3000);
       void fetchAll(true);
     } catch (error) {
@@ -1692,16 +1724,25 @@ export default function SettingsPage() {
       normalizedClientStatuses,
       finalInvoiceVisibleFromStatus,
     );
+    const nextTrackingFileVisibleFromStatus =
+      resolveTrackingFileLinksVisibleFromStatus(
+        normalizedClientStatuses,
+        trackingFileLinksVisibleFromStatus,
+      );
     try {
       await saveProfilePatch({
         custom_statuses: normalizedClientStatuses,
         custom_client_statuses: normalizedClientStatuses,
         queue_trigger_status: queueTriggerStatus,
         final_invoice_visible_from_status: nextVisibleFromStatus,
+        tracking_file_links_visible_from_status:
+          nextTrackingFileVisibleFromStatus,
       });
       setCustomClientStatuses(normalizedClientStatuses);
       setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
+      setTrackingFileLinksVisibleFromStatus(nextTrackingFileVisibleFromStatus);
       setStatusSaved(true);
+      showSettingsSavedToast();
       setTimeout(() => setStatusSaved(false), 3000);
     } catch (error) {
       console.error("Status save error:", error);
@@ -1744,6 +1785,7 @@ export default function SettingsPage() {
       drive_folder_structure_map: defaultDriveStructures,
     });
     setSavedMsg(SETTINGS_SAVED_MESSAGE);
+    showSettingsSavedToast();
     setTimeout(() => setSavedMsg(""), 3000);
     void fetchAll(true);
   }
@@ -1775,6 +1817,7 @@ export default function SettingsPage() {
     setTemplateContentsEn({});
     templateBaselineRef.current = { contents: {}, contentsEn: {} };
     setTemplateSavedMsg(SETTINGS_SAVED_MESSAGE);
+    showSettingsSavedToast();
     setTimeout(() => setTemplateSavedMsg(""), 3000);
     void fetchAll(true);
   }
@@ -1787,18 +1830,26 @@ export default function SettingsPage() {
       nextClientStatuses,
       DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS,
     );
+    const nextTrackingFileVisibleFromStatus =
+      resolveTrackingFileLinksVisibleFromStatus(
+        nextClientStatuses,
+        DEFAULT_TRACKING_FILE_LINKS_VISIBLE_FROM_STATUS,
+      );
 
     setCustomClientStatuses(nextClientStatuses);
     setQueueTriggerStatus(DEFAULT_QUEUE_TRIGGER_STATUS);
     setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
+    setTrackingFileLinksVisibleFromStatus(nextTrackingFileVisibleFromStatus);
 
     await saveProfilePatch({
       custom_statuses: nextClientStatuses,
       custom_client_statuses: nextClientStatuses,
       queue_trigger_status: DEFAULT_QUEUE_TRIGGER_STATUS,
       final_invoice_visible_from_status: nextVisibleFromStatus,
+      tracking_file_links_visible_from_status: nextTrackingFileVisibleFromStatus,
     });
     setStatusSaved(true);
+    showSettingsSavedToast();
     setTimeout(() => setStatusSaved(false), 3000);
   }
 
@@ -1813,6 +1864,7 @@ export default function SettingsPage() {
       custom_event_types: [],
     });
     setEventTypeSaved(true);
+    showSettingsSavedToast();
     setTimeout(() => setEventTypeSaved(false), 3000);
     void fetchAll(true);
   }
@@ -2380,6 +2432,7 @@ export default function SettingsPage() {
 
   return (
     <>
+      {successToastNode}
       <div className="space-y-6 max-w-4xl mx-auto">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
@@ -3733,6 +3786,42 @@ export default function SettingsPage() {
                       ? customClientStatuses
                       : [
                           getDefaultFinalInvoiceVisibleFromStatus(
+                            customClientStatuses,
+                          ),
+                        ]
+                    ).map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
+                  <p className="text-sm font-medium">
+                    {locale === "en"
+                      ? "File Link Visibility"
+                      : "Tampilkan Link File Mulai Status"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {locale === "en"
+                      ? "Choose the first client status where Google Drive and Fastpik links appear on the tracking page."
+                      : "Pilih status klien pertama saat link Google Drive dan Fastpik mulai ditampilkan di halaman tracking."}
+                  </p>
+                  <select
+                    value={resolveTrackingFileLinksVisibleFromStatus(
+                      customClientStatuses,
+                      trackingFileLinksVisibleFromStatus,
+                    )}
+                    onChange={(e) =>
+                      setTrackingFileLinksVisibleFromStatus(e.target.value)
+                    }
+                    className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    {(customClientStatuses.length > 0
+                      ? customClientStatuses
+                      : [
+                          getDefaultTrackingFileLinksVisibleFromStatus(
                             customClientStatuses,
                           ),
                         ]

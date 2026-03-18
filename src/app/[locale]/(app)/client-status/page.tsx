@@ -6,6 +6,7 @@ import { Activity, Copy, ClipboardCheck, Loader2, ExternalLink, Search } from "l
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
+import { useSuccessToast } from "@/components/ui/success-toast";
 import { Link } from "@/i18n/routing";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import { useTranslations, useLocale } from "next-intl";
@@ -121,6 +122,7 @@ export default function ClientStatusPage() {
         title: string;
         message: string;
     }>({ open: false, title: "", message: "" });
+    const { showSuccessToast, successToastNode } = useSuccessToast();
 
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
@@ -391,11 +393,21 @@ export default function ClientStatusPage() {
         setBookings(prev => prev.map(b => b.id === id ? { ...b, queue_position: pos } : b));
     }
 
-    function copyTrackLink(uuid: string, id: string) {
+    async function copyTrackLink(uuid: string, id: string) {
         const url = `${window.location.origin}/${locale}/track/${uuid}`;
-        navigator.clipboard.writeText(url);
-        setCopiedId(id);
-        setTimeout(() => setCopiedId(null), 2000);
+        try {
+            await navigator.clipboard.writeText(url);
+            showSuccessToast("Link tracking berhasil disalin.");
+            setCopiedId(id);
+            setTimeout(() => setCopiedId(null), 2000);
+        } catch {
+            showFeedback(
+                locale === "en"
+                    ? "Failed to copy tracking link."
+                    : "Gagal menyalin link tracking.",
+                locale === "en" ? "Warning" : "Peringatan",
+            );
+        }
     }
 
     const filtered = bookings.filter(b => {
@@ -512,7 +524,7 @@ export default function ClientStatusPage() {
                                     <ActionIconButton
                                         tone={copiedId === booking.id ? "green" : "violet"}
                                         title={t("salinLinkTracking")}
-                                        onClick={() => copyTrackLink(booking.tracking_uuid!, booking.id)}
+                                        onClick={() => void copyTrackLink(booking.tracking_uuid!, booking.id)}
                                     >
                                         {copiedId === booking.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                                     </ActionIconButton>
@@ -563,6 +575,7 @@ export default function ClientStatusPage() {
 
     return (
         <div className="space-y-6">
+            {successToastNode}
             <div>
                 <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
                     <Activity className="w-6 h-6" /> {t("title")}
@@ -649,7 +662,7 @@ export default function ClientStatusPage() {
                                     <ActionIconButton tone="blue" title={t("bukaLink")} onClick={() => window.open(`${window.location.origin}/${locale}/track/${b.tracking_uuid}`, "_blank")}>
                                         <ExternalLink className="w-4 h-4" />
                                     </ActionIconButton>
-                                    <ActionIconButton tone={copiedId === b.id ? "green" : "violet"} title={t("salinLink")} onClick={() => copyTrackLink(b.tracking_uuid!, b.id)}>
+                                    <ActionIconButton tone={copiedId === b.id ? "green" : "violet"} title={t("salinLink")} onClick={() => void copyTrackLink(b.tracking_uuid!, b.id)}>
                                         {copiedId === b.id ? <ClipboardCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                                     </ActionIconButton>
                                 </>

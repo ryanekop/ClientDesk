@@ -9,6 +9,7 @@ import {
 } from "@/lib/final-settlement";
 import {
     resolveUnifiedBookingStatus,
+    shouldShowTrackingFileLinksForClientStatus,
     shouldShowFinalInvoiceForClientStatus,
 } from "@/lib/client-status";
 import {
@@ -58,6 +59,7 @@ type ProfileRow = {
     studio_name: string | null;
     custom_client_statuses: string[] | null;
     final_invoice_visible_from_status: string | null;
+    tracking_file_links_visible_from_status?: string | null;
     fastpik_link_display_mode: FastpikLinkDisplayMode | null;
     fastpik_link_display_mode_tracking?: FastpikLinkDisplayMode | null;
 };
@@ -74,18 +76,19 @@ async function getBookingData(uuid: string) {
     let vendorName = "";
     let customClientStatuses: string[] | null = null;
     let finalInvoiceVisibleFromStatus: string | null = null;
+    let trackingFileLinksVisibleFromStatus: string | null = null;
     let fastpikLinkDisplayMode: FastpikLinkDisplayMode = "prefer_fastpik";
     if (booking.user_id) {
         const { data: profileWithSplitMode, error: profileWithSplitModeError } = await supabaseAdmin
             .from("profiles")
-            .select("studio_name, custom_client_statuses, final_invoice_visible_from_status, fastpik_link_display_mode, fastpik_link_display_mode_tracking")
+            .select("studio_name, custom_client_statuses, final_invoice_visible_from_status, tracking_file_links_visible_from_status, fastpik_link_display_mode, fastpik_link_display_mode_tracking")
             .eq("id", booking.user_id)
             .single();
         let profile = profileWithSplitMode as ProfileRow | null;
         if (!profile && profileWithSplitModeError) {
             const { data: legacyProfile } = await supabaseAdmin
                 .from("profiles")
-                .select("studio_name, custom_client_statuses, final_invoice_visible_from_status, fastpik_link_display_mode")
+                .select("studio_name, custom_client_statuses, final_invoice_visible_from_status, tracking_file_links_visible_from_status, fastpik_link_display_mode")
                 .eq("id", booking.user_id)
                 .single();
             profile = legacyProfile as ProfileRow | null;
@@ -93,6 +96,8 @@ async function getBookingData(uuid: string) {
         vendorName = profile?.studio_name || "";
         customClientStatuses = profile?.custom_client_statuses || null;
         finalInvoiceVisibleFromStatus = profile?.final_invoice_visible_from_status || null;
+        trackingFileLinksVisibleFromStatus =
+            profile?.tracking_file_links_visible_from_status || null;
         fastpikLinkDisplayMode = normalizeFastpikLinkDisplayMode(
             profile?.fastpik_link_display_mode_tracking ??
                 profile?.fastpik_link_display_mode,
@@ -104,6 +109,7 @@ async function getBookingData(uuid: string) {
         vendorName,
         customClientStatuses,
         finalInvoiceVisibleFromStatus,
+        trackingFileLinksVisibleFromStatus,
         fastpikLinkDisplayMode,
     };
 }
@@ -154,7 +160,13 @@ export default async function TrackingPage({ params }: PageProps) {
         );
     }
 
-    const { booking, vendorName, customClientStatuses, finalInvoiceVisibleFromStatus } = result;
+    const {
+        booking,
+        vendorName,
+        customClientStatuses,
+        finalInvoiceVisibleFromStatus,
+        trackingFileLinksVisibleFromStatus,
+    } = result;
     const finalAdjustments = normalizeFinalAdjustments(booking.final_adjustments);
     const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
     const finalAdjustmentsTotal = getFinalAdjustmentsTotal(finalAdjustments);
@@ -210,6 +222,11 @@ export default async function TrackingPage({ params }: PageProps) {
             statuses: customClientStatuses,
             currentStatus: effectiveClientStatus,
             visibleFromStatus: finalInvoiceVisibleFromStatus,
+        }),
+        showFileResults: shouldShowTrackingFileLinksForClientStatus({
+            statuses: customClientStatuses,
+            currentStatus: effectiveClientStatus,
+            visibleFromStatus: trackingFileLinksVisibleFromStatus,
         }),
     };
 

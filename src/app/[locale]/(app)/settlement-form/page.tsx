@@ -18,6 +18,7 @@ import {
   Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useSuccessToast } from "@/components/ui/success-toast";
 import { createClient } from "@/utils/supabase/client";
 import {
   getEnabledBankAccounts,
@@ -65,6 +66,7 @@ export default function SettlementFormPage() {
   const [copied, setCopied] = React.useState(false);
   const [savedMsg, setSavedMsg] = React.useState("");
   const [saveMessageTone, setSaveMessageTone] = React.useState<"success" | "error">("success");
+  const { showSuccessToast, successToastNode } = useSuccessToast();
   const [profileId, setProfileId] = React.useState("");
   const [studioName, setStudioName] = React.useState("");
   const [siteUrl, setSiteUrl] = React.useState("");
@@ -266,10 +268,10 @@ export default function SettlementFormPage() {
 
     const next = JSON.stringify(createSnapshot(nextSettings));
     setLastSavedSnapshot(next);
-    setSavedMsg(successMessage);
+    setSavedMsg("");
     setSaveMessageTone("success");
+    showSuccessToast(successMessage);
     setIframeKey((prev) => prev + 1);
-    setTimeout(() => setSavedMsg(""), 3000);
     return true;
   }
 
@@ -306,11 +308,18 @@ export default function SettlementFormPage() {
     setShowResetConfirm(false);
   }
 
-  function copyUrl() {
+  async function copyUrl() {
     if (!settlementUrl) return;
-    navigator.clipboard.writeText(settlementUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(settlementUrl);
+      showSuccessToast("URL form pelunasan berhasil disalin.");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setSavedMsg("Gagal menyalin URL.");
+      setSaveMessageTone("error");
+      setTimeout(() => setSavedMsg(""), 3000);
+    }
   }
 
   const inputClass =
@@ -326,6 +335,7 @@ export default function SettlementFormPage() {
 
   return (
     <div className="space-y-6 pb-20 lg:pb-0">
+      {successToastNode}
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Form Pelunasan</h2>
         <p className="text-muted-foreground">
@@ -580,7 +590,7 @@ export default function SettlementFormPage() {
                 </Button>
                 {settlementUrl ? (
                   <>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyUrl} title="Salin URL">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => void copyUrl()} title="Salin URL">
                       {copied ? (
                         <ClipboardCheck className="w-3.5 h-3.5 text-green-500" />
                       ) : (

@@ -7,6 +7,8 @@ export type BookingSpecialLinkRule = {
   token: string;
   userId: string;
   name: string;
+  eventTypeLocked: boolean;
+  eventTypes: string[];
   packageLocked: boolean;
   packageServiceIds: string[];
   addonLocked: boolean;
@@ -21,6 +23,9 @@ export type BookingSpecialLinkRule = {
 export type BookingSpecialOfferSnapshot = {
   link_id: string;
   link_name: string | null;
+  event_type_locked: boolean;
+  event_types: string[];
+  selected_event_type: string | null;
   package_locked: boolean;
   addon_locked: boolean;
   package_service_ids: string[];
@@ -72,6 +77,17 @@ export function normalizeUuidList(value: unknown): string[] {
   );
 }
 
+export function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean),
+    ),
+  );
+}
+
 export function normalizeSpecialOfferToken(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -95,6 +111,8 @@ export function normalizeBookingSpecialLinkRule(
       typeof record.name === "string" && record.name.trim()
         ? record.name.trim()
         : "Special Booking",
+    eventTypeLocked: record.event_type_locked === true,
+    eventTypes: normalizeStringList(record.event_types),
     packageLocked: record.package_locked === true,
     packageServiceIds: normalizeUuidList(record.package_service_ids),
     addonLocked: record.addon_locked === true,
@@ -122,6 +140,7 @@ export function isBookingSpecialLinkAvailable(
       rule.isActive &&
       !rule.consumedAt &&
       !rule.consumedBookingId &&
+      (!rule.eventTypeLocked || rule.eventTypes.length > 0) &&
       (!rule.packageLocked || rule.packageServiceIds.length > 0) &&
       (!rule.addonLocked || rule.addonServiceIds.length > 0),
   );
@@ -142,6 +161,7 @@ export function computeSpecialOfferTotal(input: {
 
 export function buildSpecialOfferSnapshot(input: {
   rule: BookingSpecialLinkRule;
+  selectedEventType?: string | null;
   selectedPackageServiceIds: string[];
   selectedAddonServiceIds: string[];
   packageTotal: number;
@@ -154,6 +174,13 @@ export function buildSpecialOfferSnapshot(input: {
   return {
     link_id: input.rule.id,
     link_name: input.rule.name || null,
+    event_type_locked: input.rule.eventTypeLocked,
+    event_types: normalizeStringList(input.rule.eventTypes),
+    selected_event_type:
+      typeof input.selectedEventType === "string" &&
+      input.selectedEventType.trim()
+        ? input.selectedEventType.trim()
+        : null,
     package_locked: input.rule.packageLocked,
     addon_locked: input.rule.addonLocked,
     package_service_ids: normalizeUuidList(input.rule.packageServiceIds),
@@ -202,6 +229,13 @@ export function resolveSpecialOfferSnapshotFromExtraFields(
     link_name:
       typeof payload.link_name === "string" && payload.link_name.trim()
         ? payload.link_name.trim()
+        : null,
+    event_type_locked: payload.event_type_locked === true,
+    event_types: normalizeStringList(payload.event_types),
+    selected_event_type:
+      typeof payload.selected_event_type === "string" &&
+      payload.selected_event_type.trim()
+        ? payload.selected_event_type.trim()
         : null,
     package_locked: payload.package_locked === true,
     addon_locked: payload.addon_locked === true,

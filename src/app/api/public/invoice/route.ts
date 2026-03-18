@@ -121,6 +121,7 @@ const labels: Record<string, Record<string, string>> = {
     initialBreakdown: "Rincian Harga Awal",
     initialPackage: "Paket Awal",
     initialAddon: "Add-on Awal",
+    addOnSection: "Add On",
     accommodationFee: "Akomodasi",
     specialDiscount: "Diskon Khusus",
   },
@@ -151,6 +152,7 @@ const labels: Record<string, Record<string, string>> = {
     initialBreakdown: "Initial Price Breakdown",
     initialPackage: "Initial Package",
     initialAddon: "Initial Add-on",
+    addOnSection: "Add On",
     accommodationFee: "Accommodation",
     specialDiscount: "Special Discount",
   },
@@ -250,8 +252,15 @@ export async function GET(request: NextRequest) {
   const addonServiceSelections = serviceSelections.filter(
     (selection) => selection.kind === "addon",
   );
-  const mappedServiceRows = [...mainServiceSelections, ...addonServiceSelections].map(
-    (selection) => ({
+  type InvoiceServiceRow = {
+    id: string;
+    name: string;
+    description: string;
+    price: number;
+    group: "main" | "addon";
+  };
+  const mappedServiceRows: InvoiceServiceRow[] = [
+    ...mainServiceSelections.map((selection) => ({
       id: selection.id,
       name: selection.service.name || t.defaultServiceName,
       description: selection.service.description?.trim() || "",
@@ -259,8 +268,19 @@ export async function GET(request: NextRequest) {
         typeof selection.service.price === "number"
           ? Math.max(selection.service.price, 0)
           : 0,
-    }),
-  );
+      group: "main" as const,
+    })),
+    ...addonServiceSelections.map((selection) => ({
+      id: selection.id,
+      name: selection.service.name || t.defaultServiceName,
+      description: selection.service.description?.trim() || "",
+      price:
+        typeof selection.service.price === "number"
+          ? Math.max(selection.service.price, 0)
+          : 0,
+      group: "addon" as const,
+    })),
+  ];
   let serviceRows =
     mappedServiceRows.length > 0
       ? mappedServiceRows
@@ -273,6 +293,7 @@ export async function GET(request: NextRequest) {
               typeof legacyService?.price === "number"
                 ? Math.max(legacyService.price, 0)
                 : 0,
+            group: "main" as const,
           },
         ];
   const currentServiceRowsTotal = serviceRows.reduce(
@@ -297,6 +318,7 @@ export async function GET(request: NextRequest) {
             ? specialOffer.link_name.trim()
             : "",
         price: missingAddonTotal,
+        group: "addon" as const,
       },
     ];
   }
@@ -577,7 +599,30 @@ export async function GET(request: NextRequest) {
         ? blue
         : amber;
 
+  let addonSectionDrawn = false;
   serviceRows.forEach((serviceRow) => {
+    if (serviceRow.group === "addon" && !addonSectionDrawn) {
+      ensureSpace(34);
+      y -= 14;
+      page.drawRectangle({
+        x: MARGIN_X,
+        y: y - 4,
+        width: contentW,
+        height: 22,
+        color: rgb(0.98, 0.986, 0.992),
+      });
+      page.drawText(t.addOnSection, {
+        x: MARGIN_X + 8,
+        y: y + 4,
+        font: helveticaBold,
+        size: 8,
+        color: gray,
+      });
+      y -= 8;
+      drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 0.5);
+      addonSectionDrawn = true;
+    }
+
     const normalizedDescription = serviceRow.description || t.noDescription;
     const descriptionLines = wrapTextLines(
       normalizedDescription,

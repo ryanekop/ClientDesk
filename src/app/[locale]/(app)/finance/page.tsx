@@ -15,6 +15,7 @@ import { TablePagination, paginateArray } from "@/components/ui/table-pagination
 import { Link } from "@/i18n/routing";
 import * as XLSX from "xlsx";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
+import { useSuccessToast } from "@/components/ui/success-toast";
 import {
     getBookingServiceLabel,
     normalizeLegacyServiceRecord,
@@ -93,8 +94,8 @@ const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
     { id: "total_price", label: "Harga Total", visible: true },
     { id: "package_price", label: "Harga Paket", visible: true },
     { id: "addon", label: "Add-on", visible: true },
-    { id: "dp_paid", label: "DP Dibayar", visible: true },
     { id: "discount", label: "Diskon", visible: true },
+    { id: "dp_paid", label: "DP Dibayar", visible: true },
     { id: "remaining", label: "Sisa", visible: true },
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true },
@@ -146,6 +147,7 @@ export default function FinancePage() {
         kind: "invoice" | "copy" | "wa" | null;
     }>({ open: false, booking: null, kind: null });
     const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
+    const { showSuccessToast, successToastNode } = useSuccessToast();
 
     const closeDesktopMenus = React.useCallback(() => {
         setInvoiceMenuBookingId(null);
@@ -634,7 +636,7 @@ export default function FinancePage() {
         await sendFinalInvoiceWhatsApp(booking);
     }
 
-    function handleCopyInvoiceTemplateStage(
+    async function handleCopyInvoiceTemplateStage(
         booking: BookingFinance,
         stage: "initial" | "final",
     ) {
@@ -642,26 +644,34 @@ export default function FinancePage() {
             stage === "initial"
                 ? buildInitialInvoiceMessage(booking)
                 : buildFinalInvoiceMessage(booking);
-        navigator.clipboard.writeText(message);
-        if (stage === "initial") {
-            setCopiedInitialTemplateId(booking.id);
+        try {
+            await navigator.clipboard.writeText(message);
+            showSuccessToast("Template invoice berhasil disalin.");
+            if (stage === "initial") {
+                setCopiedInitialTemplateId(booking.id);
+                setTimeout(() => {
+                    setCopiedInitialTemplateId((current) =>
+                        current === booking.id ? null : current,
+                    );
+                }, 2000);
+                return;
+            }
+            setCopiedFinalTemplateId(booking.id);
             setTimeout(() => {
-                setCopiedInitialTemplateId((current) =>
+                setCopiedFinalTemplateId((current) =>
                     current === booking.id ? null : current,
                 );
             }, 2000);
-            return;
+        } catch {
+            setFeedbackDialog({
+                open: true,
+                message: locale === "en" ? "Failed to copy template." : "Gagal menyalin template.",
+            });
         }
-        setCopiedFinalTemplateId(booking.id);
-        setTimeout(() => {
-            setCopiedFinalTemplateId((current) =>
-                current === booking.id ? null : current,
-            );
-        }, 2000);
     }
 
     function handleCopyPrimaryInvoiceTemplate(booking: BookingFinance) {
-        handleCopyInvoiceTemplateStage(
+        void handleCopyInvoiceTemplateStage(
             booking,
             resolveInvoiceStageFromContext(booking),
         );
@@ -879,7 +889,7 @@ export default function FinancePage() {
                                             className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
                                             onClick={() => {
                                                 closeDesktopMenus();
-                                                handleCopyInvoiceTemplateStage(booking, "initial");
+                                                void handleCopyInvoiceTemplateStage(booking, "initial");
                                             }}
                                         >
                                             {tf("copyInitialInvoiceTemplate")}
@@ -889,7 +899,7 @@ export default function FinancePage() {
                                             className="flex w-full items-center rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
                                             onClick={() => {
                                                 closeDesktopMenus();
-                                                handleCopyInvoiceTemplateStage(booking, "final");
+                                                void handleCopyInvoiceTemplateStage(booking, "final");
                                             }}
                                         >
                                             {tf("copyFinalInvoiceTemplate")}
@@ -1115,6 +1125,7 @@ export default function FinancePage() {
 
     return (
         <div className="space-y-6">
+            {successToastNode}
             <div>
                 <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
                 <p className="text-muted-foreground">{t("subtitle")}</p>
@@ -1309,7 +1320,7 @@ export default function FinancePage() {
                                     return;
                                 }
                                 if (kind === "copy") {
-                                    handleCopyInvoiceTemplateStage(booking, "initial");
+                                    void handleCopyInvoiceTemplateStage(booking, "initial");
                                     return;
                                 }
                                 handleOpenInvoiceStage(booking, "initial");
@@ -1336,7 +1347,7 @@ export default function FinancePage() {
                                     return;
                                 }
                                 if (kind === "copy") {
-                                    handleCopyInvoiceTemplateStage(booking, "final");
+                                    void handleCopyInvoiceTemplateStage(booking, "final");
                                     return;
                                 }
                                 handleOpenInvoiceStage(booking, "final");

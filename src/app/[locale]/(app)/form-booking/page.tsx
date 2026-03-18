@@ -27,6 +27,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useSuccessToast } from "@/components/ui/success-toast";
 import {
   Dialog,
   DialogContent,
@@ -255,6 +256,7 @@ export default function FormBookingPage() {
   const [qrisUploading, setQrisUploading] = React.useState(false);
   const [qrisDeleting, setQrisDeleting] = React.useState(false);
   const [saveMessageTone, setSaveMessageTone] = React.useState<"success" | "error">("success");
+  const { showSuccessToast, successToastNode } = useSuccessToast();
 
   const [iframeKey, setIframeKey] = React.useState(0);
   const [mobileTab, setMobileTab] = React.useState<"settings" | "preview">(
@@ -756,9 +758,9 @@ export default function FormBookingPage() {
         }),
       ),
     );
-    setSavedMsg("Tersimpan!");
+    setSavedMsg("");
+    showSuccessToast("Pengaturan form booking berhasil disimpan.");
     setIframeKey((k) => k + 1);
-    setTimeout(() => setSavedMsg(""), 3000);
     setSaving(false);
     return true;
   }
@@ -871,16 +873,23 @@ export default function FormBookingPage() {
       }),
     );
     setLastSavedSnapshot(nextSnapshot);
-    setSavedMsg("Berhasil reset ke default.");
+    setSavedMsg("");
     setSaveMessageTone("success");
+    showSuccessToast("Pengaturan form booking berhasil direset ke default.");
     setIframeKey((k) => k + 1);
-    setTimeout(() => setSavedMsg(""), 3000);
   }
 
-  function copyUrl() {
-    navigator.clipboard.writeText(formUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function copyUrl() {
+    try {
+      await navigator.clipboard.writeText(formUrl);
+      showSuccessToast("URL form booking berhasil disalin.");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setSavedMsg("Gagal menyalin URL form.");
+      setSaveMessageTone("error");
+      setTimeout(() => setSavedMsg(""), 3000);
+    }
   }
 
   function updateBank(index: number, field: keyof BankAccount, value: string) {
@@ -1057,6 +1066,7 @@ export default function FormBookingPage() {
 
   return (
     <div className="space-y-6">
+      {successToastNode}
       <div>
         <h2 className="text-2xl font-bold tracking-tight">
           Form Booking Publik
@@ -1966,7 +1976,7 @@ export default function FormBookingPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
-                      onClick={copyUrl}
+                      onClick={() => void copyUrl()}
                       title="Salin URL"
                     >
                       {copied ? (

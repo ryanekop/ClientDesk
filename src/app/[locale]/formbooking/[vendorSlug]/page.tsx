@@ -168,6 +168,8 @@ export default async function PublicBookingFormPage({
   let specialOfferRule: {
     id: string;
     name: string;
+    eventTypeLocked: boolean;
+    eventTypes: string[];
     packageLocked: boolean;
     packageServiceIds: string[];
     addonLocked: boolean;
@@ -180,7 +182,7 @@ export default async function PublicBookingFormPage({
     const { data: specialOfferRow } = await supabaseAdmin
       .from("booking_special_links")
       .select(
-        "id, token, user_id, name, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, is_active, consumed_at, consumed_booking_id",
+        "id, token, user_id, name, event_type_locked, event_types, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, is_active, consumed_at, consumed_booking_id",
       )
       .eq("token", offerToken)
       .eq("user_id", vendor.id)
@@ -191,6 +193,8 @@ export default async function PublicBookingFormPage({
       specialOfferRule = {
         id: normalizedRule.id,
         name: normalizedRule.name,
+        eventTypeLocked: normalizedRule.eventTypeLocked,
+        eventTypes: normalizedRule.eventTypes,
         packageLocked: normalizedRule.packageLocked,
         packageServiceIds: normalizedRule.packageServiceIds,
         addonLocked: normalizedRule.addonLocked,

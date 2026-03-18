@@ -36,6 +36,7 @@ type BookingData = {
         discountAmount: number;
     } | null;
     showFinalInvoice: boolean;
+    showFileResults: boolean;
 };
 
 const DEFAULT_STEPS = [
@@ -202,8 +203,8 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                     </div>
                 </div>
 
-                {/* Gallery Link - only show if status >= Sesi Foto */}
-                {(galleryLinks.showFastpik || galleryLinks.showDrive) && currentIdx >= 1 && (
+                {/* Gallery links follow admin visibility threshold from Status Settings */}
+                {(galleryLinks.showFastpik || galleryLinks.showDrive) && booking.showFileResults && (
                     <div className="bg-background rounded-2xl shadow-lg border p-6">
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("fileResults")}</h3>
                         <div className="space-y-2">

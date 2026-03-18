@@ -12,11 +12,12 @@ import {
   Power,
   RefreshCw,
   Trash2,
-  X,
 } from "lucide-react";
 import { useLocale } from "next-intl";
 import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
+import { getActiveEventTypes, normalizeEventTypeList } from "@/lib/event-type-config";
+import { useSuccessToast } from "@/components/ui/success-toast";
 import {
   normalizeBookingSpecialLinkRule,
   normalizeUuidList,
@@ -31,6 +32,13 @@ type ServiceOption = {
   is_addon: boolean;
   sort_order?: number | null;
   created_at?: string | null;
+};
+
+type ProfileEventTypeRow = {
+  id: string;
+  vendor_slug: string | null;
+  form_event_types?: string[] | null;
+  custom_event_types?: string[] | null;
 };
 
 function formatCurrency(value: number) {
@@ -63,20 +71,19 @@ export default function SpecialBookingFormPage() {
   );
   const [profileId, setProfileId] = React.useState("");
   const [vendorSlug, setVendorSlug] = React.useState("");
+  const [availableEventTypes, setAvailableEventTypes] = React.useState<string[]>([]);
   const [links, setLinks] = React.useState<BookingSpecialLinkRule[]>([]);
   const [services, setServices] = React.useState<ServiceOption[]>([]);
   const [formError, setFormError] = React.useState("");
-  const [formSuccess, setFormSuccess] = React.useState("");
   const [editingLinkId, setEditingLinkId] = React.useState<string | null>(null);
-  const [copyToastMessage, setCopyToastMessage] = React.useState("");
-  const [copyToastVisible, setCopyToastVisible] = React.useState(false);
-  const [copyToastClosing, setCopyToastClosing] = React.useState(false);
-  const copyToastAutoCloseRef = React.useRef<number | null>(null);
-  const copyToastCloseRef = React.useRef<number | null>(null);
 
   const [name, setName] = React.useState("");
+  const [eventTypeLocked, setEventTypeLocked] = React.useState(false);
   const [packageLocked, setPackageLocked] = React.useState(false);
   const [addonLocked, setAddonLocked] = React.useState(false);
+  const [selectedEventTypes, setSelectedEventTypes] = React.useState<string[]>(
+    [],
+  );
   const [selectedPackageIds, setSelectedPackageIds] = React.useState<string[]>(
     [],
   );
@@ -84,6 +91,7 @@ export default function SpecialBookingFormPage() {
   const [accommodationFeeInput, setAccommodationFeeInput] = React.useState("0");
   const [discountAmountInput, setDiscountAmountInput] = React.useState("0");
   const [isActive, setIsActive] = React.useState(true);
+  const { showSuccessToast, successToastNode } = useSuccessToast();
 
   const packageOptions = React.useMemo(
     () => [...services].filter((item) => !item.is_addon).sort(compareServices),
@@ -96,49 +104,15 @@ export default function SpecialBookingFormPage() {
 
   const clearMessage = React.useCallback(() => {
     setFormError("");
-    setFormSuccess("");
   }, []);
-
-  const clearCopyToastTimers = React.useCallback(() => {
-    if (copyToastAutoCloseRef.current !== null) {
-      window.clearTimeout(copyToastAutoCloseRef.current);
-      copyToastAutoCloseRef.current = null;
-    }
-    if (copyToastCloseRef.current !== null) {
-      window.clearTimeout(copyToastCloseRef.current);
-      copyToastCloseRef.current = null;
-    }
-  }, []);
-
-  const closeCopyToast = React.useCallback(() => {
-    clearCopyToastTimers();
-    setCopyToastClosing(true);
-    copyToastCloseRef.current = window.setTimeout(() => {
-      setCopyToastVisible(false);
-      setCopyToastClosing(false);
-      setCopyToastMessage("");
-      copyToastCloseRef.current = null;
-    }, 220);
-  }, [clearCopyToastTimers]);
-
-  const showCopyToast = React.useCallback(
-    (message: string) => {
-      clearCopyToastTimers();
-      setCopyToastMessage(message);
-      setCopyToastVisible(true);
-      setCopyToastClosing(false);
-      copyToastAutoCloseRef.current = window.setTimeout(() => {
-        closeCopyToast();
-      }, 2600);
-    },
-    [clearCopyToastTimers, closeCopyToast],
-  );
 
   const resetForm = React.useCallback(() => {
     setEditingLinkId(null);
     setName("");
+    setEventTypeLocked(false);
     setPackageLocked(false);
     setAddonLocked(false);
+    setSelectedEventTypes([]);
     setSelectedPackageIds([]);
     setSelectedAddonIds([]);
     setAccommodationFeeInput("0");
@@ -162,7 +136,7 @@ export default function SpecialBookingFormPage() {
       await Promise.all([
         supabase
           .from("profiles")
-          .select("id, vendor_slug")
+          .select("id, vendor_slug, form_event_types, custom_event_types")
           .eq("id", user.id)
           .single(),
         supabase
@@ -174,7 +148,7 @@ export default function SpecialBookingFormPage() {
         supabase
           .from("booking_special_links")
           .select(
-            "id, token, user_id, name, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, is_active, consumed_at, consumed_booking_id, created_at",
+            "id, token, user_id, name, event_type_locked, event_types, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, is_active, consumed_at, consumed_booking_id, created_at",
           )
           .eq("user_id", user.id)
           .order("created_at", { ascending: false }),
@@ -196,9 +170,16 @@ export default function SpecialBookingFormPage() {
       return;
     }
 
-    setProfileId(profile.id);
+    const profileData = profile as ProfileEventTypeRow;
+    setProfileId(profileData.id);
     setVendorSlug(
-      typeof profile.vendor_slug === "string" ? profile.vendor_slug : "",
+      typeof profileData.vendor_slug === "string" ? profileData.vendor_slug : "",
+    );
+    setAvailableEventTypes(
+      getActiveEventTypes({
+        customEventTypes: normalizeEventTypeList(profileData.custom_event_types),
+        activeEventTypes: profileData.form_event_types,
+      }),
     );
     setServices(
       (serviceRows || []) as ServiceOption[],
@@ -214,12 +195,6 @@ export default function SpecialBookingFormPage() {
   React.useEffect(() => {
     void loadData();
   }, [loadData]);
-
-  React.useEffect(() => {
-    return () => {
-      clearCopyToastTimers();
-    };
-  }, [clearCopyToastTimers]);
 
   function togglePackageSelection(serviceId: string) {
     setSelectedPackageIds((prev) => {
@@ -239,12 +214,25 @@ export default function SpecialBookingFormPage() {
     });
   }
 
+  function toggleEventTypeSelection(eventTypeName: string) {
+    setSelectedEventTypes((prev) => {
+      const normalized = eventTypeName.trim();
+      if (!normalized) return prev;
+      const next = new Set(prev);
+      if (next.has(normalized)) next.delete(normalized);
+      else next.add(normalized);
+      return Array.from(next);
+    });
+  }
+
   function editLink(link: BookingSpecialLinkRule) {
     clearMessage();
     setEditingLinkId(link.id);
     setName(link.name || "");
+    setEventTypeLocked(link.eventTypeLocked);
     setPackageLocked(link.packageLocked);
     setAddonLocked(link.addonLocked);
+    setSelectedEventTypes(link.eventTypes);
     setSelectedPackageIds(link.packageServiceIds);
     setSelectedAddonIds(link.addonServiceIds);
     setAccommodationFeeInput(String(Math.round(link.accommodationFee || 0)));
@@ -262,6 +250,9 @@ export default function SpecialBookingFormPage() {
     }
 
     const normalizedName = name.trim() || "Special Booking";
+    const normalizedEventTypes = normalizeEventTypeList(selectedEventTypes).filter(
+      (item) => availableEventTypes.includes(item),
+    );
     const normalizedPackageIds = normalizeUuidList(selectedPackageIds).filter((id) =>
       packageOptions.some((service) => service.id === id),
     );
@@ -273,6 +264,10 @@ export default function SpecialBookingFormPage() {
     );
     const discountAmount = Math.round(toNonNegativeMoney(discountAmountInput));
 
+    if (eventTypeLocked && normalizedEventTypes.length === 0) {
+      setFormError("Saat Jenis Acara dikunci, pilih minimal satu jenis acara.");
+      return;
+    }
     if (packageLocked && normalizedPackageIds.length === 0) {
       setFormError("Saat Paket dikunci, pilih minimal satu paket.");
       return;
@@ -288,6 +283,8 @@ export default function SpecialBookingFormPage() {
         .from("booking_special_links")
         .update({
           name: normalizedName,
+          event_type_locked: eventTypeLocked,
+          event_types: normalizedEventTypes,
           package_locked: packageLocked,
           package_service_ids: normalizedPackageIds,
           addon_locked: addonLocked,
@@ -307,13 +304,15 @@ export default function SpecialBookingFormPage() {
 
       resetForm();
       await loadData();
-      setFormSuccess("Perubahan link berhasil disimpan.");
+      showSuccessToast("Perubahan link berhasil disimpan.");
       return;
     }
 
     const { error } = await supabase.from("booking_special_links").insert({
       user_id: profileId,
       name: normalizedName,
+      event_type_locked: eventTypeLocked,
+      event_types: normalizedEventTypes,
       package_locked: packageLocked,
       package_service_ids: normalizedPackageIds,
       addon_locked: addonLocked,
@@ -331,7 +330,7 @@ export default function SpecialBookingFormPage() {
 
     resetForm();
     await loadData();
-    setFormSuccess("Link booking khusus berhasil dibuat.");
+    showSuccessToast("Link booking khusus berhasil dibuat.");
   }
 
   function buildPublicOfferUrl(link: BookingSpecialLinkRule) {
@@ -349,7 +348,7 @@ export default function SpecialBookingFormPage() {
     }
     try {
       await navigator.clipboard.writeText(url);
-      showCopyToast("URL link berhasil disalin.");
+      showSuccessToast("URL link berhasil disalin.");
     } catch {
       setFormError("Gagal menyalin URL link.");
     }
@@ -436,31 +435,7 @@ export default function SpecialBookingFormPage() {
 
   return (
     <div className="space-y-6">
-      {copyToastVisible ? (
-        <div className="pointer-events-none fixed right-4 top-4 z-50">
-          <div
-            className={[
-              "pointer-events-auto flex max-w-sm items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-lg",
-              copyToastClosing
-                ? "animate-out fade-out slide-out-to-right-8 duration-200"
-                : "animate-in fade-in slide-in-from-right-8 duration-300",
-            ].join(" ")}
-            role="status"
-            aria-live="polite"
-          >
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-            <p className="flex-1">{copyToastMessage}</p>
-            <button
-              type="button"
-              className="shrink-0 rounded p-0.5 text-emerald-700/80 transition-colors hover:bg-emerald-100 hover:text-emerald-900"
-              onClick={closeCopyToast}
-              aria-label="Tutup notifikasi"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {successToastNode}
 
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Form Booking Khusus</h2>
@@ -473,11 +448,6 @@ export default function SpecialBookingFormPage() {
       {formError ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {formError}
-        </div>
-      ) : null}
-      {formSuccess ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {formSuccess}
         </div>
       ) : null}
 
@@ -505,6 +475,55 @@ export default function SpecialBookingFormPage() {
               placeholder="Contoh: Wedding Luar Kota - Klien A"
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
             />
+          </div>
+
+          <div className="rounded-lg border p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">Jenis Acara</p>
+                <p className="text-xs text-muted-foreground">
+                  Saat lock, klien hanya bisa memilih dari whitelist ini.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEventTypeLocked((prev) => !prev)}
+                className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium ${eventTypeLocked ? "border-primary bg-primary/10 text-primary" : "border-input text-muted-foreground"}`}
+              >
+                {eventTypeLocked ? (
+                  <>
+                    <Lock className="h-3.5 w-3.5" /> Lock
+                  </>
+                ) : (
+                  <>
+                    <LockOpen className="h-3.5 w-3.5" /> Unlock
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+              {availableEventTypes.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Belum ada jenis acara aktif.</p>
+              ) : (
+                availableEventTypes.map((eventTypeName) => {
+                  const selected = selectedEventTypes.includes(eventTypeName);
+                  return (
+                    <label
+                      key={eventTypeName}
+                      className="flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
+                    >
+                      <span className="min-w-0 truncate">{eventTypeName}</span>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleEventTypeSelection(eventTypeName)}
+                        className="h-4 w-4 accent-primary"
+                      />
+                    </label>
+                  );
+                })
+              )}
+            </div>
           </div>
 
           <div className="rounded-lg border p-4 space-y-3">
@@ -713,6 +732,10 @@ export default function SpecialBookingFormPage() {
                   </div>
 
                   <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
+                    <p>
+                      Jenis Acara: {link.eventTypeLocked ? "Lock" : "Unlock"} ·{" "}
+                      {link.eventTypes.length} pilihan
+                    </p>
                     <p>
                       Paket: {link.packageLocked ? "Lock" : "Unlock"} ·{" "}
                       {link.packageServiceIds.length} pilihan

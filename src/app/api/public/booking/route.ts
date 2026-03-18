@@ -32,6 +32,7 @@ import {
     isShowAllPackagesEventType,
     LEGACY_PUBLIC_CUSTOM_EVENT_TYPE,
     normalizeEventTypeName,
+    normalizeEventTypeList,
     PUBLIC_CUSTOM_EVENT_TYPE,
 } from "@/lib/event-type-config";
 import {
@@ -315,6 +316,7 @@ export async function POST(request: NextRequest) {
         const normalizedClientName = (clientName || "").trim() || "Klien";
         const normalizedClientWhatsapp = (clientWhatsapp || "").trim();
         const normalizedEventType = normalizeEventTypeName(eventType);
+        let resolvedEventType = normalizedEventType;
         const normalizedLocationLat = normalizeStoredCoordinate(locationLat);
         const normalizedLocationLng = normalizeStoredCoordinate(locationLng);
         const rawExtraData =
@@ -370,7 +372,7 @@ export async function POST(request: NextRequest) {
             const { data: specialOfferRow, error: specialOfferError } = await supabaseAdmin
                 .from("booking_special_links")
                 .select(
-                    "id, token, user_id, name, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, is_active, consumed_at, consumed_booking_id",
+                    "id, token, user_id, name, event_type_locked, event_types, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, is_active, consumed_at, consumed_booking_id",
                 )
                 .eq("token", normalizedOfferToken)
                 .eq("user_id", vendor.id)
@@ -395,6 +397,37 @@ export async function POST(request: NextRequest) {
                     },
                     { status: 400 },
                 );
+            }
+        }
+
+        if (specialOfferRule) {
+            const allowedEventTypes = normalizeEventTypeList(
+                specialOfferRule.eventTypes,
+            );
+            if (specialOfferRule.eventTypeLocked) {
+                if (allowedEventTypes.length === 0) {
+                    return NextResponse.json(
+                        {
+                            success: false,
+                            error: "Jenis acara untuk link booking khusus belum dikonfigurasi.",
+                        },
+                        { status: 400 },
+                    );
+                }
+                if (
+                    !resolvedEventType ||
+                    !allowedEventTypes.includes(resolvedEventType)
+                ) {
+                    return NextResponse.json(
+                        {
+                            success: false,
+                            error: "Jenis acara tidak sesuai whitelist link booking khusus.",
+                        },
+                        { status: 400 },
+                    );
+                }
+            } else if (!resolvedEventType && allowedEventTypes.length > 0) {
+                resolvedEventType = allowedEventTypes[0];
             }
         }
 
@@ -484,15 +517,15 @@ export async function POST(request: NextRequest) {
                 .order("sort_order", { ascending: true })
                 .order("created_at", { ascending: true });
 
-            const preferredService = normalizedEventType
-                ? isShowAllPackagesEventType(normalizedEventType)
+            const preferredService = resolvedEventType
+                ? isShowAllPackagesEventType(resolvedEventType)
                     ? (availableMainServices || [])[0]
                     : (availableMainServices || []).find((service) => {
                     const eventTypes = Array.isArray((service as any).event_types)
                         ? ((service as any).event_types as string[])
                         : [];
                     return eventTypes.length === 0 || eventTypes.some(
-                        (type) => normalizeEventTypeName(type) === normalizedEventType,
+                        (type) => normalizeEventTypeName(type) === resolvedEventType,
                     );
                 }) || (availableMainServices || [])[0]
                 : (availableMainServices || [])[0];
@@ -543,6 +576,8 @@ export async function POST(request: NextRequest) {
         const addonServices = selectedServices?.filter(
             (service) => addonIds.includes(service.id) && service.is_addon,
         ) ?? [];
+        const resolvedMainServiceIds = mainServices.map((service) => service.id);
+        const resolvedAddonServiceIds = addonServices.map((service) => service.id);
         const packageTotal =
             mainServices.reduce((sum, service) => sum + service.price, 0);
         const addonTotal =
@@ -561,10 +596,10 @@ export async function POST(request: NextRequest) {
             (typeof vendor.min_dp_map === "object" && vendor.min_dp_map !== null)
                 ? vendor.min_dp_map as Record<string, number | { mode?: string; value?: number }>
                 : {};
-        const dpEntry = normalizedEventType
+        const dpEntry = resolvedEventType
             ? (
-                dpMap[normalizedEventType] ??
-                (normalizedEventType === PUBLIC_CUSTOM_EVENT_TYPE
+                dpMap[resolvedEventType] ??
+                (resolvedEventType === PUBLIC_CUSTOM_EVENT_TYPE
                     ? dpMap[LEGACY_PUBLIC_CUSTOM_EVENT_TYPE]
                     : undefined) ??
                 (vendor.min_dp_percent ?? 50)
@@ -594,8 +629,9 @@ export async function POST(request: NextRequest) {
         if (specialOfferRule) {
             sanitizedExtraData.special_offer = buildSpecialOfferSnapshot({
                 rule: specialOfferRule,
-                selectedPackageServiceIds: normalizedMainServiceIds,
-                selectedAddonServiceIds: addonIds,
+                selectedPackageServiceIds: resolvedMainServiceIds,
+                selectedAddonServiceIds: resolvedAddonServiceIds,
+                selectedEventType: resolvedEventType,
                 packageTotal,
                 addonTotal,
             });
@@ -608,7 +644,7 @@ export async function POST(request: NextRequest) {
             user_id: vendor.id,
             client_name: normalizedClientName,
             client_whatsapp: normalizedClientWhatsapp || null,
-            event_type: normalizedEventType || null,
+            event_type: resolvedEventType || null,
             session_date: resolvedSessionDate || null,
             service_id: mainServices[0]?.id || null,
             total_price: computedTotalPrice,
@@ -705,7 +741,7 @@ export async function POST(request: NextRequest) {
                     studioName: vendor.studio_name ?? null,
                     bookingCode: booking.booking_code,
                     clientName: normalizedClientName,
-                    eventType: normalizedEventType,
+                    eventType: resolvedEventType,
                     sessionDate: resolvedSessionDate,
                     extraFields: sanitizedExtraData,
                     fileName: paymentProofFile.name || `${booking.booking_code}_proof`,
@@ -756,7 +792,7 @@ export async function POST(request: NextRequest) {
         }
 
         const shouldSyncCalendar = hasBookingCalendarSessions({
-            eventType: normalizedEventType,
+            eventType: resolvedEventType,
             sessionDate: resolvedSessionDate || null,
             extraFields: sanitizedExtraData,
             defaultLocation: location,
@@ -832,7 +868,7 @@ export async function POST(request: NextRequest) {
                         locationLat: normalizedLocationLat,
                         locationLng: normalizedLocationLng,
                         locationDetail,
-                        eventType: normalizedEventType,
+                        eventType: resolvedEventType,
                         notes,
                         extraFields: sanitizedExtraData,
                         googleCalendarEventIds: null,
@@ -897,7 +933,7 @@ export async function POST(request: NextRequest) {
                 normalizedTemplates,
                 "whatsapp_booking_confirm",
                 "id",
-                normalizedEventType,
+                resolvedEventType,
             );
             bookingConfirmTemplate = content.trim() || null;
         } catch {

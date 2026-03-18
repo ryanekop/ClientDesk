@@ -183,6 +183,8 @@ interface BookingFormClientProps {
   specialOfferRule?: {
     id: string;
     name: string;
+    eventTypeLocked: boolean;
+    eventTypes: string[];
     packageLocked: boolean;
     packageServiceIds: string[];
     addonLocked: boolean;
@@ -376,10 +378,15 @@ export function BookingFormClient({
 
   const autoDpAmountRef = React.useRef<number | null>(null);
   const isSpecialOfferActive = Boolean(normalizedOfferToken && specialOfferRule);
+  const eventTypeLocked = isSpecialOfferActive && specialOfferRule?.eventTypeLocked === true;
   const packageLocked = isSpecialOfferActive && specialOfferRule?.packageLocked === true;
   const addonLocked = isSpecialOfferActive && specialOfferRule?.addonLocked === true;
   const accommodationFee = isSpecialOfferActive ? specialOfferRule?.accommodationFee || 0 : 0;
   const discountAmount = isSpecialOfferActive ? specialOfferRule?.discountAmount || 0 : 0;
+  const specialEventTypes = React.useMemo(
+    () => normalizeEventTypeList(specialOfferRule?.eventTypes),
+    [specialOfferRule?.eventTypes],
+  );
   const specialPackageServiceIds = React.useMemo(() => {
     if (!specialOfferRule) return [];
     const mainIds = services
@@ -452,6 +459,17 @@ export function BookingFormClient({
     specialAddonServiceIds,
     specialPackageServiceIds,
   ]);
+
+  React.useEffect(() => {
+    if (!isSpecialOfferActive || specialEventTypes.length === 0) return;
+    if (eventTypeLocked) {
+      setEventType((current) =>
+        specialEventTypes.includes(current) ? current : specialEventTypes[0],
+      );
+      return;
+    }
+    setEventType((current) => (current ? current : specialEventTypes[0]));
+  }, [eventTypeLocked, isSpecialOfferActive, specialEventTypes]);
 
   React.useEffect(() => {
     if (!eventType) {
@@ -916,6 +934,13 @@ export function BookingFormClient({
       }),
     [effectiveVendor.custom_event_types, effectiveVendor.form_event_types],
   );
+  const eventTypeOptions = React.useMemo(() => {
+    if (!eventTypeLocked) return availableEventTypes;
+    const whitelist = specialEventTypes.filter((item) =>
+      availableEventTypes.includes(item),
+    );
+    return whitelist.length > 0 ? whitelist : availableEventTypes;
+  }, [availableEventTypes, eventTypeLocked, specialEventTypes]);
   const showAllActivePackages = isShowAllPackagesEventType(eventType);
   const termsAgreementText =
     effectiveVendor.form_terms_agreement_text?.trim() || t("termsAgreementDefault");
@@ -1309,7 +1334,7 @@ export function BookingFormClient({
               required
             >
               <option value="">{t("pilihTipe")}</option>
-              {availableEventTypes.map((et) => (
+              {eventTypeOptions.map((et) => (
                 <option key={et} value={et}>
                   {et}
                 </option>

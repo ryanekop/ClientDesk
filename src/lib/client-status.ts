@@ -104,6 +104,23 @@ export function resolveFinalInvoiceVisibleFromStatus(
   return getDefaultFinalInvoiceVisibleFromStatus(normalized);
 }
 
+export function getDefaultTrackingFileLinksVisibleFromStatus(
+  statuses?: string[] | null,
+) {
+  return getDefaultFinalInvoiceVisibleFromStatus(statuses);
+}
+
+export function resolveTrackingFileLinksVisibleFromStatus(
+  statuses?: string[] | null,
+  selectedStatus?: string | null,
+) {
+  const normalized = getClientProgressStatuses(statuses);
+  if (selectedStatus && normalized.includes(selectedStatus)) {
+    return selectedStatus;
+  }
+  return getDefaultTrackingFileLinksVisibleFromStatus(normalized);
+}
+
 export function shouldShowFinalInvoiceForClientStatus({
   statuses,
   currentStatus,
@@ -117,6 +134,32 @@ export function shouldShowFinalInvoiceForClientStatus({
 
   const normalized = getClientProgressStatuses(statuses);
   const threshold = resolveFinalInvoiceVisibleFromStatus(normalized, visibleFromStatus);
+  const currentIndex = normalized.indexOf(currentStatus);
+  const thresholdIndex = normalized.indexOf(threshold);
+
+  if (currentIndex === -1 || thresholdIndex === -1) {
+    return false;
+  }
+
+  return currentIndex >= thresholdIndex;
+}
+
+export function shouldShowTrackingFileLinksForClientStatus({
+  statuses,
+  currentStatus,
+  visibleFromStatus,
+}: {
+  statuses?: string[] | null;
+  currentStatus?: string | null;
+  visibleFromStatus?: string | null;
+}) {
+  if (!currentStatus) return false;
+
+  const normalized = getClientProgressStatuses(statuses);
+  const threshold = resolveTrackingFileLinksVisibleFromStatus(
+    normalized,
+    visibleFromStatus,
+  );
   const currentIndex = normalized.indexOf(currentStatus);
   const thresholdIndex = normalized.indexOf(threshold);
 
