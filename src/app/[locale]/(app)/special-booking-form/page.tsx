@@ -5,12 +5,14 @@ import {
   CheckCircle2,
   Copy,
   ExternalLink,
+  List,
   Loader2,
   Lock,
   LockOpen,
   Pencil,
   Power,
   RefreshCw,
+  Settings2,
   Trash2,
 } from "lucide-react";
 import { useLocale } from "next-intl";
@@ -22,7 +24,6 @@ import { useSuccessToast } from "@/components/ui/success-toast";
 import {
   normalizeBookingSpecialLinkRule,
   normalizeUuidList,
-  toNonNegativeMoney,
   type BookingSpecialLinkRule,
 } from "@/lib/booking-special-offer";
 
@@ -48,6 +49,23 @@ function formatCurrency(value: number) {
     currency: "IDR",
     minimumFractionDigits: 0,
   }).format(value || 0);
+}
+
+function formatRupiahInput(value: string | number) {
+  const digits =
+    typeof value === "number"
+      ? String(Math.max(Math.trunc(value), 0))
+      : value.replace(/\D/g, "");
+  if (!digits) return "";
+  return new Intl.NumberFormat("id-ID").format(Number(digits));
+}
+
+function parseRupiahInput(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return 0;
+  const parsed = Number(digits);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(Math.trunc(parsed), 0);
 }
 
 function compareServices(a: ServiceOption, b: ServiceOption) {
@@ -81,6 +99,9 @@ export default function SpecialBookingFormPage() {
     open: boolean;
     link: BookingSpecialLinkRule | null;
   }>({ open: false, link: null });
+  const [mobileTab, setMobileTab] = React.useState<"settings" | "links">(
+    "settings",
+  );
 
   const [name, setName] = React.useState("");
   const [eventTypeLocked, setEventTypeLocked] = React.useState(false);
@@ -93,8 +114,12 @@ export default function SpecialBookingFormPage() {
     [],
   );
   const [selectedAddonIds, setSelectedAddonIds] = React.useState<string[]>([]);
-  const [accommodationFeeInput, setAccommodationFeeInput] = React.useState("0");
-  const [discountAmountInput, setDiscountAmountInput] = React.useState("0");
+  const [accommodationFeeInput, setAccommodationFeeInput] = React.useState(
+    () => formatRupiahInput(0),
+  );
+  const [discountAmountInput, setDiscountAmountInput] = React.useState(
+    () => formatRupiahInput(0),
+  );
   const [isActive, setIsActive] = React.useState(true);
   const { showSuccessToast, successToastNode } = useSuccessToast();
 
@@ -120,8 +145,8 @@ export default function SpecialBookingFormPage() {
     setSelectedEventTypes([]);
     setSelectedPackageIds([]);
     setSelectedAddonIds([]);
-    setAccommodationFeeInput("0");
-    setDiscountAmountInput("0");
+    setAccommodationFeeInput(formatRupiahInput(0));
+    setDiscountAmountInput(formatRupiahInput(0));
     setIsActive(true);
   }, []);
 
@@ -232,6 +257,7 @@ export default function SpecialBookingFormPage() {
 
   function editLink(link: BookingSpecialLinkRule) {
     clearMessage();
+    setMobileTab("settings");
     setEditingLinkId(link.id);
     setName(link.name || "");
     setEventTypeLocked(link.eventTypeLocked);
@@ -240,8 +266,8 @@ export default function SpecialBookingFormPage() {
     setSelectedEventTypes(link.eventTypes);
     setSelectedPackageIds(link.packageServiceIds);
     setSelectedAddonIds(link.addonServiceIds);
-    setAccommodationFeeInput(String(Math.round(link.accommodationFee || 0)));
-    setDiscountAmountInput(String(Math.round(link.discountAmount || 0)));
+    setAccommodationFeeInput(formatRupiahInput(Math.round(link.accommodationFee || 0)));
+    setDiscountAmountInput(formatRupiahInput(Math.round(link.discountAmount || 0)));
     setIsActive(link.isActive);
   }
 
@@ -264,10 +290,8 @@ export default function SpecialBookingFormPage() {
     const normalizedAddonIds = normalizeUuidList(selectedAddonIds).filter((id) =>
       addonOptions.some((service) => service.id === id),
     );
-    const accommodationFee = Math.round(
-      toNonNegativeMoney(accommodationFeeInput),
-    );
-    const discountAmount = Math.round(toNonNegativeMoney(discountAmountInput));
+    const accommodationFee = parseRupiahInput(accommodationFeeInput);
+    const discountAmount = parseRupiahInput(discountAmountInput);
 
     if (eventTypeLocked && normalizedEventTypes.length === 0) {
       setFormError("Saat Jenis Acara dikunci, pilih minimal satu jenis acara.");
@@ -457,10 +481,10 @@ export default function SpecialBookingFormPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 pb-20 lg:grid-cols-2 lg:pb-0">
         <form
           onSubmit={handleSubmit}
-          className="space-y-5 rounded-xl border bg-card p-5 shadow-sm"
+          className={`space-y-5 rounded-xl border bg-card p-5 shadow-sm ${mobileTab === "links" ? "hidden lg:block" : ""}`}
         >
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -644,20 +668,26 @@ export default function SpecialBookingFormPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Biaya Akomodasi (Rp)</label>
               <input
-                type="number"
-                min={0}
+                type="text"
+                inputMode="numeric"
                 value={accommodationFeeInput}
-                onChange={(e) => setAccommodationFeeInput(e.target.value)}
+                onChange={(e) =>
+                  setAccommodationFeeInput(formatRupiahInput(e.target.value))
+                }
+                placeholder="0"
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Diskon Nominal (Rp)</label>
               <input
-                type="number"
-                min={0}
+                type="text"
+                inputMode="numeric"
                 value={discountAmountInput}
-                onChange={(e) => setDiscountAmountInput(e.target.value)}
+                onChange={(e) =>
+                  setDiscountAmountInput(formatRupiahInput(e.target.value))
+                }
+                placeholder="0"
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
               />
             </div>
@@ -691,7 +721,7 @@ export default function SpecialBookingFormPage() {
           </div>
         </form>
 
-        <div className="space-y-3">
+        <div className={`space-y-3 ${mobileTab === "settings" ? "hidden lg:block" : ""}`}>
           <div className="rounded-xl border bg-card p-4 shadow-sm">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               Daftar Link Booking Khusus
@@ -833,6 +863,27 @@ export default function SpecialBookingFormPage() {
               );
             })
           )}
+        </div>
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-card/95 backdrop-blur-md lg:hidden">
+        <div className="flex">
+          <button
+            type="button"
+            onClick={() => setMobileTab("settings")}
+            className={`flex flex-1 cursor-pointer flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${mobileTab === "settings" ? "text-primary" : "text-muted-foreground"}`}
+          >
+            <Settings2 className="h-5 w-5" />
+            Pengaturan
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("links")}
+            className={`flex flex-1 cursor-pointer flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${mobileTab === "links" ? "text-primary" : "text-muted-foreground"}`}
+          >
+            <List className="h-5 w-5" />
+            Daftar Link
+          </button>
         </div>
       </div>
 

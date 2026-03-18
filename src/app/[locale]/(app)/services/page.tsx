@@ -1290,6 +1290,7 @@ export default function ServicesPage() {
                 totalItems={filteredGroupedServices.main.length}
                 currentPage={mainPage}
                 itemsPerPage={itemsPerPage}
+                perPageOptions={[10, 25, 50, 100]}
                 onPageChange={setMainPage}
                 onItemsPerPageChange={(value) => {
                   setItemsPerPage(value);
@@ -1339,6 +1340,7 @@ export default function ServicesPage() {
                 totalItems={filteredGroupedServices.addon.length}
                 currentPage={addonPage}
                 itemsPerPage={itemsPerPage}
+                perPageOptions={[10, 25, 50, 100]}
                 onPageChange={setAddonPage}
                 onItemsPerPageChange={(value) => {
                   setItemsPerPage(value);
