@@ -20,8 +20,6 @@ const ANNOUNCEMENT_SEGMENTS: AnnouncementSegment[] = [
   },
 ];
 
-const HOLIDAY_ANNOUNCEMENT_TEXT = ANNOUNCEMENT_SEGMENTS.map((segment) => segment.text).join("");
-
 const MARQUEE_ITEM_GAP_PX = 40;
 const MARQUEE_SPEED_PX_PER_SECOND = 44;
 
@@ -55,6 +53,7 @@ function renderAnnouncementMessage(keyPrefix: string) {
 
 export function GlobalHolidayAnnouncement() {
   const pathname = usePathname();
+  const announcementRef = React.useRef<HTMLDivElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const measureRef = React.useRef<HTMLSpanElement>(null);
   const firstMarqueeItemRef = React.useRef<HTMLSpanElement>(null);
@@ -70,12 +69,42 @@ export function GlobalHolidayAnnouncement() {
 
   React.useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty(
-      "--global-announcement-height",
-      isVisible ? "40px" : "0px",
-    );
+
+    if (!isVisible) {
+      root.style.setProperty("--global-announcement-height", "0px");
+      return () => {
+        root.style.setProperty("--global-announcement-height", "0px");
+      };
+    }
+
+    const announcement = announcementRef.current;
+    if (!announcement) {
+      root.style.setProperty("--global-announcement-height", "0px");
+      return () => {
+        root.style.setProperty("--global-announcement-height", "0px");
+      };
+    }
+
+    const syncAnnouncementHeight = () => {
+      const measuredHeight = Math.max(
+        announcement.getBoundingClientRect().height,
+        0,
+      );
+      root.style.setProperty(
+        "--global-announcement-height",
+        `${Math.ceil(measuredHeight)}px`,
+      );
+    };
+
+    syncAnnouncementHeight();
+
+    const observer = new ResizeObserver(() => syncAnnouncementHeight());
+    observer.observe(announcement);
+    window.addEventListener("resize", syncAnnouncementHeight);
 
     return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", syncAnnouncementHeight);
       root.style.setProperty("--global-announcement-height", "0px");
     };
   }, [isVisible]);
@@ -154,7 +183,10 @@ export function GlobalHolidayAnnouncement() {
   if (!isVisible) return null;
 
   return (
-    <div className="announcement-hover-zone sticky top-0 z-[60] h-10 border-b border-emerald-700 bg-emerald-600 text-emerald-50 shadow-sm">
+    <div
+      ref={announcementRef}
+      className="announcement-hover-zone sticky top-0 z-[60] h-10 border-b border-emerald-700 bg-emerald-600 text-emerald-50 shadow-sm"
+    >
       <div
         ref={containerRef}
         className="relative flex h-full items-center overflow-hidden px-3 sm:px-4"
