@@ -726,9 +726,21 @@ export async function GET(request: NextRequest) {
     const breakdownRows: Array<{ label: string; value: string }> = [
       { label: t.initialPackage, value: formatCurrency(specialOffer.package_total) },
       { label: t.initialAddon, value: formatCurrency(specialOffer.addon_total) },
-      { label: t.accommodationFee, value: formatCurrency(specialOffer.accommodation_fee) },
-      { label: t.specialDiscount, value: `- ${formatCurrency(specialOffer.discount_amount)}` },
     ];
+
+    if (specialOffer.accommodation_fee > 0) {
+      breakdownRows.push({
+        label: t.accommodationFee,
+        value: formatCurrency(specialOffer.accommodation_fee),
+      });
+    }
+
+    if (specialOffer.discount_amount > 0) {
+      breakdownRows.push({
+        label: t.specialDiscount,
+        value: `- ${formatCurrency(specialOffer.discount_amount)}`,
+      });
+    }
 
     y -= 16;
     breakdownRows.forEach((row) => {

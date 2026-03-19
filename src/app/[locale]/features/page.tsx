@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from 'next/link'
+import { TenantLogo } from "@/components/layout/tenant-logo"
 import { motion } from "framer-motion"
 import {
     CalendarCheck, Zap, FileText, MessageSquare, FolderOpen, Globe,
@@ -89,9 +90,9 @@ export default function FeaturesPage() {
 
     return (
         <div className="flex flex-col min-h-screen font-sans">
-            <header className="sticky top-0 z-50 flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm">
+            <header className="sticky announcement-aware-sticky z-50 flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm">
                 <Link href={`/${locale}`} className="font-bold text-xl tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity">
-                    <img src={tenant.logoUrl || "/icon-192.png"} alt={tenant.name} className="h-8 w-8 rounded-lg" />
+                    <TenantLogo src={tenant.logoUrl} alt={tenant.name} className="h-8 w-8 rounded-lg" />
                     {tenant.name}
                 </Link>
                 <div className="flex items-center gap-2">

@@ -362,8 +362,12 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                             <>
                                 <div className="flex justify-between"><span className="text-muted-foreground">{t("initialPackage")}</span><span className="font-medium">Rp {(booking.initialBreakdown.packageTotal || 0).toLocaleString("id-ID")}</span></div>
                                 <div className="flex justify-between"><span className="text-muted-foreground">{t("initialAddon")}</span><span className="font-medium">Rp {(booking.initialBreakdown.addonTotal || 0).toLocaleString("id-ID")}</span></div>
-                                <div className="flex justify-between"><span className="text-muted-foreground">{t("accommodationFee")}</span><span className="font-medium">Rp {(booking.initialBreakdown.accommodationFee || 0).toLocaleString("id-ID")}</span></div>
-                                <div className="flex justify-between"><span className="text-muted-foreground">{t("specialDiscount")}</span><span className="font-medium">- Rp {(booking.initialBreakdown.discountAmount || 0).toLocaleString("id-ID")}</span></div>
+                                {(booking.initialBreakdown.accommodationFee || 0) > 0 ? (
+                                    <div className="flex justify-between"><span className="text-muted-foreground">{t("accommodationFee")}</span><span className="font-medium">Rp {(booking.initialBreakdown.accommodationFee || 0).toLocaleString("id-ID")}</span></div>
+                                ) : null}
+                                {(booking.initialBreakdown.discountAmount || 0) > 0 ? (
+                                    <div className="flex justify-between"><span className="text-muted-foreground">{t("specialDiscount")}</span><span className="font-medium">- Rp {(booking.initialBreakdown.discountAmount || 0).toLocaleString("id-ID")}</span></div>
+                                ) : null}
                             </>
                         ) : null}
                         <div className="flex justify-between"><span className="text-muted-foreground">{t("total")}</span><span className="font-medium">Rp {(booking.totalPrice || 0).toLocaleString("id-ID")}</span></div>
@@ -388,8 +392,12 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                                 <>
                                     <div className="flex justify-between"><span className="text-muted-foreground">{t("initialPackage")}</span><span className="font-medium">Rp {(booking.initialBreakdown.packageTotal || 0).toLocaleString("id-ID")}</span></div>
                                     <div className="flex justify-between"><span className="text-muted-foreground">{t("initialAddon")}</span><span className="font-medium">Rp {(booking.initialBreakdown.addonTotal || 0).toLocaleString("id-ID")}</span></div>
-                                    <div className="flex justify-between"><span className="text-muted-foreground">{t("accommodationFee")}</span><span className="font-medium">Rp {(booking.initialBreakdown.accommodationFee || 0).toLocaleString("id-ID")}</span></div>
-                                    <div className="flex justify-between"><span className="text-muted-foreground">{t("specialDiscount")}</span><span className="font-medium">- Rp {(booking.initialBreakdown.discountAmount || 0).toLocaleString("id-ID")}</span></div>
+                                    {(booking.initialBreakdown.accommodationFee || 0) > 0 ? (
+                                        <div className="flex justify-between"><span className="text-muted-foreground">{t("accommodationFee")}</span><span className="font-medium">Rp {(booking.initialBreakdown.accommodationFee || 0).toLocaleString("id-ID")}</span></div>
+                                    ) : null}
+                                    {(booking.initialBreakdown.discountAmount || 0) > 0 ? (
+                                        <div className="flex justify-between"><span className="text-muted-foreground">{t("specialDiscount")}</span><span className="font-medium">- Rp {(booking.initialBreakdown.discountAmount || 0).toLocaleString("id-ID")}</span></div>
+                                    ) : null}
                                 </>
                             ) : null}
                             <div className="flex justify-between"><span className="text-muted-foreground">{t("baseTotal")}</span><span className="font-medium">Rp {(booking.totalPrice || 0).toLocaleString("id-ID")}</span></div>

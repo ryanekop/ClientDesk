@@ -89,6 +89,10 @@
     animation-play-state: paused;
 }
 
+.announcement-aware-sticky {
+    top: var(--global-announcement-height, 0px);
+}
+
 @media (prefers-reduced-motion: reduce) {
     .announcement-marquee-track {
         animation: none;

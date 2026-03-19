@@ -566,14 +566,18 @@ export default function SettlementClient({
                   <span className="text-slate-500">{t("initialAddon")}</span>
                   <span className="font-medium">{formatCurrency(booking.initialBreakdown.addonTotal)}</span>
                 </div>
-                <div className="flex justify-between gap-4">
-                  <span className="text-slate-500">{t("accommodationFee")}</span>
-                  <span className="font-medium">{formatCurrency(booking.initialBreakdown.accommodationFee)}</span>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <span className="text-slate-500">{t("specialDiscount")}</span>
-                  <span className="font-medium">- {formatCurrency(booking.initialBreakdown.discountAmount)}</span>
-                </div>
+                {booking.initialBreakdown.accommodationFee > 0 ? (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-slate-500">{t("accommodationFee")}</span>
+                    <span className="font-medium">{formatCurrency(booking.initialBreakdown.accommodationFee)}</span>
+                  </div>
+                ) : null}
+                {booking.initialBreakdown.discountAmount > 0 ? (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-slate-500">{t("specialDiscount")}</span>
+                    <span className="font-medium">- {formatCurrency(booking.initialBreakdown.discountAmount)}</span>
+                  </div>
+                ) : null}
               </>
             ) : null}
           </div>

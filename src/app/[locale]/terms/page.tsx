@@ -1,6 +1,5 @@
 import { getTranslations } from 'next-intl/server'
 import { getLocale } from 'next-intl/server'
-import Image from "next/image"
 import { getTenantConfig } from "@/lib/tenant-config"
 import { getIsAuthenticated } from "@/lib/auth/get-is-authenticated"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -9,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import Link from 'next/link'
 import { ArrowLeft } from "lucide-react"
 import { LandingNav } from "@/components/landing/landing-client"
+import { TenantLogo } from "@/components/layout/tenant-logo"
 
 export default async function TermsPage() {
     const t = await getTranslations('Terms')
@@ -31,14 +31,13 @@ export default async function TermsPage() {
 
     return (
         <div className="flex flex-col min-h-screen font-sans">
-            <header className="sticky top-0 z-50 flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm">
+            <header className="sticky announcement-aware-sticky z-50 flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm">
                 <Link href={`/${locale}`} className="font-bold text-xl tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity">
-                    <Image
-                        src={tenant.logoUrl || "/icon-192.png"}
+                    <TenantLogo
+                        src={tenant.logoUrl}
                         alt={tenant.name}
                         width={32}
                         height={32}
-                        sizes="32px"
                         className="h-8 w-8 rounded-lg"
                     />
                     {tenant.name}
