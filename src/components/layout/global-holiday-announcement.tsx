@@ -154,7 +154,7 @@ export function GlobalHolidayAnnouncement() {
   if (!isVisible) return null;
 
   return (
-    <div className="sticky top-0 z-[60] h-10 border-b border-emerald-700 bg-emerald-600 text-emerald-50 shadow-sm">
+    <div className="announcement-hover-zone sticky top-0 z-[60] h-10 border-b border-emerald-700 bg-emerald-600 text-emerald-50 shadow-sm">
       <div
         ref={containerRef}
         className="relative flex h-full items-center overflow-hidden px-3 sm:px-4"

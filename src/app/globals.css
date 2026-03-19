@@ -84,6 +84,11 @@
     white-space: nowrap;
 }
 
+.announcement-hover-zone:hover .announcement-marquee-track,
+.announcement-hover-zone:focus-within .announcement-marquee-track {
+    animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .announcement-marquee-track {
         animation: none;
