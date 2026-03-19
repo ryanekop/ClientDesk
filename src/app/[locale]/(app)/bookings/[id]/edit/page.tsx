@@ -220,6 +220,7 @@ export default function EditBookingPage() {
     const [instagram, setInstagram] = React.useState("");
     const [eventType, setEventType] = React.useState("Umum");
     const [bookingDate, setBookingDate] = React.useState("");
+    const [createdAtDateFallback, setCreatedAtDateFallback] = React.useState("");
     const [sessionDate, setSessionDate] = React.useState("");
     const [location, setLocation] = React.useState("");
     const [locationCoords, setLocationCoords] = React.useState<LocationCoords>({ lat: null, lng: null });
@@ -359,13 +360,17 @@ export default function EditBookingPage() {
                 setPhoneNumber(parsed.number);
                 setInstagram(booking.instagram || "");
                 setEventType(normalizeEventTypeName(booking.event_type) || "Umum");
+                const createdAtDate =
+                    typeof (booking as Record<string, unknown>).created_at === "string" &&
+                    String((booking as Record<string, unknown>).created_at).trim().length > 0
+                        ? String((booking as Record<string, unknown>).created_at).slice(0, 10)
+                        : "";
+                setCreatedAtDateFallback(createdAtDate);
                 setBookingDate(
                     typeof (booking as Record<string, unknown>).booking_date === "string" &&
                     String((booking as Record<string, unknown>).booking_date).trim().length > 0
                         ? String((booking as Record<string, unknown>).booking_date).slice(0, 10)
-                        : typeof (booking as Record<string, unknown>).created_at === "string"
-                            ? String((booking as Record<string, unknown>).created_at).slice(0, 10)
-                            : "",
+                        : createdAtDate,
                 );
                 setSessionDate(booking.session_date ? booking.session_date.slice(0, 16) : "");
                 setLocation(booking.location || "");
@@ -746,7 +751,7 @@ export default function EditBookingPage() {
             client_whatsapp: fullPhone,
             instagram: instagram || null,
             event_type: eventType,
-            booking_date: bookingDate || new Date().toISOString().slice(0, 10),
+            booking_date: bookingDate || createdAtDateFallback || new Date().toISOString().slice(0, 10),
             session_date: finalSessionDate,
             location: resolvedLocation.location,
             location_lat: resolvedLocation.locationLat,

@@ -40,11 +40,9 @@ export default async function DashboardPage() {
   ]);
 
   const now = new Date();
-  const startOfMonth = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    1,
-  ).toISOString();
+  const startOfMonth = `${now.getFullYear()}-${String(
+    now.getMonth() + 1,
+  ).padStart(2, "0")}-01`;
   const todayStart = new Date(
     now.getFullYear(),
     now.getMonth(),
@@ -79,7 +77,7 @@ export default async function DashboardPage() {
       .from("bookings")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user!.id)
-      .gte("created_at", startOfMonth)
+      .gte("booking_date", startOfMonth)
       .neq("status", "Batal"),
     supabase
       .from("bookings")
@@ -91,10 +89,11 @@ export default async function DashboardPage() {
     supabase
       .from("bookings")
       .select(
-        "id, client_name, booking_code, session_date, status, total_price, created_at, services(name)",
+        "id, client_name, booking_code, booking_date, session_date, status, total_price, created_at, services(name)",
       )
       .eq("user_id", user!.id)
       .neq("status", "Batal")
+      .order("booking_date", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(5),
     supabase
@@ -508,7 +507,9 @@ export default async function DashboardPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">
                       {formatDate(
-                        (b as typeof b & { created_at: string }).created_at,
+                        (b as typeof b & { booking_date?: string | null; created_at: string })
+                          .booking_date ||
+                          (b as typeof b & { created_at: string }).created_at,
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">
