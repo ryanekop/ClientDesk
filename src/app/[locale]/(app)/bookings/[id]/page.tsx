@@ -2635,18 +2635,31 @@ export default function BookingDetailPage() {
                         <p className="text-xs text-muted-foreground break-words">
                             📁 {driveFolderPathHint}
                         </p>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 gap-1 text-[11px] shrink-0"
-                            onClick={() => void handleRefreshDrivePathHint()}
-                            disabled={refreshingDrivePathHint}
-                            title="Refresh path preview dari setting Drive terbaru"
-                        >
-                            {refreshingDrivePathHint ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
-                            Re-sync Path
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => void handleRefreshDrivePathHint()}
+                                disabled={refreshingDrivePathHint}
+                                title="Refresh path preview dari setting Drive terbaru"
+                            >
+                                {refreshingDrivePathHint ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
+                                Re-sync Path
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => window.open(booking.drive_folder_url!, "_blank", "noopener,noreferrer")}
+                                disabled={!booking.drive_folder_url}
+                            >
+                                <ExternalLink className="w-4 h-4" />
+                                Buka Folder Google Drive
+                            </Button>
+                        </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <input
