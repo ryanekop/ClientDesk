@@ -329,7 +329,7 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                                     <span className="font-medium">
                                         {booking.fastpikProjectInfo.selection_days !== null
                                             ? t("days", { count: booking.fastpikProjectInfo.selection_days })
-                                            : t("notAvailable")}
+                                            : t("foreverDuration")}
                                     </span>
                                 </div>
                                 <div className="flex justify-between gap-4">
@@ -337,7 +337,7 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                                     <span className="font-medium">
                                         {booking.fastpikProjectInfo.download_days !== null
                                             ? t("days", { count: booking.fastpikProjectInfo.download_days })
-                                            : t("notAvailable")}
+                                            : t("foreverDuration")}
                                     </span>
                                 </div>
                                 <div className="flex justify-between gap-4">

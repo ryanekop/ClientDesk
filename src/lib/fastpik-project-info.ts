@@ -32,32 +32,47 @@ function toNonNegativeInteger(value: unknown): number | null {
   return rounded >= 0 ? rounded : null;
 }
 
-function getFirstStringValue(
-  records: Array<UnknownRecord | null>,
-  keys: string[],
-): string | null {
-  for (const record of records) {
-    if (!record) continue;
-    for (const key of keys) {
-      const value = toTrimmedString(record[key]);
-      if (value) return value;
-    }
-  }
-  return null;
+type ResolvedField<T> = {
+  found: boolean;
+  value: T | null;
+};
+
+function hasOwnKey(record: UnknownRecord, key: string) {
+  return Object.prototype.hasOwnProperty.call(record, key);
 }
 
-function getFirstIntegerValue(
+function resolveFirstStringField(
   records: Array<UnknownRecord | null>,
   keys: string[],
-): number | null {
+): ResolvedField<string> {
   for (const record of records) {
     if (!record) continue;
     for (const key of keys) {
-      const value = toNonNegativeInteger(record[key]);
-      if (value !== null) return value;
+      if (!hasOwnKey(record, key)) continue;
+      return {
+        found: true,
+        value: toTrimmedString(record[key]),
+      };
     }
   }
-  return null;
+  return { found: false, value: null };
+}
+
+function resolveFirstIntegerField(
+  records: Array<UnknownRecord | null>,
+  keys: string[],
+): ResolvedField<number> {
+  for (const record of records) {
+    if (!record) continue;
+    for (const key of keys) {
+      if (!hasOwnKey(record, key)) continue;
+      return {
+        found: true,
+        value: toNonNegativeInteger(record[key]),
+      };
+    }
+  }
+  return { found: false, value: null };
 }
 
 function normalizeFastpikProjectSnapshot(
@@ -98,6 +113,8 @@ export function buildFastpikProjectInfoSnapshot(input: {
   syncedAt?: string;
 }): FastpikProjectInfoSnapshot {
   const payloadRoot = asRecord(input.responsePayload);
+  const payloadProjectInfo = asRecord(payloadRoot?.project_info);
+  const payloadProjectInfoAlt = asRecord(payloadRoot?.projectInfo);
   const payloadData = asRecord(payloadRoot?.data);
   const payloadResult = asRecord(payloadRoot?.result);
   const payloadProject = asRecord(payloadRoot?.project);
@@ -105,12 +122,14 @@ export function buildFastpikProjectInfoSnapshot(input: {
   const payloadClientdeskDefaults = asRecord(payloadRoot?.clientdesk_defaults);
 
   const payloadCandidates: Array<UnknownRecord | null> = [
-    payloadRoot,
+    payloadProjectInfo,
+    payloadProjectInfoAlt,
+    payloadProject,
     payloadData,
     payloadResult,
-    payloadProject,
     payloadConfig,
     payloadClientdeskDefaults,
+    payloadRoot,
   ];
   const defaultRecord = asRecord(input.defaults);
   const fallbackCandidates: Array<UnknownRecord | null> = [defaultRecord];
@@ -140,39 +159,42 @@ export function buildFastpikProjectInfoSnapshot(input: {
     "max_photo_count",
   ];
 
-  const payloadPassword = getFirstStringValue(payloadCandidates, passwordKeys);
-  const payloadSelectionDays = getFirstIntegerValue(
+  const payloadPassword = resolveFirstStringField(payloadCandidates, passwordKeys);
+  const payloadSelectionDays = resolveFirstIntegerField(
     payloadCandidates,
     selectionDayKeys,
   );
-  const payloadDownloadDays = getFirstIntegerValue(
+  const payloadDownloadDays = resolveFirstIntegerField(
     payloadCandidates,
     downloadDayKeys,
   );
-  const payloadMaxPhotos = getFirstIntegerValue(payloadCandidates, maxPhotoKeys);
+  const payloadMaxPhotos = resolveFirstIntegerField(
+    payloadCandidates,
+    maxPhotoKeys,
+  );
 
   return {
     password:
-      payloadPassword ??
-      getFirstStringValue(fallbackCandidates, ["password"]) ??
-      null,
+      payloadPassword.found
+        ? payloadPassword.value
+        : resolveFirstStringField(fallbackCandidates, ["password"]).value,
     selection_days:
-      payloadSelectionDays ??
-      getFirstIntegerValue(fallbackCandidates, ["selection_days"]) ??
-      null,
+      payloadSelectionDays.found
+        ? payloadSelectionDays.value
+        : resolveFirstIntegerField(fallbackCandidates, ["selection_days"]).value,
     download_days:
-      payloadDownloadDays ??
-      getFirstIntegerValue(fallbackCandidates, ["download_days"]) ??
-      null,
+      payloadDownloadDays.found
+        ? payloadDownloadDays.value
+        : resolveFirstIntegerField(fallbackCandidates, ["download_days"]).value,
     max_photos:
-      payloadMaxPhotos ??
-      getFirstIntegerValue(fallbackCandidates, ["max_photos"]) ??
-      null,
+      payloadMaxPhotos.found
+        ? payloadMaxPhotos.value
+        : resolveFirstIntegerField(fallbackCandidates, ["max_photos"]).value,
     source:
-      payloadPassword !== null ||
-      payloadSelectionDays !== null ||
-      payloadDownloadDays !== null ||
-      payloadMaxPhotos !== null
+      payloadPassword.found ||
+      payloadSelectionDays.found ||
+      payloadDownloadDays.found ||
+      payloadMaxPhotos.found
         ? "project_response"
         : "profile_default",
     synced_at: toTrimmedString(input.syncedAt) ?? new Date().toISOString(),

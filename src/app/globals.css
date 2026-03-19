@@ -54,11 +54,11 @@
 
 @keyframes announcement-marquee {
     from {
-        transform: translateX(0);
+        transform: translate3d(0, 0, 0);
     }
 
     to {
-        transform: translateX(-50%);
+        transform: translate3d(calc(-1 * var(--announcement-marquee-distance, 0px)), 0, 0);
     }
 }
 
@@ -68,11 +68,17 @@
     min-width: 100%;
     align-items: center;
     white-space: nowrap;
-    animation: announcement-marquee 30s linear infinite;
+    animation-name: announcement-marquee;
+    animation-duration: var(--announcement-marquee-duration, 30s);
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
     will-change: transform;
+    transform: translate3d(0, 0, 0);
 }
 
 .announcement-marquee-item {
+    display: inline-flex;
+    align-items: center;
     flex: 0 0 auto;
     padding-right: 2.5rem;
     white-space: nowrap;
@@ -81,7 +87,7 @@
 @media (prefers-reduced-motion: reduce) {
     .announcement-marquee-track {
         animation: none;
-        transform: translateX(0);
+        transform: translate3d(0, 0, 0);
     }
 }
 

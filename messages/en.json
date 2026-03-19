@@ -925,6 +925,7 @@
         "selectionDuration": "Selection Link Duration",
         "downloadDuration": "Download Link Duration",
         "maxPhotos": "Maximum Photos",
+        "foreverDuration": "Forever",
         "notAvailable": "-",
         "copy": "Copy",
         "copied": "Copied",
