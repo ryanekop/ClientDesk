@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   
   -- Data & Delivery
   notes TEXT,
+  admin_notes TEXT,
   drive_folder_url TEXT,
   
   created_at TIMESTAMPTZ DEFAULT NOW(),

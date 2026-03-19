@@ -272,6 +272,11 @@
         "diskon": "Diskon",
         "sisa": "Sisa",
         "status": "Status",
+        "searchPlaceholder": "Cari klien, invoice, paket, lokasi...",
+        "packageFilterLabel": "Filter Paket",
+        "bookingStatusFilterLabel": "Filter Status Booking",
+        "allPackages": "Semua Paket",
+        "allBookingStatuses": "Semua Status",
         "aksi": "Aksi",
         "tidakAdaData": "Tidak ada data keuangan.",
         "cetak": "Cetak Invoice"

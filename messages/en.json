@@ -272,6 +272,11 @@
         "diskon": "Discount",
         "sisa": "Remaining",
         "status": "Status",
+        "searchPlaceholder": "Search client, invoice, package, location...",
+        "packageFilterLabel": "Package Filter",
+        "bookingStatusFilterLabel": "Booking Status Filter",
+        "allPackages": "All Packages",
+        "allBookingStatuses": "All Statuses",
         "aksi": "Actions",
         "tidakAdaData": "No financial data.",
         "cetak": "Print Invoice"

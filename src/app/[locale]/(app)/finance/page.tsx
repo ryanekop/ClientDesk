@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown, Copy, ClipboardCheck } from "lucide-react";
+import { Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown, Copy, ClipboardCheck, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -18,6 +18,7 @@ import { TableColumnManager } from "@/components/ui/table-column-manager";
 import { useSuccessToast } from "@/components/ui/success-toast";
 import {
     getBookingServiceLabel,
+    getBookingServiceNames,
     normalizeLegacyServiceRecord,
     normalizeBookingServiceSelections,
     type BookingServiceSelection,
@@ -47,6 +48,11 @@ import {
 import { getInitialBookingPriceBreakdown } from "@/lib/booking-special-offer";
 import { buildMultiSessionTemplateVars } from "@/utils/form-extra-fields";
 import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
+import {
+    DEFAULT_CLIENT_STATUSES,
+    getBookingStatusOptions,
+    resolveUnifiedBookingStatus,
+} from "@/lib/client-status";
 import {
     buildWhatsAppUrl,
     closePreopenedWindow,
@@ -103,6 +109,7 @@ const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
 const FINANCE_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:finance:items_per_page";
 const FINANCE_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const FINANCE_DEFAULT_ITEMS_PER_PAGE = 10;
+const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
 
 function normalizeFinanceItemsPerPage(value: unknown) {
     const parsed = typeof value === "number" ? value : Number(value);
@@ -121,6 +128,12 @@ export default function FinancePage() {
     const [bookings, setBookings] = React.useState<BookingFinance[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [filter, setFilter] = React.useState<"all" | "pending" | "paid">("all");
+    const [searchQuery, setSearchQuery] = React.useState("");
+    const [packageFilter, setPackageFilter] = React.useState("All");
+    const [bookingStatusFilter, setBookingStatusFilter] = React.useState("All");
+    const [bookingStatusOptions, setBookingStatusOptions] = React.useState<string[]>(
+        getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
+    );
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
@@ -173,7 +186,7 @@ export default function FinancePage() {
                 .from("templates")
                 .select("id, type, name, content, content_en, event_type")
                 .eq("user_id", user.id),
-            supabase.from("profiles").select("studio_name, table_column_preferences, form_sections").eq("id", user.id).single(),
+            supabase.from("profiles").select("studio_name, table_column_preferences, form_sections, custom_client_statuses").eq("id", user.id).single(),
         ]);
 
         const normalizedBookings = ((data || []) as unknown as Array<BookingFinance & { booking_services?: unknown[] }>).map((booking) => {
@@ -193,6 +206,9 @@ export default function FinancePage() {
         }) as BookingFinance[];
         const profilePrefs = (profile as { table_column_preferences?: { finance?: TableColumnPreference[] } | null } | null)?.table_column_preferences?.finance;
         const rawSections = (profile as { form_sections?: Record<string, FormLayoutItem[]> | null } | null)?.form_sections;
+        const resolvedStatusOptions = getBookingStatusOptions(
+            (profile as { custom_client_statuses?: string[] | null } | null)?.custom_client_statuses,
+        );
         const resolvedSections =
             rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)
                 ? rawSections
@@ -208,6 +224,7 @@ export default function FinancePage() {
             setFormSectionsByEventType({});
         }
         setBookings(normalizedBookings);
+        setBookingStatusOptions(resolvedStatusOptions);
         setSavedTemplates((templates || []) as { id: string; type: string; name?: string | null; content: string; content_en: string; event_type: string | null }[]);
         setStudioName(profile?.studio_name || "");
         setColumns(
@@ -1115,13 +1132,67 @@ export default function FinancePage() {
         window.open(url, "_blank");
     }
 
-    const filtered = filter === "all" ? bookings
-        : filter === "paid" ? bookings.filter(b => !isCancelledBooking(b) && b.is_fully_paid)
-            : bookings.filter(b => !isCancelledBooking(b) && !b.is_fully_paid);
+    const packageOptions = React.useMemo(
+        () =>
+            Array.from(
+                new Set(
+                    bookings
+                        .flatMap((booking) => getBookingServiceNames(booking.service_selections || [], "main"))
+                        .filter(Boolean),
+                ),
+            ).sort((a, b) => a.localeCompare(b)),
+        [bookings],
+    );
+
+    const getUnifiedBookingStatus = React.useCallback(
+        (booking: BookingFinance) =>
+            resolveUnifiedBookingStatus({
+                status: booking.status,
+                clientStatus: booking.client_status,
+                statuses: bookingStatusOptions,
+            }),
+        [bookingStatusOptions],
+    );
+
+    const filtered = (filter === "all"
+        ? bookings
+        : filter === "paid"
+            ? bookings.filter((booking) => !isCancelledBooking(booking) && booking.is_fully_paid)
+            : bookings.filter((booking) => !isCancelledBooking(booking) && !booking.is_fully_paid)
+    ).filter((booking) => {
+        const query = searchQuery.trim().toLowerCase();
+        const packageNames = getBookingServiceNames(booking.service_selections || [], "main");
+        const unifiedStatus = getUnifiedBookingStatus(booking);
+
+        const matchesSearch =
+            !query ||
+            booking.client_name.toLowerCase().includes(query) ||
+            booking.booking_code.toLowerCase().includes(query) ||
+            (booking.location || "").toLowerCase().includes(query) ||
+            (booking.service_label || booking.services?.name || "").toLowerCase().includes(query) ||
+            packageNames.some((name) => name.toLowerCase().includes(query));
+        const matchesPackage = packageFilter === "All" || packageNames.includes(packageFilter);
+        const matchesBookingStatus =
+            bookingStatusFilter === "All" || unifiedStatus === bookingStatusFilter;
+
+        return matchesSearch && matchesPackage && matchesBookingStatus;
+    });
+
+    React.useEffect(() => {
+        if (packageFilter !== "All" && !packageOptions.includes(packageFilter)) {
+            setPackageFilter("All");
+        }
+    }, [packageFilter, packageOptions]);
+
+    React.useEffect(() => {
+        if (bookingStatusFilter !== "All" && !bookingStatusOptions.includes(bookingStatusFilter)) {
+            setBookingStatusFilter("All");
+        }
+    }, [bookingStatusFilter, bookingStatusOptions]);
 
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [filter, itemsPerPage]);
+    }, [filter, searchQuery, packageFilter, bookingStatusFilter, itemsPerPage]);
 
     return (
         <div className="space-y-6">
@@ -1156,8 +1227,8 @@ export default function FinancePage() {
             </div>
 
             {/* Filters */}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="order-2 flex gap-2 overflow-x-auto pb-1 sm:order-1 sm:pb-0">
+            <div className="space-y-3">
+                <div className="flex gap-2 overflow-x-auto pb-1">
                     {(["all", "pending", "paid"] as const).map((f) => (
                         <button
                             key={f}
@@ -1168,25 +1239,73 @@ export default function FinancePage() {
                         </button>
                     ))}
                 </div>
-                <div className="order-1 flex flex-wrap items-center gap-2 sm:order-2 sm:justify-end">
+
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),220px,220px]">
+                    <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(event) => setSearchQuery(event.target.value)}
+                            placeholder={t("searchPlaceholder")}
+                            className="h-9 w-full rounded-md border border-input bg-background/50 pl-9 pr-3 text-sm outline-none transition-all focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">{t("packageFilterLabel")}</label>
+                        <select
+                            value={packageFilter}
+                            onChange={(event) => setPackageFilter(event.target.value)}
+                            className={`${selectFilterClass} w-full`}
+                        >
+                            <option value="All">{t("allPackages")}</option>
+                            {packageOptions.map((packageName) => (
+                                <option key={packageName} value={packageName}>
+                                    {packageName}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">{t("bookingStatusFilterLabel")}</label>
+                        <select
+                            value={bookingStatusFilter}
+                            onChange={(event) => setBookingStatusFilter(event.target.value)}
+                            className={`${selectFilterClass} w-full`}
+                        >
+                            <option value="All">{t("allBookingStatuses")}</option>
+                            {bookingStatusOptions.map((statusOption) => (
+                                <option key={statusOption} value={statusOption}>
+                                    {statusOption}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-end">
                     <Button
                         type="button"
                         variant="outline"
-                        className="h-9 gap-2"
+                        className="h-9 w-full gap-2 sm:w-auto"
                         onClick={exportFinance}
                     >
                         <Download className="w-4 h-4" /> Export Excel
                     </Button>
-                    <TableColumnManager
-                        title="Kelola Kolom Keuangan"
-                        description="Atur kolom yang tampil di tabel keuangan. Kolom Nama dan Aksi selalu terkunci."
-                        columns={columns}
-                        open={columnManagerOpen}
-                        onOpenChange={setColumnManagerOpen}
-                        onChange={setColumns}
-                        onSave={() => saveColumnPreferences(columns)}
-                        saving={savingColumns}
-                    />
+                    <div className="w-full sm:w-auto [&>button]:w-full [&>button]:justify-center sm:[&>button]:w-auto">
+                        <TableColumnManager
+                            title="Kelola Kolom Keuangan"
+                            description="Atur kolom yang tampil di tabel keuangan. Kolom Nama dan Aksi selalu terkunci."
+                            columns={columns}
+                            open={columnManagerOpen}
+                            onOpenChange={setColumnManagerOpen}
+                            onChange={setColumns}
+                            onSave={() => saveColumnPreferences(columns)}
+                            saving={savingColumns}
+                        />
+                    </div>
                 </div>
             </div>
 

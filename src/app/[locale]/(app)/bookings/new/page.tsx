@@ -216,6 +216,7 @@ export default function NewBookingPage() {
         [statusOptions],
     );
     const [notes, setNotes] = React.useState("");
+    const [adminNotes, setAdminNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
     const [portfolioUrl, setPortfolioUrl] = React.useState("");
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
@@ -590,6 +591,7 @@ export default function NewBookingPage() {
             status: initialBookingStatus,
             client_status: initialBookingStatus,
             notes: notes || null,
+            admin_notes: adminNotes || null,
             drive_folder_url: driveFolderUrl || null,
             portfolio_url: portfolioUrl || null,
             extra_fields: nextExtraFieldsPayload,
@@ -1136,6 +1138,18 @@ export default function NewBookingPage() {
                         <StickyNote className="w-4 h-4" /> Catatan
                     </h3>
                     <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Permintaan khusus, detail tambahan..." className={textareaClass} />
+                </div>
+                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-3">
+                    <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                        <StickyNote className="w-4 h-4" /> Catatan Admin
+                    </h3>
+                    <textarea
+                        value={adminNotes}
+                        onChange={e => setAdminNotes(e.target.value)}
+                        rows={3}
+                        placeholder="Catatan internal admin (tidak tampil ke klien/freelance)..."
+                        className={textareaClass}
+                    />
                 </div>
 
                 {/* Link Google Drive */}
