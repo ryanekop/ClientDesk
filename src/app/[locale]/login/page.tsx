@@ -9,6 +9,7 @@ import { useLocale, useTranslations } from "next-intl"
 import Link from "next/link"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { applyClientDeskRememberMeSelection } from "@/lib/auth/session-only"
 
 export default function LoginPage() {
     const router = useRouter()
@@ -46,6 +47,7 @@ export default function LoginPage() {
                 return
             }
 
+            applyClientDeskRememberMeSelection(rememberMe)
             router.refresh()
             router.push(`/${locale}/dashboard`)
         } catch {

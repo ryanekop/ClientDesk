@@ -8,6 +8,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useTranslations, useLocale } from "next-intl";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import Link from "next/link";
+import { createImplicitClient } from "@/utils/supabase/implicit-client";
 
 function extractMissingColumnFromSupabaseError(
     error: { message?: string; details?: string; hint?: string } | null,
@@ -208,8 +209,10 @@ export default function ProfilePage() {
     }
 
     async function handleResetPassword() {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin,
+        const implicitSupabase = createImplicitClient();
+        const siteUrl = window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+        const { error } = await implicitSupabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${siteUrl}/${locale}/auth/callback?type=recovery`,
         });
         if (error) {
             setResetMsg(t("resetFailed") + ": " + error.message);

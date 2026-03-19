@@ -4,13 +4,25 @@ import { createClient } from '@/utils/supabase/server'
 import { resolveTenant } from '@/lib/tenant-resolver'
 import { getSubscription, createTrialSubscription } from '@/utils/subscription-service'
 import { notifyNewSignup } from '@/utils/telegram'
+import {
+    getRequestHostname,
+    normalizeAuthLocale,
+    resolvePublicOrigin,
+    resolveSafeNextPath,
+} from '@/lib/auth/public-origin'
+
+function withOrigin(origin: string, path: string) {
+    const resolvedPath = path.startsWith('/') ? path : `/${path}`
+    return `${origin}${resolvedPath}`
+}
 
 export async function GET(request: Request) {
-    const { searchParams, origin } = new URL(request.url)
+    const { searchParams } = new URL(request.url)
     const code = searchParams.get('code')
     const type = searchParams.get('type') // 'recovery', 'invite', etc.
-    const next = searchParams.get('next')
-    const locale = searchParams.get('locale') || 'id'
+    const locale = normalizeAuthLocale(searchParams.get('locale'))
+    const next = resolveSafeNextPath(searchParams.get('next'), locale)
+    const publicOrigin = resolvePublicOrigin(request)
 
     if (code) {
         const supabase = await createClient()
@@ -56,7 +68,7 @@ export async function GET(request: Request) {
                 // =============================================
                 // MULTI-TENANT: Auto-assign tenant_id to profile
                 // =============================================
-                const hostname = request.headers.get('host') || ''
+                const hostname = getRequestHostname(request)
                 const tenant = await resolveTenant(hostname)
 
                 if (tenant.id !== 'default') {
@@ -76,27 +88,17 @@ export async function GET(request: Request) {
                 }
             }
 
-            const forwardedHost = request.headers.get('x-forwarded-host')
-            const isLocalEnv = process.env.NODE_ENV === 'development'
-
-            let redirectPath = next || `/${locale}/dashboard`
+            let redirectPath = next
             if (type === 'recovery' || type === 'invite') {
                 redirectPath = `/${locale}/reset-password`
             }
-
-            if (isLocalEnv) {
-                return NextResponse.redirect(`${origin}${redirectPath}`)
-            } else if (forwardedHost) {
-                return NextResponse.redirect(`https://${forwardedHost}${redirectPath}`)
-            } else {
-                return NextResponse.redirect(`${origin}${redirectPath}`)
-            }
+            return NextResponse.redirect(withOrigin(publicOrigin, redirectPath))
         } else {
             console.error('Auth callback error:', error.message)
         }
     }
 
-    return NextResponse.redirect(`${origin}/${locale}/login?error=auth_code_error`)
+    return NextResponse.redirect(withOrigin(publicOrigin, `/${locale}/login?error=auth_code_error`))
 }
 
 /**
@@ -105,8 +107,33 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
     try {
-        const { userId, email, fullName } = await request.json()
-        if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+        const body = await request.json().catch(() => ({})) as {
+            userId?: string
+            email?: string
+            fullName?: string
+        }
+        const requestedUserId = typeof body.userId === 'string' ? body.userId : null
+
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
+        if (requestedUserId && requestedUserId !== user.id) {
+            console.warn('[Callback POST] Ignoring mismatched userId from request body')
+        }
+
+        const userId = user.id
+        const userEmail = typeof body.email === 'string' && body.email.trim()
+            ? body.email.trim()
+            : user.email || 'unknown'
+        const metadataFullName = typeof user.user_metadata?.full_name === 'string'
+            ? user.user_metadata.full_name
+            : ''
+        const fullName = typeof body.fullName === 'string' && body.fullName.trim()
+            ? body.fullName.trim()
+            : metadataFullName
 
         const existingSub = await getSubscription(userId)
         if (!existingSub) {
@@ -118,7 +145,7 @@ export async function POST(request: Request) {
                 || 'unknown'
             const device = request.headers.get('user-agent') || ''
             notifyNewSignup({
-                email: email || 'unknown',
+                email: userEmail,
                 fullName: fullName || '',
                 type: 'signup',
                 trialDays: 5,

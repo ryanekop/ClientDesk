@@ -1,13 +1,12 @@
 "use client"
 
 import { useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { useLocale, useTranslations } from 'next-intl'
 import { Loader2 } from 'lucide-react'
 
 export default function AuthCallbackPage() {
-    const router = useRouter()
     const locale = useLocale()
     const supabase = createClient()
     const searchParams = useSearchParams()
@@ -119,7 +118,7 @@ export default function AuthCallbackPage() {
         }
 
         handleAuthCallback()
-    }, [locale, searchParams, supabase.auth])
+    }, [locale, searchParams, supabase.auth, t])
 
     if (error) {
         return (

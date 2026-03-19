@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { useLocale, useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Loader2, Eye, EyeOff, UserPlus, Mail, ArrowLeft } from "lucide-react"
@@ -9,21 +8,11 @@ import Link from "next/link"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Turnstile } from '@marsidev/react-turnstile'
-import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-
-// Use implicit flow so confirmation link works on any device (no PKCE verifier needed)
-function createImplicitClient() {
-    return createSupabaseClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        { auth: { flowType: 'implicit' } }
-    )
-}
+import { createImplicitClient } from "@/utils/supabase/implicit-client"
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
 
 export default function RegisterPage() {
-    const router = useRouter()
     const locale = useLocale()
     const t = useTranslations("Auth")
 
@@ -78,7 +67,7 @@ export default function RegisterPage() {
             }
 
             // Step 2: Call signUp with implicit flow for cross-device confirmation
-            const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
+            const siteUrl = window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
             const supabase = createImplicitClient()
             const { error: signUpError } = await supabase.auth.signUp({
                 email,

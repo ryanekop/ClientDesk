@@ -18,6 +18,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { User as SupabaseUser } from "@supabase/supabase-js";
+import { clearClientDeskSessionOnlyState } from "@/lib/auth/session-only";
 
 type LandingAuthProps = {
   isAuthenticated?: boolean;
@@ -203,6 +204,7 @@ export function LandingNav() {
   }, [supabase]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadUserState();
 
     const {
@@ -239,6 +241,7 @@ export function LandingNav() {
 
   const handleLogout = useCallback(async () => {
     setIsLoggingOut(true);
+    clearClientDeskSessionOnlyState();
     await supabase.auth.signOut();
     setUser(null);
     setAvatarUrl(null);

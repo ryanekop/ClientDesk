@@ -3,6 +3,13 @@
 import * as React from "react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
+import { useRouter } from "next/navigation";
+import { useLocale } from "next-intl";
+import { createClient } from "@/utils/supabase/client";
+import {
+    clearClientDeskSessionOnlyState,
+    evaluateClientDeskSessionOnlyState,
+} from "@/lib/auth/session-only";
 
 interface DashboardLayoutProps {
     children: React.ReactNode;
@@ -10,6 +17,37 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+    const router = useRouter();
+    const locale = useLocale();
+    const signingOutRef = React.useRef(false);
+
+    const enforceSessionOnly = React.useCallback(async () => {
+        if (signingOutRef.current) return;
+
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { shouldSignOut } = evaluateClientDeskSessionOnlyState(user.id);
+        if (!shouldSignOut) return;
+
+        signingOutRef.current = true;
+        clearClientDeskSessionOnlyState();
+        await supabase.auth.signOut();
+        router.replace(`/${locale}/login`);
+    }, [locale, router]);
+
+    React.useEffect(() => {
+        void enforceSessionOnly();
+
+        const interval = window.setInterval(() => {
+            void enforceSessionOnly();
+        }, 60_000);
+
+        return () => {
+            window.clearInterval(interval);
+        };
+    }, [enforceSessionOnly]);
 
     return (
         <div

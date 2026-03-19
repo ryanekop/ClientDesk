@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import {
@@ -18,6 +18,7 @@ import { Link, usePathname } from "@/i18n/routing";
 import { createClient } from "@/utils/supabase/client";
 import { signOut } from "@/app/actions/auth";
 import { useChangelogUnread } from "@/components/changelog-modal";
+import { clearClientDeskSessionOnlyState } from "@/lib/auth/session-only";
 
 function TopbarClock() {
   const [now, setNow] = React.useState<Date | null>(null);
@@ -74,6 +75,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   } | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
   const t = useTranslations("Topbar");
+  const locale = useLocale();
   const pathname = usePathname();
   const { hasUnread } = useChangelogUnread();
 
@@ -166,6 +168,11 @@ export function Topbar({ onMenuClick }: TopbarProps) {
     { label: t("paket"), href: "/pricing", icon: Crown },
     { label: t("pengaturan"), href: "/settings", icon: Settings },
   ];
+
+  const handleLogout = React.useCallback(() => {
+    clearClientDeskSessionOnlyState();
+    void signOut(locale);
+  }, [locale]);
 
   return (
     <>
@@ -262,7 +269,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
             {/* Logout */}
             <div className="border-t py-1">
               <button
-                onClick={() => signOut()}
+                onClick={handleLogout}
                 className="flex items-center gap-3 px-4 py-2 text-sm text-red-500 hover:bg-muted/50 transition-colors w-full cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />

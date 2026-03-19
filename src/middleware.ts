@@ -44,8 +44,8 @@ export default async function middleware(request: NextRequest) {
     // Make tenant info readable by server components/routes.
     setTenantHeaders(request.headers, tenant);
 
-    // API routes: skip i18n but keep auth session refresh.
-    if (pathname.startsWith('/api/')) {
+    // API and non-localized auth callback routes: skip i18n but keep auth session refresh.
+    if (pathname.startsWith('/api/') || pathname.startsWith('/auth/')) {
         const response = NextResponse.next({
             request: { headers: request.headers },
         });

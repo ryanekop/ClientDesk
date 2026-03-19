@@ -1,18 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import { createClient } from "@/utils/supabase/client"
 import { useLocale, useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Loader2, Mail, ArrowLeft, KeyRound } from "lucide-react"
 import Link from "next/link"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { createImplicitClient } from "@/utils/supabase/implicit-client"
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
 
 export default function ForgotPasswordPage() {
-    const supabase = createClient()
+    const supabase = createImplicitClient()
     const locale = useLocale()
     const t = useTranslations("Auth")
 
@@ -27,9 +27,9 @@ export default function ForgotPasswordPage() {
         setError(null)
 
         try {
-            const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
+            const siteUrl = window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${siteUrl}/api/auth/callback?type=recovery&locale=${locale}`,
+                redirectTo: `${siteUrl}/${locale}/auth/callback?type=recovery`,
             })
 
             if (error) {

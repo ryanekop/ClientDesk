@@ -5,7 +5,7 @@ import { Link, usePathname } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/actions/auth";
 import { createClient } from "@/utils/supabase/client";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
     LayoutDashboard,
     CalendarDays,
@@ -23,6 +23,7 @@ import {
     TicketPercent,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { clearClientDeskSessionOnlyState } from "@/lib/auth/session-only";
 
 interface SidebarProps {
     isOpen: boolean;
@@ -45,6 +46,7 @@ const mainNavItems = [
 export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     const pathname = usePathname();
     const t = useTranslations("Sidebar");
+    const locale = useLocale();
     const [isCollapsed, setIsCollapsed] = React.useState(false);
     const [userName, setUserName] = React.useState("");
     const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
@@ -80,6 +82,11 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     };
 
     const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+
+    const handleLogout = React.useCallback(() => {
+        clearClientDeskSessionOnlyState();
+        void signOut(locale);
+    }, [locale]);
 
     return (
         <>
@@ -188,7 +195,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                                 </div>
                             </Link>
                             <button
-                                onClick={() => signOut()}
+                                onClick={handleLogout}
                                 title="Logout"
                                 className={cn(
                                     "p-2 rounded-md hover:bg-muted transition-colors cursor-pointer shrink-0",
