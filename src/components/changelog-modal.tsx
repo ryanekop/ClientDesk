@@ -3,6 +3,7 @@
 import * as React from "react";
 import { BellRing } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AppCheckbox } from "@/components/ui/app-checkbox";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ export function DashboardChangelogPopup({
 }) {
   const [open, setOpen] = React.useState(false);
   const [persistInBrowser, setPersistInBrowser] = React.useState(false);
+  const persistInBrowserId = "persist-changelog-in-browser";
   const releases = React.useMemo(() => groupChangelogEntries(entries), [entries]);
   const latestRelease = releases[0];
   const latestVersion = latestRelease?.version;
@@ -91,40 +93,17 @@ export function DashboardChangelogPopup({
 
           <div className="mt-4 flex flex-col gap-4 border-t border-border/70 px-2 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3 text-sm text-muted-foreground">
-              <button
-                type="button"
-                role="checkbox"
-                aria-checked={persistInBrowser}
-                data-state={persistInBrowser ? "checked" : "unchecked"}
-                onClick={() => setPersistInBrowser((current) => !current)}
-                className="peer mt-0.5 size-4 shrink-0 rounded-[4px] border border-input shadow-xs outline-none transition-shadow dark:bg-input/30 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              >
-                {persistInBrowser && (
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="grid place-content-center text-current"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setPersistInBrowser((current) => !current)}
-                className="text-left"
-              >
+              <AppCheckbox
+                id={persistInBrowserId}
+                checked={persistInBrowser}
+                onCheckedChange={(checked) => setPersistInBrowser(checked === true)}
+                className="mt-0.5"
+              />
+              <label htmlFor={persistInBrowserId} className="cursor-pointer text-left">
                 {locale === "en"
                   ? "Don’t show this popup again for this version."
                   : "Jangan tampilkan lagi popup ini untuk versi ini."}
-              </button>
+              </label>
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row">

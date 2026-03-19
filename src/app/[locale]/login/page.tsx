@@ -10,6 +10,7 @@ import Link from "next/link"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { applyClientDeskRememberMeSelection } from "@/lib/auth/session-only"
+import { AppCheckbox } from "@/components/ui/app-checkbox"
 
 export default function LoginPage() {
     const router = useRouter()
@@ -23,6 +24,7 @@ export default function LoginPage() {
     const [rememberMe, setRememberMe] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const rememberMeId = "remember-me"
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -110,20 +112,13 @@ export default function LoginPage() {
                             </div>
 
                             <div className="flex items-center space-x-2">
-                                <button
-                                    type="button"
-                                    role="checkbox"
-                                    aria-checked={rememberMe}
-                                    data-state={rememberMe ? "checked" : "unchecked"}
-                                    onClick={() => setRememberMe(!rememberMe)}
-                                    className="peer border-input dark:bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none focus-visible:ring-[3px] cursor-pointer"
-                                >
-                                    {rememberMe && (
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="grid place-content-center text-current"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                    )}
-                                </button>
+                                <AppCheckbox
+                                    id={rememberMeId}
+                                    checked={rememberMe}
+                                    onCheckedChange={(checked) => setRememberMe(checked === true)}
+                                />
                                 <label
-                                    onClick={() => setRememberMe(!rememberMe)}
+                                    htmlFor={rememberMeId}
                                     className="text-sm font-normal cursor-pointer leading-none"
                                 >
                                     {t("rememberMe")}
