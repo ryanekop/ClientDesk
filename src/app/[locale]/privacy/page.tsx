@@ -1,5 +1,8 @@
 import { getTranslations } from 'next-intl/server'
 import { getLocale } from 'next-intl/server'
+import Image from "next/image"
+import { getTenantConfig } from "@/lib/tenant-config"
+import { getIsAuthenticated } from "@/lib/auth/get-is-authenticated"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { Button } from "@/components/ui/button"
@@ -11,6 +14,8 @@ export default async function PrivacyPage() {
     const t = await getTranslations('Privacy')
     const tl = await getTranslations('Landing')
     const locale = await getLocale()
+    const tenant = await getTenantConfig()
+    const isAuthenticated = await getIsAuthenticated()
 
     const sections = [
         { title: t('section1Title'), content: t('section1Content') },
@@ -28,13 +33,20 @@ export default async function PrivacyPage() {
         <div className="flex flex-col min-h-screen font-sans">
             <header className="sticky top-0 z-50 flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm">
                 <Link href={`/${locale}`} className="font-bold text-xl tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity">
-                    <img src="/icon-192.png" alt="Client Desk" className="h-8 w-8 rounded-lg" />
-                    Client Desk
+                    <Image
+                        src={tenant.logoUrl || "/icon-192.png"}
+                        alt={tenant.name}
+                        width={32}
+                        height={32}
+                        sizes="32px"
+                        className="h-8 w-8 rounded-lg"
+                    />
+                    {tenant.name}
                 </Link>
                 <div className="flex items-center gap-2">
                     <LanguageSwitcher />
                     <ThemeToggle />
-                    <LandingNav />
+                    <LandingNav isAuthenticated={isAuthenticated} />
                 </div>
             </header>
 
@@ -66,7 +78,7 @@ export default async function PrivacyPage() {
 
             <footer className="py-8 border-t text-center text-sm text-muted-foreground">
                 <p>
-                    © {new Date().getFullYear()} Client Desk. {tl('footerMadeWith')} <a href="https://instagram.com/ryanekopram" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@ryanekopram</a> & <a href="https://instagram.com/ryanekoapps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@ryanekoapps</a>
+                    © {new Date().getFullYear()} {tenant.name}. {tl('footerMadeWith')} <a href="https://instagram.com/ryanekopram" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@ryanekopram</a> & <a href="https://instagram.com/ryanekoapps" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@ryanekoapps</a>
                 </p>
             </footer>
         </div>

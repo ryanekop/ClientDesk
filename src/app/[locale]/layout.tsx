@@ -62,15 +62,18 @@ export default async function RootLayout({
   // side is the easiest way to get started
   const messages = await getMessages();
   const tenant = await getTenantConfig();
+  const isProduction = process.env.NODE_ENV === "production";
 
   return (
     <html lang={locale} suppressHydrationWarning>
       <head>
-        <Script
-          src="https://cloud.umami.is/script.js"
-          data-website-id="50dbf632-4580-45e9-a67e-a651da1e4d42"
-          strategy="afterInteractive"
-        />
+        {isProduction ? (
+          <Script
+            src="https://cloud.umami.is/script.js"
+            data-website-id="50dbf632-4580-45e9-a67e-a651da1e4d42"
+            strategy="lazyOnload"
+          />
+        ) : null}
       </head>
       <body
         className={`${geistSans.className} antialiased bg-background text-foreground`}

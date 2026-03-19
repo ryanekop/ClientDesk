@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
+import Image from "next/image"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { useTenant } from "@/lib/tenant-context"
@@ -125,7 +126,14 @@ export default function PricingPage() {
         <div className="flex flex-col min-h-screen font-sans">
             <header className="sticky top-0 z-50 flex items-center justify-between p-4 border-b bg-background/80 backdrop-blur-sm">
                 <Link href={`/${locale}`} className="font-bold text-xl tracking-tight flex items-center gap-2 hover:opacity-80 transition-opacity">
-                    <img src={tenant.logoUrl || "/icon-192.png"} alt={tenant.name} className="h-8 w-8 rounded-lg" />
+                    <Image
+                        src={tenant.logoUrl || "/icon-192.png"}
+                        alt={tenant.name}
+                        width={32}
+                        height={32}
+                        sizes="32px"
+                        className="h-8 w-8 rounded-lg"
+                    />
                     {tenant.name}
                 </Link>
                 <div className="flex items-center gap-2">
