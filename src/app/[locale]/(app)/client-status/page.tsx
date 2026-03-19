@@ -32,6 +32,7 @@ import {
     CANCELLED_BOOKING_STATUS,
     DEFAULT_CLIENT_STATUSES,
     getBookingStatusOptions,
+    resolveUnifiedBookingStatus,
 } from "@/lib/client-status";
 import {
     isTransitionToCancelled,
@@ -152,9 +153,10 @@ export default function ClientStatusPage() {
                 table_column_preferences?: { client_status?: TableColumnPreference[] } | null;
                 form_sections?: Record<string, FormLayoutItem[]> | null;
             } | null;
-            if (profile?.custom_client_statuses) {
-                setClientStatuses(profile.custom_client_statuses as string[]);
-            }
+            const normalizedStatusOptions = getBookingStatusOptions(
+                profileData?.custom_client_statuses as string[] | null | undefined,
+            );
+            setClientStatuses(normalizedStatusOptions);
             if (profileData?.queue_trigger_status) {
                 setQueueTriggerStatus(profileData.queue_trigger_status);
             }
@@ -168,14 +170,25 @@ export default function ClientStatusPage() {
                 .neq("status", "Batal")
                 .order("created_at", { ascending: false });
 
+            const statusSyncUpdates: Array<{ id: string; status: string }> = [];
             const normalizedBookings = ((data || []) as unknown as BookingStatus[]).map((booking) => {
                     const legacyService = normalizeLegacyServiceRecord(booking.services);
                     const serviceSelections = normalizeBookingServiceSelections(
                         booking.booking_services,
                         booking.services,
                     );
+                    const syncedStatus = resolveUnifiedBookingStatus({
+                        status: booking.status,
+                        clientStatus: booking.client_status,
+                        statuses: normalizedStatusOptions,
+                    });
+                    if (booking.status !== syncedStatus || booking.client_status !== syncedStatus) {
+                        statusSyncUpdates.push({ id: booking.id, status: syncedStatus });
+                    }
                     return {
                         ...booking,
+                        status: syncedStatus,
+                        client_status: syncedStatus,
                         service_selections: serviceSelections,
                         service_label: getBookingServiceLabel(serviceSelections, {
                             kind: "main",
@@ -196,6 +209,19 @@ export default function ClientStatusPage() {
             );
             setBookings(normalizedBookings);
             setLoading(false);
+            if (statusSyncUpdates.length > 0) {
+                void Promise.allSettled(
+                    statusSyncUpdates.map((item) =>
+                        supabase
+                            .from("bookings")
+                            .update({
+                                status: item.status,
+                                client_status: item.status,
+                            })
+                            .eq("id", item.id),
+                    ),
+                );
+            }
         }
         load();
     }, [supabase]);

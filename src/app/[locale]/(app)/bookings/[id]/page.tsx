@@ -426,6 +426,9 @@ export default function BookingDetailPage() {
     const [markingDpVerified, setMarkingDpVerified] = React.useState(false);
     const [markingDpUnverified, setMarkingDpUnverified] = React.useState(false);
     const [syncingFastpik, setSyncingFastpik] = React.useState(false);
+    const [fastpikDataSource, setFastpikDataSource] = React.useState<"live" | "fallback">("fallback");
+    const [fastpikDataSyncedAt, setFastpikDataSyncedAt] = React.useState<string | null>(null);
+    const [fastpikDataMessage, setFastpikDataMessage] = React.useState<string | null>(null);
     const [fastpikLinkDisplayMode, setFastpikLinkDisplayMode] =
         React.useState<FastpikLinkDisplayMode>("prefer_fastpik");
     const [editingDp, setEditingDp] = React.useState(false);
@@ -537,6 +540,7 @@ export default function BookingDetailPage() {
 
             if (response.ok && (hasSyncState || hasProjectPayload)) {
                 const nowIso = new Date().toISOString();
+                const syncSucceeded = payload?.success !== false;
                 setBooking((prev) =>
                     prev
                         ? {
@@ -570,6 +574,11 @@ export default function BookingDetailPage() {
                           }
                         : prev,
                 );
+                setFastpikDataSource(syncSucceeded ? "live" : "fallback");
+                setFastpikDataSyncedAt(nowIso);
+                setFastpikDataMessage(
+                    typeof payload?.message === "string" ? payload.message : null,
+                );
             }
 
             showFeedback(
@@ -583,6 +592,7 @@ export default function BookingDetailPage() {
                       : "Peringatan",
             );
         } catch {
+            setFastpikDataSource("fallback");
             showFeedback(
                 locale === "en"
                     ? "Fastpik sync failed."
@@ -593,6 +603,86 @@ export default function BookingDetailPage() {
             setSyncingFastpik(false);
         }
     }, [booking, locale, showFeedback]);
+
+    const hydrateFastpikLive = React.useCallback(async (bookingId: string) => {
+        if (!bookingId) return;
+        try {
+            const response = await fetch("/api/integrations/fastpik/live-booking", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    bookingId,
+                    locale,
+                }),
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok || payload?.success === false) {
+                setFastpikDataSource("fallback");
+                if (typeof payload?.message === "string") {
+                    setFastpikDataMessage(payload.message);
+                }
+                return;
+            }
+
+            setFastpikDataSource(payload?.source === "live" ? "live" : "fallback");
+            setFastpikDataSyncedAt(
+                typeof payload?.syncedAt === "string" ? payload.syncedAt : null,
+            );
+            setFastpikDataMessage(
+                typeof payload?.message === "string" ? payload.message : null,
+            );
+
+            const patch = payload?.booking;
+            if (patch && typeof patch === "object") {
+                const rawPatch = patch as Record<string, unknown>;
+                setBooking((prev) =>
+                    prev
+                        ? {
+                              ...prev,
+                              fastpik_project_id:
+                                  rawPatch.fastpik_project_id === null
+                                      ? null
+                                      : typeof rawPatch.fastpik_project_id === "string"
+                                      ? String(rawPatch.fastpik_project_id)
+                                      : prev.fastpik_project_id,
+                              fastpik_project_link:
+                                  rawPatch.fastpik_project_link === null
+                                      ? null
+                                      : typeof rawPatch.fastpik_project_link === "string"
+                                      ? String(rawPatch.fastpik_project_link)
+                                      : prev.fastpik_project_link,
+                              fastpik_project_edit_link:
+                                  rawPatch.fastpik_project_edit_link === null
+                                      ? null
+                                      : typeof rawPatch.fastpik_project_edit_link === "string"
+                                      ? String(rawPatch.fastpik_project_edit_link)
+                                      : prev.fastpik_project_edit_link,
+                              fastpik_sync_status:
+                                  rawPatch.fastpik_sync_status === null
+                                      ? null
+                                      : typeof rawPatch.fastpik_sync_status === "string"
+                                      ? String(rawPatch.fastpik_sync_status)
+                                      : prev.fastpik_sync_status,
+                              fastpik_last_synced_at:
+                                  rawPatch.fastpik_last_synced_at === null
+                                      ? null
+                                      : typeof rawPatch.fastpik_last_synced_at === "string"
+                                      ? String(rawPatch.fastpik_last_synced_at)
+                                      : prev.fastpik_last_synced_at,
+                              extra_fields:
+                                  rawPatch.extra_fields &&
+                                  typeof rawPatch.extra_fields === "object" &&
+                                  !Array.isArray(rawPatch.extra_fields)
+                                      ? (rawPatch.extra_fields as Record<string, unknown>)
+                                      : prev.extra_fields,
+                          }
+                        : prev,
+                );
+            }
+        } catch {
+            setFastpikDataSource("fallback");
+        }
+    }, [locale]);
 
     const buildPathHint = React.useCallback((profile: DrivePathProfile | null | undefined, bookingValue: Pick<Booking, "booking_code" | "client_name" | "event_type" | "session_date" | "extra_fields">) => {
         const folderPathSegments = buildDriveFolderPathSegments({
@@ -684,6 +774,14 @@ export default function BookingDetailPage() {
                 })()
             } : rawBooking;
             setBooking(normalized as unknown as Booking);
+            if (rawBooking) {
+                setFastpikDataSource(
+                    rawBooking.fastpik_last_synced_at ? "live" : "fallback",
+                );
+                setFastpikDataSyncedAt(rawBooking.fastpik_last_synced_at || null);
+                setFastpikDataMessage(null);
+                void hydrateFastpikLive(rawBooking.id);
+            }
             setAdjustmentItems(
                 toEditableAdjustments(
                     normalizeFinalAdjustments(rawBooking?.final_adjustments),
@@ -719,7 +817,7 @@ export default function BookingDetailPage() {
         }
         load();
         fetchTemplates();
-    }, [id, supabase]);
+    }, [buildPathHint, hydrateFastpikLive, id, supabase]);
 
     async function handleSaveClientStatus(options?: {
         skipCancelConfirmation?: boolean;
@@ -1720,6 +1818,23 @@ export default function BookingDetailPage() {
         .filter((field) => !HIDDEN_EXTRA_FIELD_KEYS.has(field.id));
     const customFieldsBySection = groupCustomSnapshotsBySection(customFieldSnapshots);
     const fastpikProjectInfo = resolveFastpikProjectInfoFromExtraFields(booking.extra_fields);
+    const formatFastpikSyncTimestamp = (value: string | null | undefined) => {
+        if (!value) return "-";
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return "-";
+        return parsed.toLocaleString(locale === "en" ? "en-US" : "id-ID", {
+            dateStyle: "medium",
+            timeStyle: "short",
+        });
+    };
+    const fastpikSyncMeta = {
+        source: fastpikDataSource === "live" ? "Live" : "Fallback",
+        syncedAt: formatFastpikSyncTimestamp(
+            fastpikDataSyncedAt ||
+                fastpikProjectInfo?.synced_at ||
+                booking.fastpik_last_synced_at,
+        ),
+    };
 
     // Separate nama_pasangan from other extra fields (show right after Nama for Wedding)
     const namaPasangan = builtInExtraFields.nama_pasangan;
@@ -2419,6 +2534,17 @@ export default function BookingDetailPage() {
                               fastpikLinkVisibility.showFastpik,
                         )}
 
+                    <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">Sumber data: {fastpikSyncMeta.source}</span>
+                        {" · "}
+                        <span className="font-medium text-foreground">Sinkron terakhir: {fastpikSyncMeta.syncedAt}</span>
+                        {fastpikDataMessage && fastpikDataSource === "fallback" ? (
+                            <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                                {fastpikDataMessage}
+                            </p>
+                        ) : null}
+                    </div>
+
                     {fastpikProjectInfo && (
                         <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
                             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -2476,7 +2602,7 @@ export default function BookingDetailPage() {
                         !fastpikLinkVisibility.showDrive &&
                         fastpikLinkVisibility.mode === "drive_only" && (
                             <p className="text-xs text-muted-foreground">
-                                Mode "Google Drive saja" aktif, tetapi link Google Drive belum tersedia.
+                                Mode &quot;Google Drive saja&quot; aktif, tetapi link Google Drive belum tersedia.
                             </p>
                         )}
                 </div>

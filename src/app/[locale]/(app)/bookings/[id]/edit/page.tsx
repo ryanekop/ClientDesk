@@ -219,6 +219,7 @@ export default function EditBookingPage() {
     const [phoneNumber, setPhoneNumber] = React.useState("");
     const [instagram, setInstagram] = React.useState("");
     const [eventType, setEventType] = React.useState("Umum");
+    const [bookingDate, setBookingDate] = React.useState("");
     const [sessionDate, setSessionDate] = React.useState("");
     const [location, setLocation] = React.useState("");
     const [locationCoords, setLocationCoords] = React.useState<LocationCoords>({ lat: null, lng: null });
@@ -357,6 +358,14 @@ export default function EditBookingPage() {
                 setPhoneNumber(parsed.number);
                 setInstagram(booking.instagram || "");
                 setEventType(normalizeEventTypeName(booking.event_type) || "Umum");
+                setBookingDate(
+                    typeof (booking as Record<string, unknown>).booking_date === "string" &&
+                    String((booking as Record<string, unknown>).booking_date).trim().length > 0
+                        ? String((booking as Record<string, unknown>).booking_date).slice(0, 10)
+                        : typeof (booking as Record<string, unknown>).created_at === "string"
+                            ? String((booking as Record<string, unknown>).created_at).slice(0, 10)
+                            : "",
+                );
                 setSessionDate(booking.session_date ? booking.session_date.slice(0, 16) : "");
                 setLocation(booking.location || "");
                 setLocationCoords({
@@ -452,7 +461,7 @@ export default function EditBookingPage() {
             setLoading(false);
         }
         load();
-    }, [id]);
+    }, [id, supabase]);
 
     const sortedServices = React.useMemo(
         () => [...services].sort(compareServicesByCatalogOrder),
@@ -660,7 +669,7 @@ export default function EditBookingPage() {
             addonTotal: addonTotalValue,
             accommodationFee: accommodationFeeValue,
             discountAmount: discountAmountValue,
-            includeWhenZero: Boolean(existingSpecialOffer),
+            includeWhenZero: true,
         });
         const preservedStructuredExtraFields = Object.fromEntries(
             Object.entries(baseExtraFieldsObject || {}).filter(
@@ -731,6 +740,7 @@ export default function EditBookingPage() {
             client_whatsapp: fullPhone,
             instagram: instagram || null,
             event_type: eventType,
+            booking_date: bookingDate || new Date().toISOString().slice(0, 10),
             session_date: finalSessionDate,
             location: resolvedLocation.location,
             location_lat: resolvedLocation.locationLat,
@@ -1079,6 +1089,18 @@ export default function EditBookingPage() {
                             <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setExtraLocationCoords({}); setCustomFieldValues({}); setPackageSearchQuery(""); setAddonSearchQuery(""); }} className={selectClass} required>
                                 {eventTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
+                        </div>
+                        <div className="col-span-full space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Tanggal Booking</label>
+                            <input
+                                type="date"
+                                value={bookingDate}
+                                onChange={e => setBookingDate(e.target.value)}
+                                className={cn(inputClass, "block")}
+                            />
+                            <p className="text-[11px] text-muted-foreground">
+                                Dipakai untuk urutan Booking Terbaru/Terlama.
+                            </p>
                         </div>
 
                         {/* Wedding split dates toggle */}

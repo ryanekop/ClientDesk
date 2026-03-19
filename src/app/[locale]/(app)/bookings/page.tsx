@@ -52,6 +52,7 @@ import { getWhatsAppTemplateContent } from "@/lib/whatsapp-template";
 import {
     DEFAULT_CLIENT_STATUSES,
     getBookingStatusOptions,
+    resolveUnifiedBookingStatus,
 } from "@/lib/client-status";
 import {
     buildGoogleMapsQueryUrl,
@@ -74,6 +75,7 @@ type Booking = {
     booking_code: string;
     client_name: string;
     client_whatsapp: string | null;
+    booking_date: string | null;
     session_date: string | null;
     status: string;
     client_status: string | null;
@@ -128,6 +130,7 @@ const STATUS_COLOR_PALETTE = [
 const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
     { id: "name", label: "Nama", visible: true, locked: true },
     { id: "invoice", label: "Invoice", visible: true },
+    { id: "booking_date", label: "Tanggal Booking", visible: true },
     { id: "package", label: "Paket", visible: true },
     { id: "schedule", label: "Jadwal", visible: true },
     { id: "location", label: "Lokasi", visible: true },
@@ -397,7 +400,8 @@ export default function BookingsPage() {
                     : {};
 
         if (profile?.studio_name) setStudioName(profile.studio_name);
-        setStatusOpts(getBookingStatusOptions(profileData?.custom_client_statuses));
+        const statusOptions = getBookingStatusOptions(profileData?.custom_client_statuses);
+        setStatusOpts(statusOptions);
         setQueueTriggerStatus(profileData?.queue_trigger_status ?? "Antrian Edit");
         if (profileData?.default_wa_target) setDefaultWaTarget(profileData.default_wa_target);
         if (rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)) {
@@ -410,7 +414,7 @@ export default function BookingsPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, location, location_lat, location_lng, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+            .select("id, booking_code, client_name, client_whatsapp, booking_date, session_date, status, client_status, queue_position, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, location, location_lat, location_lng, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false });
 
@@ -419,6 +423,7 @@ export default function BookingsPage() {
             freelance?: FreelancerInfo | null;
             booking_freelance?: Array<{ freelance: FreelancerInfo | null }>;
         };
+        const statusSyncUpdates: Array<{ id: string; status: string }> = [];
         const bgs = ((data || []) as unknown as BookingRow[]).map((b) => {
             const junctionFreelancers = (b.booking_freelance || []).map((bf) => bf.freelance).filter((item): item is FreelancerInfo => Boolean(item));
             const legacyService = normalizeLegacyServiceRecord(b.services);
@@ -426,8 +431,18 @@ export default function BookingsPage() {
                 b.booking_services,
                 b.services,
             );
+            const syncedStatus = resolveUnifiedBookingStatus({
+                status: b.status,
+                clientStatus: b.client_status,
+                statuses: statusOptions,
+            });
+            if (b.status !== syncedStatus || b.client_status !== syncedStatus) {
+                statusSyncUpdates.push({ id: b.id, status: syncedStatus });
+            }
             return {
                 ...b,
+                status: syncedStatus,
+                client_status: syncedStatus,
                 booking_freelancers: junctionFreelancers.length > 0 ? junctionFreelancers : b.freelance ? [b.freelance] : [],
                 service_selections: serviceSelections,
                 service_label: getBookingServiceLabel(serviceSelections, { kind: "main", fallback: legacyService?.name || "-" }),
@@ -448,6 +463,19 @@ export default function BookingsPage() {
         setPackages(Array.from(new Set(bgs.flatMap(b => getBookingServiceNames(b.service_selections || [], "main")).filter(Boolean))) as string[]);
         setFreelancerNames(Array.from(new Set(bgs.flatMap(b => b.booking_freelancers.map(f => f.name)).filter(Boolean))) as string[]);
         setLoading(false);
+        if (statusSyncUpdates.length > 0) {
+            void Promise.allSettled(
+                statusSyncUpdates.map((item) =>
+                    supabase
+                        .from("bookings")
+                        .update({
+                            status: item.status,
+                            client_status: item.status,
+                        })
+                        .eq("id", item.id),
+                ),
+            );
+        }
     }, [supabase]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
@@ -970,6 +998,8 @@ export default function BookingsPage() {
                 return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("invoice")}</th>;
             case "package":
                 return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("paket")}</th>;
+            case "booking_date":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Tanggal Booking</th>;
             case "schedule":
                 return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("jadwal")}</th>;
             case "location":
@@ -1008,6 +1038,19 @@ export default function BookingsPage() {
                 );
             case "package":
                 return <td key={column.id} className="px-4 py-3 max-w-[150px] truncate text-muted-foreground" title={booking.service_label || booking.services?.name || "-"}>{booking.service_label || booking.services?.name || "-"}</td>;
+            case "booking_date":
+                return (
+                    <td key={column.id} className="px-4 py-3 whitespace-nowrap text-muted-foreground font-light">
+                        {booking.booking_date
+                            ? formatSessionDate(booking.booking_date, {
+                                locale: locale === "en" ? "en" : "id",
+                                withDay: false,
+                                withTime: false,
+                                dateOnly: true,
+                            })
+                            : "-"}
+                    </td>
+                );
             case "schedule":
                 return <td key={column.id} className="px-4 py-3 whitespace-nowrap text-muted-foreground font-light">{formatDate(booking.session_date)}</td>;
             case "location":
@@ -1213,6 +1256,15 @@ export default function BookingsPage() {
                 return booking.booking_code;
             case "package":
                 return booking.service_label || booking.services?.name || "-";
+            case "booking_date":
+                return booking.booking_date
+                    ? formatSessionDate(booking.booking_date, {
+                        locale: locale === "en" ? "en" : "id",
+                        withDay: false,
+                        withTime: false,
+                        dateOnly: true,
+                    })
+                    : "-";
             case "schedule":
                 return formatDate(booking.session_date);
             case "location":
@@ -1421,9 +1473,17 @@ export default function BookingsPage() {
         return matchesSearch && matchesStatus && matchesPackage && matchesFreelance && matchesDateFrom && matchesDateTo && matchesEventType && matchesExtraFields;
     }).sort((a, b) => {
         if (sortOrder === "booking_newest") {
+            const dateComparison = (b.booking_date || b.created_at || "").localeCompare(
+                a.booking_date || a.created_at || "",
+            );
+            if (dateComparison !== 0) return dateComparison;
             return (b.created_at || "").localeCompare(a.created_at || "");
         }
         if (sortOrder === "booking_oldest") {
+            const dateComparison = (a.booking_date || a.created_at || "").localeCompare(
+                b.booking_date || b.created_at || "",
+            );
+            if (dateComparison !== 0) return dateComparison;
             return (a.created_at || "").localeCompare(b.created_at || "");
         }
         if (sortOrder === "session_newest") {

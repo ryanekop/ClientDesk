@@ -43,6 +43,9 @@ type BookingData = {
         source: string | null;
         synced_at: string | null;
     } | null;
+    fastpikDataSource: "live" | "fallback";
+    fastpikDataSyncedAt: string | null;
+    fastpikDataMessage: string | null;
     showFinalInvoice: boolean;
     showFileResults: boolean;
 };
@@ -103,6 +106,40 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                 setPasswordCopied(false);
             });
     }, [booking.fastpikProjectInfo?.password]);
+    const fastpikSyncMetaLabel = React.useMemo(() => {
+        const sourceLabel =
+            booking.fastpikDataSource === "live"
+                ? locale === "en"
+                    ? "Live"
+                    : "Live"
+                : locale === "en"
+                  ? "Fallback"
+                  : "Fallback";
+        const syncedAtValue =
+            booking.fastpikDataSyncedAt || booking.fastpikProjectInfo?.synced_at;
+        let syncedAtLabel = locale === "en" ? "Not available" : "Belum tersedia";
+        if (syncedAtValue) {
+            const parsed = new Date(syncedAtValue);
+            if (!Number.isNaN(parsed.getTime())) {
+                syncedAtLabel = parsed.toLocaleString(
+                    locale === "en" ? "en-US" : "id-ID",
+                    {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                    },
+                );
+            }
+        }
+        return {
+            sourceLabel,
+            syncedAtLabel,
+        };
+    }, [
+        booking.fastpikDataSource,
+        booking.fastpikDataSyncedAt,
+        booking.fastpikProjectInfo?.synced_at,
+        locale,
+    ]);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 py-8 sm:py-12 px-4">
@@ -229,6 +266,18 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                 {(galleryLinks.showFastpik || galleryLinks.showDrive) && booking.showFileResults && (
                     <div className="bg-background rounded-2xl shadow-lg border p-6">
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("fileResults")}</h3>
+                        <p className="mb-3 text-xs text-muted-foreground">
+                            {locale === "en" ? "Fastpik source:" : "Sumber Fastpik:"}{" "}
+                            <span className="font-medium text-foreground">{fastpikSyncMetaLabel.sourceLabel}</span>
+                            {" · "}
+                            {locale === "en" ? "Last sync:" : "Sinkron terakhir:"}{" "}
+                            <span className="font-medium text-foreground">{fastpikSyncMetaLabel.syncedAtLabel}</span>
+                        </p>
+                        {booking.fastpikDataSource === "fallback" && booking.fastpikDataMessage ? (
+                            <p className="mb-3 text-[11px] text-amber-700 dark:text-amber-300">
+                                {booking.fastpikDataMessage}
+                            </p>
+                        ) : null}
                         <div className="space-y-2">
                             {galleryLinks.showFastpik && galleryLinks.fastpikUrl && (
                                 <a

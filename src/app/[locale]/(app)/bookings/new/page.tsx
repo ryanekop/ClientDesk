@@ -35,6 +35,11 @@ import {
 } from "@/lib/client-status";
 import { createBookingCode, isDuplicateBookingCodeError } from "@/lib/booking-code";
 import { resolvePreferredLocation } from "@/utils/location";
+import {
+    buildEditableSpecialOfferSnapshot,
+    computeSpecialOfferTotal,
+    mergeSpecialOfferSnapshotIntoExtraFields,
+} from "@/lib/booking-special-offer";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -113,8 +118,14 @@ type Service = {
     sort_order?: number | null;
     event_types?: string[] | null;
 };
-type Freelance = { id: string; name: string };
+type Freelance = { id: string; name: string; google_email?: string | null };
 type LocationCoords = { lat: number | null; lng: number | null };
+type ProfileRow = {
+    custom_client_statuses?: string[] | null;
+    form_sections?: unknown;
+    form_event_types?: string[] | null;
+    custom_event_types?: unknown;
+};
 
 function formatNumber(n: number | ""): string {
     if (n === "" || n === 0) return "";
@@ -179,8 +190,10 @@ export default function NewBookingPage() {
     const [location, setLocation] = React.useState("");
     const [locationCoords, setLocationCoords] = React.useState<LocationCoords>({ lat: null, lng: null });
     const [locationDetail, setLocationDetail] = React.useState("");
-    const [totalPrice, setTotalPrice] = React.useState<number | "">("");
+    const [totalPrice, setTotalPrice] = React.useState(0);
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
+    const [accommodationFee, setAccommodationFee] = React.useState<number | "">("");
+    const [discountAmount, setDiscountAmount] = React.useState<number | "">("");
     const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
     const [selectedAddonIds, setSelectedAddonIds] = React.useState<string[]>([]);
     const [packageDialogOpen, setPackageDialogOpen] = React.useState(false);
@@ -265,15 +278,18 @@ export default function NewBookingPage() {
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("profiles").select("custom_client_statuses, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
             ]);
+            const profileRow = (prof ?? null) as ProfileRow | null;
             setServices(((svcs || []) as Service[]).sort(compareServicesByCatalogOrder));
             setFreelancers((frees || []) as Freelance[]);
-            const nextStatusOptions = getBookingStatusOptions((prof as any)?.custom_client_statuses as string[] | null | undefined);
+            const nextStatusOptions = getBookingStatusOptions(
+                profileRow?.custom_client_statuses as string[] | null | undefined,
+            );
             setStatusOptions(nextStatusOptions);
             setEventTypeOptions(getActiveEventTypes({
-                customEventTypes: normalizeEventTypeList((prof as any)?.custom_event_types),
-                activeEventTypes: (prof as any)?.form_event_types,
+                customEventTypes: normalizeEventTypeList(profileRow?.custom_event_types),
+                activeEventTypes: profileRow?.form_event_types,
             }));
-            const rawSections = (prof as Record<string, unknown> | null)?.form_sections;
+            const rawSections = (profileRow as Record<string, unknown> | null)?.form_sections;
             if (Array.isArray(rawSections)) {
                 setFormSectionsByEventType({ Umum: normalizeStoredFormLayout(rawSections, "Umum") });
             } else if (rawSections && typeof rawSections === "object") {
@@ -292,7 +308,7 @@ export default function NewBookingPage() {
             }
         }
         load();
-    }, []);
+    }, [supabase]);
 
     const sortedServices = React.useMemo(
         () => [...services].sort(compareServicesByCatalogOrder),
@@ -360,15 +376,32 @@ export default function NewBookingPage() {
     }, [addonServices]);
 
     React.useEffect(() => {
-        if (selectedMainServices.length === 0 && selectedAddonServices.length === 0) {
-            setTotalPrice("");
-            return;
-        }
-        setTotalPrice(
-            selectedMainServices.reduce((sum, service) => sum + service.price, 0) +
-            selectedAddonServices.reduce((sum, service) => sum + service.price, 0),
+        const packageTotal = selectedMainServices.reduce(
+            (sum, service) => sum + service.price,
+            0,
         );
-    }, [selectedAddonServices, selectedMainServices]);
+        const addonTotal = selectedAddonServices.reduce(
+            (sum, service) => sum + service.price,
+            0,
+        );
+        const accommodationFeeValue =
+            typeof accommodationFee === "number" ? accommodationFee : 0;
+        const discountAmountValue =
+            typeof discountAmount === "number" ? discountAmount : 0;
+        setTotalPrice(
+            computeSpecialOfferTotal({
+                packageTotal,
+                addonTotal,
+                accommodationFee: accommodationFeeValue,
+                discountAmount: discountAmountValue,
+            }),
+        );
+    }, [
+        accommodationFee,
+        discountAmount,
+        selectedAddonServices,
+        selectedMainServices,
+    ]);
 
     const activeCustomLayoutSections = React.useMemo(() => {
         const rawLayout =
@@ -408,10 +441,6 @@ export default function NewBookingPage() {
             const s = data as Service;
             setServices(prev => [...prev, s].sort(compareServicesByCatalogOrder));
             setSelectedServiceIds(prev => (prev.includes(s.id) ? prev : [...prev, s.id]));
-            setTotalPrice(prev => {
-                const current = typeof prev === "number" ? prev : 0;
-                return current > 0 ? current + s.price : s.price;
-            });
             setCustomServiceName(""); setCustomServicePrice(""); setCustomServiceDesc("");
             setShowCustomServicePopup(false);
         } else { showFeedback("Gagal menyimpan paket baru."); }
@@ -472,10 +501,48 @@ export default function NewBookingPage() {
                 finalSessionDate = akadDate || resepsiDate || null;
             }
         }
+        const packageTotalValue = selectedMainServices.reduce(
+            (sum, service) => sum + service.price,
+            0,
+        );
+        const addonTotalValue = selectedAddonServices.reduce(
+            (sum, service) => sum + service.price,
+            0,
+        );
+        const accommodationFeeValue =
+            typeof accommodationFee === "number" ? accommodationFee : 0;
+        const discountAmountValue =
+            typeof discountAmount === "number" ? discountAmount : 0;
+        const totalPriceValue = computeSpecialOfferTotal({
+            packageTotal: packageTotalValue,
+            addonTotal: addonTotalValue,
+            accommodationFee: accommodationFeeValue,
+            discountAmount: discountAmountValue,
+        });
         const customFieldSnapshots = buildCustomFieldSnapshots(
             formSectionsByEventType[eventType] || formSectionsByEventType.Umum || [],
             eventType,
             customFieldValues,
+        );
+        const nextSpecialOffer = buildEditableSpecialOfferSnapshot({
+            existingSnapshot: null,
+            selectedEventType: eventType,
+            selectedPackageServiceIds: selectedServiceIds,
+            selectedAddonServiceIds: selectedAddonIds,
+            packageTotal: packageTotalValue,
+            addonTotal: addonTotalValue,
+            accommodationFee: accommodationFeeValue,
+            discountAmount: discountAmountValue,
+            includeWhenZero: true,
+        });
+        const nextExtraFieldsPayload = mergeSpecialOfferSnapshotIntoExtraFields(
+            {
+                ...mergedExtra,
+                ...(customFieldSnapshots.length > 0
+                    ? { custom_fields: customFieldSnapshots }
+                    : {}),
+            },
+            nextSpecialOffer,
         );
         const resolvedLocation = resolvePreferredLocation(
             eventType === "Wedding"
@@ -518,20 +585,14 @@ export default function NewBookingPage() {
             event_type: eventType,
             service_id: selectedServiceIds[0] || null,
             freelance_id: selectedFreelancerIds[0] || null,
-            total_price: parseFloat(totalPrice.toString()) || 0,
+            total_price: totalPriceValue,
             dp_paid: parseFloat(dpPaid.toString()) || 0,
             status: initialBookingStatus,
             client_status: initialBookingStatus,
             notes: notes || null,
             drive_folder_url: driveFolderUrl || null,
             portfolio_url: portfolioUrl || null,
-            extra_fields:
-                Object.keys(mergedExtra).length > 0 || customFieldSnapshots.length > 0
-                    ? {
-                        ...mergedExtra,
-                        ...(customFieldSnapshots.length > 0 ? { custom_fields: customFieldSnapshots } : {}),
-                    }
-                    : null,
+            extra_fields: nextExtraFieldsPayload,
         };
 
         let booking: { id: string } | null = null;
@@ -593,10 +654,10 @@ export default function NewBookingPage() {
                 try {
                     const selectedFreelancerEmails = freelancers
                         .filter(f => selectedFreelancerIds.includes(f.id))
-                        .map(f => (f as any).google_email)
-                        .filter(Boolean);
+                        .map(f => f.google_email)
+                        .filter((email): email is string => Boolean(email));
                     const noEmailNames = freelancers
-                        .filter(f => selectedFreelancerIds.includes(f.id) && !(f as any).google_email)
+                        .filter(f => selectedFreelancerIds.includes(f.id) && !f.google_email)
                         .map(f => f.name);
 
                     const res = await fetch("/api/google/calendar-invite", {
@@ -684,7 +745,7 @@ export default function NewBookingPage() {
                                 />
                             </div>
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 col-span-full">
                             <label className="text-xs font-medium text-muted-foreground">Instagram</label>
                             <input value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@username" className={inputClass} />
                         </div>
@@ -814,7 +875,7 @@ export default function NewBookingPage() {
                             </>
                         )}
 
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 col-span-full">
                             <label className="text-xs font-medium text-muted-foreground">Status Awal</label>
                             <input value={initialBookingStatus} readOnly className={inputClass} />
                             <p className="text-[11px] text-muted-foreground">Status awal selalu Pending. Ubah status setelah booking dibuat.</p>
@@ -948,7 +1009,7 @@ export default function NewBookingPage() {
                                     ))}
                                     <div className="flex justify-between font-bold border-t pt-1 mt-1">
                                         <span>Total</span>
-                                        <span>{formatCurrency((typeof totalPrice === "number" ? totalPrice : 0))}</span>
+                                        <span>{formatCurrency(totalPrice)}</span>
                                     </div>
                                 </div>
                             )}
@@ -1009,9 +1070,9 @@ export default function NewBookingPage() {
                                 <input
                                     required type="text" inputMode="numeric"
                                     value={formatNumber(totalPrice)}
-                                    onChange={e => setTotalPrice(parseFormattedNumber(e.target.value))}
+                                    readOnly
                                     placeholder="0"
-                                    className={cn(inputClass, "flex-1")}
+                                    className={cn(inputClass, "flex-1 bg-muted/40")}
                                 />
                             </div>
                         </div>
@@ -1023,6 +1084,34 @@ export default function NewBookingPage() {
                                     required type="text" inputMode="numeric"
                                     value={formatNumber(dpPaid)}
                                     onChange={e => setDpPaid(parseFormattedNumber(e.target.value))}
+                                    placeholder="0"
+                                    className={cn(inputClass, "flex-1")}
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Biaya Akomodasi (Rp)</label>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={formatNumber(accommodationFee)}
+                                    onChange={e => setAccommodationFee(parseFormattedNumber(e.target.value))}
+                                    placeholder="0"
+                                    className={cn(inputClass, "flex-1")}
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Diskon Nominal (Rp)</label>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={formatNumber(discountAmount)}
+                                    onChange={e => setDiscountAmount(parseFormattedNumber(e.target.value))}
                                     placeholder="0"
                                     className={cn(inputClass, "flex-1")}
                                 />
