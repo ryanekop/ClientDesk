@@ -1,7 +1,6 @@
 import { getTranslations } from 'next-intl/server'
 import { getLocale } from 'next-intl/server'
 import { getTenantConfig } from "@/lib/tenant-config"
-import { getIsAuthenticated } from "@/lib/auth/get-is-authenticated"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { Button } from "@/components/ui/button"
@@ -15,7 +14,6 @@ export default async function TermsPage() {
     const tl = await getTranslations('Landing')
     const locale = await getLocale()
     const tenant = await getTenantConfig()
-    const isAuthenticated = await getIsAuthenticated()
 
     const sections = [
         { title: t('section1Title'), content: t('section1Content') },
@@ -45,7 +43,7 @@ export default async function TermsPage() {
                 <div className="flex items-center gap-2">
                     <LanguageSwitcher />
                     <ThemeToggle />
-                    <LandingNav isAuthenticated={isAuthenticated} />
+                    <LandingNav />
                 </div>
             </header>
 

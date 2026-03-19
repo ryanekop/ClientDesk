@@ -1,11 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
-import { ArrowRight, Menu, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  ArrowRight,
+  Crown,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Settings,
+  User,
+  X,
+} from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/utils/supabase/client";
+import { User as SupabaseUser } from "@supabase/supabase-js";
 
 type LandingAuthProps = {
   isAuthenticated?: boolean;
@@ -144,21 +156,193 @@ export function MobileNav({ isAuthenticated = false }: LandingAuthProps) {
   );
 }
 
-export function LandingNav({ isAuthenticated = false }: LandingAuthProps) {
-  const t = useTranslations("Landing");
+export function LandingNav() {
+  const tLanding = useTranslations("Landing");
+  const tTopbar = useTranslations("Topbar");
   const locale = useLocale();
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [userName, setUserName] = useState("Admin");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarTs, setAvatarTs] = useState(() => Date.now());
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  if (isAuthenticated) {
+  const loadUserState = useCallback(async () => {
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser();
+
+    if (!currentUser) {
+      setUser(null);
+      setAvatarUrl(null);
+      setUserName("Admin");
+      return;
+    }
+
+    setUser(currentUser);
+    setUserName(
+      currentUser.user_metadata?.full_name ||
+        currentUser.email?.split("@")[0] ||
+        "Admin",
+    );
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, avatar_url")
+      .eq("id", currentUser.id)
+      .single();
+
+    if (profile?.full_name) {
+      setUserName(profile.full_name);
+    }
+    setAvatarUrl(profile?.avatar_url || null);
+    setAvatarTs(Date.now());
+  }, [supabase]);
+
+  useEffect(() => {
+    void loadUserState();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      void loadUserState();
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [loadUserState, supabase]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
+
+  const getInitials = (name: string) =>
+    name
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+
+  const handleLogout = useCallback(async () => {
+    setIsLoggingOut(true);
+    await supabase.auth.signOut();
+    setUser(null);
+    setAvatarUrl(null);
+    setUserName("Admin");
+    setMenuOpen(false);
+    router.refresh();
+    setIsLoggingOut(false);
+  }, [router, supabase]);
+
+  if (user) {
     return (
-      <Button variant="outline" asChild className="hidden md:inline-flex">
-        <Link href={`/${locale}/dashboard`}>{t("dashboard")}</Link>
-      </Button>
+      <div className="relative" ref={menuRef}>
+        <Button
+          variant="ghost"
+          onClick={() => setMenuOpen((prev) => !prev)}
+          className="relative h-9 w-9 rounded-full bg-muted flex items-center justify-center cursor-pointer hover:bg-muted/80 transition-colors overflow-hidden p-0"
+        >
+          {avatarUrl ? (
+            <img
+              src={
+                avatarUrl.startsWith("data:")
+                  ? avatarUrl
+                  : `${avatarUrl}${avatarUrl.includes("?") ? "&" : "?"}t=${avatarTs}`
+              }
+              alt="Avatar"
+              className="absolute inset-0 w-full h-full object-cover rounded-full"
+            />
+          ) : (
+            <span className="text-xs font-medium">{getInitials(userName)}</span>
+          )}
+        </Button>
+        <div
+          className={`absolute right-0 top-full mt-2 w-56 rounded-lg border bg-card shadow-lg z-50 overflow-hidden transition-all duration-200 ease-out origin-top-right ${
+            menuOpen
+              ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+              : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
+          }`}
+        >
+          <div className="px-4 py-3 border-b">
+            <p className="text-sm font-medium leading-none">{userName}</p>
+            <p className="text-xs leading-none text-muted-foreground mt-1">
+              {user.email || "admin@example.com"}
+            </p>
+          </div>
+          <div className="py-1">
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                router.push(`/${locale}/profile`);
+              }}
+              className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted/50 transition-colors w-full text-left cursor-pointer"
+            >
+              <User className="w-4 h-4 text-muted-foreground" />
+              {tTopbar("profil")}
+            </button>
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                router.push(`/${locale}/dashboard`);
+              }}
+              className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted/50 transition-colors w-full text-left cursor-pointer"
+            >
+              <LayoutDashboard className="w-4 h-4 text-muted-foreground" />
+              {tTopbar("dashboard")}
+            </button>
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                router.push(`/${locale}/pricing`);
+              }}
+              className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted/50 transition-colors w-full text-left cursor-pointer"
+            >
+              <Crown className="w-4 h-4 text-muted-foreground" />
+              {tTopbar("paket")}
+            </button>
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                router.push(`/${locale}/settings`);
+              }}
+              className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted/50 transition-colors w-full text-left cursor-pointer"
+            >
+              <Settings className="w-4 h-4 text-muted-foreground" />
+              {tTopbar("pengaturan")}
+            </button>
+          </div>
+          <div className="border-t py-1">
+            <button
+              onClick={() => void handleLogout()}
+              disabled={isLoggingOut}
+              className="flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-muted/50 transition-colors w-full text-left cursor-pointer disabled:opacity-60"
+            >
+              <LogOut className="w-4 h-4" />
+              {isLoggingOut ? "Logging out..." : tTopbar("logout")}
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
     <Button variant="outline" asChild className="hidden md:inline-flex">
-      <Link href={`/${locale}/login`}>{t("loginAdmin")}</Link>
+      <Link href={`/${locale}/login`}>{tLanding("loginAdmin")}</Link>
     </Button>
   );
 }

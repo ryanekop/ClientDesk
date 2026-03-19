@@ -53,7 +53,7 @@ export default async function Home() {
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
           <ThemeToggle />
-          <LandingNav isAuthenticated={isAuthenticated} />
+          <LandingNav />
           <MobileNav isAuthenticated={isAuthenticated} />
         </div>
       </header>
