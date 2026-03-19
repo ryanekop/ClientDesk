@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { ArrowRight, Menu, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
 type LandingAuthProps = {
@@ -83,53 +84,62 @@ export function MobileNav({ isAuthenticated = false }: LandingAuthProps) {
         {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </Button>
 
-      <div
-        className={`absolute top-[65px] left-4 right-4 z-50 rounded-2xl border bg-card shadow-xl overflow-hidden origin-top transition-all duration-200 ${
-          open
-            ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
-            : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
-        }`}
-      >
-        <div className="p-3">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => handleNav(item.id)}
-              className="w-full text-left px-4 py-4 text-base font-medium text-foreground hover:bg-muted/50 rounded-xl transition-colors cursor-pointer"
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+      <AnimatePresence>
+        {open ? (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.95 }}
+            transition={{
+              type: "spring",
+              stiffness: 500,
+              damping: 40,
+              mass: 0.8,
+            }}
+            className="absolute top-[65px] left-4 right-4 z-50 rounded-2xl border bg-card shadow-xl overflow-hidden"
+          >
+            <div className="p-3">
+              {navItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => handleNav(item.id)}
+                  className="w-full text-left px-4 py-4 text-base font-medium text-foreground hover:bg-muted/50 rounded-xl transition-colors cursor-pointer"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
 
-        <div className="p-4 pt-2 border-t space-y-2">
-          {isAuthenticated ? (
-            <Button size="lg" asChild className="w-full gap-2 cursor-pointer">
-              <Link href={`/${locale}/dashboard`} onClick={() => setOpen(false)}>
-                {t("dashboard")} <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          ) : (
-            <>
-              <Button
-                variant="secondary"
-                size="lg"
-                asChild
-                className="w-full cursor-pointer"
-              >
-                <Link href={`/${locale}/register`} onClick={() => setOpen(false)}>
-                  {t("navRegister")}
-                </Link>
-              </Button>
-              <Button size="lg" asChild className="w-full gap-2 cursor-pointer">
-                <Link href={`/${locale}/login`} onClick={() => setOpen(false)}>
-                  {t("navLogin")} <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+            <div className="p-4 pt-2 border-t space-y-2">
+              {isAuthenticated ? (
+                <Button size="lg" asChild className="w-full gap-2 cursor-pointer">
+                  <Link href={`/${locale}/dashboard`} onClick={() => setOpen(false)}>
+                    {t("dashboard")} <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    asChild
+                    className="w-full cursor-pointer"
+                  >
+                    <Link href={`/${locale}/register`} onClick={() => setOpen(false)}>
+                      {t("navRegister")}
+                    </Link>
+                  </Button>
+                  <Button size="lg" asChild className="w-full gap-2 cursor-pointer">
+                    <Link href={`/${locale}/login`} onClick={() => setOpen(false)}>
+                      {t("navLogin")} <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </>
+              )}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
