@@ -88,13 +88,6 @@ export async function POST(request: NextRequest) {
     }
 
     const settlementStatus = getSettlementStatus(booking.settlement_status);
-    if (settlementStatus === "draft") {
-      return NextResponse.json(
-        { success: false, error: "Invoice final belum dibuka oleh admin." },
-        { status: 400 },
-      );
-    }
-
     if (booking.is_fully_paid || settlementStatus === "paid") {
       return NextResponse.json(
         { success: false, error: "Booking ini sudah lunas." },

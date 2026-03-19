@@ -257,6 +257,7 @@ export default function EditBookingPage() {
         getInitialBookingStatus(DEFAULT_CLIENT_STATUSES),
     );
     const [notes, setNotes] = React.useState("");
+    const [adminNotes, setAdminNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
     const [portfolioUrl, setPortfolioUrl] = React.useState("");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
@@ -417,6 +418,11 @@ export default function EditBookingPage() {
                 setStatus(unifiedStatus);
                 setInitialStatus(unifiedStatus);
                 setNotes(booking.notes || "");
+                setAdminNotes(
+                    typeof (booking as Record<string, unknown>).admin_notes === "string"
+                        ? String((booking as Record<string, unknown>).admin_notes)
+                        : "",
+                );
                 setDriveFolderUrl(booking.drive_folder_url || "");
                 setPortfolioUrl(booking.portfolio_url || "");
                 const nextExtraFields = (booking.extra_fields ? Object.fromEntries(
@@ -756,6 +762,7 @@ export default function EditBookingPage() {
             client_status: nextStatus,
             ...(cancelPatch || {}),
             notes: notes || null,
+            admin_notes: adminNotes || null,
             drive_folder_url: driveFolderUrl || null,
             portfolio_url: portfolioUrl || null,
             extra_fields: nextExtraFieldsPayload,
@@ -1461,8 +1468,12 @@ export default function EditBookingPage() {
                         <div className="border-t pt-3 space-y-2">
                             <div className="flex justify-between gap-4"><span className="text-muted-foreground">Paket Awal</span><span>{formatCurrency(initialPriceBreakdown.packageTotal)}</span></div>
                             <div className="flex justify-between gap-4"><span className="text-muted-foreground">Add-on Awal</span><span>{formatCurrency(initialPriceBreakdown.addonTotal)}</span></div>
-                            <div className="flex justify-between gap-4"><span className="text-muted-foreground">Akomodasi</span><span>{formatCurrency(initialPriceBreakdown.accommodationFee)}</span></div>
-                            <div className="flex justify-between gap-4"><span className="text-muted-foreground">Diskon</span><span>- {formatCurrency(initialPriceBreakdown.discountAmount)}</span></div>
+                            {Number(initialPriceBreakdown.accommodationFee) > 0 ? (
+                                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Akomodasi</span><span>{formatCurrency(initialPriceBreakdown.accommodationFee)}</span></div>
+                            ) : null}
+                            {Number(initialPriceBreakdown.discountAmount) > 0 ? (
+                                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Diskon</span><span>- {formatCurrency(initialPriceBreakdown.discountAmount)}</span></div>
+                            ) : null}
                             <div className="flex justify-between gap-4"><span className="text-muted-foreground">DP Dibayar</span><span>- {formatCurrency(dpPaidValue)}</span></div>
                             <div className="flex justify-between gap-4"><span className="text-muted-foreground">DP Terverifikasi</span><span>{formatCurrency(verifiedDpAmount)}</span></div>
                             <div className="flex justify-between gap-4"><span className="text-muted-foreground">Refund DP</span><span>{formatCurrency(resolvedDpRefundAmount)}</span></div>
@@ -1504,6 +1515,12 @@ export default function EditBookingPage() {
                         <StickyNote className="w-4 h-4" /> Catatan
                     </h3>
                     <textarea rows={4} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Detail tambahan..." className={textareaClass} />
+                </div>
+                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-3">
+                    <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                        <StickyNote className="w-4 h-4" /> Catatan Admin
+                    </h3>
+                    <textarea rows={4} value={adminNotes} onChange={e => setAdminNotes(e.target.value)} placeholder="Catatan internal admin (tidak tampil ke klien/freelance)..." className={textareaClass} />
                 </div>
 
                 {/* Link Google Drive */}

@@ -4,7 +4,6 @@ import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import {
-  AlertCircle,
   CheckCircle2,
   Download,
   Loader2,
@@ -217,7 +216,7 @@ export default function SettlementClient({
   );
   const settlementStatus = getSettlementStatus(booking.settlementStatus);
   const proofEnabled = effectiveVendor.formShowProof ?? true;
-  const canSubmit = settlementStatus === "sent" || settlementStatus === "submitted";
+  const canSubmit = !booking.isFullyPaid && settlementStatus !== "paid" && remaining > 0;
   const [selectedPaymentMethod, setSelectedPaymentMethod] = React.useState<PaymentMethod | null>(
     effectiveVendor.formPaymentMethods[0] || null,
   );
@@ -650,15 +649,6 @@ export default function SettlementClient({
             {t("downloadInvoice")}
           </button>
         </div>
-
-        {settlementStatus === "draft" && !booking.isFullyPaid ? (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800 shadow-sm">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <p>{t("notOpened")}</p>
-            </div>
-          </div>
-        ) : null}
 
         {(booking.isFullyPaid || settlementStatus === "paid") ? (
           <div className="rounded-2xl border border-green-200 bg-green-50 p-5 text-sm text-green-800 shadow-sm">

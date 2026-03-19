@@ -181,7 +181,6 @@ export async function hydrateFastpikLiveData(params: {
       userId: booking.user_id,
       bookingId: booking.id,
       locale,
-      force: true,
     });
     const latestBooking = await fetchLatestFastpikBookingFields(supabase, booking);
     const fastpikProjectInfo =

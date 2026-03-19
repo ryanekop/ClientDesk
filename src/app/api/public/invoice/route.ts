@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
   const { data: booking, error } = await supabaseAdmin
     .from("bookings")
     .select(
-      "id, booking_code, client_name, client_whatsapp, session_date, event_type, extra_fields, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, user_id, services(id, name, price, description, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, description, is_addon))",
+      "id, booking_code, client_name, client_whatsapp, booking_date, session_date, event_type, extra_fields, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, user_id, services(id, name, price, description, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, description, is_addon))",
     )
     .eq("booking_code", code)
     .single();
@@ -230,11 +230,20 @@ export async function GET(request: NextRequest) {
         })
       : [sessionDate]
   ).filter((value) => value && value.trim().length > 0);
-  const now = new Date().toLocaleDateString(dateLocale, {
+  const fallbackDateLabel = new Date().toLocaleDateString(dateLocale, {
     day: "numeric",
     month: "long",
     year: "numeric",
   });
+  const bookingDateLabel =
+    typeof booking.booking_date === "string" && booking.booking_date.trim()
+      ? formatSessionDate(booking.booking_date, {
+          locale: lang === "en" ? "en" : "id",
+          dateOnly: true,
+        })
+      : "-";
+  const invoiceHeaderDate =
+    bookingDateLabel && bookingDateLabel !== "-" ? bookingDateLabel : fallbackDateLabel;
   const legacyService = normalizeLegacyServiceRecord(booking.services);
   const serviceSelections = normalizeBookingServiceSelections(
     (booking as { booking_services?: unknown[] }).booking_services,
@@ -525,8 +534,8 @@ export async function GET(request: NextRequest) {
   });
 
   y -= 14;
-  const dateW = helvetica.widthOfTextAtSize(now, 9);
-  page.drawText(now, {
+  const dateW = helvetica.widthOfTextAtSize(invoiceHeaderDate, 9);
+  page.drawText(invoiceHeaderDate, {
     x: PAGE_WIDTH - MARGIN_X - dateW,
     y,
     font: helvetica,

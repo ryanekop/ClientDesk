@@ -2120,6 +2120,7 @@ export default function SettingsPage() {
     resepsi_location: "Grand Ballroom Jakarta",
     resepsi_date: "15 April 2026",
     resepsi_time: "18.00",
+    resepsi_maps_url: "https://maps.google.com/maps?q=Grand+Ballroom+Jakarta",
     location_maps_url:
       "https://maps.google.com/maps?q=Jakarta+Convention+Center",
     detail_location: "Gedung Utama, Lt. 3, Ruang Ballroom A",

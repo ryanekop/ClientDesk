@@ -156,6 +156,7 @@ type Booking = {
     instagram: string | null;
     event_type: string | null;
     notes: string | null;
+    admin_notes: string | null;
     extra_fields: Record<string, unknown> | null;
     payment_method: string | null;
     payment_source: PaymentSource | null;
@@ -711,7 +712,7 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }, { data: addonServiceRows }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, admin_notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode").eq("id", user.id).single(),
                 supabase.from("services")
@@ -2077,92 +2078,96 @@ export default function BookingDetailPage() {
                 <div className="border-t pt-3 space-y-3">
                     <InfoRow label="Paket Awal" value={formatCurrency(initialPriceBreakdown.packageTotal)} />
                     <InfoRow label="Add-on Awal" value={formatCurrency(initialPriceBreakdown.addonTotal)} />
-                    <InfoRow
-                        label="Akomodasi"
-                        value={editingAccommodation ? (
-                            <div className="flex flex-wrap items-center gap-2">
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={accommodationInput}
-                                    onChange={(e) => setAccommodationInput(e.target.value)}
-                                    className="h-9 w-40 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                                />
-                                <Button size="sm" onClick={() => { void handleSaveAccommodation(); }} disabled={savingAccommodation}>
-                                    {savingAccommodation ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                        setAccommodationInput(String(initialPriceBreakdown.accommodationFee || 0));
-                                        setEditingAccommodation(false);
-                                    }}
-                                    disabled={savingAccommodation}
-                                >
-                                    Batal
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span>{formatCurrency(initialPriceBreakdown.accommodationFee)}</span>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 px-2.5"
-                                    onClick={() => {
-                                        setAccommodationInput(String(initialPriceBreakdown.accommodationFee || 0));
-                                        setEditingAccommodation(true);
-                                    }}
-                                >
-                                    Edit Akomodasi
-                                </Button>
-                            </div>
-                        )}
-                    />
-                    <InfoRow
-                        label="Diskon"
-                        value={editingDiscount ? (
-                            <div className="flex flex-wrap items-center gap-2">
-                                <input
-                                    type="number"
-                                    min={0}
-                                    value={discountInput}
-                                    onChange={(e) => setDiscountInput(e.target.value)}
-                                    className="h-9 w-40 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                                />
-                                <Button size="sm" onClick={() => { void handleSaveDiscount(); }} disabled={savingDiscount}>
-                                    {savingDiscount ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                        setDiscountInput(String(initialPriceBreakdown.discountAmount || 0));
-                                        setEditingDiscount(false);
-                                    }}
-                                    disabled={savingDiscount}
-                                >
-                                    Batal
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="flex flex-wrap items-center gap-2">
-                                <span>- {formatCurrency(initialPriceBreakdown.discountAmount)}</span>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 px-2.5"
-                                    onClick={() => {
-                                        setDiscountInput(String(initialPriceBreakdown.discountAmount || 0));
-                                        setEditingDiscount(true);
-                                    }}
-                                >
-                                    Edit Diskon
-                                </Button>
-                            </div>
-                        )}
-                    />
+                    {(editingAccommodation || Number(initialPriceBreakdown.accommodationFee) > 0) ? (
+                        <InfoRow
+                            label="Akomodasi"
+                            value={editingAccommodation ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        value={accommodationInput}
+                                        onChange={(e) => setAccommodationInput(e.target.value)}
+                                        className="h-9 w-40 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    />
+                                    <Button size="sm" onClick={() => { void handleSaveAccommodation(); }} disabled={savingAccommodation}>
+                                        {savingAccommodation ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                            setAccommodationInput(String(initialPriceBreakdown.accommodationFee || 0));
+                                            setEditingAccommodation(false);
+                                        }}
+                                        disabled={savingAccommodation}
+                                    >
+                                        Batal
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span>{formatCurrency(initialPriceBreakdown.accommodationFee)}</span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 px-2.5"
+                                        onClick={() => {
+                                            setAccommodationInput(String(initialPriceBreakdown.accommodationFee || 0));
+                                            setEditingAccommodation(true);
+                                        }}
+                                    >
+                                        Edit Akomodasi
+                                    </Button>
+                                </div>
+                            )}
+                        />
+                    ) : null}
+                    {(editingDiscount || Number(initialPriceBreakdown.discountAmount) > 0) ? (
+                        <InfoRow
+                            label="Diskon"
+                            value={editingDiscount ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        value={discountInput}
+                                        onChange={(e) => setDiscountInput(e.target.value)}
+                                        className="h-9 w-40 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    />
+                                    <Button size="sm" onClick={() => { void handleSaveDiscount(); }} disabled={savingDiscount}>
+                                        {savingDiscount ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                            setDiscountInput(String(initialPriceBreakdown.discountAmount || 0));
+                                            setEditingDiscount(false);
+                                        }}
+                                        disabled={savingDiscount}
+                                    >
+                                        Batal
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span>- {formatCurrency(initialPriceBreakdown.discountAmount)}</span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 px-2.5"
+                                        onClick={() => {
+                                            setDiscountInput(String(initialPriceBreakdown.discountAmount || 0));
+                                            setEditingDiscount(true);
+                                        }}
+                                    >
+                                        Edit Diskon
+                                    </Button>
+                                </div>
+                            )}
+                        />
+                    ) : null}
                     <InfoRow
                         label="DP Dibayar"
                         value={editingDp ? (
@@ -2463,6 +2468,12 @@ export default function BookingDetailPage() {
                 <div className="rounded-xl border bg-card p-6 space-y-2">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Catatan</h3>
                     <p className="text-sm whitespace-pre-wrap">{booking.notes}</p>
+                </div>
+            )}
+            {booking.admin_notes && (
+                <div className="rounded-xl border bg-card p-6 space-y-2">
+                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Catatan Admin</h3>
+                    <p className="text-sm whitespace-pre-wrap">{booking.admin_notes}</p>
                 </div>
             )}
 

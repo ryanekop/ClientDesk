@@ -2,6 +2,7 @@ import {
   formatSessionTime,
   formatTemplateSessionDate,
 } from "@/utils/format-date";
+import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
 
 export type EventExtraField = {
   key: string;
@@ -120,6 +121,7 @@ export const MULTI_SESSION_TEMPLATE_KEYS = [
   "resepsi_location",
   "resepsi_date",
   "resepsi_time",
+  "resepsi_maps_url",
 ] as const;
 
 const EXTRA_FIELD_PREVIEW_VALUES: Record<string, string> = {
@@ -214,6 +216,10 @@ export function buildMultiSessionTemplateVars(
   const resepsi = buildSessionDateTimeVars(source, "tanggal_resepsi", locale);
   const akadLocation = readStringField(source, "tempat_akad");
   const resepsiLocation = readStringField(source, "tempat_resepsi");
+  const resepsiMapsUrl = buildGoogleMapsUrlOrFallback(
+    { address: resepsiLocation || null },
+    "-",
+  );
 
   const entries = [
     ["akad_location", akadLocation],
@@ -222,6 +228,7 @@ export function buildMultiSessionTemplateVars(
     ["resepsi_location", resepsiLocation],
     ["resepsi_date", resepsi.date],
     ["resepsi_time", resepsi.time],
+    ["resepsi_maps_url", resepsiMapsUrl],
   ].filter(([, value]) => value.length > 0) as Array<[string, string]>;
 
   return Object.fromEntries(entries);
