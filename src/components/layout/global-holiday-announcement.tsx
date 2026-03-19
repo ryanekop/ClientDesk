@@ -185,8 +185,7 @@ export function GlobalHolidayAnnouncement() {
   return (
     <div
       ref={announcementRef}
-      className="announcement-hover-zone sticky top-0 z-[60] h-10 border-b border-emerald-900 bg-emerald-700 text-white shadow-sm"
-      style={{ textShadow: "0 1px 1px rgba(0, 0, 0, 0.28)" }}
+      className="announcement-hover-zone sticky top-0 z-[60] h-10 border-b border-emerald-700 bg-emerald-600 text-emerald-50 shadow-sm"
     >
       <div
         ref={containerRef}
