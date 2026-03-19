@@ -6,6 +6,7 @@ import { getMessages } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
 import { ThemeProvider } from "@/components/theme-provider";
+import { GlobalHolidayAnnouncement } from "@/components/layout/global-holiday-announcement";
 import { getTenantConfig } from "@/lib/tenant-config";
 import { TenantProvider } from "@/lib/tenant-context";
 import "../globals.css";
@@ -99,6 +100,7 @@ export default async function RootLayout({
                 defaultBookingVendorSlug: tenant.defaultBookingVendorSlug || "",
               }}
             >
+              <GlobalHolidayAnnouncement />
               {children}
             </TenantProvider>
           </ThemeProvider>

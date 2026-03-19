@@ -12,7 +12,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
     return (
-        <div className="flex h-screen overflow-hidden bg-muted/30">
+        <div
+            className="flex overflow-hidden bg-muted/30"
+            style={{
+                height: "calc(100vh - var(--global-announcement-height, 0px))",
+            }}
+        >
             <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
             <div className="flex flex-col flex-1 w-full overflow-hidden">
                 <Topbar onMenuClick={() => setIsSidebarOpen(true)} />

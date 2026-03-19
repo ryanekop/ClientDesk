@@ -31,6 +31,7 @@
 
 :root {
     --radius: 0.625rem;
+    --global-announcement-height: 0px;
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
@@ -49,6 +50,39 @@
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
     --ring: oklch(0.708 0 0);
+}
+
+@keyframes announcement-marquee {
+    from {
+        transform: translateX(0);
+    }
+
+    to {
+        transform: translateX(-50%);
+    }
+}
+
+.announcement-marquee-track {
+    display: inline-flex;
+    width: max-content;
+    min-width: 100%;
+    align-items: center;
+    white-space: nowrap;
+    animation: announcement-marquee 30s linear infinite;
+    will-change: transform;
+}
+
+.announcement-marquee-item {
+    flex: 0 0 auto;
+    padding-right: 2.5rem;
+    white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .announcement-marquee-track {
+        animation: none;
+        transform: translateX(0);
+    }
 }
 
 .dark {
