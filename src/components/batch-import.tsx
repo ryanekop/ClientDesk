@@ -338,6 +338,9 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
                       Upload file .xlsx sesuai template v2
                     </p>
                     <p className="text-xs text-muted-foreground/60 mt-1">
+                      External import ID digenerate otomatis, admin tidak perlu isi manual
+                    </p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">
                       Validasi akan jalan otomatis setelah file dipilih
                     </p>
                   </div>
@@ -403,7 +406,7 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
                       <thead className="bg-muted/50 sticky top-0">
                         <tr>
                           <th className="px-3 py-2 text-left font-medium text-muted-foreground">Row</th>
-                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">External ID</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Import ID (otomatis)</th>
                           <th className="px-3 py-2 text-left font-medium text-muted-foreground">Nama Klien</th>
                           <th className="px-3 py-2 text-left font-medium text-muted-foreground">Event</th>
                           <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>

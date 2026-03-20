@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
 import * as XLSX from "xlsx";
 import {
   DEFAULT_CLIENT_STATUSES,
@@ -58,7 +59,6 @@ export const IMPORT_COLUMNS = {
 } as const;
 
 const REQUIRED_TEMPLATE_COLUMNS = [
-  IMPORT_COLUMNS.externalImportId,
   IMPORT_COLUMNS.clientName,
   IMPORT_COLUMNS.eventType,
   IMPORT_COLUMNS.mainServices,
@@ -215,7 +215,6 @@ function normalizeEventTypeInput(value: unknown, eventTypes: string[]): string |
 
 function getTemplateHeaders(context: ImportContext): string[] {
   const baseHeaders = [
-    IMPORT_COLUMNS.externalImportId,
     IMPORT_COLUMNS.clientName,
     IMPORT_COLUMNS.eventType,
     IMPORT_COLUMNS.mainServices,
@@ -242,6 +241,153 @@ function getTemplateHeaders(context: ImportContext): string[] {
   const customHeaders = context.customFieldUnion.map((field) => `cf.${field.id}`);
 
   return [...baseHeaders, ...extraHeaders, ...customHeaders];
+}
+
+function sampleValueFromLabel(label: string) {
+  const trimmed = label.trim();
+  return trimmed ? `Contoh ${trimmed}` : "Contoh";
+}
+
+function fillRequiredExtraFields(
+  row: Record<string, string | number>,
+  eventType: string,
+) {
+  const defs = EVENT_EXTRA_FIELDS[eventType] || [];
+  for (const field of defs) {
+    if (!field.required) continue;
+    row[`extra.${field.key}`] = field.isNumeric ? "0" : sampleValueFromLabel(field.label);
+  }
+}
+
+function fillRequiredCustomFields(
+  row: Record<string, string | number>,
+  customFields: ImportCustomFieldDefinition[],
+) {
+  for (const field of customFields) {
+    if (!field.required) continue;
+    const key = `cf.${field.id}`;
+
+    if (field.type === "number") {
+      row[key] = "1";
+      continue;
+    }
+
+    if ((field.type === "select" || field.type === "checkbox") && field.options.length > 0) {
+      row[key] = field.options[0];
+      continue;
+    }
+
+    row[key] = sampleValueFromLabel(field.label);
+  }
+}
+
+function buildTemplateSampleRows(
+  context: ImportContext,
+  headers: string[],
+): Array<Record<string, string | number>> {
+  const nonWeddingEventType =
+    context.eventTypeOptions.find((item) => item.toLowerCase() !== "wedding") ||
+    context.eventTypeOptions[0] ||
+    "Umum";
+  const weddingEventType = context.eventTypeOptions.find(
+    (item) => item.toLowerCase() === "wedding",
+  );
+
+  const baseRow = Object.fromEntries(headers.map((header) => [header, ""])) as Record<
+    string,
+    string | number
+  >;
+
+  const nonWeddingMainService =
+    context.mainServices.find((service) =>
+      isServiceAvailableForEvent(service, nonWeddingEventType),
+    ) || context.mainServices[0];
+  const nonWeddingAddonService =
+    context.addonServices.find((service) =>
+      isServiceAvailableForEvent(service, nonWeddingEventType),
+    ) || context.addonServices[0];
+  const sampleFreelancer = context.freelancers[0];
+
+  const row1 = {
+    ...baseRow,
+    [IMPORT_COLUMNS.clientName]: "CONTOH - Nama Klien Reguler",
+    [IMPORT_COLUMNS.eventType]: nonWeddingEventType,
+    [IMPORT_COLUMNS.mainServices]: nonWeddingMainService?.name || "",
+    [IMPORT_COLUMNS.mainServiceIds]: "",
+    [IMPORT_COLUMNS.sessionDate]: "2026-07-15T10:00",
+    [IMPORT_COLUMNS.akadDate]: "",
+    [IMPORT_COLUMNS.resepsiDate]: "",
+    [IMPORT_COLUMNS.dpPaid]: "1000000",
+    [IMPORT_COLUMNS.status]: context.initialStatus,
+    [IMPORT_COLUMNS.addonServices]: nonWeddingAddonService?.name || "",
+    [IMPORT_COLUMNS.addonServiceIds]: "",
+    [IMPORT_COLUMNS.freelancers]: sampleFreelancer?.name || "",
+    [IMPORT_COLUMNS.freelanceIds]: "",
+    [IMPORT_COLUMNS.location]: "Contoh Lokasi 1",
+    [IMPORT_COLUMNS.locationDetail]: "Gedung A Lt.2",
+    [IMPORT_COLUMNS.bookingDate]: "2026-07-01",
+    [IMPORT_COLUMNS.notes]: "Contoh catatan booking reguler.",
+    [IMPORT_COLUMNS.adminNotes]: "",
+    [IMPORT_COLUMNS.accommodationFee]: "0",
+    [IMPORT_COLUMNS.discountAmount]: "0",
+  };
+
+  fillRequiredExtraFields(row1, nonWeddingEventType);
+  fillRequiredCustomFields(
+    row1,
+    context.customFieldsByEventType[nonWeddingEventType] ||
+      context.customFieldsByEventType.Umum ||
+      [],
+  );
+
+  const rows: Array<Record<string, string | number>> = [row1];
+
+  if (weddingEventType) {
+    const weddingMainService =
+      context.mainServices.find((service) =>
+        isServiceAvailableForEvent(service, weddingEventType),
+      ) || context.mainServices[0];
+    const weddingAddonService =
+      context.addonServices.find((service) =>
+        isServiceAvailableForEvent(service, weddingEventType),
+      ) || context.addonServices[0];
+
+    const row2 = {
+      ...baseRow,
+      [IMPORT_COLUMNS.clientName]: "CONTOH - Nama Klien Wedding",
+      [IMPORT_COLUMNS.eventType]: weddingEventType,
+      [IMPORT_COLUMNS.mainServices]: weddingMainService?.name || "",
+      [IMPORT_COLUMNS.mainServiceIds]: "",
+      [IMPORT_COLUMNS.sessionDate]: "",
+      [IMPORT_COLUMNS.akadDate]: "2026-08-20T09:00",
+      [IMPORT_COLUMNS.resepsiDate]: "2026-08-20T18:00",
+      [IMPORT_COLUMNS.dpPaid]: "1500000",
+      [IMPORT_COLUMNS.status]: context.initialStatus,
+      [IMPORT_COLUMNS.addonServices]: weddingAddonService?.name || "",
+      [IMPORT_COLUMNS.addonServiceIds]: "",
+      [IMPORT_COLUMNS.freelancers]: sampleFreelancer?.name || "",
+      [IMPORT_COLUMNS.freelanceIds]: "",
+      [IMPORT_COLUMNS.location]: "Contoh Lokasi Wedding",
+      [IMPORT_COLUMNS.locationDetail]: "Hall Utama",
+      [IMPORT_COLUMNS.bookingDate]: "2026-08-01",
+      [IMPORT_COLUMNS.notes]: "Contoh booking wedding split session.",
+      [IMPORT_COLUMNS.adminNotes]: "",
+      [IMPORT_COLUMNS.accommodationFee]: "0",
+      [IMPORT_COLUMNS.discountAmount]: "0",
+    };
+
+    fillRequiredExtraFields(row2, weddingEventType);
+    fillRequiredCustomFields(
+      row2,
+      context.customFieldsByEventType[weddingEventType] ||
+        context.customFieldsByEventType.Umum ||
+        [],
+    );
+
+    rows.push(row2);
+  }
+
+  return rows;
 }
 
 function compareServices(a: ImportServiceRow, b: ImportServiceRow) {
@@ -566,7 +712,11 @@ export async function loadImportContext(
 
 export function buildTemplateWorkbookBuffer(context: ImportContext): Buffer {
   const headers = getTemplateHeaders(context);
-  const rows = [headers];
+  const sampleRows = buildTemplateSampleRows(context, headers);
+  const rows = [
+    headers,
+    ...sampleRows.map((row) => headers.map((header) => row[header] ?? "")),
+  ];
   const bookingsSheet = XLSX.utils.aoa_to_sheet(rows);
 
   bookingsSheet["!cols"] = headers.map((header) => ({
@@ -620,15 +770,16 @@ export function buildTemplateWorkbookBuffer(context: ImportContext): Buffer {
 
   const guideRows = [
     ["Batch Import Excel v2 - Guide"],
-    ["1. Wajib isi: external_import_id, client_name, event_type, dp_paid, dan salah satu main_services/main_service_ids."],
+    ["1. Wajib isi: client_name, event_type, dp_paid, dan salah satu main_services/main_service_ids."],
     ["2. Date format: YYYY-MM-DD atau YYYY-MM-DDTHH:mm (timezone Asia/Jakarta)."],
     ["3. Untuk Wedding: isi session_date ATAU isi lengkap akad_date + resepsi_date."],
     ["4. Gunakan pemisah | atau koma untuk multi-value (services/addons/freelancers)."],
     ["5. Mapping Name + ID fallback: isi nama untuk mudah dibaca, pakai ID bila ada nama ganda."],
     ["6. Kolom dynamic: extra.<key> untuk built-in extra fields, cf.<id> untuk custom fields."],
-    ["7. Mode create-only: external_import_id harus unik, tidak mengupdate booking existing."],
+    ["7. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
     ["8. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
     ["9. Batas maksimum 500 baris per file .xlsx."],
+    ["10. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
   ];
   const guideSheet = XLSX.utils.aoa_to_sheet(guideRows);
   guideSheet["!cols"] = [{ wch: 140 }];
@@ -679,6 +830,27 @@ function makeReportFileName(prefix: string) {
 
 function workbookToBase64(buffer: Buffer) {
   return buffer.toString("base64");
+}
+
+function buildExternalImportRowSignature(row: Record<string, unknown>): string {
+  const entries = Object.entries(row)
+    .map(([key, value]) => [key.trim(), normalizeText(value)] as const)
+    .filter(([key]) => key.length > 0 && key !== IMPORT_COLUMNS.externalImportId)
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  return JSON.stringify(entries);
+}
+
+function generateExternalImportId(input: {
+  userId: string;
+  rowNumber: number;
+  row: Record<string, unknown>;
+}): string {
+  const signature = buildExternalImportRowSignature(input.row);
+  const hash = createHash("sha256")
+    .update(`${input.userId}|v2|${input.rowNumber}|${signature}`)
+    .digest("hex");
+  return `impv2_${hash.slice(0, 24)}`;
 }
 
 function summarizeValidationRows(rows: NormalizedImportRow[]) {
@@ -1044,10 +1216,11 @@ function validateOneRow(input: {
   const normalized = buildEmptyNormalizedRow(input.rowNumber);
 
   normalized.rawExternalImportId = normalizeCell(input.row, IMPORT_COLUMNS.externalImportId);
-  normalized.externalImportId = normalized.rawExternalImportId;
-  if (!normalized.externalImportId) {
-    pushIssue(normalized, "error", "external_import_id wajib diisi.");
-  }
+  normalized.externalImportId = generateExternalImportId({
+    userId: input.context.userId,
+    rowNumber: input.rowNumber,
+    row: input.row,
+  });
 
   normalized.clientName = normalizeCell(input.row, IMPORT_COLUMNS.clientName);
   if (!normalized.clientName) {
