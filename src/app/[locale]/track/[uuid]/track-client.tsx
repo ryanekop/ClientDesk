@@ -11,6 +11,12 @@ type BookingData = {
     trackingUuid: string | null;
     clientName: string;
     sessionDate: string | null;
+    sessionRows?: Array<{
+        key: string;
+        label: string | null;
+        sessionDate: string;
+        location: string | null;
+    }>;
     eventType: string | null;
     clientStatus: string | null;
     queuePosition: number | null;
@@ -85,9 +91,27 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
     }, [customStatuses]);
 
     const currentIdx = booking.clientStatus ? steps.findIndex(s => s.key === booking.clientStatus) : -1;
-    const sessionDate = booking.sessionDate
-        ? formatSessionDate(booking.sessionDate)
-        : "-";
+    const dateLocale = locale === "en" ? "en" : "id";
+    const scheduleRows = React.useMemo(() => {
+        const rows =
+            Array.isArray(booking.sessionRows) && booking.sessionRows.length > 0
+                ? booking.sessionRows
+                : booking.sessionDate
+                  ? [
+                        {
+                            key: "primary",
+                            label: null,
+                            sessionDate: booking.sessionDate,
+                            location: booking.location,
+                        },
+                    ]
+                  : [];
+        return rows.map((row, index) => ({
+            key: row.key || `session-${index}`,
+            label: row.label,
+            value: formatSessionDate(row.sessionDate, { locale: dateLocale }),
+        }));
+    }, [booking.location, booking.sessionDate, booking.sessionRows, dateLocale]);
     const galleryLinks = resolveFastpikLinkDisplay({
         mode: booking.fastpikLinkDisplayMode,
         fastpikUrl: booking.fastpikUrl,
@@ -189,9 +213,20 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                                 <span className="font-medium">{booking.eventType}</span>
                             </div>
                         )}
-                        <div className="flex justify-between">
+                        <div className="flex items-start justify-between gap-3">
                             <span className="text-muted-foreground">{t("schedule")}</span>
-                            <span className="font-medium">{sessionDate}</span>
+                            {scheduleRows.length === 0 ? (
+                                <span className="font-medium">-</span>
+                            ) : (
+                                <div className="space-y-1 text-right">
+                                    {scheduleRows.map((row) => (
+                                        <p key={row.key} className="font-medium">
+                                            {row.label ? `${row.label}: ` : ""}
+                                            {row.value}
+                                        </p>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

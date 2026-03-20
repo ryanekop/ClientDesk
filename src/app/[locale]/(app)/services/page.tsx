@@ -81,6 +81,19 @@ type Service = {
 type ServiceGroupKey = "main" | "addon";
 
 const EVENT_TYPES = getBuiltInEventTypes();
+const SERVICE_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
+const SERVICE_DEFAULT_ITEMS_PER_PAGE = 10;
+const SERVICE_ITEMS_PER_PAGE_STORAGE_PREFIX =
+  "clientdesk:services:itemsPerPage";
+
+function normalizeServiceItemsPerPage(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return SERVICE_PER_PAGE_OPTIONS.includes(
+    parsed as (typeof SERVICE_PER_PAGE_OPTIONS)[number],
+  )
+    ? parsed
+    : SERVICE_DEFAULT_ITEMS_PER_PAGE;
+}
 
 function getServiceGroupKey(service: Pick<Service, "is_addon">): ServiceGroupKey {
   return service.is_addon ? "addon" : "main";
@@ -487,7 +500,11 @@ export default function ServicesPage() {
   const [editAffectsSchedule, setEditAffectsSchedule] = React.useState(true);
   const [mainPage, setMainPage] = React.useState(1);
   const [addonPage, setAddonPage] = React.useState(1);
-  const [itemsPerPage, setItemsPerPage] = React.useState(10);
+  const [itemsPerPage, setItemsPerPage] = React.useState(
+    SERVICE_DEFAULT_ITEMS_PER_PAGE,
+  );
+  const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
+  const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedEventFilter, setSelectedEventFilter] = React.useState("");
   const [isReorderMode, setIsReorderMode] = React.useState(false);
@@ -522,10 +539,12 @@ export default function ServicesPage() {
     } = await supabase.auth.getUser();
 
     if (!user) {
+      setCurrentUserId(null);
       setServices([]);
       setLoading(false);
       return;
     }
+    setCurrentUserId(user.id);
 
     const [servicesResult, profileResult] = await Promise.all([
       supabase
@@ -563,6 +582,51 @@ export default function ServicesPage() {
   React.useEffect(() => {
     fetchServices();
   }, [fetchServices]);
+
+  React.useEffect(() => {
+    if (!currentUserId) {
+      setItemsPerPage(SERVICE_DEFAULT_ITEMS_PER_PAGE);
+      setItemsPerPageHydrated(false);
+      return;
+    }
+
+    const storageKey = `${SERVICE_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      setItemsPerPage(normalizeServiceItemsPerPage(raw));
+    } catch {
+      setItemsPerPage(SERVICE_DEFAULT_ITEMS_PER_PAGE);
+    } finally {
+      setItemsPerPageHydrated(true);
+    }
+  }, [currentUserId]);
+
+  React.useEffect(() => {
+    if (!currentUserId || !itemsPerPageHydrated) return;
+
+    const storageKey = `${SERVICE_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+    try {
+      window.localStorage.setItem(
+        storageKey,
+        String(normalizeServiceItemsPerPage(itemsPerPage)),
+      );
+    } catch {
+      // Ignore storage write failures.
+    }
+  }, [currentUserId, itemsPerPage, itemsPerPageHydrated]);
+
+  React.useEffect(() => {
+    if (!currentUserId) return;
+
+    const storageKey = `${SERVICE_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
+    function handleStorage(event: StorageEvent) {
+      if (event.storageArea !== window.localStorage) return;
+      if (event.key !== storageKey) return;
+      setItemsPerPage(normalizeServiceItemsPerPage(event.newValue));
+    }
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [currentUserId]);
 
   React.useEffect(() => {
     if (!isAddOpen) {
@@ -1290,7 +1354,7 @@ export default function ServicesPage() {
                 totalItems={filteredGroupedServices.main.length}
                 currentPage={mainPage}
                 itemsPerPage={itemsPerPage}
-                perPageOptions={[10, 25, 50, 100]}
+                perPageOptions={[...SERVICE_PER_PAGE_OPTIONS]}
                 onPageChange={setMainPage}
                 onItemsPerPageChange={(value) => {
                   setItemsPerPage(value);
@@ -1340,7 +1404,7 @@ export default function ServicesPage() {
                 totalItems={filteredGroupedServices.addon.length}
                 currentPage={addonPage}
                 itemsPerPage={itemsPerPage}
-                perPageOptions={[10, 25, 50, 100]}
+                perPageOptions={[...SERVICE_PER_PAGE_OPTIONS]}
                 onPageChange={setAddonPage}
                 onItemsPerPageChange={(value) => {
                   setItemsPerPage(value);

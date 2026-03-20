@@ -22,11 +22,8 @@ import { getTranslations, getLocale } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import type { ChangelogEntry } from "@/lib/changelog";
 import {
-  getDpRefundAmount,
   getNetVerifiedRevenueAmount,
   getRemainingFinalPayment,
-  getVerifiedDpAmount,
-  getVerifiedFinalPaymentAmount,
 } from "@/lib/final-settlement";
 
 export default async function DashboardPage() {
@@ -110,7 +107,7 @@ export default async function DashboardPage() {
     supabase
       .from("bookings")
       .select(
-        "total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, created_at, status, client_status, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at",
+        "booking_date, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, created_at, status, client_status, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at",
       )
       .eq("user_id", user!.id),
     supabase
@@ -232,13 +229,9 @@ export default async function DashboardPage() {
       settlement_status: booking.settlement_status,
       is_fully_paid: booking.is_fully_paid,
     };
-    const dpAmount = getVerifiedDpAmount(input);
-    const refundAmount = getDpRefundAmount(input);
-    const finalPaidAmount = getVerifiedFinalPaymentAmount(input);
-
-    recordRevenueTransaction(booking.dp_verified_at, dpAmount);
-    recordRevenueTransaction(booking.dp_refunded_at, -refundAmount);
-    recordRevenueTransaction(booking.final_paid_at, finalPaidAmount);
+    const netVerifiedRevenue = getNetVerifiedRevenueAmount(input);
+    const bookingDateBasis = booking.booking_date || booking.created_at;
+    recordRevenueTransaction(bookingDateBasis, netVerifiedRevenue);
   });
 
   const dailyData = Object.entries(revenueByDate).map(([date, rev]) => ({

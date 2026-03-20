@@ -18,6 +18,7 @@ import {
     hydrateFastpikLiveData,
     type FastpikLiveBookingFields,
 } from "@/lib/fastpik-live-sync";
+import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -106,6 +107,12 @@ export async function GET(request: NextRequest) {
         clientStatus: effectiveBooking.client_status,
         statuses: customClientStatuses,
     });
+    const sessionRows = resolveBookingCalendarSessions({
+        eventType: effectiveBooking.event_type,
+        sessionDate: effectiveBooking.session_date,
+        extraFields: effectiveBooking.extra_fields,
+        defaultLocation: effectiveBooking.location,
+    });
 
     return NextResponse.json({
         success: true,
@@ -114,6 +121,7 @@ export async function GET(request: NextRequest) {
             trackingUuid: effectiveBooking.tracking_uuid,
             clientName: effectiveBooking.client_name,
             sessionDate: effectiveBooking.session_date,
+            sessionRows,
             eventType: effectiveBooking.event_type,
             clientStatus: effectiveClientStatus,
             queuePosition: effectiveBooking.queue_position,

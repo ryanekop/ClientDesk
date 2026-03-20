@@ -91,11 +91,15 @@ export function isChangelogDismissed(latestVersion: string) {
     return false;
   }
 
-  const savedVersion = window.localStorage.getItem(
-    CHANGELOG_DISMISS_STORAGE_KEY,
-  );
+  try {
+    const savedVersion = window.localStorage.getItem(
+      CHANGELOG_DISMISS_STORAGE_KEY,
+    );
 
-  return savedVersion === latestVersion;
+    return savedVersion === latestVersion;
+  } catch {
+    return false;
+  }
 }
 
 export function saveChangelogPreference(
@@ -107,7 +111,11 @@ export function saveChangelogPreference(
   }
 
   if (persistInBrowser) {
-    window.localStorage.setItem(CHANGELOG_DISMISS_STORAGE_KEY, latestVersion);
-    window.dispatchEvent(new CustomEvent(CHANGELOG_PREFERENCE_EVENT));
+    try {
+      window.localStorage.setItem(CHANGELOG_DISMISS_STORAGE_KEY, latestVersion);
+      window.dispatchEvent(new CustomEvent(CHANGELOG_PREFERENCE_EVENT));
+    } catch {
+      // Ignore storage write failures.
+    }
   }
 }

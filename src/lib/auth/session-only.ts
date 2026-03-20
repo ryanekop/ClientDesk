@@ -7,24 +7,44 @@ function canUseBrowserStorage() {
   return typeof window !== "undefined";
 }
 
-export function clearClientDeskSessionOnlyState() {
-  if (!canUseBrowserStorage()) return;
+function getSafeSessionStorage() {
+  if (!canUseBrowserStorage()) return null;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
 
-  window.sessionStorage.removeItem(CLIENTDESK_SESSION_ONLY_KEY);
-  window.localStorage.removeItem(CLIENTDESK_SESSION_ONLY_USER_KEY);
-  window.localStorage.removeItem(CLIENTDESK_SESSION_LOGIN_TIME_KEY);
+function getSafeLocalStorage() {
+  if (!canUseBrowserStorage()) return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function clearClientDeskSessionOnlyState() {
+  const sessionStorage = getSafeSessionStorage();
+  const localStorage = getSafeLocalStorage();
+  sessionStorage?.removeItem(CLIENTDESK_SESSION_ONLY_KEY);
+  localStorage?.removeItem(CLIENTDESK_SESSION_ONLY_USER_KEY);
+  localStorage?.removeItem(CLIENTDESK_SESSION_LOGIN_TIME_KEY);
 }
 
 export function applyClientDeskRememberMeSelection(rememberMe: boolean) {
-  if (!canUseBrowserStorage()) return;
+  const sessionStorage = getSafeSessionStorage();
+  const localStorage = getSafeLocalStorage();
+  if (!sessionStorage || !localStorage) return;
 
   if (rememberMe) {
     clearClientDeskSessionOnlyState();
     return;
   }
 
-  window.sessionStorage.setItem(CLIENTDESK_SESSION_ONLY_KEY, "true");
-  window.localStorage.setItem(
+  sessionStorage.setItem(CLIENTDESK_SESSION_ONLY_KEY, "true");
+  localStorage.setItem(
     CLIENTDESK_SESSION_LOGIN_TIME_KEY,
     Date.now().toString(),
   );
@@ -34,16 +54,18 @@ export function evaluateClientDeskSessionOnlyState(userId: string): {
   shouldSignOut: boolean;
   sessionOnlyActive: boolean;
 } {
-  if (!canUseBrowserStorage()) {
+  const sessionStorage = getSafeSessionStorage();
+  const localStorage = getSafeLocalStorage();
+  if (!sessionStorage || !localStorage) {
     return { shouldSignOut: false, sessionOnlyActive: false };
   }
 
   const sessionOnlyFlag =
-    window.sessionStorage.getItem(CLIENTDESK_SESSION_ONLY_KEY) === "true";
-  const trackedUserId = window.localStorage.getItem(
+    sessionStorage.getItem(CLIENTDESK_SESSION_ONLY_KEY) === "true";
+  const trackedUserId = localStorage.getItem(
     CLIENTDESK_SESSION_ONLY_USER_KEY,
   );
-  const loginTimeRaw = window.localStorage.getItem(
+  const loginTimeRaw = localStorage.getItem(
     CLIENTDESK_SESSION_LOGIN_TIME_KEY,
   );
   const loginTime = Number.parseInt(loginTimeRaw || "0", 10);
@@ -56,9 +78,9 @@ export function evaluateClientDeskSessionOnlyState(userId: string): {
   }
 
   if (sessionOnlyFlag) {
-    window.localStorage.setItem(CLIENTDESK_SESSION_ONLY_USER_KEY, userId);
+    localStorage.setItem(CLIENTDESK_SESSION_ONLY_USER_KEY, userId);
     if (!hasLoginTime) {
-      window.localStorage.setItem(
+      localStorage.setItem(
         CLIENTDESK_SESSION_LOGIN_TIME_KEY,
         Date.now().toString(),
       );
@@ -67,8 +89,8 @@ export function evaluateClientDeskSessionOnlyState(userId: string): {
   }
 
   if (trackedUserId === userId) {
-    window.localStorage.removeItem(CLIENTDESK_SESSION_ONLY_USER_KEY);
-    window.localStorage.removeItem(CLIENTDESK_SESSION_LOGIN_TIME_KEY);
+    localStorage.removeItem(CLIENTDESK_SESSION_ONLY_USER_KEY);
+    localStorage.removeItem(CLIENTDESK_SESSION_LOGIN_TIME_KEY);
   }
 
   return { shouldSignOut: false, sessionOnlyActive: false };

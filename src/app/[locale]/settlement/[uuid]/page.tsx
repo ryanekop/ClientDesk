@@ -7,7 +7,10 @@ import {
   resolveDriveImageUrl,
 } from "@/lib/payment-config";
 import { normalizeFinalAdjustments } from "@/lib/final-settlement";
-import { resolveTemplateType } from "@/lib/whatsapp-template";
+import {
+  getWhatsAppTemplateContent,
+  type WhatsAppTemplate,
+} from "@/lib/whatsapp-template";
 import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
 
 const supabaseAdmin = createClient(
@@ -40,13 +43,33 @@ async function getSettlementData(uuid: string) {
       .single(),
     supabaseAdmin
       .from("templates")
-      .select("type, name, content, content_en")
+      .select("type, name, content, content_en, event_type")
       .eq("user_id", booking.user_id),
   ]);
 
-  const settlementConfirmTemplate = Array.isArray(templates)
-    ? templates.find((template) => resolveTemplateType(template) === "whatsapp_settlement_confirm")
-    : null;
+  const normalizedTemplates: WhatsAppTemplate[] = Array.isArray(templates)
+    ? templates.map((template) => ({
+        type: typeof template.type === "string" ? template.type : "",
+        name: typeof template.name === "string" ? template.name : null,
+        content: typeof template.content === "string" ? template.content : "",
+        content_en:
+          typeof template.content_en === "string" ? template.content_en : "",
+        event_type:
+          typeof template.event_type === "string" ? template.event_type : null,
+      }))
+    : [];
+  const settlementConfirmTemplate = getWhatsAppTemplateContent(
+    normalizedTemplates,
+    "whatsapp_settlement_confirm",
+    "id",
+    booking.event_type,
+  );
+  const settlementConfirmTemplateEn = getWhatsAppTemplateContent(
+    normalizedTemplates,
+    "whatsapp_settlement_confirm",
+    "en",
+    booking.event_type,
+  );
   const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
 
   return {
@@ -95,8 +118,8 @@ async function getSettlementData(uuid: string) {
         profile?.qris_drive_file_id || null,
       ),
       bankAccounts: normalizeBankAccounts(profile?.bank_accounts),
-      settlementConfirmTemplate: settlementConfirmTemplate?.content || "",
-      settlementConfirmTemplateEn: settlementConfirmTemplate?.content_en || "",
+      settlementConfirmTemplate,
+      settlementConfirmTemplateEn,
     },
   };
 }

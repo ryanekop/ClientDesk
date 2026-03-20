@@ -198,6 +198,26 @@ const templateTypes = [
   },
 ];
 
+const EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES = new Set([
+  "whatsapp_client",
+  "whatsapp_freelancer",
+  "whatsapp_booking_confirm",
+  "whatsapp_settlement_client",
+  "whatsapp_settlement_confirm",
+]);
+
+function isEventScopedWhatsAppTemplateType(type: string) {
+  return EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES.has(type);
+}
+
+function buildTemplateContentKey(
+  type: string,
+  eventType: string | null | undefined,
+) {
+  if (!isEventScopedWhatsAppTemplateType(type)) return type;
+  return `${type}__${normalizeTemplateEventTypeValue(eventType) || "Umum"}`;
+}
+
 const templateTitleKeyByType: Record<string, string> = {
   whatsapp_client: "templateWAClient",
   whatsapp_freelancer: "templateWAFreelancer",
@@ -512,6 +532,17 @@ function normalizeTemplateEventTypeValue(
   if (typeof eventType !== "string") return null;
   const trimmed = eventType.trim();
   return trimmed || null;
+}
+
+function parseTemplateContentKey(key: string) {
+  for (const type of EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES) {
+    const prefix = `${type}__`;
+    if (key.startsWith(prefix)) {
+      const eventType = key.slice(prefix.length) || "Umum";
+      return { type, eventType };
+    }
+  }
+  return { type: key, eventType: undefined };
 }
 
 export default function SettingsPage() {
@@ -1196,10 +1227,9 @@ export default function SettingsPage() {
       activeEventTypes: loadedActiveEventTypes,
     }).map((item) => item.name);
     templateTypes.forEach((tt) => {
-      if (tt.value === "whatsapp_freelancer") {
-        // Initialize per event type
+      if (isEventScopedWhatsAppTemplateType(tt.value)) {
         templateEventTypes.forEach((et) => {
-          const key = `${tt.value}__${et}`;
+          const key = buildTemplateContentKey(tt.value, et);
           const existing = allTemplates.find(
             (tmpl: Template) =>
               resolveTemplateType(tmpl) === tt.value &&
@@ -1604,11 +1634,7 @@ export default function SettingsPage() {
   }
 
   function resolveTemplateTargetFromKey(key: string) {
-    if (key.startsWith("whatsapp_freelancer__")) {
-      const eventType = key.slice("whatsapp_freelancer__".length) || "Umum";
-      return { type: "whatsapp_freelancer", eventType };
-    }
-    return { type: key, eventType: undefined };
+    return parseTemplateContentKey(key);
   }
 
   async function handleSaveAllTemplates() {
@@ -2222,9 +2248,9 @@ export default function SettingsPage() {
   );
 
   function renderTemplateCard(tt: (typeof templateTypes)[0]) {
-    const isFreelancer = tt.value === "whatsapp_freelancer";
-    const contentKey = isFreelancer
-      ? `${tt.value}__${selectedEventType}`
+    const isEventScoped = isEventScopedWhatsAppTemplateType(tt.value);
+    const contentKey = isEventScoped
+      ? buildTemplateContentKey(tt.value, selectedEventType)
       : tt.value;
     const cardToneClass =
       templateCardToneByType[tt.value] ||
@@ -2238,7 +2264,7 @@ export default function SettingsPage() {
       currentLang === "id"
         ? templateContents[contentKey] || ""
         : templateContentsEn[contentKey] || "";
-    const hints = isFreelancer
+    const hints = isEventScoped
       ? Array.from(
           new Set([
             ...(variableHints[tt.value] || []),
@@ -2255,7 +2281,7 @@ export default function SettingsPage() {
       : variableHints[tt.value] || [];
     const preview = renderPreview(
       content,
-      isFreelancer
+      isEventScoped
         ? {
             event_type: selectedEventType,
             ...getEventExtraFieldPreviewVars(selectedEventType),
@@ -2282,8 +2308,7 @@ export default function SettingsPage() {
           <p className="text-sm text-muted-foreground">{tp(descKey)}</p>
         </div>
         <div className="p-6 space-y-4">
-          {/* Event Type Selector for Freelancer */}
-          {isFreelancer && (
+          {isEventScoped && (
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 {tp("eventType")}

@@ -33,7 +33,10 @@ import {
     buildBookingMetadataColumns,
     getBookingMetadataValue,
 } from "@/lib/booking-table-columns";
-import type { FormLayoutItem } from "@/components/form-builder/booking-form-layout";
+import {
+    buildCustomFieldTemplateVars,
+    type FormLayoutItem,
+} from "@/components/form-builder/booking-form-layout";
 import {
     getFinalInvoiceTotal,
     getNetVerifiedRevenueAmount,
@@ -46,7 +49,10 @@ import {
     normalizeWhatsAppNumber,
 } from "@/lib/whatsapp-template";
 import { getInitialBookingPriceBreakdown } from "@/lib/booking-special-offer";
-import { buildMultiSessionTemplateVars } from "@/utils/form-extra-fields";
+import {
+    buildExtraFieldTemplateVars,
+    buildMultiSessionTemplateVars,
+} from "@/utils/form-extra-fields";
 import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
 import {
     DEFAULT_CLIENT_STATUSES,
@@ -520,7 +526,12 @@ export default function FinancePage() {
         const remaining = Math.max((booking.total_price || 0) - (booking.dp_paid || 0), 0);
         const invoiceLink = getInitialInvoiceLink(booking);
         const trackingLink = getTrackingLink(booking);
-        const templateContent = getWhatsAppTemplateContent(savedTemplates, "whatsapp_client", locale);
+        const templateContent = getWhatsAppTemplateContent(
+            savedTemplates,
+            "whatsapp_client",
+            locale,
+            booking.event_type,
+        );
 
         if (templateContent.trim()) {
             return fillWhatsAppTemplate(templateContent, {
@@ -546,9 +557,11 @@ export default function FinancePage() {
                 notes: "-",
                 tracking_link: trackingLink || "-",
                 invoice_url: invoiceLink,
+                ...buildExtraFieldTemplateVars(booking.extra_fields),
                 ...buildMultiSessionTemplateVars(booking.extra_fields, {
                     locale: locale === "en" ? "en" : "id",
                 }),
+                ...buildCustomFieldTemplateVars(booking.extra_fields),
             });
         }
 
@@ -562,7 +575,12 @@ export default function FinancePage() {
         const trackingLink = getTrackingLink(booking);
         const settlementLink = getSettlementLink(booking);
         const invoiceLink = getFinalInvoiceLink(booking);
-        const templateContent = getWhatsAppTemplateContent(savedTemplates, "whatsapp_settlement_client", locale);
+        const templateContent = getWhatsAppTemplateContent(
+            savedTemplates,
+            "whatsapp_settlement_client",
+            locale,
+            booking.event_type,
+        );
 
         if (templateContent.trim()) {
             return fillWhatsAppTemplate(templateContent, {
@@ -582,9 +600,11 @@ export default function FinancePage() {
                 tracking_link: trackingLink || "-",
                 invoice_url: invoiceLink,
                 settlement_link: settlementLink || "-",
+                ...buildExtraFieldTemplateVars(booking.extra_fields),
                 ...buildMultiSessionTemplateVars(booking.extra_fields, {
                     locale: locale === "en" ? "en" : "id",
                 }),
+                ...buildCustomFieldTemplateVars(booking.extra_fields),
             });
         }
 
@@ -1406,6 +1426,18 @@ export default function FinancePage() {
                     );
                 })}
             </div>
+            {!loading && filtered.length > 0 ? (
+                <div className="md:hidden rounded-xl border bg-card text-card-foreground shadow-sm">
+                    <TablePagination
+                        totalItems={filtered.length}
+                        currentPage={currentPage}
+                        itemsPerPage={itemsPerPage}
+                        onPageChange={setCurrentPage}
+                        onItemsPerPageChange={setItemsPerPage}
+                        perPageOptions={[...FINANCE_PER_PAGE_OPTIONS]}
+                    />
+                </div>
+            ) : null}
 
             <Dialog open={mobileActionPicker.open} onOpenChange={(open) => !open && setMobileActionPicker({ open: false, booking: null, kind: null })}>
                 <DialogContent className="sm:max-w-sm">

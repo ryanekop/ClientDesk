@@ -1145,6 +1145,7 @@ export default function BookingDetailPage() {
             savedTemplates,
             "whatsapp_client",
             locale,
+            booking?.event_type,
         );
         let msg: string;
         if (content.trim()) {
@@ -1171,9 +1172,11 @@ export default function BookingDetailPage() {
                 notes: booking?.notes || "-",
                 tracking_link: trackingLink || "-",
                 invoice_url: `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking?.booking_code || "")}&lang=${locale}&stage=${activeInvoiceStage}`,
+                ...buildExtraFieldTemplateVars(booking?.extra_fields),
                 ...buildMultiSessionTemplateVars(booking?.extra_fields, {
                     locale: locale === "en" ? "en" : "id",
                 }),
+                ...buildCustomFieldTemplateVars(booking?.extra_fields),
             };
             msg = fillWhatsAppTemplate(content, vars);
         } else {
@@ -1500,6 +1503,7 @@ export default function BookingDetailPage() {
             savedTemplates,
             "whatsapp_settlement_client",
             locale,
+            booking.event_type,
         );
         const message = templateContent.trim()
             ? fillWhatsAppTemplate(templateContent, {
@@ -1519,9 +1523,11 @@ export default function BookingDetailPage() {
                 tracking_link: booking.tracking_uuid ? `${window.location.origin}/${locale}/track/${booking.tracking_uuid}` : "-",
                 invoice_url: invoiceUrl,
                 settlement_link: settlementUrl,
+                ...buildExtraFieldTemplateVars(booking.extra_fields),
                 ...buildMultiSessionTemplateVars(booking.extra_fields, {
                     locale: locale === "en" ? "en" : "id",
                 }),
+                ...buildCustomFieldTemplateVars(booking.extra_fields),
             })
             : `Halo ${booking.client_name}, invoice final untuk booking ${booking.booking_code} sudah kami siapkan.\n\n` +
                 `Paket: ${booking.service_label || booking.services?.name || "-"}\n` +

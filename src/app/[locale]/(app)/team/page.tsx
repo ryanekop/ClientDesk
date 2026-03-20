@@ -581,6 +581,16 @@ export default function TeamPage() {
                             </div>
                         ))}
                     </div>
+                    <div className="md:hidden rounded-xl border bg-card text-card-foreground shadow-sm">
+                        <TablePagination
+                            totalItems={filteredMembers.length}
+                            currentPage={currentPage}
+                            itemsPerPage={itemsPerPage}
+                            onPageChange={setCurrentPage}
+                            onItemsPerPageChange={setItemsPerPage}
+                            perPageOptions={[...TEAM_PER_PAGE_OPTIONS]}
+                        />
+                    </div>
 
                     {/* Desktop Table */}
                     <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">

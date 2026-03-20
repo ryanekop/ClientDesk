@@ -53,8 +53,12 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     const [avatarTs, setAvatarTs] = React.useState(() => Date.now());
 
     React.useEffect(() => {
-        const saved = localStorage.getItem("clientdesk_sidebar_collapsed");
-        if (saved === "true") setIsCollapsed(true);
+        try {
+            const saved = window.localStorage.getItem("clientdesk_sidebar_collapsed");
+            if (saved === "true") setIsCollapsed(true);
+        } catch {
+            // Ignore storage read failures (e.g. strict privacy mode).
+        }
     }, []);
 
     React.useEffect(() => {
@@ -78,7 +82,11 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     const toggleCollapse = () => {
         const newVal = !isCollapsed;
         setIsCollapsed(newVal);
-        localStorage.setItem("clientdesk_sidebar_collapsed", String(newVal));
+        try {
+            window.localStorage.setItem("clientdesk_sidebar_collapsed", String(newVal));
+        } catch {
+            // Ignore storage write failures.
+        }
     };
 
     const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);

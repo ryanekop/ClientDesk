@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { useTranslations } from "next-intl";
 import {
+  buildCustomFieldTemplateVars,
   buildCustomFieldSnapshots,
   groupFormLayoutBySection,
   normalizeStoredFormLayout,
@@ -31,6 +32,7 @@ import { FileDropzone } from "@/components/public/file-dropzone";
 import { PaymentMethodSection } from "@/components/public/payment-method-section";
 import {
   EVENT_EXTRA_FIELDS,
+  buildExtraFieldTemplateVars,
   buildMultiSessionTemplateVars,
 } from "@/utils/form-extra-fields";
 import { isRichTextEmpty, sanitizeRichTextHtml } from "@/utils/rich-text";
@@ -855,9 +857,11 @@ export function BookingFormClient({
             notes: notes || "-",
             tracking_link: "-",
             invoice_url: "-",
+            ...buildExtraFieldTemplateVars(mergedExtraForTemplate),
             ...buildMultiSessionTemplateVars(mergedExtraForTemplate, {
               locale: localeCode,
             }),
+            ...buildCustomFieldTemplateVars(mergedExtraForTemplate),
           })
         : `Halo ${resultData.vendorName || "Admin"}, saya baru saja booking melalui form online.\n\n` +
           `📋 *Detail Booking*\n` +

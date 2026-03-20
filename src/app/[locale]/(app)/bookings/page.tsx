@@ -243,6 +243,7 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
         savedTemplates,
         "whatsapp_client",
         locale,
+        booking.event_type,
     );
     return applyVars(content);
 }
@@ -1703,6 +1704,18 @@ export default function BookingsPage() {
                     ))
                 )}
             </div>
+            {!loading && filteredBookings.length > 0 ? (
+                <div className="md:hidden rounded-xl border bg-card text-card-foreground shadow-sm">
+                    <TablePagination
+                        totalItems={filteredBookings.length}
+                        currentPage={currentPage}
+                        itemsPerPage={itemsPerPage}
+                        onPageChange={setCurrentPage}
+                        onItemsPerPageChange={setItemsPerPage}
+                        perPageOptions={[...PAGINATION_PER_PAGE_OPTIONS]}
+                    />
+                </div>
+            ) : null}
 
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-visible hidden md:block">

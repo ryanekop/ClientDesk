@@ -22,6 +22,7 @@ import {
     hydrateFastpikLiveData,
     type FastpikLiveBookingFields,
 } from "@/lib/fastpik-live-sync";
+import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 
 // Admin client — runs server-side only, never exposed to browser
 const supabaseAdmin = createClient(
@@ -228,12 +229,19 @@ export default async function TrackingPage({ params }: PageProps) {
         clientStatus: booking.client_status,
         statuses: customClientStatuses,
     });
+    const sessionRows = resolveBookingCalendarSessions({
+        eventType: booking.event_type,
+        sessionDate: booking.session_date,
+        extraFields: booking.extra_fields,
+        defaultLocation: booking.location,
+    });
 
     const bookingData = {
         bookingCode: booking.booking_code,
         trackingUuid: booking.tracking_uuid,
         clientName: booking.client_name,
         sessionDate: booking.session_date,
+        sessionRows,
         eventType: booking.event_type,
         clientStatus: effectiveClientStatus,
         queuePosition: booking.queue_position,

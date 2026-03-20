@@ -697,6 +697,18 @@ export default function ClientStatusPage() {
                     </div>
                 ))}
             </div>
+            {filtered.length > 0 ? (
+                <div className="md:hidden rounded-xl border bg-card shadow-sm">
+                    <TablePagination
+                        totalItems={filtered.length}
+                        currentPage={currentPage}
+                        itemsPerPage={itemsPerPage}
+                        onPageChange={setCurrentPage}
+                        onItemsPerPageChange={setItemsPerPage}
+                        perPageOptions={[...CLIENT_STATUS_PER_PAGE_OPTIONS]}
+                    />
+                </div>
+            ) : null}
 
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card shadow-sm overflow-hidden hidden md:block">
