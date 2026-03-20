@@ -26,6 +26,22 @@ type SettlementInput = {
   is_fully_paid?: boolean | null;
 };
 
+type AutoDpVerificationInput = {
+  previousStatus?: string | null;
+  nextStatus?: string | null;
+  triggerStatus?: string | null;
+  dpPaid?: number | null;
+  dpVerifiedAt?: string | null;
+  nowIso?: string;
+};
+
+type AutoDpVerificationPatch = {
+  dp_verified_amount: number;
+  dp_verified_at: string;
+  dp_refund_amount: number;
+  dp_refunded_at: null;
+};
+
 export function normalizeFinalAdjustments(value: unknown): FinalAdjustment[] {
   if (!Array.isArray(value)) return [];
 
@@ -102,6 +118,33 @@ export function getDpRefundAmount(input: SettlementInput): number {
   const refund = Math.max(input.dp_refund_amount || 0, 0);
   const verifiedDp = getVerifiedDpAmount(input);
   return refund > verifiedDp ? verifiedDp : refund;
+}
+
+export function buildAutoDpVerificationPatch({
+  previousStatus,
+  nextStatus,
+  triggerStatus,
+  dpPaid,
+  dpVerifiedAt,
+  nowIso,
+}: AutoDpVerificationInput): AutoDpVerificationPatch | null {
+  const trigger = (triggerStatus || "").trim();
+  if (!trigger) return null;
+
+  if (previousStatus === trigger || nextStatus !== trigger) {
+    return null;
+  }
+
+  const safeDpPaid = Math.max(Number(dpPaid) || 0, 0);
+  if (safeDpPaid <= 0) return null;
+  if (dpVerifiedAt) return null;
+
+  return {
+    dp_verified_amount: safeDpPaid,
+    dp_verified_at: nowIso || new Date().toISOString(),
+    dp_refund_amount: 0,
+    dp_refunded_at: null,
+  };
 }
 
 export function getNetVerifiedRevenueAmount(input: SettlementInput): number {

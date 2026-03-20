@@ -68,11 +68,13 @@ import {
 import { normalizeDriveFolderStructureSettings } from "@/lib/drive-folder-structure";
 import {
   COMPLETED_BOOKING_STATUS,
+  DEFAULT_DP_VERIFY_TRIGGER_STATUS,
   DEFAULT_CLIENT_STATUSES,
   INITIAL_BOOKING_STATUS,
   getDefaultFinalInvoiceVisibleFromStatus,
   getDefaultTrackingFileLinksVisibleFromStatus,
   normalizeClientProgressStatuses,
+  resolveDpVerifyTriggerStatus,
   resolveFinalInvoiceVisibleFromStatus,
   resolveTrackingFileLinksVisibleFromStatus,
 } from "@/lib/client-status";
@@ -119,6 +121,7 @@ type Profile = {
   google_refresh_token?: string | null;
   google_drive_access_token?: string | null;
   google_drive_refresh_token?: string | null;
+  dp_verify_trigger_status?: string | null;
   final_invoice_visible_from_status?: string | null;
   tracking_file_links_visible_from_status?: string | null;
   form_event_types?: string[] | null;
@@ -415,6 +418,7 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "custom_statuses",
   "custom_client_statuses",
   "queue_trigger_status",
+  "dp_verify_trigger_status",
   "default_wa_target",
   "final_invoice_visible_from_status",
   "tracking_file_links_visible_from_status",
@@ -681,6 +685,9 @@ export default function SettingsPage() {
   const [newClientStatusName, setNewClientStatusName] = React.useState("");
   const [queueTriggerStatus, setQueueTriggerStatus] =
     React.useState(DEFAULT_QUEUE_TRIGGER_STATUS);
+  const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState(
+    DEFAULT_DP_VERIFY_TRIGGER_STATUS,
+  );
   const [finalInvoiceVisibleFromStatus, setFinalInvoiceVisibleFromStatus] =
     React.useState(DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS);
   const [
@@ -1135,6 +1142,12 @@ export default function SettingsPage() {
     if ((prof as any)?.queue_trigger_status) {
       setQueueTriggerStatus((prof as any).queue_trigger_status);
     }
+    setDpVerifyTriggerStatus(
+      resolveDpVerifyTriggerStatus(
+        loadedClientStatuses,
+        (prof as any)?.dp_verify_trigger_status,
+      ),
+    );
     setFinalInvoiceVisibleFromStatus(
       resolveFinalInvoiceVisibleFromStatus(
         loadedClientStatuses,
@@ -1760,16 +1773,22 @@ export default function SettingsPage() {
         normalizedClientStatuses,
         trackingFileLinksVisibleFromStatus,
       );
+    const nextDpVerifyTriggerStatus = resolveDpVerifyTriggerStatus(
+      normalizedClientStatuses,
+      dpVerifyTriggerStatus,
+    );
     try {
       await saveProfilePatch({
         custom_statuses: normalizedClientStatuses,
         custom_client_statuses: normalizedClientStatuses,
         queue_trigger_status: queueTriggerStatus,
+        dp_verify_trigger_status: nextDpVerifyTriggerStatus || null,
         final_invoice_visible_from_status: nextVisibleFromStatus,
         tracking_file_links_visible_from_status:
           nextTrackingFileVisibleFromStatus,
       });
       setCustomClientStatuses(normalizedClientStatuses);
+      setDpVerifyTriggerStatus(nextDpVerifyTriggerStatus);
       setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
       setTrackingFileLinksVisibleFromStatus(nextTrackingFileVisibleFromStatus);
       setStatusSaved(true);
@@ -1869,6 +1888,7 @@ export default function SettingsPage() {
 
     setCustomClientStatuses(nextClientStatuses);
     setQueueTriggerStatus(DEFAULT_QUEUE_TRIGGER_STATUS);
+    setDpVerifyTriggerStatus(DEFAULT_DP_VERIFY_TRIGGER_STATUS);
     setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
     setTrackingFileLinksVisibleFromStatus(nextTrackingFileVisibleFromStatus);
 
@@ -1876,6 +1896,7 @@ export default function SettingsPage() {
       custom_statuses: nextClientStatuses,
       custom_client_statuses: nextClientStatuses,
       queue_trigger_status: DEFAULT_QUEUE_TRIGGER_STATUS,
+      dp_verify_trigger_status: DEFAULT_DP_VERIFY_TRIGGER_STATUS || null,
       final_invoice_visible_from_status: nextVisibleFromStatus,
       tracking_file_links_visible_from_status: nextTrackingFileVisibleFromStatus,
     });
@@ -3795,6 +3816,31 @@ export default function SettingsPage() {
                   <select
                     value={queueTriggerStatus}
                     onChange={(e) => setQueueTriggerStatus(e.target.value)}
+                    className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="">(Tidak ada trigger)</option>
+                    {customClientStatuses.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
+                  <p className="text-sm font-medium">
+                    Trigger Auto-DP Terverifikasi
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Pilih status klien yang otomatis menandai DP sebagai
+                    terverifikasi saat booking masuk ke status ini.
+                  </p>
+                  <select
+                    value={resolveDpVerifyTriggerStatus(
+                      customClientStatuses,
+                      dpVerifyTriggerStatus,
+                    )}
+                    onChange={(e) => setDpVerifyTriggerStatus(e.target.value)}
                     className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
                     <option value="">(Tidak ada trigger)</option>

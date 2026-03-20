@@ -44,6 +44,7 @@ import {
 } from "@/utils/google-calendar-status-sync";
 import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
 import {
+    buildAutoDpVerificationPatch,
     getDpRefundAmount,
     getFinalAdjustmentsTotal,
     getFinalInvoiceTotal,
@@ -142,6 +143,7 @@ type Freelance = { id: string; name: string; google_email?: string | null };
 type LocationCoords = { lat: number | null; lng: number | null };
 type ProfileRow = {
     custom_client_statuses?: string[] | null;
+    dp_verify_trigger_status?: string | null;
     form_sections?: unknown;
     form_event_types?: string[] | null;
     custom_event_types?: unknown;
@@ -257,6 +259,7 @@ export default function EditBookingPage() {
     const [initialStatus, setInitialStatus] = React.useState(
         getInitialBookingStatus(DEFAULT_CLIENT_STATUSES),
     );
+    const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
     const [notes, setNotes] = React.useState("");
     const [adminNotes, setAdminNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
@@ -327,11 +330,12 @@ export default function EditBookingPage() {
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
                 supabase.from("booking_services").select("service_id, kind, sort_order").eq("booking_id", id).order("sort_order", { ascending: true }),
-                supabase.from("profiles").select("custom_client_statuses, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
+                supabase.from("profiles").select("custom_client_statuses, dp_verify_trigger_status, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
             ]);
             const profileRow = (prof ?? null) as ProfileRow | null;
             const nextStatusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
             setStatusOptions(nextStatusOptions);
+            setDpVerifyTriggerStatus(profileRow?.dp_verify_trigger_status ?? "");
             setEventTypeOptions(getActiveEventTypes({
                 customEventTypes: normalizeEventTypeList(profileRow?.custom_event_types),
                 activeEventTypes: profileRow?.form_event_types,
@@ -745,6 +749,13 @@ export default function EditBookingPage() {
                 verifiedAmount: dpVerifiedAmount,
             })
             : null;
+        const autoDpPatch = buildAutoDpVerificationPatch({
+            previousStatus,
+            nextStatus,
+            triggerStatus: dpVerifyTriggerStatus,
+            dpPaid: dPaid,
+            dpVerifiedAt,
+        });
 
         const { error } = await supabase.from("bookings").update({
             client_name: clientName,
@@ -766,6 +777,7 @@ export default function EditBookingPage() {
             status: nextStatus,
             client_status: nextStatus,
             ...(cancelPatch || {}),
+            ...(autoDpPatch || {}),
             notes: notes || null,
             admin_notes: adminNotes || null,
             drive_folder_url: driveFolderUrl || null,

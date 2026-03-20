@@ -25,6 +25,7 @@ import {
 } from "@/utils/form-extra-fields";
 import { buildDriveImageUrl, type PaymentSource } from "@/lib/payment-config";
 import {
+    buildAutoDpVerificationPatch,
     getFinalAdjustmentsTotal,
     getFinalInvoiceTotal,
     getInvoiceStage,
@@ -196,6 +197,7 @@ type DrivePathProfile = {
 
 type BookingProfileRow = {
     custom_client_statuses?: string[] | null;
+    dp_verify_trigger_status?: string | null;
     fastpik_link_display_mode?: FastpikLinkDisplayMode | null;
     fastpik_link_display_mode_booking_detail?: FastpikLinkDisplayMode | null;
 };
@@ -407,6 +409,7 @@ export default function BookingDetailPage() {
     const [creatingFolder, setCreatingFolder] = React.useState(false);
     const [isDriveConnected, setIsDriveConnected] = React.useState(false);
     const [clientStatus, setClientStatus] = React.useState("");
+    const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
     const [queuePos, setQueuePos] = React.useState<number | "">(0);
     const [savingStatus, setSavingStatus] = React.useState(false);
     const [statusSaved, setStatusSaved] = React.useState(false);
@@ -714,7 +717,7 @@ export default function BookingDetailPage() {
                 supabase.from("bookings")
                     .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, admin_notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
-                supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode").eq("id", user.id).single(),
+                supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, dp_verify_trigger_status, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode").eq("id", user.id).single(),
                 supabase.from("services")
                     .select("id, name, price, description, event_types")
                     .eq("user_id", user.id)
@@ -741,6 +744,7 @@ export default function BookingDetailPage() {
                     | null
             )?.fastpik_link_display_mode_booking_detail;
             const statusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
+            setDpVerifyTriggerStatus(profileRow?.dp_verify_trigger_status ?? "");
             setFastpikLinkDisplayMode(
                 normalizeFastpikLinkDisplayMode(
                     bookingDetailLinkMode ??
@@ -846,6 +850,13 @@ export default function BookingDetailPage() {
                 verifiedAmount: booking.dp_verified_amount || 0,
             })
             : null;
+        const autoDpPatch = buildAutoDpVerificationPatch({
+            previousStatus,
+            nextStatus,
+            triggerStatus: dpVerifyTriggerStatus,
+            dpPaid: booking.dp_paid,
+            dpVerifiedAt: booking.dp_verified_at,
+        });
         const { error } = await supabase
             .from("bookings")
             .update({
@@ -853,6 +864,7 @@ export default function BookingDetailPage() {
                 client_status: nextStatus,
                 queue_position: queuePos === "" ? null : Number(queuePos),
                 ...(cancelPatch || {}),
+                ...(autoDpPatch || {}),
             })
             .eq("id", booking.id);
         setSavingStatus(false);
@@ -871,6 +883,7 @@ export default function BookingDetailPage() {
                     client_status: nextStatus,
                     queue_position: queuePos === "" ? null : Number(queuePos),
                     ...(cancelPatch || {}),
+                    ...(autoDpPatch || {}),
                 }
                 : prev,
         );

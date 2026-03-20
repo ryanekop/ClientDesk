@@ -24,6 +24,7 @@
 .DS_Store
 *.pem
 *.sql
+!supabase_migration_dp_verify_trigger_status.sql
 *.sh
 
 # debug

@@ -64,6 +64,7 @@ import {
     syncGoogleCalendarForStatusTransition,
 } from "@/utils/google-calendar-status-sync";
 import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
+import { buildAutoDpVerificationPatch } from "@/lib/final-settlement";
 import * as XLSX from "xlsx";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
@@ -266,6 +267,7 @@ export default function BookingsPage() {
     const [studioName, setStudioName] = React.useState("");
     const [statusOpts, setStatusOpts] = React.useState<string[]>(DEFAULT_STATUS_OPTS);
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
+    const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
     const [defaultWaTarget, setDefaultWaTarget] = React.useState<"client" | "freelancer">("client");
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_BOOKING_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
@@ -381,13 +383,14 @@ export default function BookingsPage() {
         // Fetch studio name for WA templates
         const { data: profile } = await supabase
             .from("profiles")
-            .select("studio_name, custom_client_statuses, queue_trigger_status, default_wa_target, form_sections, table_column_preferences")
+            .select("studio_name, custom_client_statuses, queue_trigger_status, dp_verify_trigger_status, default_wa_target, form_sections, table_column_preferences")
             .eq("id", user.id)
             .single();
         const profileData = profile as ({
             studio_name?: string | null;
             custom_client_statuses?: string[] | null;
             queue_trigger_status?: string | null;
+            dp_verify_trigger_status?: string | null;
             default_wa_target?: "client" | "freelancer" | null;
             form_sections?: unknown;
             table_column_preferences?: { bookings?: TableColumnPreference[] } | null;
@@ -404,6 +407,7 @@ export default function BookingsPage() {
         const statusOptions = getBookingStatusOptions(profileData?.custom_client_statuses);
         setStatusOpts(statusOptions);
         setQueueTriggerStatus(profileData?.queue_trigger_status ?? "Antrian Edit");
+        setDpVerifyTriggerStatus(profileData?.dp_verify_trigger_status ?? "");
         if (profileData?.default_wa_target) setDefaultWaTarget(profileData.default_wa_target);
         if (rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)) {
             setFormSectionsByEventType(rawSections as Record<string, FormLayoutItem[]>);
@@ -655,6 +659,13 @@ export default function BookingsPage() {
                 verifiedAmount: activeBooking.dp_verified_amount || 0,
             })
             : null;
+        const autoDpPatch = buildAutoDpVerificationPatch({
+            previousStatus,
+            nextStatus,
+            triggerStatus: dpVerifyTriggerStatus,
+            dpPaid: activeBooking.dp_paid,
+            dpVerifiedAt: activeBooking.dp_verified_at,
+        });
 
         try {
             if (isQueue && !wasQueue) {
@@ -669,6 +680,7 @@ export default function BookingsPage() {
                         client_status: nextStatus,
                         queue_position: newPos,
                         ...(cancelPatch || {}),
+                        ...(autoDpPatch || {}),
                     })
                     .eq("id", bookingId);
                 if (error) {
@@ -676,7 +688,7 @@ export default function BookingsPage() {
                     return;
                 }
                 setBookings((prev) => prev.map((booking) => booking.id === bookingId
-                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos, ...(cancelPatch || {}) }
+                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos, ...(cancelPatch || {}), ...(autoDpPatch || {}) }
                     : booking));
             } else if (wasQueue && !isQueue) {
                 const { error } = await supabase
@@ -686,6 +698,7 @@ export default function BookingsPage() {
                         client_status: nextStatus,
                         queue_position: null,
                         ...(cancelPatch || {}),
+                        ...(autoDpPatch || {}),
                     })
                     .eq("id", bookingId);
                 if (error) {
@@ -702,7 +715,7 @@ export default function BookingsPage() {
 
                 setBookings((prev) => {
                     let updated = prev.map((booking) => booking.id === bookingId
-                        ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null, ...(cancelPatch || {}) }
+                        ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null, ...(cancelPatch || {}), ...(autoDpPatch || {}) }
                         : booking);
                     remainingQueue.forEach((queuedBooking, index) => {
                         updated = updated.map((booking) => booking.id === queuedBooking.id
@@ -718,6 +731,7 @@ export default function BookingsPage() {
                         status: nextStatus,
                         client_status: nextStatus,
                         ...(cancelPatch || {}),
+                        ...(autoDpPatch || {}),
                     })
                     .eq("id", bookingId);
                 if (error) {
@@ -725,7 +739,7 @@ export default function BookingsPage() {
                     return;
                 }
                 setBookings((prev) => prev.map((booking) => booking.id === bookingId
-                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, ...(cancelPatch || {}) }
+                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, ...(cancelPatch || {}), ...(autoDpPatch || {}) }
                     : booking));
             }
 

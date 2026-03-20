@@ -39,6 +39,7 @@ import {
     syncGoogleCalendarForStatusTransition,
 } from "@/utils/google-calendar-status-sync";
 import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
+import { buildAutoDpVerificationPatch } from "@/lib/final-settlement";
 
 type BookingStatus = {
     id: string;
@@ -49,7 +50,9 @@ type BookingStatus = {
     status: string;
     client_status: string | null;
     queue_position: number | null;
+    dp_paid?: number | null;
     dp_verified_amount?: number | null;
+    dp_verified_at?: string | null;
     dp_refund_amount?: number | null;
     dp_refunded_at?: string | null;
     tracking_uuid: string | null;
@@ -109,6 +112,7 @@ export default function ClientStatusPage() {
     const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
     const [clientStatuses, setClientStatuses] = React.useState<string[]>(DEFAULT_CLIENT_STATUSES);
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
+    const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_CLIENT_STATUS_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
@@ -146,10 +150,11 @@ export default function ClientStatusPage() {
             setCurrentUserId(user.id);
 
             // Load custom client statuses from profile
-            const { data: profile } = await supabase.from("profiles").select("custom_client_statuses, queue_trigger_status, table_column_preferences, form_sections").eq("id", user.id).single();
+            const { data: profile } = await supabase.from("profiles").select("custom_client_statuses, queue_trigger_status, dp_verify_trigger_status, table_column_preferences, form_sections").eq("id", user.id).single();
             const profileData = profile as {
                 custom_client_statuses?: string[] | null;
                 queue_trigger_status?: string | null;
+                dp_verify_trigger_status?: string | null;
                 table_column_preferences?: { client_status?: TableColumnPreference[] } | null;
                 form_sections?: Record<string, FormLayoutItem[]> | null;
             } | null;
@@ -160,12 +165,13 @@ export default function ClientStatusPage() {
             if (profileData?.queue_trigger_status) {
                 setQueueTriggerStatus(profileData.queue_trigger_status);
             }
+            setDpVerifyTriggerStatus(profileData?.dp_verify_trigger_status ?? "");
             const resolvedSections = profileData?.form_sections || {};
             setFormSectionsByEventType(resolvedSections);
 
             const { data } = await supabase
                 .from("bookings")
-                .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, dp_verified_amount, dp_refund_amount, dp_refunded_at, tracking_uuid, event_type, extra_fields, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
+                .select("id, booking_code, client_name, client_whatsapp, session_date, status, client_status, queue_position, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, tracking_uuid, event_type, extra_fields, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
                 .eq("user_id", user.id)
                 .neq("status", "Batal")
                 .order("created_at", { ascending: false });
@@ -309,6 +315,13 @@ export default function ClientStatusPage() {
                 verifiedAmount: oldBooking.dp_verified_amount || 0,
             })
             : null;
+        const autoDpPatch = buildAutoDpVerificationPatch({
+            previousStatus,
+            nextStatus,
+            triggerStatus: dpVerifyTriggerStatus,
+            dpPaid: oldBooking.dp_paid,
+            dpVerifiedAt: oldBooking.dp_verified_at,
+        });
 
         try {
             if (isQueue && !wasQueue) {
@@ -324,6 +337,7 @@ export default function ClientStatusPage() {
                         client_status: nextStatus,
                         queue_position: newPos,
                         ...(cancelPatch || {}),
+                        ...(autoDpPatch || {}),
                     })
                     .eq("id", id);
                 if (error) {
@@ -333,7 +347,7 @@ export default function ClientStatusPage() {
                 setBookings((prev) =>
                     prev.map((booking) =>
                         booking.id === id
-                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos, ...(cancelPatch || {}) }
+                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos, ...(cancelPatch || {}), ...(autoDpPatch || {}) }
                             : booking,
                     ),
                 );
@@ -346,6 +360,7 @@ export default function ClientStatusPage() {
                         client_status: nextStatus,
                         queue_position: null,
                         ...(cancelPatch || {}),
+                        ...(autoDpPatch || {}),
                     })
                     .eq("id", id);
                 if (error) {
@@ -362,7 +377,7 @@ export default function ClientStatusPage() {
                 setBookings((prev) => {
                     let updated = prev.map((booking) =>
                         booking.id === id
-                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null, ...(cancelPatch || {}) }
+                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null, ...(cancelPatch || {}), ...(autoDpPatch || {}) }
                             : booking,
                     );
                     remaining.forEach((queueBooking, index) => {
@@ -381,6 +396,7 @@ export default function ClientStatusPage() {
                         status: nextStatus,
                         client_status: nextStatus,
                         ...(cancelPatch || {}),
+                        ...(autoDpPatch || {}),
                     })
                     .eq("id", id);
                 if (error) {
@@ -390,7 +406,7 @@ export default function ClientStatusPage() {
                 setBookings((prev) =>
                     prev.map((booking) =>
                         booking.id === id
-                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, ...(cancelPatch || {}) }
+                            ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, ...(cancelPatch || {}), ...(autoDpPatch || {}) }
                             : booking,
                     ),
                 );

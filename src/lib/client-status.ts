@@ -1,5 +1,6 @@
 export const INITIAL_BOOKING_STATUS = "Pending";
 export const COMPLETED_BOOKING_STATUS = "Selesai";
+export const DEFAULT_DP_VERIFY_TRIGGER_STATUS = "";
 
 export const DEFAULT_CLIENT_STATUSES = [
   INITIAL_BOOKING_STATUS,
@@ -126,6 +127,17 @@ export function resolveTrackingFileLinksVisibleFromStatus(
     return selectedStatus;
   }
   return getDefaultTrackingFileLinksVisibleFromStatus(normalized);
+}
+
+export function resolveDpVerifyTriggerStatus(
+  statuses?: string[] | null,
+  selectedStatus?: string | null,
+) {
+  const normalized = getClientProgressStatuses(statuses);
+  if (selectedStatus && normalized.includes(selectedStatus)) {
+    return selectedStatus;
+  }
+  return DEFAULT_DP_VERIFY_TRIGGER_STATUS;
 }
 
 export function shouldShowFinalInvoiceForClientStatus({
