@@ -698,7 +698,7 @@ export default function ClientStatusPage() {
                 ))}
             </div>
             {filtered.length > 0 ? (
-                <div className="md:hidden rounded-xl border bg-card shadow-sm">
+                <div className="md:hidden">
                     <TablePagination
                         totalItems={filtered.length}
                         currentPage={currentPage}

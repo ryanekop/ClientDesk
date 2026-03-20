@@ -581,7 +581,7 @@ export default function TeamPage() {
                             </div>
                         ))}
                     </div>
-                    <div className="md:hidden rounded-xl border bg-card text-card-foreground shadow-sm">
+                    <div className="md:hidden">
                         <TablePagination
                             totalItems={filteredMembers.length}
                             currentPage={currentPage}

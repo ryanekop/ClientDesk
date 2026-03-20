@@ -1427,7 +1427,7 @@ export default function FinancePage() {
                 })}
             </div>
             {!loading && filtered.length > 0 ? (
-                <div className="md:hidden rounded-xl border bg-card text-card-foreground shadow-sm">
+                <div className="md:hidden">
                     <TablePagination
                         totalItems={filtered.length}
                         currentPage={currentPage}
