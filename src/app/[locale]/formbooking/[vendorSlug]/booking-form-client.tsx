@@ -983,6 +983,24 @@ export function BookingFormClient({
     [services],
   );
 
+  function syncTermsCanBeAccepted(container: HTMLDivElement | null = termsContentRef.current) {
+    if (!container) return;
+
+    const thresholdPx = 8;
+    const canUnlock =
+      container.scrollHeight <= container.clientHeight + thresholdPx ||
+      container.scrollTop + container.clientHeight >=
+        container.scrollHeight - thresholdPx;
+
+    if (canUnlock) {
+      setTermsCanBeAccepted(true);
+    }
+  }
+
+  function handleTermsContentScroll(event: React.UIEvent<HTMLDivElement>) {
+    syncTermsCanBeAccepted(event.currentTarget);
+  }
+
   React.useEffect(() => {
     if (!hasTerms) {
       setTermsAccepted(false);
@@ -1000,24 +1018,14 @@ export function BookingFormClient({
     const container = termsContentRef.current;
     if (!container) return;
 
-    const thresholdPx = 8;
-    const unlockIfReady = () => {
-      const canUnlock =
-        container.scrollHeight <= container.clientHeight + thresholdPx ||
-        container.scrollTop + container.clientHeight >=
-          container.scrollHeight - thresholdPx;
-      if (canUnlock) {
-        setTermsCanBeAccepted(true);
-      }
-    };
+    syncTermsCanBeAccepted(container);
 
-    unlockIfReady();
+    const frameId = window.requestAnimationFrame(() => {
+      syncTermsCanBeAccepted(container);
+    });
 
-    const handleScroll = () => unlockIfReady();
-    window.requestAnimationFrame(unlockIfReady);
-    container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, [hasTerms, termsCanBeAccepted, termsDialogOpen]);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [hasTerms, termsCanBeAccepted, termsDialogOpen, termsContent]);
   const filteredServices = !eventType
     ? []
     : showAllActivePackages
@@ -2154,7 +2162,7 @@ export function BookingFormClient({
 
         {hasTerms && (
           <Dialog open={termsDialogOpen} onOpenChange={setTermsDialogOpen}>
-            <DialogContent className="sm:max-w-2xl">
+            <DialogContent className="sm:max-w-2xl flex max-h-[85vh] flex-col overflow-hidden overflow-y-hidden">
               <DialogHeader>
                 <DialogTitle>{termsLinkText}</DialogTitle>
                 <DialogDescription>
@@ -2163,7 +2171,9 @@ export function BookingFormClient({
               </DialogHeader>
               <div
                 ref={termsContentRef}
-                className="max-h-[55vh] overflow-y-auto rounded-lg border bg-muted/20 p-4 text-sm leading-6 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:italic [&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:ml-5 [&_li]:list-item [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5"
+                onScroll={handleTermsContentScroll}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border bg-muted/20 p-4 text-sm leading-6 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:italic [&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:ml-5 [&_li]:list-item [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5"
+                style={{ WebkitOverflowScrolling: "touch" }}
                 dangerouslySetInnerHTML={{ __html: termsContent }}
               />
               <div className="flex justify-end">
