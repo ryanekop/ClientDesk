@@ -13,6 +13,7 @@ import {
   LocationAutocomplete,
   type LocationSelectionMeta,
 } from "@/components/ui/location-autocomplete";
+import { UniversityAutocomplete } from "@/components/ui/university-autocomplete";
 import {
   Dialog,
   DialogContent,
@@ -66,6 +67,12 @@ import {
   normalizeSpecialOfferToken,
   normalizeUuidList,
 } from "@/lib/booking-special-offer";
+import {
+  hasUniversityReferenceSelection,
+  isUniversityExtraField,
+  UNIVERSITY_EXTRA_FIELD_KEY,
+  UNIVERSITY_REFERENCE_EXTRA_KEY,
+} from "@/lib/university-references";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -595,6 +602,14 @@ export function BookingFormClient({
         (hasExtraField("tempat_resepsi") && !extraData.tempat_resepsi))
     ) {
       setError(t("errorLokasiWedding"));
+      return;
+    }
+
+    if (
+      hasExtraField(UNIVERSITY_EXTRA_FIELD_KEY) &&
+      !hasUniversityReferenceSelection(extraData, eventType)
+    ) {
+      setError(t("errorUniversityRequired"));
       return;
     }
 
@@ -1237,7 +1252,36 @@ export function BookingFormClient({
           {field.label}
           {field.required && <span className="text-red-500"> *</span>}
         </label>
-        {field.isLocation ? (
+        {isUniversityExtraField({
+          eventType,
+          fieldKey: field.key,
+        }) ? (
+          <UniversityAutocomplete
+            value={extraData[field.key] || ""}
+            selectedId={extraData[UNIVERSITY_REFERENCE_EXTRA_KEY] || ""}
+            onValueChange={(value) =>
+              setExtraData((prev) => ({ ...prev, [field.key]: value }))
+            }
+            onSelect={(item) =>
+              setExtraData((prev) => {
+                const next = { ...prev };
+                if (item) {
+                  next[field.key] = item.name;
+                  next[UNIVERSITY_REFERENCE_EXTRA_KEY] = item.id;
+                } else {
+                  delete next[UNIVERSITY_REFERENCE_EXTRA_KEY];
+                }
+                return next;
+              })
+            }
+            placeholder={t("universityPlaceholder")}
+            required={field.required}
+            strings={{
+              noResults: t("universityNoResults"),
+              selectionHint: t("universitySelectionHint"),
+            }}
+          />
+        ) : field.isLocation ? (
           <LocationAutocomplete
             value={extraData[field.key] || ""}
             onChange={(value) =>

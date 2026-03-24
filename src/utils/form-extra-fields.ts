@@ -3,6 +3,7 @@ import {
   formatTemplateSessionDate,
 } from "@/utils/format-date";
 import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
+import { UNIVERSITY_REFERENCE_EXTRA_KEY } from "@/lib/university-references";
 
 export type EventExtraField = {
   key: string;
@@ -173,6 +174,7 @@ export function buildExtraFieldTemplateVars(raw: unknown): Record<string, string
     Object.entries(raw as Record<string, unknown>).filter(
       ([key, value]) =>
         key !== "custom_fields" &&
+        key !== UNIVERSITY_REFERENCE_EXTRA_KEY &&
         typeof value === "string" &&
         value.trim().length > 0,
     ),

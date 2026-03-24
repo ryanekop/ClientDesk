@@ -48,6 +48,12 @@ import {
     normalizeUuidList,
     type BookingSpecialLinkRule,
 } from "@/lib/booking-special-offer";
+import {
+    cleanUniversityName,
+    normalizeUniversityName,
+    UNIVERSITY_EXTRA_FIELD_KEY,
+    UNIVERSITY_REFERENCE_EXTRA_KEY,
+} from "@/lib/university-references";
 
 type VendorRecord = {
     id: string;
@@ -72,10 +78,16 @@ type VendorRecord = {
     qris_drive_file_id?: string | null;
     bank_accounts?: unknown[] | null;
     custom_client_statuses?: string[] | null;
+    form_sections?: unknown[] | Record<string, unknown[]> | null;
 };
 
 type AvailableServiceRow = {
     event_types?: string[] | null;
+};
+
+type UniversityReferenceRow = {
+    id: string;
+    name: string;
 };
 
 type BookingRequestBody = {
@@ -208,7 +220,69 @@ const VENDOR_SELECT_COLUMNS = [
     "qris_drive_file_id",
     "bank_accounts",
     "custom_client_statuses",
+    "form_sections",
 ] as const;
+
+type StoredLayoutItem = {
+    kind: string;
+    builtinId?: string;
+    sectionId?: string;
+};
+
+function isStoredLayoutItem(
+    value: unknown,
+): value is StoredLayoutItem {
+    return value !== null && typeof value === "object" && "kind" in value;
+}
+
+function findStoredEventLayout(
+    raw: VendorRecord["form_sections"],
+    eventType: string,
+): StoredLayoutItem[] | null {
+    if (Array.isArray(raw)) {
+        return raw.every(isStoredLayoutItem) ? raw : null;
+    }
+
+    if (!raw || typeof raw !== "object") {
+        return null;
+    }
+
+    const normalizedEventType = normalizeEventTypeName(eventType) || eventType;
+    const entries = Object.entries(raw);
+    const resolveEntry = (target: string) =>
+        entries.find(([key]) => (normalizeEventTypeName(key) || key) === target)?.[1];
+
+    const eventLayout = resolveEntry(normalizedEventType);
+    if (Array.isArray(eventLayout) && eventLayout.every(isStoredLayoutItem)) {
+        return eventLayout;
+    }
+
+    const umumLayout = resolveEntry("Umum");
+    if (Array.isArray(umumLayout) && umumLayout.every(isStoredLayoutItem)) {
+        return umumLayout;
+    }
+
+    return null;
+}
+
+function requiresUniversitySelection(
+    rawFormSections: VendorRecord["form_sections"],
+    eventType: string | null | undefined,
+) {
+    if (normalizeEventTypeName(eventType) !== "Wisuda") {
+        return false;
+    }
+
+    const layout = findStoredEventLayout(rawFormSections, eventType || "Wisuda");
+    if (!layout) {
+        return true;
+    }
+
+    const builtinExtraId = `extra:${UNIVERSITY_EXTRA_FIELD_KEY}`;
+    return layout.some(
+        (item) => item.kind === "builtin_field" && item.builtinId === builtinExtraId,
+    );
+}
 
 async function fetchVendorByField(
     field: "id" | "vendor_slug",
@@ -441,6 +515,69 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        const shouldRequireUniversitySelection = requiresUniversitySelection(
+            vendor.form_sections ?? null,
+            resolvedEventType,
+        );
+
+        let resolvedUniversityReference: UniversityReferenceRow | null = null;
+        if (shouldRequireUniversitySelection) {
+            const submittedUniversityName = cleanUniversityName(
+                typeof rawExtraData[UNIVERSITY_EXTRA_FIELD_KEY] === "string"
+                    ? rawExtraData[UNIVERSITY_EXTRA_FIELD_KEY]
+                    : "",
+            );
+            const submittedUniversityRefId =
+                typeof rawExtraData[UNIVERSITY_REFERENCE_EXTRA_KEY] === "string"
+                    ? rawExtraData[UNIVERSITY_REFERENCE_EXTRA_KEY].trim()
+                    : "";
+
+            if (
+                !submittedUniversityName ||
+                !isValidUuid(submittedUniversityRefId)
+            ) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "Silakan pilih universitas dari suggestion yang tersedia.",
+                    },
+                    { status: 400 },
+                );
+            }
+
+            const { data: universityReference, error: universityReferenceError } =
+                await supabaseAdmin
+                    .from("university_references")
+                    .select("id, name")
+                    .eq("id", submittedUniversityRefId)
+                    .maybeSingle<UniversityReferenceRow>();
+
+            if (universityReferenceError || !universityReference) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "Universitas yang dipilih tidak valid.",
+                    },
+                    { status: 400 },
+                );
+            }
+
+            if (
+                normalizeUniversityName(universityReference.name) !==
+                normalizeUniversityName(submittedUniversityName)
+            ) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "Universitas yang dipilih tidak valid.",
+                    },
+                    { status: 400 },
+                );
+            }
+
+            resolvedUniversityReference = universityReference;
+        }
+
         const availablePaymentMethods = normalizePaymentMethods(vendor.form_payment_methods);
         const enabledBankAccounts = getEnabledBankAccounts(normalizeBankAccounts(vendor.bank_accounts));
         const selectedPaymentMethod = paymentMethod as PaymentMethod | null;
@@ -641,6 +778,14 @@ export async function POST(request: NextRequest) {
         }
 
         const sanitizedExtraData: Record<string, unknown> = { ...rawExtraData };
+        if (resolvedUniversityReference) {
+            sanitizedExtraData[UNIVERSITY_EXTRA_FIELD_KEY] =
+                resolvedUniversityReference.name;
+            sanitizedExtraData[UNIVERSITY_REFERENCE_EXTRA_KEY] =
+                resolvedUniversityReference.id;
+        } else {
+            delete sanitizedExtraData[UNIVERSITY_REFERENCE_EXTRA_KEY];
+        }
         if (addonServices.length > 0) {
             sanitizedExtraData.addon_ids = addonServices.map((service) => service.id);
             sanitizedExtraData.addon_names = addonServices.map((service) => service.name);

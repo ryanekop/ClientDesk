@@ -17,6 +17,7 @@ import {
     LocationAutocomplete,
     type LocationSelectionMeta,
 } from "@/components/ui/location-autocomplete";
+import { UniversityAutocomplete } from "@/components/ui/university-autocomplete";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { BookingAdminCustomFields } from "@/components/form-builder/booking-admin-custom-fields";
@@ -45,6 +46,11 @@ import {
     computeSpecialOfferTotal,
     mergeSpecialOfferSnapshotIntoExtraFields,
 } from "@/lib/booking-special-offer";
+import {
+    hasUniversityReferenceSelection,
+    isUniversityExtraField,
+    UNIVERSITY_REFERENCE_EXTRA_KEY,
+} from "@/lib/university-references";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -498,6 +504,11 @@ export default function NewBookingPage() {
             setSaving(false);
             return;
         }
+        if (!hasUniversityReferenceSelection(extraFields, eventType)) {
+            showFeedback("Silakan pilih universitas dari suggestion yang tersedia.");
+            setSaving(false);
+            return;
+        }
 
         const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
 
@@ -772,7 +783,33 @@ export default function NewBookingPage() {
                             {currentExtraFields.map(f => (
                                 <div key={f.key} className={`space-y-1.5 ${f.isLocation || f.fullWidth || currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
                                     <label className="text-xs font-medium text-muted-foreground">{locale === "id" ? f.label : f.labelEn}{f.required && <span className="text-red-500 ml-0.5">*</span>}</label>
-                                    {f.isLocation ? (
+                                    {isUniversityExtraField({
+                                        eventType,
+                                        fieldKey: f.key,
+                                    }) ? (
+                                        <UniversityAutocomplete
+                                            value={extraFields[f.key] || ""}
+                                            selectedId={extraFields[UNIVERSITY_REFERENCE_EXTRA_KEY] || ""}
+                                            onValueChange={value =>
+                                                setExtraFields(prev => ({ ...prev, [f.key]: value }))
+                                            }
+                                            onSelect={(item) =>
+                                                setExtraFields(prev => {
+                                                    const next = { ...prev };
+                                                    if (item) {
+                                                        next[f.key] = item.name;
+                                                        next[UNIVERSITY_REFERENCE_EXTRA_KEY] = item.id;
+                                                    } else {
+                                                        delete next[UNIVERSITY_REFERENCE_EXTRA_KEY];
+                                                    }
+                                                    return next;
+                                                })
+                                            }
+                                            placeholder={locale === "en" ? "Search university..." : "Cari universitas..."}
+                                            required={f.required}
+                                            allowManualCreate
+                                        />
+                                    ) : f.isLocation ? (
                                         <LocationAutocomplete
                                             value={extraFields[f.key] || ""}
                                             onChange={v => setExtraFields(prev => ({ ...prev, [f.key]: v }))}

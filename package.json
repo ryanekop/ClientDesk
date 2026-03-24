@@ -6,7 +6,9 @@
     "dev": "next dev --webpack",
     "build": "NODE_OPTIONS='--max-old-space-size=4096' next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "scrape:universities": "node scripts/scrape-universities-from-kip.mjs",
+    "seed:universities": "node scripts/seed-universities-from-json.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

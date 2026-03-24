@@ -76,7 +76,6 @@ import { isGoogleDriveConnected } from "@/utils/google/connection";
 import {
     buildGoogleMapsDirectionUrl,
     buildGoogleMapsQueryUrl,
-    buildGoogleMapsUrlOrFallback,
 } from "@/utils/location";
 import {
     buildWhatsAppUrl,
@@ -100,6 +99,7 @@ import {
     mergeSpecialOfferSnapshotIntoExtraFields,
     resolveSpecialOfferSnapshotFromExtraFields,
 } from "@/lib/booking-special-offer";
+import { UNIVERSITY_REFERENCE_EXTRA_KEY } from "@/lib/university-references";
 
 const EXTRA_FIELD_LABELS: Record<string, string> = {
     universitas: "Universitas",
@@ -127,6 +127,7 @@ const HIDDEN_EXTRA_FIELD_KEYS = new Set([
     "addon_ids",
     "addon_names",
     "special_offer",
+    UNIVERSITY_REFERENCE_EXTRA_KEY,
 ]);
 const FASTPIK_APP_BASE_URL = (process.env.NEXT_PUBLIC_FASTPIK_BASE_URL || "https://fastpik.ryanekoapp.web.id").replace(/\/+$/, "");
 
