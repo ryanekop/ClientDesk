@@ -54,6 +54,7 @@ import {
   getStoredTemplateType,
   resolveTemplateType,
 } from "@/lib/whatsapp-template";
+import { BOOKING_WHATSAPP_TIME_VARIABLES } from "@/lib/booking-whatsapp-template-vars";
 import {
   getEventExtraFieldPreviewVars,
   getEventExtraFieldTemplateTokens,
@@ -274,6 +275,7 @@ const variableHints: Record<string, string[]> = {
     "{{client_name}}",
     "{{booking_code}}",
     "{{session_date}}",
+    ...BOOKING_WHATSAPP_TIME_VARIABLES,
     "{{service_name}}",
     "{{total_price}}",
     "{{dp_paid}}",
@@ -337,7 +339,7 @@ const variableHints: Record<string, string[]> = {
     "{{client_whatsapp}}",
     "{{booking_code}}",
     "{{session_date}}",
-    "{{session_time}}",
+    ...BOOKING_WHATSAPP_TIME_VARIABLES,
     "{{service_name}}",
     "{{studio_name}}",
     "{{event_type}}",
@@ -2146,7 +2148,9 @@ export default function SettingsPage() {
     client_name: "Budi",
     booking_code: "INV-100120250001",
     session_date: "15 April 2026",
-    session_time: "17.00",
+    session_time: "17.00 - 18.00",
+    session_start: "17.00",
+    session_end: "18.00",
     end_time: "18.00",
     service_name: "Paket Wedding",
     total_price: "Rp 5.000.000",

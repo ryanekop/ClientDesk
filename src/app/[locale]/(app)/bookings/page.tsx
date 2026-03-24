@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
-import { formatSessionDate, formatSessionTime, formatTemplateSessionDate } from "@/utils/format-date";
+import { formatSessionDate } from "@/utils/format-date";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -27,12 +27,9 @@ import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal"
 import { useSuccessToast } from "@/components/ui/success-toast";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import {
-    buildExtraFieldTemplateVars,
-    buildMultiSessionTemplateVars,
     getEventExtraFields,
 } from "@/utils/form-extra-fields";
 import {
-    buildCustomFieldTemplateVars,
     extractCustomFieldSnapshots,
     getGroupedCustomLayoutSections,
     type FormLayoutItem,
@@ -40,7 +37,11 @@ import {
 import {
     type BookingServiceSelection,
 } from "@/lib/booking-services";
-import { buildBookingSessionDisplay } from "@/lib/booking-session-display";
+import {
+    buildBookingSessionDisplay,
+    splitBookingSessionDisplayLines,
+} from "@/lib/booking-session-display";
+import { buildBookingWhatsAppTemplateVars } from "@/lib/booking-whatsapp-template-vars";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
 import {
     lockBoundaryColumns,
@@ -59,7 +60,6 @@ import {
 } from "@/lib/client-status";
 import {
     buildGoogleMapsQueryUrl,
-    buildGoogleMapsUrlOrFallback,
 } from "@/utils/location";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
 import {
@@ -215,46 +215,18 @@ type SavedTemplate = {
 
 function generateWATemplate(booking: Booking, locale: string, savedTemplates: SavedTemplate[], studioName: string, freelancerName?: string) {
     const templateLocale = locale === "en" ? "en" : "id";
-    const sessionStr = booking.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-";
-    const sessionTime = booking.session_date ? formatSessionTime(booking.session_date) : "-";
-    const serviceName = booking.service_label || booking.services?.name || "-";
-
-    // Build replacement map
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
-    const vars: Record<string, string> = {
-        client_name: booking.client_name,
-        client_whatsapp: booking.client_whatsapp || "-",
-        booking_code: booking.booking_code,
-        session_date: sessionStr,
-        session_time: sessionTime,
-        service_name: serviceName,
-        total_price: new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(booking.total_price || 0),
-        dp_paid: new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(booking.dp_paid || 0),
-        studio_name: studioName || "",
-        freelancer_name: freelancerName || "",
-        event_type: booking.event_type || "-",
-        location: booking.location || "-",
-        location_maps_url: buildGoogleMapsUrlOrFallback(
-            {
-                address: booking.location,
-                lat: booking.location_lat,
-                lng: booking.location_lng,
-            },
-            "-",
-        ),
-        detail_location: booking.location_detail || "-",
-        notes: booking.notes || "-",
-        tracking_link: booking.tracking_uuid ? `${siteUrl}/id/track/${booking.tracking_uuid}` : "-",
-        invoice_url: `${siteUrl}/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}`,
-        ...buildExtraFieldTemplateVars(booking.extra_fields),
-        ...buildMultiSessionTemplateVars(booking.extra_fields, {
-            locale: templateLocale,
-        }),
-        ...buildCustomFieldTemplateVars(booking.extra_fields),
-    };
+    const vars = buildBookingWhatsAppTemplateVars({
+        booking,
+        locale: templateLocale,
+        studioName,
+        freelancerName,
+        trackingLink: booking.tracking_uuid ? `${siteUrl}/${templateLocale}/track/${booking.tracking_uuid}` : "-",
+        invoiceUrl: `${siteUrl}/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}`,
+    });
 
     function applyVars(tpl: string) {
-        return tpl.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] || `{{${key}}}`);
+        return tpl.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
     }
 
     if (freelancerName) {
@@ -1020,6 +992,18 @@ export default function BookingsPage() {
         locale: locale === "en" ? "en" : "id",
     }), [locale]);
 
+    function renderSessionDisplayValue(value: string) {
+        return (
+            <div className="flex flex-col gap-1">
+                {splitBookingSessionDisplayLines(value).map((line, index) => (
+                    <span key={`${line}-${index}`} className="block whitespace-nowrap">
+                        {line}
+                    </span>
+                ))}
+            </div>
+        );
+    }
+
     function renderDesktopHeader(column: TableColumnPreference) {
         switch (column.id) {
             case "name":
@@ -1031,9 +1015,9 @@ export default function BookingsPage() {
             case "booking_date":
                 return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Tanggal Booking</th>;
             case "session_date_display":
-                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Tanggal Sesi</th>;
+                return <th key={column.id} className="min-w-[170px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Tanggal Sesi</th>;
             case "session_time_display":
-                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Jam Sesi</th>;
+                return <th key={column.id} className="min-w-[160px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Jam Sesi</th>;
             case "location":
                 return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("location")}</th>;
             case "status":
@@ -1085,9 +1069,9 @@ export default function BookingsPage() {
                     </td>
                 );
             case "session_date_display":
-                return <td key={column.id} className="px-4 py-3 whitespace-pre-line text-muted-foreground font-light leading-5">{sessionDisplay.dateDisplay}</td>;
+                return <td key={column.id} className="min-w-[170px] px-4 py-3 align-top text-muted-foreground font-light leading-5">{renderSessionDisplayValue(sessionDisplay.dateDisplay)}</td>;
             case "session_time_display":
-                return <td key={column.id} className="px-4 py-3 whitespace-pre-line text-muted-foreground font-light leading-5">{sessionDisplay.timeDisplay}</td>;
+                return <td key={column.id} className="min-w-[160px] px-4 py-3 align-top text-muted-foreground font-light leading-5">{renderSessionDisplayValue(sessionDisplay.timeDisplay)}</td>;
             case "location":
                 return (
                     <td key={column.id} className="px-4 py-3 max-w-[180px]">
@@ -1788,7 +1772,7 @@ export default function BookingsPage() {
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-visible hidden md:block">
                 <div className="relative overflow-x-auto overflow-y-visible">
-                    <table className="min-w-[1320px] w-full text-sm text-left border-collapse">
+                    <table className="min-w-[1400px] w-full text-sm text-left border-collapse">
                         <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
                                 {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}

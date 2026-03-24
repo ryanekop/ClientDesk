@@ -24,6 +24,19 @@ export type BookingSessionDisplay = {
   timeDisplay: string;
 };
 
+export function splitBookingSessionDisplayLines(value: string): string[] {
+  if (!value || value === "-") {
+    return ["-"];
+  }
+
+  const lines = value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return lines.length > 0 ? lines : ["-"];
+}
+
 export function buildBookingSessionDisplay({
   eventType,
   sessionDate,

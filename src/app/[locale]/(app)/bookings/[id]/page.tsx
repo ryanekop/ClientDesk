@@ -18,7 +18,7 @@ import {
     useBookingWriteAccess,
     useBookingWriteGuard,
 } from "@/lib/booking-write-access-context";
-import { formatSessionDate, formatSessionTime, formatTemplateSessionDate } from "@/utils/format-date";
+import { formatSessionDate, formatTemplateSessionDate } from "@/utils/format-date";
 import {
     buildCustomFieldTemplateVars,
     extractBuiltInExtraFieldValues,
@@ -55,6 +55,11 @@ import {
     normalizeBookingServiceSelections,
     type BookingServiceSelection,
 } from "@/lib/booking-services";
+import {
+    buildBookingSessionDisplay,
+    splitBookingSessionDisplayLines,
+} from "@/lib/booking-session-display";
+import { buildBookingWhatsAppTemplateVars } from "@/lib/booking-whatsapp-template-vars";
 import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
 import {
     DEFAULT_CLIENT_STATUSES,
@@ -266,6 +271,18 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
         <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-start sm:gap-3">
             <div className="text-muted-foreground sm:w-40 sm:shrink-0">{label}</div>
             <div className="min-w-0 flex-1 break-words">{value}</div>
+        </div>
+    );
+}
+
+function renderSessionDisplayValue(value: string) {
+    return (
+        <div className="space-y-1">
+            {splitBookingSessionDisplayLines(value).map((line, index) => (
+                <div key={`${line}-${index}`} className="whitespace-nowrap">
+                    {line}
+                </div>
+            ))}
         </div>
     );
 }
@@ -1390,46 +1407,28 @@ export default function BookingDetailPage() {
         new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n || 0);
 
     function sendWA(phone: string | null, name: string) {
-        if (!phone) return;
+        if (!phone || !booking) return;
         const cleaned = normalizeWhatsAppNumber(phone);
         // Use client template if available
         const content = getWhatsAppTemplateContent(
             savedTemplates,
             "whatsapp_client",
             locale,
-            booking?.event_type,
+            booking.event_type,
         );
         let msg: string;
         if (content.trim()) {
-            const vars: Record<string, string> = {
-                client_name: booking?.client_name || name,
-                client_whatsapp: booking?.client_whatsapp || "-",
-                booking_code: booking?.booking_code || "",
-                session_date: booking?.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-",
-                service_name: booking?.service_label || booking?.services?.name || "-",
-                total_price: formatCurrency(finalInvoiceTotal || booking?.total_price || 0),
-                dp_paid: formatCurrency(booking?.dp_paid || 0),
-                studio_name: studioName || "",
-                event_type: booking?.event_type || "-",
-                location: booking?.location || "-",
-                location_maps_url: buildGoogleMapsUrlOrFallback(
-                    {
-                        address: booking?.location,
-                        lat: booking?.location_lat,
-                        lng: booking?.location_lng,
-                    },
-                    "-",
-                ),
-                detail_location: booking?.location_detail || "-",
-                notes: booking?.notes || "-",
-                tracking_link: trackingLink || "-",
-                invoice_url: `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking?.booking_code || "")}&lang=${locale}&stage=${activeInvoiceStage}`,
-                ...buildExtraFieldTemplateVars(booking?.extra_fields),
-                ...buildMultiSessionTemplateVars(booking?.extra_fields, {
-                    locale: locale === "en" ? "en" : "id",
-                }),
-                ...buildCustomFieldTemplateVars(booking?.extra_fields),
-            };
+            const vars = buildBookingWhatsAppTemplateVars({
+                booking: {
+                    ...booking,
+                    client_name: booking.client_name || name,
+                },
+                locale,
+                studioName,
+                trackingLink: trackingLink || "-",
+                invoiceUrl: `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}&lang=${locale}&stage=${activeInvoiceStage}`,
+                totalPriceOverride: finalInvoiceTotal || booking.total_price || 0,
+            });
             msg = fillWhatsAppTemplate(content, vars);
         } else {
             msg = `Halo ${name}, terima kasih telah booking di studio kami!`;
@@ -1438,49 +1437,26 @@ export default function BookingDetailPage() {
     }
 
     function sendWAFreelance(phone: string | null, fname: string) {
-        if (!phone) { showFeedback("Nomor WhatsApp freelancer tidak tersedia."); return; }
+        if (!phone || !booking) { showFeedback("Nomor WhatsApp freelancer tidak tersedia."); return; }
         const cleaned = normalizeWhatsAppNumber(phone);
-        const sessionStr = booking?.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-";
-        const sessionTime = booking?.session_date ? formatSessionTime(booking.session_date) : "-";
         // Use freelancer template if available
         const content = getWhatsAppTemplateContent(
             savedTemplates,
             "whatsapp_freelancer",
             locale,
-            booking?.event_type,
+            booking.event_type,
         );
         let msg: string;
         if (content.trim()) {
-            const vars: Record<string, string> = {
-                freelancer_name: fname,
-                client_name: booking?.client_name || "",
-                client_whatsapp: booking?.client_whatsapp || "-",
-                booking_code: booking?.booking_code || "",
-                session_date: sessionStr,
-                session_time: sessionTime,
-                service_name: booking?.service_label || booking?.services?.name || "-",
-                studio_name: studioName || "",
-                event_type: booking?.event_type || "-",
-                location: booking?.location || "-",
-                location_maps_url: buildGoogleMapsUrlOrFallback(
-                    {
-                        address: booking?.location,
-                        lat: booking?.location_lat,
-                        lng: booking?.location_lng,
-                    },
-                    "-",
-                ),
-                detail_location: booking?.location_detail || "-",
-                notes: booking?.notes || "-",
-                ...buildExtraFieldTemplateVars(booking?.extra_fields),
-                ...buildMultiSessionTemplateVars(booking?.extra_fields, {
-                    locale: locale === "en" ? "en" : "id",
-                }),
-                ...buildCustomFieldTemplateVars(booking?.extra_fields),
-            };
+            const vars = buildBookingWhatsAppTemplateVars({
+                booking,
+                locale,
+                studioName,
+                freelancerName: fname,
+            });
             msg = fillWhatsAppTemplate(content, vars);
         } else {
-            msg = `Halo ${fname}, kamu dijadwalkan sesi foto bersama klien ${booking?.client_name} (${booking?.booking_code}) pada ${sessionStr}. Mohon konfirmasi kehadiranmu. Terima kasih!`;
+            msg = `Halo ${fname}, kamu dijadwalkan sesi foto bersama klien ${booking.client_name} (${booking.booking_code}) pada ${booking.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-"}. Mohon konfirmasi kehadiranmu. Terima kasih!`;
         }
         openWhatsAppUrl(buildWhatsAppUrl(cleaned, msg));
     }
@@ -2083,6 +2059,14 @@ export default function BookingDetailPage() {
         legacyServicePrice: booking.services?.price ?? booking.total_price,
         extraFields: booking.extra_fields,
     });
+    const sessionDisplay = buildBookingSessionDisplay({
+        eventType: booking.event_type,
+        sessionDate: booking.session_date,
+        extraFields: booking.extra_fields,
+        legacyService: booking.services,
+        serviceSelections: booking.service_selections,
+        locale: locale === "en" ? "en" : "id",
+    });
     const trackingLink = booking.tracking_uuid ? `${window.location.origin}/${locale}/track/${booking.tracking_uuid}` : "";
     const settlementLink = booking.tracking_uuid ? `${window.location.origin}/${locale}/settlement/${booking.tracking_uuid}` : "";
     const builtInExtraFields = extractBuiltInExtraFieldValues(booking.extra_fields);
@@ -2350,7 +2334,8 @@ export default function BookingDetailPage() {
             {/* Detail Sesi */}
             <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Detail Sesi</h3>
-                <InfoRow label="Jadwal" value={formatDate(booking.session_date)} />
+                <InfoRow label="Tanggal Sesi" value={renderSessionDisplayValue(sessionDisplay.dateDisplay)} />
+                <InfoRow label="Jam Sesi" value={renderSessionDisplayValue(sessionDisplay.timeDisplay)} />
                 {booking.location && (
                     <InfoRow
                         label="Lokasi"
