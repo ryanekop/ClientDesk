@@ -176,28 +176,28 @@ export function Topbar({ onMenuClick }: TopbarProps) {
 
   return (
     <>
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-2 bg-background/95 px-3 shadow-[0_1px_5px_rgba(0,0,0,0.02)] backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6">
-      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-4">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between shadow-[0_1px_5px_rgba(0,0,0,0.02)] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
+      <div className="flex items-center gap-4">
         <Button
           variant="ghost"
           size="icon"
-          className="shrink-0 md:hidden"
+          className="md:hidden"
           onClick={onMenuClick}
         >
           <Menu className="w-5 h-5" />
           <span className="sr-only">Toggle Sidebar</span>
         </Button>
-        <h1 className="min-w-0 truncate text-lg font-semibold md:hidden">{pageTitle}</h1>
+        <h1 className="text-lg font-semibold md:hidden">{pageTitle}</h1>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+      <div className="flex items-center gap-2">
         <TopbarClock />
         <LanguageSwitcher />
         <ThemeToggle />
         <Button
           variant="outline"
           asChild
-          className="relative h-9 w-9 shrink-0 rounded-md px-0 sm:w-auto sm:px-3"
+          className="relative gap-2 rounded-md px-3"
         >
           <Link href="/changelog">
             <Megaphone className="h-4 w-4 text-muted-foreground" />
@@ -214,7 +214,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
         <div className="relative" ref={ref}>
           <button
             onClick={() => setProfileOpen(!profileOpen)}
-            className="ml-0 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 sm:ml-1"
+            className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-medium text-sm cursor-pointer hover:opacity-90 transition-opacity ml-1 overflow-hidden"
           >
             {avatarUrl ? (
               <img
