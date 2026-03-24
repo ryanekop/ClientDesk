@@ -1968,7 +1968,7 @@ export default function BookingDetailPage() {
                 : "Gagal menyalin password Fastpik.",
         );
     };
-    const handleCopyGalleryLink = React.useCallback((url: string) => {
+    const handleCopyGalleryLink = (url: string) => {
         void copyTextWithSuccessToast(
             url,
             locale === "en" ? "Gallery link copied." : "Link galeri berhasil disalin.",
@@ -1976,8 +1976,8 @@ export default function BookingDetailPage() {
                 ? "Failed to copy gallery link."
                 : "Gagal menyalin link galeri.",
         );
-    }, [copyTextWithSuccessToast, locale]);
-    const handleCopyPortfolioLink = React.useCallback((url: string) => {
+    };
+    const handleCopyPortfolioLink = (url: string) => {
         void copyTextWithSuccessToast(
             url,
             locale === "en"
@@ -1987,7 +1987,7 @@ export default function BookingDetailPage() {
                 ? "Failed to copy portfolio link."
                 : "Gagal menyalin link portofolio.",
         );
-    }, [copyTextWithSuccessToast, locale]);
+    };
     const renderGalleryLinkCard = (
         label: string,
         url: string,
