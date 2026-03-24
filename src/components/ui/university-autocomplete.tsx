@@ -62,7 +62,6 @@ export function UniversityAutocomplete({
   const [creating, setCreating] = React.useState(false);
   const [error, setError] = React.useState("");
   const [activeIndex, setActiveIndex] = React.useState(-1);
-  const autoResolvedValueRef = React.useRef("");
 
   const searchTerm = cleanUniversityName(value);
 
@@ -143,65 +142,6 @@ export function UniversityAutocomplete({
       window.clearTimeout(timeout);
     };
   }, [searchTerm]);
-
-  React.useEffect(() => {
-    const normalizedValue = normalizeUniversityName(value);
-    if (!normalizedValue || selectedId) return;
-    if (normalizedValue.length < 2) return;
-    if (autoResolvedValueRef.current === normalizedValue) return;
-
-    autoResolvedValueRef.current = normalizedValue;
-    const controller = new AbortController();
-
-    void (async () => {
-      try {
-        const response = await fetch(
-          `/api/public/universities/search?q=${encodeURIComponent(value)}&limit=10`,
-          {
-            method: "GET",
-            signal: controller.signal,
-          },
-        );
-        if (!response.ok) return;
-        const payload = await response.json().catch(() => ({ items: [] }));
-        const nextItems = Array.isArray(payload.items) ? payload.items : [];
-        const exactMatch = nextItems.find(
-          (item: unknown) =>
-            Boolean(item) &&
-            typeof item === "object" &&
-            typeof (item as UniversityReferenceItem).id === "string" &&
-            typeof (item as UniversityReferenceItem).name === "string" &&
-            [
-              normalizeUniversityName((item as UniversityReferenceItem).name),
-              normalizeUniversityName(
-                (item as UniversityReferenceItem).displayName ||
-                  buildUniversityDisplayName(
-                    (item as UniversityReferenceItem).name,
-                    (item as UniversityReferenceItem).abbreviation,
-                  ),
-              ),
-              normalizeUniversityName(
-                (item as UniversityReferenceItem).abbreviation || "",
-              ),
-            ].includes(normalizedValue),
-        );
-        if (exactMatch) {
-          onValueChange(
-            exactMatch.displayName ||
-              buildUniversityDisplayName(
-                exactMatch.name,
-                exactMatch.abbreviation,
-              ),
-          );
-          onSelect(exactMatch);
-        }
-      } catch {
-        // Silent by design: unresolved existing values can still be corrected manually.
-      }
-    })();
-
-    return () => controller.abort();
-  }, [onSelect, onValueChange, selectedId, value]);
 
   const invalidSelection =
     searchTerm.length > 0 && !selectedId && !loading && !creating;
