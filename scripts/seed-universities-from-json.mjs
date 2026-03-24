@@ -83,24 +83,22 @@ async function main() {
   let updatedCount = 0;
   let skippedManualCount = 0;
 
+  const { data: existingRows, error: existingError } = await supabase
+    .from("university_references")
+    .select("normalized_name, source");
+
+  if (existingError) {
+    throw new Error(
+      existingError.message || "Gagal membaca referensi universitas yang sudah ada.",
+    );
+  }
+
+  const existingByNormalizedName = new Map(
+    (existingRows || []).map((row) => [row.normalized_name, row]),
+  );
+
   for (let index = 0; index < items.length; index += BATCH_SIZE) {
     const batch = items.slice(index, index + BATCH_SIZE);
-    const normalizedNames = batch.map((item) => item.normalized_name);
-
-    const { data: existingRows, error: existingError } = await supabase
-      .from("university_references")
-      .select("id, normalized_name, source")
-      .in("normalized_name", normalizedNames);
-
-    if (existingError) {
-      throw new Error(
-        existingError.message || "Gagal membaca referensi universitas yang sudah ada.",
-      );
-    }
-
-    const existingByNormalizedName = new Map(
-      (existingRows || []).map((row) => [row.normalized_name, row]),
-    );
 
     const rowsToWrite = [];
     for (const item of batch) {
@@ -108,6 +106,10 @@ async function main() {
       if (!existing) {
         insertedCount += 1;
         rowsToWrite.push(item);
+        existingByNormalizedName.set(item.normalized_name, {
+          normalized_name: item.normalized_name,
+          source: item.source,
+        });
         continue;
       }
 
@@ -118,6 +120,10 @@ async function main() {
 
       updatedCount += 1;
       rowsToWrite.push(item);
+      existingByNormalizedName.set(item.normalized_name, {
+        normalized_name: item.normalized_name,
+        source: item.source,
+      });
     }
 
     if (rowsToWrite.length === 0) {
