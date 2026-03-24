@@ -22,9 +22,10 @@ import { getBookingWriteBlockedMessage } from "@/lib/booking-write-access";
 import { cn } from "@/lib/utils";
 import { BatchImportButton } from "@/components/batch-import";
 import { PageHeader } from "@/components/ui/page-header";
-import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
 import { useSuccessToast } from "@/components/ui/success-toast";
+import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import {
     buildExtraFieldTemplateVars,
     buildMultiSessionTemplateVars,
@@ -72,6 +73,8 @@ import {
 } from "@/utils/google-calendar-status-sync";
 import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
 import { buildAutoDpVerificationPatch } from "@/lib/final-settlement";
+import { fetchPaginatedJson } from "@/lib/pagination/http";
+import type { PaginatedQueryState } from "@/lib/pagination/types";
 import * as XLSX from "xlsx";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
@@ -169,6 +172,27 @@ type BookingFilterStoragePayload = {
     dateToFilter: string;
     extraFieldFilters: Record<string, string>;
     sortOrder: BookingSortOrder;
+};
+
+type BookingPageMetadata = {
+    studioName: string;
+    statusOptions: string[];
+    queueTriggerStatus: string;
+    dpVerifyTriggerStatus: string;
+    defaultWaTarget: "client" | "freelancer";
+    packages: string[];
+    freelancerNames: string[];
+    availableEventTypes: string[];
+    formSectionsByEventType: Record<string, FormLayoutItem[]>;
+    tableColumnPreferences: TableColumnPreference[] | null;
+    metadataRows: Array<{
+        event_type?: string | null;
+        extra_fields?: Record<string, unknown> | null;
+    }>;
+    extraFieldRows: Array<{
+        event_type?: string | null;
+        extra_fields?: Record<string, unknown> | null;
+    }>;
 };
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
@@ -269,6 +293,7 @@ export default function BookingsPage() {
     const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
     const [filtersHydrated, setFiltersHydrated] = React.useState(false);
     const [loading, setLoading] = React.useState(true);
+    const [refreshing, setRefreshing] = React.useState(false);
     const [copiedClientTemplateId, setCopiedClientTemplateId] = React.useState<string | null>(null);
     const [copiedFreelancerTemplateId, setCopiedFreelancerTemplateId] = React.useState<string | null>(null);
     const [studioName, setStudioName] = React.useState("");
@@ -294,6 +319,10 @@ export default function BookingsPage() {
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
+    const [totalItems, setTotalItems] = React.useState(0);
+    const [availableEventTypes, setAvailableEventTypes] = React.useState<string[]>([]);
+    const [metadataRows, setMetadataRows] = React.useState<Array<{ event_type?: string | null; extra_fields?: Record<string, unknown> | null }>>([]);
+    const [extraFieldRows, setExtraFieldRows] = React.useState<Array<{ event_type?: string | null; extra_fields?: Record<string, unknown> | null }>>([]);
 
     // Modals
     const [statusModal, setStatusModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
@@ -338,6 +367,7 @@ export default function BookingsPage() {
     const requireBookingWrite = useBookingWriteGuard(({ message }) => {
         setFeedbackDialog({ open: true, message });
     });
+    const hasLoadedBookingsRef = React.useRef(false);
 
     const closeDesktopMenus = React.useCallback(() => {
         setWaMenuBookingId(null);
@@ -385,118 +415,81 @@ export default function BookingsPage() {
         const { data } = await supabase.from("templates").select("id, type, name, content, content_en, event_type").eq("user_id", user.id);
         setSavedTemplates((data || []) as SavedTemplate[]);
     }, [supabase]);
+    const fetchData = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
+        if (!itemsPerPageHydrated || !filtersHydrated) return;
 
-
-
-
-    const fetchData = React.useCallback(async () => {
-        setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        setCurrentUserId(user.id);
-
-        // Fetch studio name for WA templates
-        const { data: profile } = await supabase
-            .from("profiles")
-            .select("studio_name, custom_client_statuses, queue_trigger_status, dp_verify_trigger_status, default_wa_target, form_sections, table_column_preferences")
-            .eq("id", user.id)
-            .single();
-        const profileData = profile as ({
-            studio_name?: string | null;
-            custom_client_statuses?: string[] | null;
-            queue_trigger_status?: string | null;
-            dp_verify_trigger_status?: string | null;
-            default_wa_target?: "client" | "freelancer" | null;
-            form_sections?: unknown;
-            table_column_preferences?: { bookings?: TableColumnPreference[] } | null;
-        } & Record<string, unknown>) | null;
-        const rawSections = (profile as Record<string, unknown> | null)?.form_sections;
-        const resolvedSections =
-            rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)
-                ? (rawSections as Record<string, FormLayoutItem[]>)
-                : Array.isArray(rawSections)
-                    ? { Umum: rawSections as FormLayoutItem[] }
-                    : {};
-
-        if (profile?.studio_name) setStudioName(profile.studio_name);
-        const statusOptions = getBookingStatusOptions(profileData?.custom_client_statuses);
-        setStatusOpts(statusOptions);
-        setQueueTriggerStatus(profileData?.queue_trigger_status ?? "Antrian Edit");
-        setDpVerifyTriggerStatus(profileData?.dp_verify_trigger_status ?? "");
-        if (profileData?.default_wa_target) setDefaultWaTarget(profileData.default_wa_target);
-        if (rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)) {
-            setFormSectionsByEventType(rawSections as Record<string, FormLayoutItem[]>);
-        } else if (Array.isArray(rawSections)) {
-            setFormSectionsByEventType({ Umum: rawSections as FormLayoutItem[] });
+        if (mode === "initial") {
+            setLoading(true);
         } else {
-            setFormSectionsByEventType({});
+            setRefreshing(true);
         }
 
-        const { data } = await supabase
-            .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, booking_date, session_date, status, client_status, queue_position, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, location, location_lat, location_lng, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false });
-
-        // Normalize: merge booking_freelancers into a flat array
-        type BookingRow = Omit<Booking, "booking_freelancers" | "service_selections" | "service_label"> & {
-            freelance?: FreelancerInfo | null;
-            booking_freelance?: Array<{ freelance: FreelancerInfo | null }>;
-        };
-        const statusSyncUpdates: Array<{ id: string; status: string }> = [];
-        const bgs = ((data || []) as unknown as BookingRow[]).map((b) => {
-            const junctionFreelancers = (b.booking_freelance || []).map((bf) => bf.freelance).filter((item): item is FreelancerInfo => Boolean(item));
-            const legacyService = normalizeLegacyServiceRecord(b.services);
-            const serviceSelections = normalizeBookingServiceSelections(
-                b.booking_services,
-                b.services,
-            );
-            const syncedStatus = resolveUnifiedBookingStatus({
-                status: b.status,
-                clientStatus: b.client_status,
-                statuses: statusOptions,
+        try {
+            const params = new URLSearchParams({
+                page: String(currentPage),
+                perPage: String(itemsPerPage),
+                search: searchQuery,
+                status: statusFilter,
+                package: packageFilter,
+                freelance: freelanceFilter,
+                eventType: eventTypeFilter,
+                dateFrom: dateFromFilter,
+                dateTo: dateToFilter,
+                sortOrder,
+                extraFilters: JSON.stringify(extraFieldFilters),
             });
-            if (b.status !== syncedStatus || b.client_status !== syncedStatus) {
-                statusSyncUpdates.push({ id: b.id, status: syncedStatus });
-            }
-            return {
-                ...b,
-                status: syncedStatus,
-                client_status: syncedStatus,
-                booking_freelancers: junctionFreelancers.length > 0 ? junctionFreelancers : b.freelance ? [b.freelance] : [],
-                service_selections: serviceSelections,
-                service_label: getBookingServiceLabel(serviceSelections, { kind: "main", fallback: legacyService?.name || "-" }),
-            };
-        }) as unknown as Booking[];
-        const nextColumnDefaults = lockBoundaryColumns([
-            ...BASE_BOOKING_COLUMNS.slice(0, -1),
-            ...buildBookingMetadataColumns(bgs, resolvedSections),
-            BASE_BOOKING_COLUMNS[BASE_BOOKING_COLUMNS.length - 1],
-        ]);
-        setBookings(bgs);
-        setColumns(
-            mergeTableColumnPreferences(
-                nextColumnDefaults,
-                profileData?.table_column_preferences?.bookings,
-            ),
-        );
-        setPackages(Array.from(new Set(bgs.flatMap(b => getBookingServiceNames(b.service_selections || [], "main")).filter(Boolean))) as string[]);
-        setFreelancerNames(Array.from(new Set(bgs.flatMap(b => b.booking_freelancers.map(f => f.name)).filter(Boolean))) as string[]);
-        setLoading(false);
-        if (canWriteBookings && statusSyncUpdates.length > 0) {
-            void Promise.allSettled(
-                statusSyncUpdates.map((item) =>
-                    supabase
-                        .from("bookings")
-                        .update({
-                            status: item.status,
-                            client_status: item.status,
-                        })
-                        .eq("id", item.id),
+
+            const response = await fetchPaginatedJson<Booking, BookingPageMetadata>(
+                `/api/internal/bookings?${params.toString()}`,
+            );
+            const metadata = response.metadata;
+            const nextColumnDefaults = lockBoundaryColumns([
+                ...BASE_BOOKING_COLUMNS.slice(0, -1),
+                ...buildBookingMetadataColumns(
+                    metadata?.metadataRows || [],
+                    metadata?.formSectionsByEventType || {},
+                ),
+                BASE_BOOKING_COLUMNS[BASE_BOOKING_COLUMNS.length - 1],
+            ]);
+
+            setBookings(response.items);
+            setTotalItems(response.totalItems);
+            setStudioName(metadata?.studioName || "");
+            setStatusOpts(metadata?.statusOptions || DEFAULT_STATUS_OPTS);
+            setQueueTriggerStatus(metadata?.queueTriggerStatus || "Antrian Edit");
+            setDpVerifyTriggerStatus(metadata?.dpVerifyTriggerStatus || "");
+            setDefaultWaTarget(metadata?.defaultWaTarget || "client");
+            setPackages(metadata?.packages || []);
+            setFreelancerNames(metadata?.freelancerNames || []);
+            setAvailableEventTypes(metadata?.availableEventTypes || []);
+            setFormSectionsByEventType(metadata?.formSectionsByEventType || {});
+            setMetadataRows(metadata?.metadataRows || []);
+            setExtraFieldRows(metadata?.extraFieldRows || []);
+            setColumns(
+                mergeTableColumnPreferences(
+                    nextColumnDefaults,
+                    metadata?.tableColumnPreferences || undefined,
                 ),
             );
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
         }
-    }, [canWriteBookings, supabase]);
+    }, [
+        currentPage,
+        dateFromFilter,
+        dateToFilter,
+        eventTypeFilter,
+        extraFieldFilters,
+        filtersHydrated,
+        freelanceFilter,
+        itemsPerPage,
+        itemsPerPageHydrated,
+        packageFilter,
+        searchQuery,
+        sortOrder,
+        statusFilter,
+    ]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -522,9 +515,14 @@ export default function BookingsPage() {
     }
 
     React.useEffect(() => {
-        void fetchData();
+        async function hydrateCurrentUser() {
+            const { data: { user } } = await supabase.auth.getUser();
+            setCurrentUserId(user?.id || null);
+        }
+
+        void hydrateCurrentUser();
         void fetchTemplates();
-    }, [fetchData, fetchTemplates]);
+    }, [fetchTemplates, supabase]);
 
     React.useEffect(() => {
         if (!currentUserId) return;
@@ -624,6 +622,13 @@ export default function BookingsPage() {
     }, [currentUserId]);
 
     React.useEffect(() => {
+        if (!itemsPerPageHydrated || !filtersHydrated) return;
+        const mode = hasLoadedBookingsRef.current ? "refresh" : "initial";
+        hasLoadedBookingsRef.current = true;
+        void fetchData(mode);
+    }, [fetchData, filtersHydrated, itemsPerPageHydrated]);
+
+    React.useEffect(() => {
         if (!waMenuBookingId && !copyMenuBookingId) return;
         function handleOutsideClick(event: MouseEvent) {
             const target = event.target as HTMLElement | null;
@@ -685,8 +690,12 @@ export default function BookingsPage() {
 
         try {
             if (isQueue && !wasQueue) {
-                const maxPos = bookings
-                    .filter((booking) => booking.client_status === trigger && booking.queue_position != null)
+                const { data: queueRows } = await supabase
+                    .from("bookings")
+                    .select("queue_position")
+                    .eq("client_status", trigger)
+                    .not("queue_position", "is", null);
+                const maxPos = ((queueRows || []) as Array<{ queue_position?: number | null }>)
                     .reduce((max, booking) => Math.max(max, booking.queue_position || 0), 0);
                 const newPos = maxPos + 1;
                 const { error } = await supabase
@@ -703,9 +712,6 @@ export default function BookingsPage() {
                     setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
                     return;
                 }
-                setBookings((prev) => prev.map((booking) => booking.id === bookingId
-                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: newPos, ...(cancelPatch || {}), ...(autoDpPatch || {}) }
-                    : booking));
             } else if (wasQueue && !isQueue) {
                 const { error } = await supabase
                     .from("bookings")
@@ -722,24 +728,17 @@ export default function BookingsPage() {
                     return;
                 }
 
-                const remainingQueue = bookings
-                    .filter((booking) => booking.client_status === trigger && booking.id !== bookingId && booking.queue_position != null)
-                    .sort((a, b) => (a.queue_position || 0) - (b.queue_position || 0));
+                const { data: remainingQueueRows } = await supabase
+                    .from("bookings")
+                    .select("id, queue_position")
+                    .eq("client_status", trigger)
+                    .neq("id", bookingId)
+                    .not("queue_position", "is", null)
+                    .order("queue_position", { ascending: true });
+                const remainingQueue = ((remainingQueueRows || []) as Array<{ id: string; queue_position?: number | null }>);
                 for (let i = 0; i < remainingQueue.length; i += 1) {
                     await supabase.from("bookings").update({ queue_position: i + 1 }).eq("id", remainingQueue[i].id);
                 }
-
-                setBookings((prev) => {
-                    let updated = prev.map((booking) => booking.id === bookingId
-                        ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, queue_position: null, ...(cancelPatch || {}), ...(autoDpPatch || {}) }
-                        : booking);
-                    remainingQueue.forEach((queuedBooking, index) => {
-                        updated = updated.map((booking) => booking.id === queuedBooking.id
-                            ? { ...booking, queue_position: index + 1 }
-                            : booking);
-                    });
-                    return updated;
-                });
             } else {
                 const { error } = await supabase
                     .from("bookings")
@@ -754,9 +753,6 @@ export default function BookingsPage() {
                     setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
                     return;
                 }
-                setBookings((prev) => prev.map((booking) => booking.id === bookingId
-                    ? { ...booking, status: nextStatus || booking.status, client_status: nextStatus, ...(cancelPatch || {}), ...(autoDpPatch || {}) }
-                    : booking));
             }
 
             setCancelStatusConfirmOpen(false);
@@ -770,6 +766,7 @@ export default function BookingsPage() {
             if (calendarWarning) {
                 setFeedbackDialog({ open: true, message: calendarWarning });
             }
+            void fetchData("refresh");
         } finally {
             setIsUpdatingStatus(false);
         }
@@ -864,8 +861,8 @@ export default function BookingsPage() {
 
         const { error } = await supabase.from("bookings").delete().eq("id", bookingToDelete.id);
         if (!error) {
-            setBookings(prev => prev.filter(b => b.id !== bookingToDelete.id));
             setDeleteModal({ open: false, booking: null });
+            void fetchData("refresh");
             if (warningDetails.length > 0) {
                 const warningMessage = locale === "en"
                     ? `Booking deleted with warning${warningDetails.length > 1 ? "s" : ""}: ${warningDetails.join(" ")}`
@@ -1359,7 +1356,7 @@ export default function BookingsPage() {
                 ? Array.from(new Set(
                     (field.options && field.options.length > 0
                         ? field.options
-                        : bookings.map((booking) => {
+                        : extraFieldRows.map((booking) => {
                             const customSnapshot = extractCustomFieldSnapshots(booking.extra_fields).find((item) => item.id === field.key);
                             return customSnapshot?.value || "";
                         })
@@ -1367,22 +1364,10 @@ export default function BookingsPage() {
                 ))
                 : undefined,
         }));
-    }, [bookings, eventTypeFilter, formSectionsByEventType]);
-
-    const availableEventTypes = React.useMemo(
-        () =>
-            Array.from(
-                new Set(
-                    bookings
-                        .map((booking) => booking.event_type)
-                        .filter((eventType): eventType is string => Boolean(eventType)),
-                ),
-            ),
-        [bookings],
-    );
+    }, [eventTypeFilter, extraFieldRows, formSectionsByEventType]);
 
     React.useEffect(() => {
-        if (!filtersHydrated || loading) return;
+        if (!filtersHydrated || loading || refreshing) return;
 
         if (statusFilter !== "All" && !statusOpts.includes(statusFilter)) {
             setStatusFilter("All");
@@ -1437,6 +1422,7 @@ export default function BookingsPage() {
         loading,
         packageFilter,
         packages,
+        refreshing,
         statusFilter,
         statusOpts,
     ]);
@@ -1479,6 +1465,13 @@ export default function BookingsPage() {
         setCurrentPage(1);
     }, [searchQuery, statusFilter, packageFilter, freelanceFilter, eventTypeFilter, dateFromFilter, dateToFilter, extraFieldFilters, sortOrder, itemsPerPage]);
 
+    React.useEffect(() => {
+        const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages);
+        }
+    }, [currentPage, itemsPerPage, totalItems]);
+
     const orderedVisibleColumns = React.useMemo(
         () => columns.filter((column) => column.visible),
         [columns],
@@ -1487,60 +1480,55 @@ export default function BookingsPage() {
     React.useEffect(() => {
         const nextDefaults = lockBoundaryColumns([
             ...BASE_BOOKING_COLUMNS.slice(0, -1),
-            ...buildBookingMetadataColumns(bookings, formSectionsByEventType),
+            ...buildBookingMetadataColumns(metadataRows, formSectionsByEventType),
             BASE_BOOKING_COLUMNS[BASE_BOOKING_COLUMNS.length - 1],
         ]);
         setColumns((current) => mergeTableColumnPreferences(nextDefaults, current));
-    }, [bookings, formSectionsByEventType]);
+    }, [formSectionsByEventType, metadataRows]);
 
-    const filteredBookings = bookings.filter(b => {
-        const q = searchQuery.toLowerCase();
-        const matchesSearch = !searchQuery || (
-            b.client_name.toLowerCase().includes(q) ||
-            b.booking_code.toLowerCase().includes(q) ||
-            (b.location && b.location.toLowerCase().includes(q))
-        );
-        const matchesStatus = statusFilter === "All" || b.status === statusFilter;
-        const matchesPackage = packageFilter === "All" || getBookingServiceNames(b.service_selections || [], "main").includes(packageFilter);
-        const matchesFreelance = freelanceFilter === "All" || b.booking_freelancers.some(f => f.name === freelanceFilter);
-        const sessionDateValue = b.session_date ? b.session_date.slice(0, 10) : "";
-        const matchesDateFrom = !dateFromFilter || (sessionDateValue && sessionDateValue >= dateFromFilter);
-        const matchesDateTo = !dateToFilter || (sessionDateValue && sessionDateValue <= dateToFilter);
-        const matchesEventType = eventTypeFilter === "All" || b.event_type === eventTypeFilter;
-        const builtInExtraFields = extractBuiltInExtraFieldValues(b.extra_fields);
-        const customFieldMap = Object.fromEntries(
-            extractCustomFieldSnapshots(b.extra_fields).map((item) => [item.id, item.value]),
-        ) as Record<string, string>;
-        const matchesExtraFields = activeExtraFilterFields.every((field) => {
-            const filterValue = extraFieldFilters[field.key]?.trim();
-            if (!filterValue) return true;
-            const sourceValue = (builtInExtraFields[field.key] || customFieldMap[field.key] || "").trim();
-            if (!sourceValue) return false;
-            return field.mode === "exact"
-                ? sourceValue === filterValue
-                : sourceValue.toLowerCase().includes(filterValue.toLowerCase());
+    const filteredBookings = bookings;
+    const queryState = React.useMemo<PaginatedQueryState>(() => ({
+        page: currentPage,
+        perPage: itemsPerPage,
+        totalItems,
+        isLoading: loading,
+        isRefreshing: refreshing,
+    }), [currentPage, itemsPerPage, totalItems, loading, refreshing]);
+
+    async function exportBookings() {
+        const params = new URLSearchParams({
+            page: "1",
+            perPage: String(Math.max(totalItems, 1)),
+            search: searchQuery,
+            status: statusFilter,
+            package: packageFilter,
+            freelance: freelanceFilter,
+            eventType: eventTypeFilter,
+            dateFrom: dateFromFilter,
+            dateTo: dateToFilter,
+            sortOrder,
+            extraFilters: JSON.stringify(extraFieldFilters),
+            export: "1",
         });
-        return matchesSearch && matchesStatus && matchesPackage && matchesFreelance && matchesDateFrom && matchesDateTo && matchesEventType && matchesExtraFields;
-    }).sort((a, b) => {
-        if (sortOrder === "booking_newest") {
-            const dateComparison = (b.booking_date || b.created_at || "").localeCompare(
-                a.booking_date || a.created_at || "",
-            );
-            if (dateComparison !== 0) return dateComparison;
-            return (b.created_at || "").localeCompare(a.created_at || "");
-        }
-        if (sortOrder === "booking_oldest") {
-            const dateComparison = (a.booking_date || a.created_at || "").localeCompare(
-                b.booking_date || b.created_at || "",
-            );
-            if (dateComparison !== 0) return dateComparison;
-            return (a.created_at || "").localeCompare(b.created_at || "");
-        }
-        if (sortOrder === "session_newest") {
-            return (a.session_date || "").localeCompare(b.session_date || "");
-        }
-        return (b.session_date || "").localeCompare(a.session_date || "");
-    });
+        const response = await fetchPaginatedJson<Booking, BookingPageMetadata>(
+            `/api/internal/bookings?${params.toString()}`,
+        );
+        const exportData = response.items.map((booking) => ({
+            [tb("exportBookingCode")]: booking.booking_code,
+            [tb("exportClientName")]: booking.client_name,
+            [tb("exportWhatsApp")]: booking.client_whatsapp || "",
+            [tb("exportSessionDate")]: booking.session_date ? formatSessionDate(booking.session_date, { dateOnly: true }) : "",
+            [tb("exportLocation")]: booking.location || "",
+            [tb("exportPackage")]: booking.service_label || booking.services?.name || "",
+            [tb("exportTotalPrice")]: booking.total_price || 0,
+            [tb("exportDPPaid")]: booking.dp_paid || 0,
+            [tb("exportStatus")]: booking.status,
+        }));
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Bookings");
+        XLSX.writeFile(wb, `bookings_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }
 
     return (
         <div className="space-y-6">
@@ -1550,23 +1538,7 @@ export default function BookingsPage() {
             <PageHeader
                 actions={(
                     <>
-                        <Button variant="outline" className="w-full lg:w-auto" onClick={() => {
-                        const exportData = filteredBookings.map((b: Booking) => ({
-                            [tb("exportBookingCode")]: b.booking_code,
-                            [tb("exportClientName")]: b.client_name,
-                            [tb("exportWhatsApp")]: b.client_whatsapp || "",
-                            [tb("exportSessionDate")]: b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "",
-                            [tb("exportLocation")]: b.location || "",
-                            [tb("exportPackage")]: b.service_label || b.services?.name || "",
-                            [tb("exportTotalPrice")]: b.total_price || 0,
-                            [tb("exportDPPaid")]: b.dp_paid || 0,
-                            [tb("exportStatus")]: b.status,
-                        }));
-                        const ws = XLSX.utils.json_to_sheet(exportData);
-                        const wb = XLSX.utils.book_new();
-                        XLSX.utils.book_append_sheet(wb, ws, "Bookings");
-                        XLSX.writeFile(wb, `bookings_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
-                    }}>
+                        <Button variant="outline" className="w-full lg:w-auto" onClick={() => { void exportBookings(); }}>
                             <Download className="w-4 h-4" /> {tb("export")}
                         </Button>
                         <TableColumnManager
@@ -1581,7 +1553,7 @@ export default function BookingsPage() {
                             triggerClassName="w-full lg:w-auto"
                         />
                         <BatchImportButton
-                            onImported={() => fetchData()}
+                            onImported={() => fetchData("refresh")}
                             canCommitBookings={canWriteBookings}
                             bookingWriteBlockedMessage={bookingWriteBlockedMessage}
                             buttonClassName="w-full lg:w-auto"
@@ -1663,7 +1635,7 @@ export default function BookingsPage() {
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Jenis acara</label>
                                 <select value={eventTypeFilter} onChange={e => setEventTypeFilter(e.target.value)} className={`${selectFilterClass} w-full`}>
                                     <option value="All">Semua Acara</option>
-                                    {Array.from(new Set(bookings.map(b => b.event_type).filter(Boolean))).sort().map(t => (
+                                    {availableEventTypes.map(t => (
                                         <option key={t} value={t!}>{t}</option>
                                     ))}
                                 </select>
@@ -1721,12 +1693,12 @@ export default function BookingsPage() {
 
             {/* Mobile Cards */}
             <div className="md:hidden space-y-3">
-                {loading ? (
-                    <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
-                ) : filteredBookings.length === 0 ? (
+                {queryState.isLoading || queryState.isRefreshing ? (
+                    <CardListSkeleton count={Math.min(queryState.perPage, 4)} />
+                ) : queryState.totalItems === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">{tb("noDataFound")}</div>
                 ) : (
-                    paginateArray(filteredBookings, currentPage, itemsPerPage).map((booking) => (
+                    filteredBookings.map((booking) => (
                         <div key={booking.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
                             <div className="flex items-start justify-between">
                                 <div>
@@ -1787,12 +1759,12 @@ export default function BookingsPage() {
                     ))
                 )}
             </div>
-            {!loading && filteredBookings.length > 0 ? (
+            {!queryState.isLoading && !queryState.isRefreshing && queryState.totalItems > 0 ? (
                 <div className="md:hidden">
                     <TablePagination
-                        totalItems={filteredBookings.length}
-                        currentPage={currentPage}
-                        itemsPerPage={itemsPerPage}
+                        totalItems={queryState.totalItems}
+                        currentPage={queryState.page}
+                        itemsPerPage={queryState.perPage}
                         onPageChange={setCurrentPage}
                         onItemsPerPageChange={setItemsPerPage}
                         perPageOptions={[...PAGINATION_PER_PAGE_OPTIONS]}
@@ -1810,12 +1782,15 @@ export default function BookingsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border/50">
-                            {loading ? (
-                                <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground">{t("memuat")}</td></tr>
-                            ) : filteredBookings.length === 0 ? (
+                            {queryState.isLoading || queryState.isRefreshing ? (
+                                <TableRowsSkeleton
+                                    rows={Math.min(queryState.perPage, 6)}
+                                    columns={orderedVisibleColumns.length}
+                                />
+                            ) : queryState.totalItems === 0 ? (
                                 <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground text-xs italic">{tb("noDataFound")}</td></tr>
                             ) : (
-                                paginateArray(filteredBookings, currentPage, itemsPerPage).map((booking) => (
+                                filteredBookings.map((booking) => (
                                     <tr key={booking.id} className="hover:bg-muted/30 transition-colors group">
                                         {orderedVisibleColumns.map((column) => renderDesktopCell(booking, column))}
                                     </tr>
@@ -1824,7 +1799,7 @@ export default function BookingsPage() {
                         </tbody>
                     </table>
                 </div>
-                <TablePagination totalItems={filteredBookings.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...PAGINATION_PER_PAGE_OPTIONS]} />
+                <TablePagination totalItems={queryState.totalItems} currentPage={queryState.page} itemsPerPage={queryState.perPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...PAGINATION_PER_PAGE_OPTIONS]} />
             </div>
 
             {/* Status Change Modal */}
@@ -2087,10 +2062,10 @@ export default function BookingsPage() {
                             if (!driveLinkPopup.booking || !driveLinkInput) return;
                             setSavingDriveLink(true);
                             await supabase.from("bookings").update({ drive_folder_url: driveLinkInput }).eq("id", driveLinkPopup.booking.id);
-                            setBookings(prev => prev.map(b => b.id === driveLinkPopup.booking?.id ? { ...b, drive_folder_url: driveLinkInput } : b));
                             void triggerFastpikAutoSync(driveLinkPopup.booking.id);
                             setSavingDriveLink(false);
                             setDriveLinkPopup({ open: false, booking: null });
+                            void fetchData("refresh");
                         }}>
                             {savingDriveLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
                             {tb("save")}

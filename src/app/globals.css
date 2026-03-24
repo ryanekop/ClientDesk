@@ -63,6 +63,12 @@
     }
 }
 
+@keyframes shimmer {
+    to {
+        transform: translateX(100%);
+    }
+}
+
 .announcement-marquee-track {
     display: inline-flex;
     width: max-content;
@@ -92,6 +98,10 @@
 
 .announcement-aware-sticky {
     top: var(--global-announcement-height, 0px);
+}
+
+.animate-shimmer {
+    animation: shimmer 1.5s infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

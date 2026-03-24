@@ -54,7 +54,7 @@ import {
 } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
-import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
+import { TablePagination } from "@/components/ui/table-pagination";
 import {
   getActiveEventTypes,
   getBuiltInEventTypes,
@@ -62,6 +62,9 @@ import {
   normalizeEventTypeName,
   normalizeEventTypeList,
 } from "@/lib/event-type-config";
+import { CardListSkeleton } from "@/components/ui/data-skeletons";
+import { fetchPaginatedJson } from "@/lib/pagination/http";
+import type { PaginatedQueryState } from "@/lib/pagination/types";
 
 type Service = {
   id: string;
@@ -80,6 +83,12 @@ type Service = {
 };
 
 type ServiceGroupKey = "main" | "addon";
+
+type ServicesPageMetadata = {
+  eventTypeOptions: string[];
+  usedEventTypes: string[];
+  hasAnyServices: boolean;
+};
 
 const EVENT_TYPES = getBuiltInEventTypes();
 const SERVICE_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
@@ -491,7 +500,10 @@ export default function ServicesPage() {
   const t = useTranslations("Services");
   const ts = useTranslations("ServicesPage");
   const [services, setServices] = React.useState<Service[]>([]);
+  const [mainServices, setMainServices] = React.useState<Service[]>([]);
+  const [addonServices, setAddonServices] = React.useState<Service[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [editingService, setEditingService] = React.useState<Service | null>(null);
   const [isAddOpen, setIsAddOpen] = React.useState(false);
   const [isEditOpen, setIsEditOpen] = React.useState(false);
@@ -514,10 +526,15 @@ export default function ServicesPage() {
   const [activeDragId, setActiveDragId] = React.useState<string | null>(null);
   const [pageError, setPageError] = React.useState("");
   const [eventTypeOptions, setEventTypeOptions] = React.useState<string[]>(EVENT_TYPES);
+  const [usedEventTypeOptions, setUsedEventTypeOptions] = React.useState<string[]>(EVENT_TYPES);
+  const [mainTotalItems, setMainTotalItems] = React.useState(0);
+  const [addonTotalItems, setAddonTotalItems] = React.useState(0);
+  const [hasAnyServices, setHasAnyServices] = React.useState(false);
   const [deleteConfirmDialog, setDeleteConfirmDialog] = React.useState<{
     open: boolean;
     service: Service | null;
   }>({ open: false, service: null });
+  const hasLoadedPagedServicesRef = React.useRef(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -531,7 +548,7 @@ export default function ServicesPage() {
     }),
   );
 
-  const fetchServices = React.useCallback(async () => {
+  const fetchAllServices = React.useCallback(async () => {
     setLoading(true);
     setPageError("");
 
@@ -573,16 +590,95 @@ export default function ServicesPage() {
     if (error) {
       setPageError(error.message);
       setServices([]);
+      setHasAnyServices(false);
     } else {
-      setServices(((data || []) as Service[]).sort(compareServices));
+      const normalizedServices = ((data || []) as Service[]).sort(compareServices);
+      const nextUsedEventTypes = Array.from(
+        new Set(
+          normalizedServices.flatMap((service) =>
+            (service.event_types || [])
+              .map((eventType) => normalizeEventTypeName(eventType))
+              .filter((eventType): eventType is string => Boolean(eventType)),
+          ),
+        ),
+      ).sort((left, right) => left.localeCompare(right));
+      setServices(normalizedServices);
+      setUsedEventTypeOptions(nextUsedEventTypes);
+      setHasAnyServices(normalizedServices.length > 0);
     }
 
     setLoading(false);
   }, [supabase]);
 
+  const fetchPagedServices = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
+    if (!itemsPerPageHydrated || isReorderMode) return;
+
+    if (mode === "initial") {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
+    setPageError("");
+
+    try {
+      const createParams = (group: ServiceGroupKey, page: number) => {
+        const params = new URLSearchParams({
+          group,
+          page: String(page),
+          perPage: String(itemsPerPage),
+        });
+
+        if (searchQuery.trim()) {
+          params.set("search", searchQuery.trim());
+        }
+
+        if (selectedEventFilter) {
+          params.set("eventType", selectedEventFilter);
+        }
+
+        return params;
+      };
+
+      const [mainResponse, addonResponse] = await Promise.all([
+        fetchPaginatedJson<Service, ServicesPageMetadata>(
+          `/api/internal/services?${createParams("main", mainPage).toString()}`,
+        ),
+        fetchPaginatedJson<Service, ServicesPageMetadata>(
+          `/api/internal/services?${createParams("addon", addonPage).toString()}`,
+        ),
+      ]);
+
+      setMainServices(mainResponse.items);
+      setAddonServices(addonResponse.items);
+      setMainTotalItems(mainResponse.totalItems);
+      setAddonTotalItems(addonResponse.totalItems);
+
+      const metadata = mainResponse.metadata || addonResponse.metadata;
+      setEventTypeOptions(metadata?.eventTypeOptions || EVENT_TYPES);
+      setUsedEventTypeOptions(metadata?.usedEventTypes || []);
+      setHasAnyServices(Boolean(metadata?.hasAnyServices));
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Failed to load services.");
+      setMainServices([]);
+      setAddonServices([]);
+      setMainTotalItems(0);
+      setAddonTotalItems(0);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [addonPage, isReorderMode, itemsPerPage, itemsPerPageHydrated, mainPage, searchQuery, selectedEventFilter]);
+
   React.useEffect(() => {
-    fetchServices();
-  }, [fetchServices]);
+    async function hydrateCurrentUser() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setCurrentUserId(user?.id || null);
+    }
+
+    void hydrateCurrentUser();
+  }, [supabase]);
 
   React.useEffect(() => {
     if (!currentUserId) {
@@ -630,6 +726,63 @@ export default function ServicesPage() {
   }, [currentUserId]);
 
   React.useEffect(() => {
+    if (isReorderMode) {
+      void fetchAllServices();
+      return;
+    }
+
+    if (!itemsPerPageHydrated) return;
+    const mode = hasLoadedPagedServicesRef.current ? "refresh" : "initial";
+    hasLoadedPagedServicesRef.current = true;
+    void fetchPagedServices(mode);
+  }, [fetchAllServices, fetchPagedServices, isReorderMode, itemsPerPageHydrated]);
+
+  async function getRequiredUserId() {
+    if (currentUserId) return currentUserId;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error("Unauthorized");
+    }
+    setCurrentUserId(user.id);
+    return user.id;
+  }
+
+  async function normalizeGroupAfterMutation(groupKey: ServiceGroupKey) {
+    const userId = await getRequiredUserId();
+    const { data, error } = await supabase
+      .from("services")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("is_addon", groupKey === "addon")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    await Promise.all(
+      ((data || []) as Array<{ id: string }>).map((service, index) =>
+        supabase
+          .from("services")
+          .update({ sort_order: index })
+          .eq("id", service.id),
+      ),
+    );
+  }
+
+  async function refreshVisibleData() {
+    if (isReorderMode) {
+      await fetchAllServices();
+      return;
+    }
+
+    await fetchPagedServices("refresh");
+  }
+
+  React.useEffect(() => {
     if (!isAddOpen) {
       setAddIsAddon(false);
       setAddAffectsSchedule(true);
@@ -662,41 +815,27 @@ export default function ServicesPage() {
       setServices(previousServices);
       setPageError(failedResult.error.message);
     } else {
-      await fetchServices();
+      await fetchAllServices();
     }
 
     setSavingOrderGroup(null);
   }
 
-  async function normalizeGroupAfterMutation(
-    groupKey: ServiceGroupKey,
-    sourceServices: Service[],
-  ) {
-    const group = splitServicesByGroup(sourceServices)[groupKey];
-    const normalizedGroup = normalizeServiceOrder(group);
-    await Promise.all(
-      normalizedGroup.map((service) =>
-        supabase
-          .from("services")
-          .update({ sort_order: service.sort_order })
-          .eq("id", service.id),
-      ),
-    );
-  }
-
   async function handleAdd(formData: FormData) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    const userId = await getRequiredUserId();
 
     const isAddon = formData.get("is_addon") === "on";
     const isPublic = formData.get("is_public") === "on";
     const affectsSchedule = !isAddon || formData.get("affects_schedule") === "on";
-    const nextSortOrder = splitServicesByGroup(services)[isAddon ? "addon" : "main"].length;
+    const { count } = await supabase
+      .from("services")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_addon", isAddon);
+    const nextSortOrder = count || 0;
 
     const { error } = await supabase.from("services").insert({
-      user_id: user.id,
+      user_id: userId,
       name: formData.get("name") as string,
       description: (formData.get("description") as string) || null,
       price: parseFloat(formData.get("price") as string) || 0,
@@ -717,7 +856,7 @@ export default function ServicesPage() {
 
     if (!error) {
       setIsAddOpen(false);
-      await fetchServices();
+      await refreshVisibleData();
     } else {
       setPageError(error.message);
     }
@@ -732,11 +871,16 @@ export default function ServicesPage() {
       !nextIsAddon || formData.get("affects_schedule") === "on";
     const previousGroupKey = getServiceGroupKey(editingService);
     const nextGroupKey: ServiceGroupKey = nextIsAddon ? "addon" : "main";
-    const remainingServices = services.filter((service) => service.id !== editingService.id);
     const nextSortOrder =
       previousGroupKey === nextGroupKey
         ? editingService.sort_order
-        : splitServicesByGroup(remainingServices)[nextGroupKey].length;
+        : (
+            await supabase
+              .from("services")
+              .select("id", { count: "exact", head: true })
+              .eq("user_id", await getRequiredUserId())
+              .eq("is_addon", nextIsAddon)
+          ).count || 0;
 
     const { error } = await supabase
       .from("services")
@@ -765,12 +909,12 @@ export default function ServicesPage() {
     }
 
     if (previousGroupKey !== nextGroupKey) {
-      await normalizeGroupAfterMutation(previousGroupKey, remainingServices);
+      await normalizeGroupAfterMutation(previousGroupKey);
     }
 
     setIsEditOpen(false);
     setEditingService(null);
-    await fetchServices();
+    await refreshVisibleData();
   }
 
   async function handleToggleActive(service: Service) {
@@ -784,7 +928,7 @@ export default function ServicesPage() {
       return;
     }
 
-    await fetchServices();
+    await refreshVisibleData();
   }
 
   async function handleTogglePublic(service: Service) {
@@ -798,7 +942,7 @@ export default function ServicesPage() {
       return;
     }
 
-    await fetchServices();
+    await refreshVisibleData();
   }
 
   function openEditDialog(service: Service) {
@@ -828,11 +972,8 @@ export default function ServicesPage() {
       return;
     }
 
-    const nextServices = services.filter(
-      (service) => service.id !== currentService.id,
-    );
-    await normalizeGroupAfterMutation(getServiceGroupKey(currentService), nextServices);
-    await fetchServices();
+    await normalizeGroupAfterMutation(getServiceGroupKey(currentService));
+    await refreshVisibleData();
   }
 
   async function handleMove(service: Service, direction: "up" | "down") {
@@ -907,60 +1048,42 @@ export default function ServicesPage() {
     [ts],
   );
 
-  const filteredServices = React.useMemo(() => {
-    let result = [...services];
-
-    if (selectedEventFilter && !isShowAllPackagesEventType(selectedEventFilter)) {
-      result = result.filter(
-        (service) => serviceHasEventType(service, selectedEventFilter),
-      );
-    }
-
-    if (searchQuery.trim()) {
-      const lowerQuery = searchQuery.toLowerCase();
-      result = result.filter(
-        (service) =>
-          service.name.toLowerCase().includes(lowerQuery) ||
-          (service.description || "").toLowerCase().includes(lowerQuery),
-      );
-    }
-
-    return result.sort(compareServices);
-  }, [searchQuery, selectedEventFilter, services]);
-
   React.useEffect(() => {
     setMainPage(1);
     setAddonPage(1);
   }, [searchQuery, selectedEventFilter]);
 
   const usedEventTypes = React.useMemo(() => {
-    const set = new Set<string>();
-    services.forEach((service) =>
-      service.event_types?.forEach((eventType) => {
-        const normalized = normalizeEventTypeName(eventType);
-        if (normalized) set.add(normalized);
-      }),
-    );
+    const set = new Set<string>(usedEventTypeOptions);
     return eventTypeOptions.filter(
       (eventType) =>
         isShowAllPackagesEventType(eventType) || set.has(eventType),
     );
-  }, [eventTypeOptions, services]);
+  }, [eventTypeOptions, usedEventTypeOptions]);
 
   const groupedServices = React.useMemo(() => splitServicesByGroup(services), [services]);
-  const filteredGroupedServices = React.useMemo(
-    () => splitServicesByGroup(filteredServices),
-    [filteredServices],
-  );
-
   const displayedMainServices = isReorderMode
     ? groupedServices.main
-    : paginateArray(filteredGroupedServices.main, mainPage, itemsPerPage);
+    : mainServices;
   const displayedAddonServices = isReorderMode
     ? groupedServices.addon
-    : paginateArray(filteredGroupedServices.addon, addonPage, itemsPerPage);
+    : addonServices;
 
   const reorderSaving = savingOrderGroup !== null;
+  const mainQueryState = React.useMemo<PaginatedQueryState>(() => ({
+    page: mainPage,
+    perPage: itemsPerPage,
+    totalItems: isReorderMode ? groupedServices.main.length : mainTotalItems,
+    isLoading: loading,
+    isRefreshing: refreshing,
+  }), [groupedServices.main.length, isReorderMode, itemsPerPage, loading, mainPage, mainTotalItems, refreshing]);
+  const addonQueryState = React.useMemo<PaginatedQueryState>(() => ({
+    page: addonPage,
+    perPage: itemsPerPage,
+    totalItems: isReorderMode ? groupedServices.addon.length : addonTotalItems,
+    isLoading: loading,
+    isRefreshing: refreshing,
+  }), [addonPage, addonTotalItems, groupedServices.addon.length, isReorderMode, itemsPerPage, loading, refreshing]);
 
   return (
     <div className="space-y-6">
@@ -1168,7 +1291,7 @@ export default function ServicesPage() {
         </div>
       ) : null}
 
-      {!loading && services.length > 0 && !isReorderMode ? (
+      {!loading && hasAnyServices && !isReorderMode ? (
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1209,19 +1332,19 @@ export default function ServicesPage() {
         </div>
       ) : null}
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      {loading && isReorderMode ? (
+        <div className="space-y-4">
+          <CardListSkeleton count={3} withBadge />
         </div>
-      ) : services.length === 0 ? (
+      ) : !hasAnyServices ? (
         <div className="rounded-xl border bg-card p-12 text-center shadow-sm">
           <Package className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
           <h3 className="mb-1 text-lg font-semibold">{t("belumAda")}</h3>
           <p className="text-sm text-muted-foreground">{t("belumAdaDesc")}</p>
         </div>
       ) : !isReorderMode &&
-        filteredGroupedServices.main.length === 0 &&
-        filteredGroupedServices.addon.length === 0 ? (
+        mainQueryState.totalItems === 0 &&
+        addonQueryState.totalItems === 0 ? (
         <div className="rounded-xl border bg-card p-12 text-center shadow-sm">
           <Search className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
           <h3 className="mb-1 text-lg font-semibold">{ts("noResults")}</h3>
@@ -1328,9 +1451,11 @@ export default function ServicesPage() {
             <SectionDivider
               title={ts("mainPackages")}
               description={ts("mainPackagesDesc")}
-              count={filteredGroupedServices.main.length}
+              count={mainQueryState.totalItems}
             />
-            {displayedMainServices.length === 0 ? (
+            {mainQueryState.isLoading || mainQueryState.isRefreshing ? (
+              <CardListSkeleton count={Math.min(mainQueryState.perPage, 3)} withBadge />
+            ) : displayedMainServices.length === 0 ? (
               <EmptySectionState
                 title={ts("emptyMainTitle")}
                 description={ts("emptyMainDesc")}
@@ -1353,11 +1478,11 @@ export default function ServicesPage() {
                 ))}
               </div>
             )}
-            {filteredGroupedServices.main.length > itemsPerPage ? (
+            {mainQueryState.totalItems > itemsPerPage ? (
               <TablePagination
-                totalItems={filteredGroupedServices.main.length}
-                currentPage={mainPage}
-                itemsPerPage={itemsPerPage}
+                totalItems={mainQueryState.totalItems}
+                currentPage={mainQueryState.page}
+                itemsPerPage={mainQueryState.perPage}
                 perPageOptions={[...SERVICE_PER_PAGE_OPTIONS]}
                 onPageChange={setMainPage}
                 onItemsPerPageChange={(value) => {
@@ -1373,14 +1498,16 @@ export default function ServicesPage() {
             <SectionDivider
               title={ts("addonPackages")}
               description={ts("addonPackagesDesc")}
-              count={filteredGroupedServices.addon.length}
+              count={addonQueryState.totalItems}
               badge={
                 <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700 dark:bg-purple-500/10 dark:text-purple-400">
                   <Layers className="h-2.5 w-2.5" /> Add-on
                 </span>
               }
             />
-            {displayedAddonServices.length === 0 ? (
+            {addonQueryState.isLoading || addonQueryState.isRefreshing ? (
+              <CardListSkeleton count={Math.min(addonQueryState.perPage, 3)} withBadge />
+            ) : displayedAddonServices.length === 0 ? (
               <EmptySectionState
                 title={ts("emptyAddonTitle")}
                 description={ts("emptyAddonDesc")}
@@ -1403,11 +1530,11 @@ export default function ServicesPage() {
                 ))}
               </div>
             )}
-            {filteredGroupedServices.addon.length > itemsPerPage ? (
+            {addonQueryState.totalItems > itemsPerPage ? (
               <TablePagination
-                totalItems={filteredGroupedServices.addon.length}
-                currentPage={addonPage}
-                itemsPerPage={itemsPerPage}
+                totalItems={addonQueryState.totalItems}
+                currentPage={addonQueryState.page}
+                itemsPerPage={addonQueryState.perPage}
                 perPageOptions={[...SERVICE_PER_PAGE_OPTIONS]}
                 onPageChange={setAddonPage}
                 onItemsPerPageChange={(value) => {

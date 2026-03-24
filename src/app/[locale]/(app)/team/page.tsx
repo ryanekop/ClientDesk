@@ -1,14 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Edit2, Trash2, Users, MessageCircle, Loader2, X, Search } from "lucide-react";
+import { Plus, Edit2, Trash2, Users, MessageCircle, X, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
-import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
 import { PageHeader } from "@/components/ui/page-header";
 import {
@@ -18,6 +18,9 @@ import {
     type TableColumnPreference,
 } from "@/lib/table-column-prefs";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
+import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
+import { fetchPaginatedJson } from "@/lib/pagination/http";
+import type { PaginatedQueryState } from "@/lib/pagination/types";
 
 
 type Freelancer = {
@@ -64,6 +67,11 @@ const TEAM_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:team:items_per_page";
 const TEAM_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const TEAM_DEFAULT_ITEMS_PER_PAGE = 10;
 
+type TeamPageMetadata = {
+    tags: string[];
+    tableColumnPreferences: TableColumnPreference[] | null;
+};
+
 function normalizeTeamItemsPerPage(value: unknown) {
     const parsed = typeof value === "number" ? value : Number(value);
     return TEAM_PER_PAGE_OPTIONS.includes(
@@ -108,6 +116,7 @@ export default function TeamPage() {
     const tt = useTranslations("TeamPage");
     const [members, setMembers] = React.useState<Freelancer[]>([]);
     const [loading, setLoading] = React.useState(true);
+    const [refreshing, setRefreshing] = React.useState(false);
     const [editingMember, setEditingMember] = React.useState<Freelancer | null>(null);
     const [isAddOpen, setIsAddOpen] = React.useState(false);
     const [isEditOpen, setIsEditOpen] = React.useState(false);
@@ -123,6 +132,8 @@ export default function TeamPage() {
     const [editTagInput, setEditTagInput] = React.useState("");
     const [searchQuery, setSearchQuery] = React.useState("");
     const [tagFilter, setTagFilter] = React.useState("All");
+    const [availableTags, setAvailableTags] = React.useState<string[]>([]);
+    const [totalItems, setTotalItems] = React.useState(0);
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(TEAM_COLUMN_DEFAULTS);
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
@@ -130,37 +141,69 @@ export default function TeamPage() {
         open: boolean;
         member: Freelancer | null;
     }>({ open: false, member: null });
+    const hasLoadedMembersRef = React.useRef(false);
 
-    const fetchMembers = React.useCallback(async () => {
-        setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        setCurrentUserId(user.id);
+    const fetchMembers = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
+        if (!itemsPerPageHydrated) return;
 
-        const { data } = await supabase
-            .from("freelance")
-            .select("*")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false });
+        if (mode === "initial") {
+            setLoading(true);
+        } else {
+            setRefreshing(true);
+        }
 
-        const { data: profile } = await supabase
-            .from("profiles")
-            .select("table_column_preferences")
-            .eq("id", user.id)
-            .single();
-        const profilePrefs = (profile as { table_column_preferences?: { team?: TableColumnPreference[] } | null } | null)?.table_column_preferences?.team;
+        try {
+            const params = new URLSearchParams({
+                page: String(currentPage),
+                perPage: String(itemsPerPage),
+            });
 
-        setColumns(
-            mergeTableColumnPreferences(
-                TEAM_COLUMN_DEFAULTS,
-                profilePrefs,
-            ),
-        );
-        setMembers(((data || []) as Freelancer[]).map((d) => ({ ...d, tags: d.tags || [] })));
-        setLoading(false);
+            if (searchQuery.trim()) {
+                params.set("search", searchQuery.trim());
+            }
+
+            if (tagFilter !== "All") {
+                params.set("tag", tagFilter);
+            }
+
+            const response = await fetchPaginatedJson<Freelancer, TeamPageMetadata>(
+                `/api/internal/team?${params.toString()}`,
+            );
+            setMembers(
+                response.items.map((member) => ({
+                    ...member,
+                    tags: Array.isArray(member.tags) ? member.tags : [],
+                })),
+            );
+            setTotalItems(response.totalItems);
+            setAvailableTags(response.metadata?.tags || []);
+            setColumns(
+                mergeTableColumnPreferences(
+                    TEAM_COLUMN_DEFAULTS,
+                    response.metadata?.tableColumnPreferences || undefined,
+                ),
+            );
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, [currentPage, itemsPerPage, itemsPerPageHydrated, searchQuery, tagFilter]);
+
+    React.useEffect(() => {
+        async function hydrateCurrentUser() {
+            const { data: { user } } = await supabase.auth.getUser();
+            setCurrentUserId(user?.id || null);
+        }
+
+        void hydrateCurrentUser();
     }, [supabase]);
 
-    React.useEffect(() => { void fetchMembers(); }, [fetchMembers]);
+    React.useEffect(() => {
+        if (!itemsPerPageHydrated) return;
+        const mode = hasLoadedMembersRef.current ? "refresh" : "initial";
+        hasLoadedMembersRef.current = true;
+        void fetchMembers(mode);
+    }, [fetchMembers, itemsPerPageHydrated]);
 
     React.useEffect(() => {
         if (!currentUserId) {
@@ -217,7 +260,12 @@ export default function TeamPage() {
             tags: addTags,
         });
 
-        if (!error) { setIsAddOpen(false); setAddTags([]); setTagInput(""); fetchMembers(); }
+        if (!error) {
+            setIsAddOpen(false);
+            setAddTags([]);
+            setTagInput("");
+            void fetchMembers("refresh");
+        }
     }
 
     async function handleEdit(formData: FormData) {
@@ -237,7 +285,13 @@ export default function TeamPage() {
             })
             .eq("id", editingMember.id);
 
-        if (!error) { setIsEditOpen(false); setEditingMember(null); setEditTags([]); setEditTagInput(""); fetchMembers(); }
+        if (!error) {
+            setIsEditOpen(false);
+            setEditingMember(null);
+            setEditTags([]);
+            setEditTagInput("");
+            void fetchMembers("refresh");
+        }
     }
 
     async function handleToggleStatus(member: Freelancer) {
@@ -245,7 +299,7 @@ export default function TeamPage() {
             .from("freelance")
             .update({ status: member.status === "active" ? "inactive" : "active" })
             .eq("id", member.id);
-        fetchMembers();
+        void fetchMembers("refresh");
     }
 
     function handleDelete(id: string) {
@@ -259,7 +313,7 @@ export default function TeamPage() {
         if (!member) return;
         setDeleteConfirmDialog({ open: false, member: null });
         await supabase.from("freelance").delete().eq("id", member.id);
-        fetchMembers();
+        void fetchMembers("refresh");
     }
 
     function sendWhatsApp(phone: string | null) {
@@ -271,25 +325,32 @@ export default function TeamPage() {
     const selectFilterClass = "h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer";
     const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 
-    const allTags = React.useMemo(() => Array.from(new Set(members.flatMap(m => m.tags))).sort(), [members]);
-
-    const filteredMembers = React.useMemo(() => {
-        return members.filter(m => {
-            const q = searchQuery.toLowerCase();
-            const matchSearch = !searchQuery || m.name.toLowerCase().includes(q) || m.role.toLowerCase().includes(q);
-            const matchTag = tagFilter === "All" || m.tags.includes(tagFilter);
-            return matchSearch && matchTag;
-        });
-    }, [members, searchQuery, tagFilter]);
-
     React.useEffect(() => {
         setCurrentPage(1);
     }, [searchQuery, tagFilter, itemsPerPage]);
+
+    React.useEffect(() => {
+        const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages);
+        }
+    }, [currentPage, itemsPerPage, totalItems]);
 
     const orderedVisibleColumns = React.useMemo(
         () => columns.filter((column) => column.visible),
         [columns],
     );
+    const hasActiveListFilters = searchQuery.trim().length > 0 || tagFilter !== "All";
+    const showListControls =
+        !loading &&
+        (totalItems > 0 || hasActiveListFilters || availableTags.length > 0);
+    const queryState = React.useMemo<PaginatedQueryState>(() => ({
+        page: currentPage,
+        perPage: itemsPerPage,
+        totalItems,
+        isLoading: loading,
+        isRefreshing: refreshing,
+    }), [currentPage, itemsPerPage, totalItems, loading, refreshing]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -465,7 +526,7 @@ export default function TeamPage() {
                                 </form>
                             </DialogContent>
                         </Dialog>
-                        {!loading && members.length > 0 ? (
+                        {!loading && totalItems > 0 ? (
                             <TableColumnManager
                                 title="Kelola Kolom Tim/Freelance"
                                 description="Atur kolom yang tampil di tabel tim atau freelance. Kolom Nama dan Aksi selalu terkunci."
@@ -488,7 +549,7 @@ export default function TeamPage() {
             </PageHeader>
 
             {/* Search + Filter */}
-            {!loading && members.length > 0 && (
+            {showListControls && (
                 <div className="flex flex-col sm:flex-row gap-3">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -504,36 +565,49 @@ export default function TeamPage() {
                             </button>
                         )}
                     </div>
-                    {allTags.length > 0 && (
+                    {availableTags.length > 0 && (
                         <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className={`${selectFilterClass} w-full sm:w-auto`}>
                             <option value="All">Semua Tag</option>
-                            {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+                            {availableTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
                         </select>
                     )}
                 </div>
             )}
 
-            {loading ? (
-                <div className="flex items-center justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-            ) : members.length === 0 ? (
+            {queryState.isLoading || queryState.isRefreshing ? (
+                <>
+                    <div className="md:hidden">
+                        <CardListSkeleton count={Math.min(queryState.perPage, 4)} withBadge={false} />
+                    </div>
+                    <div className="hidden md:block rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
+                        <div className="relative overflow-x-auto">
+                            <table className="min-w-[860px] w-full text-sm text-left">
+                                <thead className="text-xs uppercase bg-card border-b">
+                                    <tr>
+                                        {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                    <TableRowsSkeleton
+                                        rows={Math.min(queryState.perPage, 6)}
+                                        columns={orderedVisibleColumns.length}
+                                    />
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </>
+            ) : queryState.totalItems === 0 ? (
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-12 text-center">
                     <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <h3 className="font-semibold text-lg mb-1">{members.length === 0 ? t("belumAda") : "Tidak ada hasil"}</h3>
-                    <p className="text-muted-foreground text-sm">{members.length === 0 ? t("belumAdaDesc") : "Coba ubah kata kunci pencarian atau filter tag."}</p>
-                </div>
-            ) : filteredMembers.length === 0 ? (
-                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-12 text-center">
-                    <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <h3 className="font-semibold text-lg mb-1">{members.length === 0 ? t("belumAda") : "Tidak ada hasil"}</h3>
-                    <p className="text-muted-foreground text-sm">{members.length === 0 ? t("belumAdaDesc") : "Coba ubah kata kunci pencarian atau filter tag."}</p>
+                    <h3 className="font-semibold text-lg mb-1">{hasActiveListFilters ? "Tidak ada hasil" : t("belumAda")}</h3>
+                    <p className="text-muted-foreground text-sm">{hasActiveListFilters ? "Coba ubah kata kunci pencarian atau filter tag." : t("belumAdaDesc")}</p>
                 </div>
             ) : (
                 <>
                     {/* Mobile Cards */}
                     <div className="md:hidden space-y-3">
-                        {paginateArray(filteredMembers, currentPage, itemsPerPage).map((member) => (
+                        {members.map((member) => (
                             <div key={member.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium shrink-0">
@@ -592,9 +666,9 @@ export default function TeamPage() {
                     </div>
                     <div className="md:hidden">
                         <TablePagination
-                            totalItems={filteredMembers.length}
-                            currentPage={currentPage}
-                            itemsPerPage={itemsPerPage}
+                            totalItems={queryState.totalItems}
+                            currentPage={queryState.page}
+                            itemsPerPage={queryState.perPage}
                             onPageChange={setCurrentPage}
                             onItemsPerPageChange={setItemsPerPage}
                             perPageOptions={[...TEAM_PER_PAGE_OPTIONS]}
@@ -611,7 +685,7 @@ export default function TeamPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
-                                    {paginateArray(filteredMembers, currentPage, itemsPerPage).map((member) => (
+                                    {members.map((member) => (
                                         <tr key={member.id} className="group hover:bg-muted/50 transition-colors">
                                             {orderedVisibleColumns.map((column) => renderDesktopCell(member, column))}
                                         </tr>
@@ -619,7 +693,7 @@ export default function TeamPage() {
                                 </tbody>
                             </table>
                         </div>
-                        <TablePagination totalItems={filteredMembers.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...TEAM_PER_PAGE_OPTIONS]} />
+                        <TablePagination totalItems={queryState.totalItems} currentPage={queryState.page} itemsPerPage={queryState.perPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...TEAM_PER_PAGE_OPTIONS]} />
                     </div>
                 </>
             )}

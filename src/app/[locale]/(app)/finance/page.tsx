@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown, Copy, ClipboardCheck, Search, ListOrdered, X } from "lucide-react";
+import { Clock, CheckCircle2, FileText, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown, Copy, ClipboardCheck, Search, ListOrdered, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -12,7 +12,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
-import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Link } from "@/i18n/routing";
 import {
     BookingWriteReadonlyBanner,
@@ -48,7 +48,6 @@ import {
     getFinalInvoiceTotal,
     getNetVerifiedRevenueAmount,
     getRemainingFinalPayment,
-    getVerifiedDpAmount,
 } from "@/lib/final-settlement";
 import {
     fillWhatsAppTemplate,
@@ -64,7 +63,6 @@ import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
 import {
     DEFAULT_CLIENT_STATUSES,
     getBookingStatusOptions,
-    resolveUnifiedBookingStatus,
 } from "@/lib/client-status";
 import {
     buildWhatsAppUrl,
@@ -72,6 +70,10 @@ import {
     openWhatsAppUrl,
     preopenWindowForDeferredNavigation,
 } from "@/utils/whatsapp-link";
+import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
+import { fetchPaginatedJson } from "@/lib/pagination/http";
+import type { PaginatedQueryState } from "@/lib/pagination/types";
+
 type BookingFinance = {
     id: string;
     booking_code: string;
@@ -135,6 +137,27 @@ const FINANCE_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const FINANCE_DEFAULT_ITEMS_PER_PAGE = 10;
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
 
+type FinancePageMetadata = {
+    studioName: string;
+    bookingStatusOptions: string[];
+    packageOptions: string[];
+    tableColumnPreferences: TableColumnPreference[] | null;
+    formSectionsByEventType: Record<string, FormLayoutItem[]>;
+    metadataRows: Array<{
+        event_type?: string | null;
+        extra_fields?: Record<string, unknown> | null;
+    }>;
+    summary: {
+        totalRevenue: number;
+        totalPending: number;
+        totalDP: number;
+        totalBookings: number;
+        paidCount: number;
+        unpaidCount: number;
+        monthlyRevenueTotal: number;
+    };
+};
+
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -154,16 +177,6 @@ function normalizeFinanceItemsPerPage(value: unknown) {
         : FINANCE_DEFAULT_ITEMS_PER_PAGE;
 }
 
-function isSameLocalMonth(dateValue: string | null, referenceDate: Date) {
-    if (!dateValue) return false;
-    const parsedDate = new Date(dateValue);
-    if (Number.isNaN(parsedDate.getTime())) return false;
-    return (
-        parsedDate.getFullYear() === referenceDate.getFullYear() &&
-        parsedDate.getMonth() === referenceDate.getMonth()
-    );
-}
-
 export default function FinancePage() {
     const supabase = createClient();
     const t = useTranslations("Finance");
@@ -171,6 +184,7 @@ export default function FinancePage() {
     const locale = useLocale();
     const [bookings, setBookings] = React.useState<BookingFinance[]>([]);
     const [loading, setLoading] = React.useState(true);
+    const [refreshing, setRefreshing] = React.useState(false);
     const [filter, setFilter] = React.useState<FinanceFilterValue>("all");
     const [searchQuery, setSearchQuery] = React.useState("");
     const [packageFilter, setPackageFilter] = React.useState("All");
@@ -191,6 +205,18 @@ export default function FinancePage() {
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
+    const [metadataRows, setMetadataRows] = React.useState<Array<{ event_type?: string | null; extra_fields?: Record<string, unknown> | null }>>([]);
+    const [packageOptions, setPackageOptions] = React.useState<string[]>([]);
+    const [totalItems, setTotalItems] = React.useState(0);
+    const [summary, setSummary] = React.useState<FinancePageMetadata["summary"]>({
+        totalRevenue: 0,
+        totalPending: 0,
+        totalDP: 0,
+        totalBookings: 0,
+        paidCount: 0,
+        unpaidCount: 0,
+        monthlyRevenueTotal: 0,
+    });
     const [invoiceMenuBookingId, setInvoiceMenuBookingId] = React.useState<string | null>(null);
     const [copyMenuBookingId, setCopyMenuBookingId] = React.useState<string | null>(null);
     const [waMenuBookingId, setWaMenuBookingId] = React.useState<string | null>(null);
@@ -215,6 +241,7 @@ export default function FinancePage() {
     const requireBookingWrite = useBookingWriteGuard(({ message }) => {
         setFeedbackDialog({ open: true, message });
     });
+    const hasLoadedFinanceRef = React.useRef(false);
 
     const closeDesktopMenus = React.useCallback(() => {
         setInvoiceMenuBookingId(null);
@@ -232,75 +259,84 @@ export default function FinancePage() {
         setBookingStatusFilter("All");
     }, []);
 
-    const fetchBookings = React.useCallback(async () => {
-        setLoading(true);
+    const fetchTemplates = React.useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        setCurrentUserId(user.id);
-
-        const [{ data }, { data: templates }, { data: profile }] = await Promise.all([
-            supabase
-                .from("bookings")
-                .select("id, booking_code, client_name, client_whatsapp, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, status, session_date, event_type, location, location_lat, location_lng, tracking_uuid, client_status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, payment_proof_url, payment_proof_drive_file_id, final_payment_proof_url, final_payment_proof_drive_file_id, extra_fields, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))")
-                .eq("user_id", user.id)
-                .order("created_at", { ascending: false }),
-            supabase
-                .from("templates")
-                .select("id, type, name, content, content_en, event_type")
-                .eq("user_id", user.id),
-            supabase.from("profiles").select("studio_name, table_column_preferences, form_sections, custom_client_statuses").eq("id", user.id).single(),
-        ]);
-
-        const normalizedBookings = ((data || []) as unknown as Array<BookingFinance & { booking_services?: unknown[] }>).map((booking) => {
-            const legacyService = normalizeLegacyServiceRecord(booking.services);
-            const serviceSelections = normalizeBookingServiceSelections(
-                booking.booking_services,
-                booking.services,
-            );
-            return {
-                ...booking,
-                service_selections: serviceSelections,
-                service_label: getBookingServiceLabel(serviceSelections, {
-                    kind: "main",
-                    fallback: legacyService?.name || "-",
-                }),
-            };
-        }) as BookingFinance[];
-        const profilePrefs = (profile as { table_column_preferences?: { finance?: TableColumnPreference[] } | null } | null)?.table_column_preferences?.finance;
-        const rawSections = (profile as { form_sections?: Record<string, FormLayoutItem[]> | null } | null)?.form_sections;
-        const resolvedStatusOptions = getBookingStatusOptions(
-            (profile as { custom_client_statuses?: string[] | null } | null)?.custom_client_statuses,
-        );
-        const resolvedSections =
-            rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)
-                ? rawSections
-                : {};
-        const nextColumnDefaults = lockBoundaryColumns([
-            ...BASE_FINANCE_COLUMNS.slice(0, -1),
-            ...buildBookingMetadataColumns(normalizedBookings, resolvedSections),
-            BASE_FINANCE_COLUMNS[BASE_FINANCE_COLUMNS.length - 1],
-        ]);
-        if (rawSections && typeof rawSections === "object" && !Array.isArray(rawSections)) {
-            setFormSectionsByEventType(rawSections);
-        } else {
-            setFormSectionsByEventType({});
-        }
-        setBookings(normalizedBookings);
-        setBookingStatusOptions(resolvedStatusOptions);
-        setSavedTemplates((templates || []) as { id: string; type: string; name?: string | null; content: string; content_en: string; event_type: string | null }[]);
-        setStudioName(profile?.studio_name || "");
-        setColumns(
-            mergeTableColumnPreferences(
-                nextColumnDefaults,
-                profilePrefs,
-            ),
-        );
-        setLoading(false);
+        const { data } = await supabase
+            .from("templates")
+            .select("id, type, name, content, content_en, event_type")
+            .eq("user_id", user.id);
+        setSavedTemplates((data || []) as { id: string; type: string; name?: string | null; content: string; content_en: string; event_type: string | null }[]);
     }, [supabase]);
 
+    const fetchFinancePage = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
+        if (!itemsPerPageHydrated || !filtersHydrated) return;
+
+        if (mode === "initial") {
+            setLoading(true);
+        } else {
+            setRefreshing(true);
+        }
+
+        try {
+            const params = new URLSearchParams({
+                page: String(currentPage),
+                perPage: String(itemsPerPage),
+                filter,
+                search: searchQuery,
+                package: packageFilter,
+                bookingStatus: bookingStatusFilter,
+            });
+            const response = await fetchPaginatedJson<BookingFinance, FinancePageMetadata>(
+                `/api/internal/finance?${params.toString()}`,
+            );
+            const metadata = response.metadata;
+            const nextColumnDefaults = lockBoundaryColumns([
+                ...BASE_FINANCE_COLUMNS.slice(0, -1),
+                ...buildBookingMetadataColumns(
+                    metadata?.metadataRows || [],
+                    metadata?.formSectionsByEventType || {},
+                ),
+                BASE_FINANCE_COLUMNS[BASE_FINANCE_COLUMNS.length - 1],
+            ]);
+
+            setBookings(response.items);
+            setTotalItems(response.totalItems);
+            setBookingStatusOptions(metadata?.bookingStatusOptions || getBookingStatusOptions(DEFAULT_CLIENT_STATUSES));
+            setPackageOptions(metadata?.packageOptions || []);
+            setStudioName(metadata?.studioName || "");
+            setFormSectionsByEventType(metadata?.formSectionsByEventType || {});
+            setMetadataRows(metadata?.metadataRows || []);
+            setSummary(metadata?.summary || {
+                totalRevenue: 0,
+                totalPending: 0,
+                totalDP: 0,
+                totalBookings: 0,
+                paidCount: 0,
+                unpaidCount: 0,
+                monthlyRevenueTotal: 0,
+            });
+            setColumns(
+                mergeTableColumnPreferences(
+                    nextColumnDefaults,
+                    metadata?.tableColumnPreferences || undefined,
+                ),
+            );
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, [bookingStatusFilter, currentPage, filter, filtersHydrated, itemsPerPage, itemsPerPageHydrated, packageFilter, searchQuery]);
+
     React.useEffect(() => {
-        void fetchBookings();
-    }, [fetchBookings]);
+        async function hydrateCurrentUser() {
+            const { data: { user } } = await supabase.auth.getUser();
+            setCurrentUserId(user?.id || null);
+        }
+
+        void hydrateCurrentUser();
+        void fetchTemplates();
+    }, [fetchTemplates, supabase]);
 
     React.useEffect(() => {
         if (!currentUserId) {
@@ -395,6 +431,13 @@ export default function FinancePage() {
     }, [currentUserId]);
 
     React.useEffect(() => {
+        if (!itemsPerPageHydrated || !filtersHydrated) return;
+        const mode = hasLoadedFinanceRef.current ? "refresh" : "initial";
+        hasLoadedFinanceRef.current = true;
+        void fetchFinancePage(mode);
+    }, [fetchFinancePage, filtersHydrated, itemsPerPageHydrated]);
+
+    React.useEffect(() => {
         if (!invoiceMenuBookingId && !copyMenuBookingId && !waMenuBookingId) return;
         function handleOutsideClick(event: MouseEvent) {
             const target = event.target as HTMLElement | null;
@@ -422,11 +465,11 @@ export default function FinancePage() {
     React.useEffect(() => {
         const nextDefaults = lockBoundaryColumns([
             ...BASE_FINANCE_COLUMNS.slice(0, -1),
-            ...buildBookingMetadataColumns(bookings, formSectionsByEventType),
+            ...buildBookingMetadataColumns(metadataRows, formSectionsByEventType),
             BASE_FINANCE_COLUMNS[BASE_FINANCE_COLUMNS.length - 1],
         ]);
         setColumns((current) => mergeTableColumnPreferences(nextDefaults, current));
-    }, [bookings, formSectionsByEventType]);
+    }, [formSectionsByEventType, metadataRows]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -470,7 +513,7 @@ export default function FinancePage() {
             final_payment_amount: remaining,
             final_paid_at: new Date().toISOString(),
         }).eq("id", id);
-        fetchBookings();
+        void fetchFinancePage("refresh");
     }
 
     async function handleMarkUnpaid(id: string) {
@@ -482,7 +525,7 @@ export default function FinancePage() {
             final_payment_amount: 0,
             final_paid_at: null,
         }).eq("id", id);
-        fetchBookings();
+        void fetchFinancePage("refresh");
     }
 
     const formatCurrency = (n: number) =>
@@ -1175,79 +1218,69 @@ export default function FinancePage() {
         }
     }
 
-    const totalRevenue = bookings.reduce((sum, booking) => sum + getNetVerifiedRevenue(booking), 0);
-    const totalPending = bookings
-        .filter((b) => !isCancelledBooking(b) && !b.is_fully_paid)
-        .reduce((sum, booking) => sum + getRemainingFinalPayment({
-        total_price: booking.total_price,
-        dp_paid: booking.dp_paid,
-        final_adjustments: booking.final_adjustments,
-        final_payment_amount: booking.final_payment_amount,
-        final_paid_at: booking.final_paid_at,
-        settlement_status: booking.settlement_status,
-        is_fully_paid: booking.is_fully_paid,
-    }), 0);
-    const totalDP = bookings.reduce((sum, booking) => sum + getVerifiedDpAmount({
-        total_price: booking.total_price,
-        dp_paid: booking.dp_paid,
-        dp_verified_amount: booking.dp_verified_amount,
-    }), 0);
-    const monthlyRevenueSummary = React.useMemo(() => {
-        const now = new Date();
-        const monthLabel = new Intl.DateTimeFormat(locale, {
-            month: "long",
-            year: "numeric",
-        }).format(now);
-        const total = bookings.reduce((sum, booking) => {
-            const verifiedDp = isSameLocalMonth(booking.dp_verified_at, now)
-                ? Math.max(booking.dp_verified_amount || 0, 0)
-                : 0;
-            const verifiedFinalPayment = isSameLocalMonth(booking.final_paid_at, now)
-                ? Math.max(booking.final_payment_amount || 0, 0)
-                : 0;
-            const refundedDp = isSameLocalMonth(booking.dp_refunded_at, now)
-                ? Math.min(
-                    Math.max(booking.dp_refund_amount || 0, 0),
-                    Math.max(booking.dp_verified_amount || 0, 0),
-                )
-                : 0;
-            return sum + verifiedDp + verifiedFinalPayment - refundedDp;
-        }, 0);
-
-        return { monthLabel, total };
-    }, [bookings, locale]);
     const hasActiveFilters =
         searchQuery.trim().length > 0 ||
         filter !== "all" ||
         packageFilter !== "All" ||
         bookingStatusFilter !== "All";
 
-    function exportFinance() {
+    const monthlyRevenueLabel = React.useMemo(
+        () =>
+            new Intl.DateTimeFormat(locale, {
+                month: "long",
+                year: "numeric",
+            }).format(new Date()),
+        [locale],
+    );
+
+    const queryState = React.useMemo<PaginatedQueryState>(() => ({
+        page: currentPage,
+        perPage: itemsPerPage,
+        totalItems,
+        isLoading: loading,
+        isRefreshing: refreshing,
+    }), [currentPage, itemsPerPage, totalItems, loading, refreshing]);
+
+    async function exportFinance() {
+        const params = new URLSearchParams({
+            page: "1",
+            perPage: String(Math.max(totalItems, 1)),
+            filter,
+            search: searchQuery,
+            package: packageFilter,
+            bookingStatus: bookingStatusFilter,
+            export: "1",
+        });
+        const response = await fetchPaginatedJson<BookingFinance, FinancePageMetadata>(
+            `/api/internal/finance?${params.toString()}`,
+        );
+        const exportBookings = response.items;
+        const exportSummary = response.metadata?.summary || summary;
         const wb = XLSX.utils.book_new();
 
         // Sheet 1: Summary
         const summaryData: Array<Array<string | number>> = [
             ["Ringkasan Keuangan", "", ""],
             ["", "", ""],
-            ["Total Pemasukan", totalRevenue, ""],
-            ["Sisa Tagihan (Belum Lunas)", totalPending, ""],
-            ["Total DP Diterima", totalDP, ""],
-            ["Jumlah Booking Lunas", bookings.filter((b) => !isCancelledBooking(b) && b.is_fully_paid).length, ""],
-            ["Jumlah Booking Belum Lunas", bookings.filter((b) => !isCancelledBooking(b) && !b.is_fully_paid).length, ""],
+            ["Total Pemasukan", exportSummary.totalRevenue, ""],
+            ["Sisa Tagihan (Belum Lunas)", exportSummary.totalPending, ""],
+            ["Total DP Diterima", exportSummary.totalDP, ""],
+            ["Jumlah Booking Lunas", exportSummary.paidCount, ""],
+            ["Jumlah Booking Belum Lunas", exportSummary.unpaidCount, ""],
             ["", "", ""],
             ["Ringkasan per Bulan", "", ""],
             ["Bulan", "Total Harga", "Pemasukan Bersih"],
         ];
         // Group by month
         const monthMap: Record<string, { total: number; dp: number }> = {};
-        bookings.forEach(b => {
+        exportBookings.forEach((b) => {
             const d = b.session_date ? new Date(b.session_date) : new Date();
             const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
             if (!monthMap[key]) monthMap[key] = { total: 0, dp: 0 };
             monthMap[key].total += getFinalInvoiceTotal(b.total_price, b.final_adjustments);
             monthMap[key].dp += getNetVerifiedRevenue(b);
         });
-        Object.keys(monthMap).sort().reverse().forEach(key => {
+        Object.keys(monthMap).sort().reverse().forEach((key) => {
             const [y, m] = key.split("-");
             const label = new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
             summaryData.push([label, monthMap[key].total, monthMap[key].dp]);
@@ -1257,7 +1290,7 @@ export default function FinancePage() {
         XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
 
         // Sheet 2: Detail
-        const detailData = bookings.map(b => {
+        const detailData = exportBookings.map((b) => {
             const initialBreakdown = getInitialPriceBreakdown(b);
             return {
                 "Kode Booking": b.booking_code,
@@ -1296,52 +1329,6 @@ export default function FinancePage() {
         window.open(url, "_blank");
     }
 
-    const packageOptions = React.useMemo(
-        () =>
-            Array.from(
-                new Set(
-                    bookings
-                        .flatMap((booking) => getBookingServiceNames(booking.service_selections || [], "main"))
-                        .filter(Boolean),
-                ),
-            ).sort((a, b) => a.localeCompare(b)),
-        [bookings],
-    );
-
-    const getUnifiedBookingStatus = React.useCallback(
-        (booking: BookingFinance) =>
-            resolveUnifiedBookingStatus({
-                status: booking.status,
-                clientStatus: booking.client_status,
-                statuses: bookingStatusOptions,
-            }),
-        [bookingStatusOptions],
-    );
-
-    const filtered = (filter === "all"
-        ? bookings
-        : filter === "paid"
-            ? bookings.filter((booking) => !isCancelledBooking(booking) && booking.is_fully_paid)
-            : bookings.filter((booking) => !isCancelledBooking(booking) && !booking.is_fully_paid)
-    ).filter((booking) => {
-        const query = searchQuery.trim().toLowerCase();
-        const packageNames = getBookingServiceNames(booking.service_selections || [], "main");
-        const unifiedStatus = getUnifiedBookingStatus(booking);
-
-        const matchesSearch =
-            !query ||
-            booking.client_name.toLowerCase().includes(query) ||
-            booking.booking_code.toLowerCase().includes(query) ||
-            (booking.location || "").toLowerCase().includes(query) ||
-            (booking.service_label || booking.services?.name || "").toLowerCase().includes(query) ||
-            packageNames.some((name) => name.toLowerCase().includes(query));
-        const matchesPackage = packageFilter === "All" || packageNames.includes(packageFilter);
-        const matchesBookingStatus =
-            bookingStatusFilter === "All" || unifiedStatus === bookingStatusFilter;
-
-        return matchesSearch && matchesPackage && matchesBookingStatus;
-    });
-
     React.useEffect(() => {
         if (loading) return;
         if (packageFilter !== "All" && !packageOptions.includes(packageFilter)) {
@@ -1360,6 +1347,13 @@ export default function FinancePage() {
         setCurrentPage(1);
     }, [filter, searchQuery, packageFilter, bookingStatusFilter, itemsPerPage]);
 
+    React.useEffect(() => {
+        const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages);
+        }
+    }, [currentPage, itemsPerPage, totalItems]);
+
     return (
         <div className="space-y-6">
             {successToastNode}
@@ -1371,7 +1365,7 @@ export default function FinancePage() {
                             type="button"
                             variant="outline"
                             className="w-full lg:w-auto"
-                            onClick={exportFinance}
+                            onClick={() => { void exportFinance(); }}
                         >
                             <Download className="w-4 h-4" /> Export Excel
                         </Button>
@@ -1404,8 +1398,8 @@ export default function FinancePage() {
                         </div>
                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("totalPemasukan")}</span>
                     </div>
-                    <div className="text-2xl font-bold">{formatCurrency(totalRevenue)}</div>
-                    <p className="text-xs text-muted-foreground mt-1">{t("dariSemuaBooking", { count: bookings.length })}</p>
+                    <div className="text-2xl font-bold">{formatCurrency(summary.totalRevenue)}</div>
+                    <p className="text-xs text-muted-foreground mt-1">{t("dariSemuaBooking", { count: summary.totalBookings })}</p>
                 </div>
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
                     <div className="flex items-center gap-3 mb-2">
@@ -1414,8 +1408,8 @@ export default function FinancePage() {
                         </div>
                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("monthlyRevenue")}</span>
                     </div>
-                    <div className="text-2xl font-bold">{formatCurrency(monthlyRevenueSummary.total)}</div>
-                    <p className="text-xs text-muted-foreground mt-1">{t("monthlyRevenueSubtitle", { month: monthlyRevenueSummary.monthLabel })}</p>
+                    <div className="text-2xl font-bold">{formatCurrency(summary.monthlyRevenueTotal)}</div>
+                    <p className="text-xs text-muted-foreground mt-1">{t("monthlyRevenueSubtitle", { month: monthlyRevenueLabel })}</p>
                 </div>
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
                     <div className="flex items-center gap-3 mb-2">
@@ -1424,8 +1418,8 @@ export default function FinancePage() {
                         </div>
                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("sisaTagihan")}</span>
                     </div>
-                    <div className="text-2xl font-bold">{formatCurrency(totalPending)}</div>
-                    <p className="text-xs text-muted-foreground mt-1">{t("dariBookingBelumLunas", { count: bookings.filter(b => !isCancelledBooking(b) && !b.is_fully_paid).length })}</p>
+                    <div className="text-2xl font-bold">{formatCurrency(summary.totalPending)}</div>
+                    <p className="text-xs text-muted-foreground mt-1">{t("dariBookingBelumLunas", { count: summary.unpaidCount })}</p>
                 </div>
             </div>
 
@@ -1519,11 +1513,11 @@ export default function FinancePage() {
 
             {/* Mobile Cards */}
             <div className="md:hidden space-y-3">
-                {loading ? (
-                    <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
-                ) : filtered.length === 0 ? (
+                {queryState.isLoading || queryState.isRefreshing ? (
+                    <CardListSkeleton count={Math.min(queryState.perPage, 4)} />
+                ) : queryState.totalItems === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">{t("tidakAdaData")}</div>
-                ) : paginateArray(filtered, currentPage, itemsPerPage).map((b) => {
+                ) : bookings.map((b) => {
                     const remaining = getRemainingAmount(b);
                     const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
                     const initialBreakdown = getInitialPriceBreakdown(b);
@@ -1616,12 +1610,12 @@ export default function FinancePage() {
                     );
                 })}
             </div>
-            {!loading && filtered.length > 0 ? (
+            {!queryState.isLoading && !queryState.isRefreshing && queryState.totalItems > 0 ? (
                 <div className="md:hidden">
                     <TablePagination
-                        totalItems={filtered.length}
-                        currentPage={currentPage}
-                        itemsPerPage={itemsPerPage}
+                        totalItems={queryState.totalItems}
+                        currentPage={queryState.page}
+                        itemsPerPage={queryState.perPage}
                         onPageChange={setCurrentPage}
                         onItemsPerPageChange={setItemsPerPage}
                         perPageOptions={[...FINANCE_PER_PAGE_OPTIONS]}
@@ -1723,15 +1717,16 @@ export default function FinancePage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                            {loading ? (
-                                <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground">
-                                    <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                                </td></tr>
-                            ) : filtered.length === 0 ? (
+                            {queryState.isLoading || queryState.isRefreshing ? (
+                                <TableRowsSkeleton
+                                    rows={Math.min(queryState.perPage, 6)}
+                                    columns={orderedVisibleColumns.length}
+                                />
+                            ) : queryState.totalItems === 0 ? (
                                 <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground">
                                     {t("tidakAdaData")}
                                 </td></tr>
-                            ) : paginateArray(filtered, currentPage, itemsPerPage).map((b) => {
+                            ) : bookings.map((b) => {
                                 const remaining = getRemainingAmount(b);
                                 const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
                                 const initialBreakdown = getInitialPriceBreakdown(b);
@@ -1757,7 +1752,7 @@ export default function FinancePage() {
                         </tbody>
                     </table>
                 </div>
-                <TablePagination totalItems={filtered.length} currentPage={currentPage} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...FINANCE_PER_PAGE_OPTIONS]} />
+                <TablePagination totalItems={queryState.totalItems} currentPage={queryState.page} itemsPerPage={queryState.perPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...FINANCE_PER_PAGE_OPTIONS]} />
             </div>
         </div>
     );
