@@ -10,6 +10,11 @@ import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-di
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
 import {
+    BookingWriteReadonlyBanner,
+    useBookingWriteAccess,
+    useBookingWriteGuard,
+} from "@/lib/booking-write-access-context";
+import {
     LocationAutocomplete,
     type LocationSelectionMeta,
 } from "@/components/ui/location-autocomplete";
@@ -290,6 +295,7 @@ export default function EditBookingPage() {
         message: string;
     }>({ open: false, title: "", message: "" });
     const [cancelStatusConfirmOpen, setCancelStatusConfirmOpen] = React.useState(false);
+    const { canWriteBookings } = useBookingWriteAccess();
 
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
@@ -298,6 +304,9 @@ export default function EditBookingPage() {
             message,
         });
     }, [locale]);
+    const requireBookingWrite = useBookingWriteGuard(({ message, title }) => {
+        showFeedback(message, title);
+    });
 
     const triggerFastpikAutoSync = React.useCallback(
         async (bookingId: string) => {
@@ -564,6 +573,7 @@ export default function EditBookingPage() {
     const paymentCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "payment_details")?.items || [];
 
     async function saveCustomService() {
+        if (!requireBookingWrite()) return;
         if (!customServiceName.trim()) return;
         setSavingCustomService(true);
         const { data: { user } } = await supabase.auth.getUser();
@@ -588,6 +598,7 @@ export default function EditBookingPage() {
     }
 
     async function saveCustomFreelancer() {
+        if (!requireBookingWrite()) return;
         if (!customFreelancerName.trim()) return;
         setSavingCustomFreelancer(true);
         const { data: { user } } = await supabase.auth.getUser();
@@ -611,6 +622,7 @@ export default function EditBookingPage() {
         skipCancelConfirmation?: boolean;
         cancelPayment?: { policy: CancelPaymentPolicy; refundAmount: number };
     }) {
+        if (!requireBookingWrite()) return;
         if (
             isTransitionToCancelled(initialStatus, status) &&
             !options?.skipCancelConfirmation
@@ -895,6 +907,7 @@ export default function EditBookingPage() {
     }
 
     async function handleMarkDpVerified() {
+        if (!requireBookingWrite()) return;
         const dpValue = Math.max(
             Number(typeof dpPaid === "number" ? dpPaid : parseFloat(String(dpPaid || 0))) || 0,
             0,
@@ -925,6 +938,7 @@ export default function EditBookingPage() {
     }
 
     async function handleMarkDpUnverified() {
+        if (!requireBookingWrite()) return;
         setMarkingDpUnverified(true);
         const patch = {
             dp_verified_amount: 0,
@@ -1030,7 +1044,10 @@ export default function EditBookingPage() {
                 </div>
             </div>
 
+            <BookingWriteReadonlyBanner />
+
             <form onSubmit={handleSubmit} className="space-y-6">
+                <fieldset disabled={!canWriteBookings} className="space-y-6">
                 <div className="rounded-xl border bg-card p-6 shadow-sm space-y-4">
                     <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                         <Users className="w-4 h-4" /> Informasi Klien
@@ -1558,9 +1575,11 @@ export default function EditBookingPage() {
                     <p className="text-[11px] text-muted-foreground">Link postingan IG hasil foto (opsional).</p>
                 </div>
 
+                </fieldset>
+
                 <div className="flex gap-3 justify-end pt-4">
                     <Link href={`/bookings/${id}`}><Button type="button" variant="ghost" className="text-muted-foreground hover:text-foreground">Batal</Button></Link>
-                    <Button type="submit" disabled={saving} className="gap-2 bg-foreground text-background hover:bg-foreground/90 px-8">
+                    <Button type="submit" disabled={saving || !canWriteBookings} className="gap-2 bg-foreground text-background hover:bg-foreground/90 px-8">
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Simpan Perubahan
                     </Button>

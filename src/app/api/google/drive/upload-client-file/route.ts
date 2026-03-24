@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+    assertBookingWriteAccessForUser,
+    BookingWriteAccessDeniedError,
+} from "@/lib/booking-write-access.server";
 import { createClient } from "@/utils/supabase/server";
 import { findOrCreateNestedPath, uploadFileToDrive } from "@/utils/google/drive";
 import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
@@ -11,6 +15,8 @@ export async function POST(request: NextRequest) {
         if (!user) {
             return NextResponse.json({ success: false, error: "Tidak terautentikasi" }, { status: 401 });
         }
+
+        await assertBookingWriteAccessForUser(user.id);
 
         const { data: profile } = await supabase
             .from("profiles")
@@ -109,6 +115,12 @@ export async function POST(request: NextRequest) {
             folderUrl: folder.folderUrl,
         });
     } catch (err: any) {
+        if (err instanceof BookingWriteAccessDeniedError) {
+            return NextResponse.json(
+                { success: false, error: err.message },
+                { status: err.status },
+            );
+        }
         return NextResponse.json({ success: false, error: err.message }, { status: 500 });
     }
 }

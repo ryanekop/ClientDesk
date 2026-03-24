@@ -13,6 +13,12 @@ import { useLocale } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import { Link } from "@/i18n/routing";
+import {
+    BookingWriteReadonlyBanner,
+    useBookingWriteAccess,
+    useBookingWriteGuard,
+} from "@/lib/booking-write-access-context";
+import { getBookingWriteBlockedMessage } from "@/lib/booking-write-access";
 import * as XLSX from "xlsx";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
 import { useSuccessToast } from "@/components/ui/success-toast";
@@ -167,6 +173,14 @@ export default function FinancePage() {
     }>({ open: false, booking: null, kind: null });
     const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
     const { showSuccessToast, successToastNode } = useSuccessToast();
+    const { canWriteBookings } = useBookingWriteAccess();
+    const bookingWriteBlockedMessage = React.useMemo(
+        () => getBookingWriteBlockedMessage(locale),
+        [locale],
+    );
+    const requireBookingWrite = useBookingWriteGuard(({ message }) => {
+        setFeedbackDialog({ open: true, message });
+    });
 
     const closeDesktopMenus = React.useCallback(() => {
         setInvoiceMenuBookingId(null);
@@ -342,6 +356,7 @@ export default function FinancePage() {
     }
 
     async function handleMarkPaid(id: string) {
+        if (!requireBookingWrite()) return;
         const booking = bookings.find((item) => item.id === id);
         if (!booking) return;
         const remaining = getRemainingFinalPayment({
@@ -363,6 +378,7 @@ export default function FinancePage() {
     }
 
     async function handleMarkUnpaid(id: string) {
+        if (!requireBookingWrite()) return;
         const booking = bookings.find((item) => item.id === id);
         await supabase.from("bookings").update({
             is_fully_paid: false,
@@ -476,6 +492,7 @@ export default function FinancePage() {
     }
 
     async function ensureSettlementOpened(booking: BookingFinance) {
+        if (!requireBookingWrite()) return null;
         if (!booking.tracking_uuid) {
             setFeedbackDialog({ open: true, message: tf("settlementLinkNotAvailable") });
             return null;
@@ -803,6 +820,8 @@ export default function FinancePage() {
                     <td key={column.id} className="px-6 py-4 whitespace-nowrap">
                         <button
                             onClick={() => booking.is_fully_paid ? handleMarkUnpaid(booking.id) : handleMarkPaid(booking.id)}
+                            disabled={!canWriteBookings}
+                            title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
                             className={`text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer transition-colors ${booking.is_fully_paid
                                 ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400 hover:bg-green-200"
                                 : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 hover:bg-amber-200"
@@ -1217,6 +1236,7 @@ export default function FinancePage() {
     return (
         <div className="space-y-6">
             {successToastNode}
+            <BookingWriteReadonlyBanner />
             <div>
                 <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
                 <p className="text-muted-foreground">{t("subtitle")}</p>
@@ -1358,6 +1378,8 @@ export default function FinancePage() {
                                 ) : (
                                     <button
                                         onClick={() => b.is_fully_paid ? handleMarkUnpaid(b.id) : handleMarkPaid(b.id)}
+                                        disabled={!canWriteBookings}
+                                        title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
                                         className={`text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer ${b.is_fully_paid
                                             ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
                                             : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"}`}

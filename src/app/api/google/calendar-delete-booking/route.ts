@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  assertBookingWriteAccessForUser,
+  BookingWriteAccessDeniedError,
+} from "@/lib/booking-write-access.server";
 import { createClient } from "@/utils/supabase/server";
 import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
@@ -41,6 +45,8 @@ export async function POST(request: NextRequest) {
         { status: 401 },
       );
     }
+
+    await assertBookingWriteAccessForUser(user.id);
 
     const { data: booking } = await supabase
       .from("bookings")
@@ -142,6 +148,12 @@ export async function POST(request: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
+    if (error instanceof BookingWriteAccessDeniedError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status },
+      );
+    }
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
       { success: false, error: message },

@@ -13,6 +13,12 @@ import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
 import { Link } from "@/i18n/routing";
+import {
+    BookingWriteReadonlyBanner,
+    useBookingWriteAccess,
+    useBookingWriteGuard,
+} from "@/lib/booking-write-access-context";
+import { getBookingWriteBlockedMessage } from "@/lib/booking-write-access";
 import { cn } from "@/lib/utils";
 import { BatchImportButton } from "@/components/batch-import";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
@@ -323,6 +329,14 @@ export default function BookingsPage() {
     const [copyTargetPopup, setCopyTargetPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
     const { showSuccessToast, successToastNode } = useSuccessToast();
+    const { canWriteBookings } = useBookingWriteAccess();
+    const bookingWriteBlockedMessage = React.useMemo(
+        () => getBookingWriteBlockedMessage(locale),
+        [locale],
+    );
+    const requireBookingWrite = useBookingWriteGuard(({ message }) => {
+        setFeedbackDialog({ open: true, message });
+    });
 
     const closeDesktopMenus = React.useCallback(() => {
         setWaMenuBookingId(null);
@@ -468,7 +482,7 @@ export default function BookingsPage() {
         setPackages(Array.from(new Set(bgs.flatMap(b => getBookingServiceNames(b.service_selections || [], "main")).filter(Boolean))) as string[]);
         setFreelancerNames(Array.from(new Set(bgs.flatMap(b => b.booking_freelancers.map(f => f.name)).filter(Boolean))) as string[]);
         setLoading(false);
-        if (statusSyncUpdates.length > 0) {
+        if (canWriteBookings && statusSyncUpdates.length > 0) {
             void Promise.allSettled(
                 statusSyncUpdates.map((item) =>
                     supabase
@@ -481,7 +495,7 @@ export default function BookingsPage() {
                 ),
             );
         }
-    }, [supabase]);
+    }, [canWriteBookings, supabase]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -633,6 +647,7 @@ export default function BookingsPage() {
         skipCancelConfirmation?: boolean;
         cancelPayment?: { policy: CancelPaymentPolicy; refundAmount: number };
     }) {
+        if (!requireBookingWrite()) return;
         if (!statusModal.booking || !newStatus) return;
         const activeBooking = bookings.find((booking) => booking.id === statusModal.booking?.id) || statusModal.booking;
         const bookingId = activeBooking.id;
@@ -760,6 +775,7 @@ export default function BookingsPage() {
     }
 
     async function confirmDelete() {
+        if (!requireBookingWrite()) return;
         if (!deleteModal.booking) return;
         setIsDeleting(true);
 
@@ -1230,8 +1246,12 @@ export default function BookingsPage() {
                                     <Folder className="w-4 h-4" />
                                 </ActionIconButton>
                             ) : (
-                                <ActionIconButton tone="blue" title="Set Link Drive"
-                                    onClick={() => { setDriveLinkInput(""); setDriveLinkPopup({ open: true, booking }); }}>
+                                <ActionIconButton
+                                    tone="blue"
+                                    title={!canWriteBookings ? bookingWriteBlockedMessage : "Set Link Drive"}
+                                    onClick={() => { setDriveLinkInput(""); setDriveLinkPopup({ open: true, booking }); }}
+                                    disabled={!canWriteBookings}
+                                >
                                     <Link2 className="w-4 h-4" />
                                 </ActionIconButton>
                             )}
@@ -1240,17 +1260,31 @@ export default function BookingsPage() {
                                     <Info className="w-4 h-4" />
                                 </ActionIconButton>
                             </Link>
-                            <ActionIconButton tone="orange" title={tb("changeStatusBtn")}
-                                onClick={() => { setNewStatus(booking.client_status || booking.status); setStatusModal({ open: true, booking }); }}>
+                            <ActionIconButton
+                                tone="orange"
+                                title={!canWriteBookings ? bookingWriteBlockedMessage : tb("changeStatusBtn")}
+                                onClick={() => { setNewStatus(booking.client_status || booking.status); setStatusModal({ open: true, booking }); }}
+                                disabled={!canWriteBookings}
+                            >
                                 <RefreshCcw className="w-4 h-4" />
                             </ActionIconButton>
-                            <Link href={`/bookings/${booking.id}/edit`}>
-                                <ActionIconButton tone="indigo" title={tb("editBtn")}>
+                            {canWriteBookings ? (
+                                <Link href={`/bookings/${booking.id}/edit`}>
+                                    <ActionIconButton tone="indigo" title={tb("editBtn")}>
+                                        <Edit2 className="w-4 h-4" />
+                                    </ActionIconButton>
+                                </Link>
+                            ) : (
+                                <ActionIconButton tone="indigo" title={bookingWriteBlockedMessage} disabled>
                                     <Edit2 className="w-4 h-4" />
                                 </ActionIconButton>
-                            </Link>
-                            <ActionIconButton tone="red" title={tb("deleteBtn")}
-                                onClick={() => setDeleteModal({ open: true, booking })}>
+                            )}
+                            <ActionIconButton
+                                tone="red"
+                                title={!canWriteBookings ? bookingWriteBlockedMessage : tb("deleteBtn")}
+                                onClick={() => setDeleteModal({ open: true, booking })}
+                                disabled={!canWriteBookings}
+                            >
                                 <Trash2 className="w-4 h-4" />
                             </ActionIconButton>
                         </div>
@@ -1510,6 +1544,7 @@ export default function BookingsPage() {
     return (
         <div className="space-y-6">
             {successToastNode}
+            <BookingWriteReadonlyBanner />
             {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -1546,12 +1581,26 @@ export default function BookingsPage() {
                         onSave={() => saveColumnPreferences(columns)}
                         saving={savingColumns}
                     />
-                    <BatchImportButton onImported={() => fetchData()} />
-                    <Link href="/bookings/new">
-                        <Button className="gap-2 h-9 bg-foreground text-background hover:bg-foreground/90">
+                    <BatchImportButton
+                        onImported={() => fetchData()}
+                        canCommitBookings={canWriteBookings}
+                        bookingWriteBlockedMessage={bookingWriteBlockedMessage}
+                    />
+                    {canWriteBookings ? (
+                        <Link href="/bookings/new">
+                            <Button className="gap-2 h-9 bg-foreground text-background hover:bg-foreground/90">
+                                <Plus className="w-4 h-4" /> {tb("addClient")}
+                            </Button>
+                        </Link>
+                    ) : (
+                        <Button
+                            className="gap-2 h-9 bg-foreground text-background hover:bg-foreground/90"
+                            disabled
+                            title={bookingWriteBlockedMessage}
+                        >
                             <Plus className="w-4 h-4" /> {tb("addClient")}
                         </Button>
-                    </Link>
+                    )}
                 </div>
             </div>
 
@@ -1706,11 +1755,25 @@ export default function BookingsPage() {
                                     <MessageCircle className="w-4 h-4" />
                                 </ActionIconButton>
                                 <Link href={`/bookings/${booking.id}`}><ActionIconButton tone="slate"><Info className="w-4 h-4" /></ActionIconButton></Link>
-                                <ActionIconButton tone="orange" onClick={() => { setNewStatus(booking.client_status || booking.status); setStatusModal({ open: true, booking }); }}>
+                                <ActionIconButton
+                                    tone="orange"
+                                    onClick={() => { setNewStatus(booking.client_status || booking.status); setStatusModal({ open: true, booking }); }}
+                                    disabled={!canWriteBookings}
+                                    title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
+                                >
                                     <RefreshCcw className="w-4 h-4" />
                                 </ActionIconButton>
-                                <Link href={`/bookings/${booking.id}/edit`}><ActionIconButton tone="indigo"><Edit2 className="w-4 h-4" /></ActionIconButton></Link>
-                                <ActionIconButton tone="red" onClick={() => setDeleteModal({ open: true, booking })}>
+                                {canWriteBookings ? (
+                                    <Link href={`/bookings/${booking.id}/edit`}><ActionIconButton tone="indigo"><Edit2 className="w-4 h-4" /></ActionIconButton></Link>
+                                ) : (
+                                    <ActionIconButton tone="indigo" disabled title={bookingWriteBlockedMessage}><Edit2 className="w-4 h-4" /></ActionIconButton>
+                                )}
+                                <ActionIconButton
+                                    tone="red"
+                                    onClick={() => setDeleteModal({ open: true, booking })}
+                                    disabled={!canWriteBookings}
+                                    title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
+                                >
                                     <Trash2 className="w-4 h-4" />
                                 </ActionIconButton>
                             </div>
@@ -1799,6 +1862,7 @@ export default function BookingsPage() {
                         <Button
                             onClick={() => { void handleUpdateStatus(); }}
                             disabled={
+                                !canWriteBookings ||
                                 isUpdatingStatus ||
                                 newStatus === (statusModal.booking?.client_status || statusModal.booking?.status)
                             }
@@ -1824,7 +1888,7 @@ export default function BookingsPage() {
                     </DialogHeader>
                     <DialogFooter className="sm:justify-center gap-2 pt-2">
                         <Button variant="outline" className="flex-1" onClick={() => setDeleteModal({ open: false, booking: null })} disabled={isDeleting}>{tb("cancel")}</Button>
-                        <Button variant="destructive" className="flex-1" onClick={confirmDelete} disabled={isDeleting}>
+                        <Button variant="destructive" className="flex-1" onClick={confirmDelete} disabled={isDeleting || !canWriteBookings}>
                             {isDeleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
                             {tb("yesDelete")}
                         </Button>
@@ -2012,7 +2076,8 @@ export default function BookingsPage() {
                     </div>
                     <DialogFooter>
                         <Button variant="ghost" onClick={() => setDriveLinkPopup({ open: false, booking: null })}>{tb("cancel")}</Button>
-                        <Button disabled={!driveLinkInput || savingDriveLink} className="gap-2" onClick={async () => {
+                        <Button disabled={!driveLinkInput || savingDriveLink || !canWriteBookings} className="gap-2" onClick={async () => {
+                            if (!requireBookingWrite()) return;
                             if (!driveLinkPopup.booking || !driveLinkInput) return;
                             setSavingDriveLink(true);
                             await supabase.from("bookings").update({ drive_folder_url: driveLinkInput }).eq("id", driveLinkPopup.booking.id);

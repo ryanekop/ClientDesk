@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+    assertBookingWriteAccessForUser,
+    BookingWriteAccessDeniedError,
+} from "@/lib/booking-write-access.server";
 import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
 import { hasBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import {
@@ -365,6 +369,8 @@ export async function POST(request: NextRequest) {
         if (!vendor) {
             return NextResponse.json({ success: false, error: "Vendor tidak ditemukan. Pastikan link form adalah link terbaru." }, { status: 404 });
         }
+
+        await assertBookingWriteAccessForUser(vendor.id, { publicFacing: true });
 
         const normalizedOfferToken = normalizeSpecialOfferToken(offerToken);
         let specialOfferRule: BookingSpecialLinkRule | null = null;
@@ -949,6 +955,12 @@ export async function POST(request: NextRequest) {
             bookingConfirmTemplate,
         });
     } catch (err: unknown) {
+        if (err instanceof BookingWriteAccessDeniedError) {
+            return NextResponse.json(
+                { success: false, error: err.message },
+                { status: err.status },
+            );
+        }
         const message = err instanceof Error ? err.message : "Terjadi kesalahan saat memproses booking.";
         return NextResponse.json({ success: false, error: message }, { status: 500 });
     }

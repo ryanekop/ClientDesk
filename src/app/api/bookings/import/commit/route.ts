@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  assertBookingWriteAccessForUser,
+  BookingWriteAccessDeniedError,
+} from "@/lib/booking-write-access.server";
 import { createClient } from "@/utils/supabase/server";
 import {
   buildCommitReportFile,
@@ -374,6 +378,8 @@ export async function POST(request: Request) {
       );
     }
 
+    await assertBookingWriteAccessForUser(user.id);
+
     const formData = await request.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {
@@ -502,6 +508,12 @@ export async function POST(request: Request) {
       report,
     });
   } catch (error) {
+    if (error instanceof BookingWriteAccessDeniedError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status },
+      );
+    }
     const message =
       error instanceof Error ? error.message : "Gagal melakukan commit import.";
     return NextResponse.json({ success: false, error: message }, { status: 500 });

@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  assertBookingWriteAccessForUser,
+  BookingWriteAccessDeniedError,
+} from "@/lib/booking-write-access.server";
 import { createClient } from "@/utils/supabase/server";
 import {
   hydrateFastpikLiveData,
@@ -41,6 +45,8 @@ export async function POST(request: NextRequest) {
         { status: 401 },
       );
     }
+
+    await assertBookingWriteAccessForUser(user.id);
 
     const body = (await request.json().catch(() => ({}))) as LiveBookingPayload;
     const bookingId =
@@ -85,6 +91,15 @@ export async function POST(request: NextRequest) {
       booking: liveResult.booking,
     });
   } catch (error: unknown) {
+    if (error instanceof BookingWriteAccessDeniedError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message,
+        },
+        { status: error.status },
+      );
+    }
     return NextResponse.json(
       {
         success: false,

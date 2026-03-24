@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+    assertBookingWriteAccessForUser,
+    BookingWriteAccessDeniedError,
+} from "@/lib/booking-write-access.server";
 import { createClient } from "@/utils/supabase/server";
 import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
 import { hasOAuthTokenPair } from "@/utils/google/connection";
@@ -23,6 +27,8 @@ export async function POST(request: NextRequest) {
         if (!user) {
             return NextResponse.json({ success: false, error: "Tidak terautentikasi" }, { status: 401 });
         }
+
+        await assertBookingWriteAccessForUser(user.id);
 
         const payload = await request.json() as SyncRequestBody;
         const bookingIdsFromPayload = Array.isArray(payload.bookingIds)
@@ -221,6 +227,12 @@ export async function POST(request: NextRequest) {
             skipped: skipped.length > 0 ? skipped : undefined,
         });
     } catch (error) {
+        if (error instanceof BookingWriteAccessDeniedError) {
+            return NextResponse.json(
+                { success: false, error: error.message },
+                { status: error.status },
+            );
+        }
         const message = error instanceof Error ? error.message : "Unknown error";
         return NextResponse.json({ success: false, error: message }, { status: 500 });
     }

@@ -8,6 +8,12 @@ import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
 import { useSuccessToast } from "@/components/ui/success-toast";
 import { Link } from "@/i18n/routing";
+import {
+    BookingWriteReadonlyBanner,
+    useBookingWriteAccess,
+    useBookingWriteGuard,
+} from "@/lib/booking-write-access-context";
+import { getBookingWriteBlockedMessage } from "@/lib/booking-write-access";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import { useTranslations, useLocale } from "next-intl";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
@@ -128,6 +134,18 @@ export default function ClientStatusPage() {
         message: string;
     }>({ open: false, title: "", message: "" });
     const { showSuccessToast, successToastNode } = useSuccessToast();
+    const { canWriteBookings } = useBookingWriteAccess();
+    const bookingWriteBlockedMessage = React.useMemo(
+        () => getBookingWriteBlockedMessage(locale),
+        [locale],
+    );
+    const requireBookingWrite = useBookingWriteGuard(({ message, title }) => {
+        setFeedbackDialog({
+            open: true,
+            title,
+            message,
+        });
+    });
 
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
@@ -215,7 +233,7 @@ export default function ClientStatusPage() {
             );
             setBookings(normalizedBookings);
             setLoading(false);
-            if (statusSyncUpdates.length > 0) {
+            if (canWriteBookings && statusSyncUpdates.length > 0) {
                 void Promise.allSettled(
                     statusSyncUpdates.map((item) =>
                         supabase
@@ -230,7 +248,7 @@ export default function ClientStatusPage() {
             }
         }
         load();
-    }, [supabase]);
+    }, [canWriteBookings, supabase]);
 
     React.useEffect(() => {
         if (!currentUserId) {
@@ -287,6 +305,7 @@ export default function ClientStatusPage() {
             cancelPayment?: { policy: CancelPaymentPolicy; refundAmount: number };
         },
     ) {
+        if (!requireBookingWrite()) return;
         const oldBooking = bookings.find((booking) => booking.id === id);
         if (!oldBooking) return;
 
@@ -431,6 +450,7 @@ export default function ClientStatusPage() {
     }
 
     async function updateQueue(id: string, pos: number | null) {
+        if (!requireBookingWrite()) return;
         await supabase.from("bookings").update({ queue_position: pos }).eq("id", id);
         setBookings(prev => prev.map(b => b.id === id ? { ...b, queue_position: pos } : b));
     }
@@ -526,7 +546,8 @@ export default function ClientStatusPage() {
                         <select
                             value={booking.client_status || ""}
                             onChange={e => updateStatus(booking.id, e.target.value)}
-                            disabled={savingId === booking.id}
+                            disabled={savingId === booking.id || !canWriteBookings}
+                            title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
                             className={selectClass}
                         >
                             <option value="">{t("belumDiset")}</option>
@@ -553,6 +574,8 @@ export default function ClientStatusPage() {
                                 updateQueue(booking.id, val);
                             }}
                             placeholder="-"
+                            disabled={!canWriteBookings}
+                            title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
                             className={inputClass}
                         />
                     </td>
@@ -618,6 +641,7 @@ export default function ClientStatusPage() {
     return (
         <div className="space-y-6">
             {successToastNode}
+            <BookingWriteReadonlyBanner />
             <div>
                 <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
                     <Activity className="w-6 h-6" /> {t("title")}
@@ -688,14 +712,14 @@ export default function ClientStatusPage() {
                                 ))}
                             <div className="flex items-center gap-3">
                                 <label className="text-xs text-muted-foreground shrink-0 w-14">Status</label>
-                                <select value={b.client_status || ""} onChange={e => updateStatus(b.id, e.target.value)} disabled={savingId === b.id} className={`${selectClass} flex-1`}>
+                                <select value={b.client_status || ""} onChange={e => updateStatus(b.id, e.target.value)} disabled={savingId === b.id || !canWriteBookings} title={!canWriteBookings ? bookingWriteBlockedMessage : undefined} className={`${selectClass} flex-1`}>
                                     <option value="">{t("belumDiset")}</option>
                                     {getBookingStatusOptions(clientStatuses).map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
                             </div>
                             <div className="flex items-center gap-3">
                                 <label className="text-xs text-muted-foreground shrink-0 w-14">{t("antrian")}</label>
-                                <input type="number" min={0} value={b.queue_position ?? ""} onChange={e => updateQueue(b.id, e.target.value === "" ? null : parseInt(e.target.value, 10))} placeholder="-" className={`${inputClass} flex-1`} />
+                                <input type="number" min={0} value={b.queue_position ?? ""} onChange={e => updateQueue(b.id, e.target.value === "" ? null : parseInt(e.target.value, 10))} placeholder="-" disabled={!canWriteBookings} title={!canWriteBookings ? bookingWriteBlockedMessage : undefined} className={`${inputClass} flex-1`} />
                             </div>
                         </div>
                         <div className="flex items-center gap-1 pt-1 border-t">

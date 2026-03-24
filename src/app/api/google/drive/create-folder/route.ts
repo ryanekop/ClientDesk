@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+    assertBookingWriteAccessForUser,
+    BookingWriteAccessDeniedError,
+} from "@/lib/booking-write-access.server";
 import { createClient } from "@/utils/supabase/server";
 import { createBookingFolder, findOrCreateNestedPath } from "@/utils/google/drive";
 import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
@@ -11,6 +15,8 @@ export async function POST(request: NextRequest) {
         if (!user) {
             return NextResponse.json({ success: false, error: "Tidak terautentikasi" }, { status: 401 });
         }
+
+        await assertBookingWriteAccessForUser(user.id);
 
         const { data: profile } = await supabase
             .from("profiles")
@@ -94,6 +100,12 @@ export async function POST(request: NextRequest) {
             folderUrl: result.folderUrl,
         });
     } catch (err: unknown) {
+        if (err instanceof BookingWriteAccessDeniedError) {
+            return NextResponse.json(
+                { success: false, error: err.message },
+                { status: err.status },
+            );
+        }
         const message = err instanceof Error ? err.message : "Gagal membuat folder.";
         return NextResponse.json({ success: false, error: message }, { status: 500 });
     }

@@ -12,6 +12,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
 import { useLocale } from "next-intl";
+import {
+    BookingWriteReadonlyBanner,
+    useBookingWriteAccess,
+    useBookingWriteGuard,
+} from "@/lib/booking-write-access-context";
 import { formatSessionDate, formatSessionTime, formatTemplateSessionDate } from "@/utils/format-date";
 import {
     buildCustomFieldTemplateVars,
@@ -464,6 +469,7 @@ export default function BookingDetailPage() {
         title: string;
         message: string;
     }>({ open: false, title: "", message: "" });
+    const { canWriteBookings } = useBookingWriteAccess();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const currentDpValue = booking?.dp_paid ?? 0;
     const fastpikLinkVisibility = React.useMemo(
@@ -487,6 +493,9 @@ export default function BookingDetailPage() {
             message,
         });
     }, [locale]);
+    const requireBookingWrite = useBookingWriteGuard(({ message, title }) => {
+        showFeedback(message, title);
+    });
     const { showSuccessToast, successToastNode } = useSuccessToast();
     const warningTitle = locale === "en" ? "Warning" : "Peringatan";
     const copyTextWithSuccessToast = React.useCallback(
@@ -521,6 +530,7 @@ export default function BookingDetailPage() {
     }, [booking?.fastpik_project_id, copyTextWithSuccessToast, fastpikDashboardUrl, locale]);
 
     const handleSyncFastpikManual = React.useCallback(async () => {
+        if (!requireBookingWrite()) return;
         if (!booking) return;
         setSyncingFastpik(true);
         try {
@@ -611,9 +621,10 @@ export default function BookingDetailPage() {
         } finally {
             setSyncingFastpik(false);
         }
-    }, [booking, locale, showFeedback]);
+    }, [booking, locale, requireBookingWrite, showFeedback]);
 
     const hydrateFastpikLive = React.useCallback(async (bookingId: string) => {
+        if (!canWriteBookings) return;
         if (!bookingId) return;
         try {
             const response = await fetch("/api/integrations/fastpik/live-booking", {
@@ -691,7 +702,7 @@ export default function BookingDetailPage() {
         } catch {
             setFastpikDataSource("fallback");
         }
-    }, [locale]);
+    }, [canWriteBookings, locale]);
 
     const buildPathHint = React.useCallback((profile: DrivePathProfile | null | undefined, bookingValue: Pick<Booking, "booking_code" | "client_name" | "event_type" | "session_date" | "extra_fields">) => {
         const folderPathSegments = buildDriveFolderPathSegments({
@@ -790,7 +801,9 @@ export default function BookingDetailPage() {
                 );
                 setFastpikDataSyncedAt(rawBooking.fastpik_last_synced_at || null);
                 setFastpikDataMessage(null);
-                void hydrateFastpikLive(rawBooking.id);
+                if (canWriteBookings) {
+                    void hydrateFastpikLive(rawBooking.id);
+                }
             }
             setAdjustmentItems(
                 toEditableAdjustments(
@@ -801,11 +814,11 @@ export default function BookingDetailPage() {
             if (rawBooking) {
                 setClientStatus(syncedStatus);
                 setQueuePos(rawBooking.queue_position || "");
-                if (rawBooking.client_status !== syncedStatus || rawBooking.status !== syncedStatus) {
+                if (canWriteBookings && (rawBooking.client_status !== syncedStatus || rawBooking.status !== syncedStatus)) {
                     await supabase.from("bookings").update({ status: syncedStatus, client_status: syncedStatus }).eq("id", id);
                 }
                 // Generate tracking_uuid if not set
-                if (!rawBooking.tracking_uuid) {
+                if (canWriteBookings && !rawBooking.tracking_uuid) {
                     const uuid = crypto.randomUUID();
                     await supabase.from("bookings").update({ tracking_uuid: uuid }).eq("id", id);
                     setBooking(prev => prev ? { ...prev, tracking_uuid: uuid } : prev);
@@ -827,12 +840,13 @@ export default function BookingDetailPage() {
         }
         load();
         fetchTemplates();
-    }, [buildPathHint, hydrateFastpikLive, id, supabase]);
+    }, [buildPathHint, canWriteBookings, hydrateFastpikLive, id, supabase]);
 
     async function handleSaveClientStatus(options?: {
         skipCancelConfirmation?: boolean;
         cancelPayment?: { policy: CancelPaymentPolicy; refundAmount: number };
     }) {
+        if (!requireBookingWrite()) return;
         if (!booking) return;
         const previousStatus = booking.client_status || booking.status || null;
         const nextStatus = clientStatus || booking.status || null;
@@ -909,6 +923,7 @@ export default function BookingDetailPage() {
     }
 
     async function handleSaveDp() {
+        if (!requireBookingWrite()) return;
         if (!booking) return;
         const nextDp = Number(dpInput);
         if (!Number.isFinite(nextDp) || nextDp < 0) {
@@ -960,6 +975,7 @@ export default function BookingDetailPage() {
         accommodationFee: number;
         discountAmount: number;
     }) {
+        if (!requireBookingWrite()) return false;
         if (!booking) return false;
 
         const normalizedAccommodationFee = Math.max(input.accommodationFee || 0, 0);
@@ -1067,6 +1083,7 @@ export default function BookingDetailPage() {
     }
 
     async function handleMarkDpVerified() {
+        if (!requireBookingWrite()) return;
         if (!booking) return;
         setMarkingDpVerified(true);
         const verifiedAmount = Math.max(booking.dp_paid || 0, 0);
@@ -1093,6 +1110,7 @@ export default function BookingDetailPage() {
     }
 
     async function handleMarkDpUnverified() {
+        if (!requireBookingWrite()) return;
         if (!booking) return;
         setMarkingDpUnverified(true);
         const patch = {
@@ -1251,6 +1269,7 @@ export default function BookingDetailPage() {
     }
 
     async function handleCreateFolder() {
+        if (!requireBookingWrite()) return;
         if (!booking) return;
         setCreatingFolder(true);
         const res = await fetch("/api/google/drive/create-folder", {
@@ -1269,6 +1288,7 @@ export default function BookingDetailPage() {
     }
 
     async function handleUploadClientFile(e: React.ChangeEvent<HTMLInputElement>) {
+        if (!requireBookingWrite()) return;
         const file = e.target.files?.[0];
         if (!file || !booking) return;
         setUploadingFile(true);
@@ -1385,6 +1405,7 @@ export default function BookingDetailPage() {
     }
 
     async function saveFinalAdjustments(nextStatus?: SettlementStatus) {
+        if (!requireBookingWrite()) return null;
         if (!booking) return null;
 
         const normalizedAdjustments = normalizeEditableAdjustments(adjustmentItems);
@@ -1423,6 +1444,7 @@ export default function BookingDetailPage() {
     }
 
     async function handleCreateCustomAddon() {
+        if (!requireBookingWrite()) return;
         if (!booking || !customAddonName.trim() || Number(customAddonPrice) <= 0) {
             showFeedback("Isi nama dan harga add-on custom terlebih dahulu.");
             return;
@@ -1467,6 +1489,7 @@ export default function BookingDetailPage() {
     }
 
     async function handleSendFinalInvoice() {
+        if (!requireBookingWrite()) return;
         if (!booking?.tracking_uuid || !booking.client_whatsapp) {
             showFeedback("Booking ini belum punya tracking link atau nomor WhatsApp klien.");
             return;
@@ -1581,6 +1604,7 @@ export default function BookingDetailPage() {
     }
 
     async function handleMarkFinalPaid() {
+        if (!requireBookingWrite()) return;
         if (!booking) return;
 
         const normalizedAdjustments = normalizeEditableAdjustments(adjustmentItems);
@@ -1629,6 +1653,7 @@ export default function BookingDetailPage() {
     }
 
     async function handleMarkFinalUnpaid() {
+        if (!requireBookingWrite()) return;
         if (!booking) return;
 
         setMarkingFinalUnpaid(true);
@@ -1663,6 +1688,7 @@ export default function BookingDetailPage() {
     }
 
     async function handleDeleteBooking() {
+        if (!requireBookingWrite()) return;
         if (!booking) return;
 
         setDeletingBooking(true);
@@ -2020,16 +2046,25 @@ export default function BookingDetailPage() {
                         size="sm"
                         className="gap-1.5"
                         onClick={() => setDeleteBookingModalOpen(true)}
+                        disabled={!canWriteBookings}
                     >
                         <Trash2 className="w-4 h-4" /> Hapus
                     </Button>
-                    <Link href={`/bookings/${booking.id}/edit`}>
-                        <Button variant="outline" size="sm" className="gap-1.5">
+                    {canWriteBookings ? (
+                        <Link href={`/bookings/${booking.id}/edit`}>
+                            <Button variant="outline" size="sm" className="gap-1.5">
+                                <Edit2 className="w-4 h-4" /> Edit
+                            </Button>
+                        </Link>
+                    ) : (
+                        <Button variant="outline" size="sm" className="gap-1.5" disabled>
                             <Edit2 className="w-4 h-4" /> Edit
                         </Button>
-                    </Link>
+                    )}
                 </div>
             </div>
+
+            <BookingWriteReadonlyBanner />
 
             {/* Quick Actions */}
             <div className="flex flex-wrap gap-2">
@@ -2052,7 +2087,7 @@ export default function BookingDetailPage() {
                         <Folder className="w-4 h-4 text-yellow-600" /> Buka Drive Folder
                     </Button>
                 ) : (
-                    <Button variant="outline" size="sm" className="gap-1.5" disabled={!isDriveConnected || creatingFolder} onClick={handleCreateFolder}>
+                    <Button variant="outline" size="sm" className="gap-1.5" disabled={!isDriveConnected || creatingFolder || !canWriteBookings} onClick={handleCreateFolder}>
                         {creatingFolder ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderPlus className="w-4 h-4 text-yellow-600" />}
                         Buat Drive Folder
                     </Button>
@@ -2451,17 +2486,17 @@ export default function BookingDetailPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                    <Button size="sm" className="gap-1.5" onClick={handleSendFinalInvoice} disabled={sendingFinalInvoice || !booking.client_whatsapp}>
+                    <Button size="sm" className="gap-1.5" onClick={handleSendFinalInvoice} disabled={sendingFinalInvoice || !booking.client_whatsapp || !canWriteBookings}>
                         {sendingFinalInvoice ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
                         Kirim Invoice Final
                     </Button>
                     {booking.is_fully_paid ? (
-                        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleMarkFinalUnpaid} disabled={markingFinalUnpaid}>
+                        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleMarkFinalUnpaid} disabled={markingFinalUnpaid || !canWriteBookings}>
                             {markingFinalUnpaid ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
                             Batal Tandai Lunas
                         </Button>
                     ) : (
-                        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleMarkFinalPaid} disabled={markingFinalPaid}>
+                        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleMarkFinalPaid} disabled={markingFinalPaid || !canWriteBookings}>
                             {markingFinalPaid ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
                             Tandai Lunas
                         </Button>
@@ -2541,7 +2576,7 @@ export default function BookingDetailPage() {
                                 size="sm"
                                 className="gap-1.5"
                                 onClick={() => void handleSyncFastpikManual()}
-                                disabled={syncingFastpik}
+                                disabled={syncingFastpik || !canWriteBookings}
                             >
                                 {syncingFastpik ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -2737,7 +2772,7 @@ export default function BookingDetailPage() {
                         />
                         <Button
                             variant="outline" size="sm" className="gap-1.5"
-                            disabled={uploadingFile}
+                            disabled={uploadingFile || !canWriteBookings}
                             onClick={() => fileInputRef.current?.click()}
                         >
                             {uploadingFile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
@@ -2781,6 +2816,7 @@ export default function BookingDetailPage() {
                         <select
                             value={clientStatus}
                             onChange={e => setClientStatus(e.target.value)}
+                            disabled={!canWriteBookings}
                             className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] cursor-pointer"
                         >
                             <option value="">Pilih status...</option>
@@ -2797,6 +2833,7 @@ export default function BookingDetailPage() {
                             value={queuePos}
                             onChange={e => setQueuePos(e.target.value === "" ? "" : parseInt(e.target.value, 10))}
                             placeholder="Misal: 3"
+                            disabled={!canWriteBookings}
                             className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                         />
                     </div>
@@ -2806,7 +2843,7 @@ export default function BookingDetailPage() {
                     <Button
                         size="sm"
                         onClick={() => { void handleSaveClientStatus(); }}
-                        disabled={savingStatus}
+                        disabled={savingStatus || !canWriteBookings}
                         className="gap-1.5"
                     >
                         {savingStatus ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}

@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+    assertBookingWriteAccessForUser,
+    BookingWriteAccessDeniedError,
+} from "@/lib/booking-write-access.server";
 import { createClient } from "@/utils/supabase/server";
 import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
 import { hasOAuthTokenPair } from "@/utils/google/connection";
@@ -25,6 +29,8 @@ export async function POST(req: NextRequest) {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+        await assertBookingWriteAccessForUser(user.id, { locale: "en" });
 
         const profileResult = await fetchGoogleCalendarProfileSchemaSafe(supabase, user.id);
         if (profileResult.error) {
@@ -176,6 +182,9 @@ export async function POST(req: NextRequest) {
             );
         }
     } catch (error: any) {
+        if (error instanceof BookingWriteAccessDeniedError) {
+            return NextResponse.json({ error: error.message }, { status: error.status });
+        }
         console.error("Calendar invite error:", error);
         return NextResponse.json({ error: error.message || "Failed to send calendar invite" }, { status: 500 });
     }

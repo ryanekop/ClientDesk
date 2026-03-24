@@ -1,4 +1,5 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { getBookingWriteAccessForUser } from "@/lib/booking-write-access.server";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { normalizeAuthLocale } from "@/lib/auth/public-origin";
@@ -19,5 +20,11 @@ export default async function Layout({
         redirect(`/${locale}/login`);
     }
 
-    return <DashboardLayout>{children}</DashboardLayout>;
+    const bookingWriteAccess = await getBookingWriteAccessForUser(user.id);
+
+    return (
+        <DashboardLayout bookingWriteAccess={bookingWriteAccess}>
+            {children}
+        </DashboardLayout>
+    );
 }

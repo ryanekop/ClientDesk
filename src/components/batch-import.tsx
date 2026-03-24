@@ -78,6 +78,12 @@ type CommitResponse = {
   error?: string;
 };
 
+type BatchImportButtonProps = {
+  onImported: () => void;
+  canCommitBookings?: boolean;
+  bookingWriteBlockedMessage?: string;
+};
+
 function downloadBase64Xlsx(base64: string, fileName: string) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -97,7 +103,11 @@ function downloadBase64Xlsx(base64: string, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-export function BatchImportButton({ onImported }: { onImported: () => void }) {
+export function BatchImportButton({
+  onImported,
+  canCommitBookings = true,
+  bookingWriteBlockedMessage = "Akses booking terkunci.",
+}: BatchImportButtonProps) {
   const [open, setOpen] = React.useState(false);
   const [step, setStep] = React.useState<Step>("upload");
   const [file, setFile] = React.useState<File | null>(null);
@@ -205,6 +215,10 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
 
   async function handleCommit() {
     if (!file || !validation || !validation.canCommit) return;
+    if (!canCommitBookings) {
+      setFatalError(bookingWriteBlockedMessage);
+      return;
+    }
     setCommitting(true);
     setStep("confirm");
     setFatalError(null);
@@ -398,6 +412,11 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
                       Commit dikunci karena masih ada error.
                     </span>
                   )}
+                  {validation.canCommit && !canCommitBookings && (
+                    <span className="text-xs text-amber-600 self-center">
+                      {bookingWriteBlockedMessage}
+                    </span>
+                  )}
                 </div>
 
                 <div className="rounded-lg border overflow-hidden">
@@ -530,7 +549,7 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
                 <Button
                   onClick={handleCommit}
                   className="gap-1.5 w-full sm:w-auto"
-                  disabled={!validation.canCommit}
+                  disabled={!validation.canCommit || !canCommitBookings}
                 >
                   Commit Import <ArrowRight className="w-3.5 h-3.5" />
                 </Button>

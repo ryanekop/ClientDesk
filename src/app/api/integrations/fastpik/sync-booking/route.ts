@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  assertBookingWriteAccessForUser,
+  BookingWriteAccessDeniedError,
+} from "@/lib/booking-write-access.server";
 import { createClient } from "@/utils/supabase/server";
 import { syncBookingToFastpik } from "@/lib/fastpik-integration/server";
 
@@ -24,6 +28,8 @@ export async function POST(request: NextRequest) {
         { status: 401 },
       );
     }
+
+    await assertBookingWriteAccessForUser(user.id);
 
     const body = (await request.json().catch(() => ({}))) as SyncBookingPayload;
     const bookingId =
@@ -60,6 +66,16 @@ export async function POST(request: NextRequest) {
       message: result.message,
     });
   } catch (error: any) {
+    if (error instanceof BookingWriteAccessDeniedError) {
+      return NextResponse.json(
+        {
+          success: false,
+          status: "failed",
+          message: error.message,
+        },
+        { status: error.status },
+      );
+    }
     return NextResponse.json(
       {
         success: false,
