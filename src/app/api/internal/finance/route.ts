@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRouteUser } from "@/lib/pagination/route-user";
 import {
   getBookingServiceLabel,
-  getBookingServiceNames,
   normalizeBookingServiceSelections,
   normalizeLegacyServiceRecord,
   type BookingServiceSelection,
@@ -13,12 +12,6 @@ import {
   getBookingStatusOptions,
   resolveUnifiedBookingStatus,
 } from "@/lib/client-status";
-import {
-  getFinalInvoiceTotal,
-  getNetVerifiedRevenueAmount,
-  getRemainingFinalPayment,
-  getVerifiedDpAmount,
-} from "@/lib/final-settlement";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 10;
@@ -60,6 +53,32 @@ type BookingFinance = {
   service_label?: string;
 };
 
+type FinancePageRpcResponse = {
+  items?: BookingFinance[];
+  totalItems?: number;
+};
+
+type FinanceMetadataResponse = {
+  studioName?: string;
+  bookingStatusOptions?: string[];
+  packageOptions?: string[];
+  tableColumnPreferences?: unknown;
+  formSectionsByEventType?: Record<string, unknown>;
+  metadataRows?: Array<{
+    event_type?: string | null;
+    extra_fields?: Record<string, unknown> | null;
+  }>;
+  summary?: {
+    totalRevenue?: number;
+    totalPending?: number;
+    totalDP?: number;
+    totalBookings?: number;
+    paidCount?: number;
+    unpaidCount?: number;
+    monthlyRevenueTotal?: number;
+  };
+};
+
 function parsePositiveInt(value: string | null, fallback: number) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 1) {
@@ -69,23 +88,59 @@ function parsePositiveInt(value: string | null, fallback: number) {
   return Math.floor(parsed);
 }
 
-function isSameLocalMonth(dateValue: string | null, referenceDate: Date) {
-  if (!dateValue) return false;
-  const parsedDate = new Date(dateValue);
-  if (Number.isNaN(parsedDate.getTime())) return false;
-  return (
-    parsedDate.getFullYear() === referenceDate.getFullYear() &&
-    parsedDate.getMonth() === referenceDate.getMonth()
-  );
+function readRpcObject<T>(value: unknown): T | null {
+  if (Array.isArray(value)) {
+    const firstItem = value[0];
+    return firstItem && typeof firstItem === "object" ? (firstItem as T) : null;
+  }
+
+  return value && typeof value === "object" ? (value as T) : null;
 }
 
-function isCancelledBooking(booking: BookingFinance) {
-  return (booking.status || booking.client_status || "").trim().toLowerCase() === "batal";
+function readStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function readMetadataRows(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is { event_type?: string | null; extra_fields?: Record<string, unknown> | null } =>
+          Boolean(item) && typeof item === "object",
+      )
+    : [];
+}
+
+function readSummary(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return {
+      totalRevenue: 0,
+      totalPending: 0,
+      totalDP: 0,
+      totalBookings: 0,
+      paidCount: 0,
+      unpaidCount: 0,
+      monthlyRevenueTotal: 0,
+    };
+  }
+
+  const summary = value as Record<string, unknown>;
+
+  return {
+    totalRevenue: Number(summary.totalRevenue) || 0,
+    totalPending: Number(summary.totalPending) || 0,
+    totalDP: Number(summary.totalDP) || 0,
+    totalBookings: Number(summary.totalBookings) || 0,
+    paidCount: Number(summary.paidCount) || 0,
+    unpaidCount: Number(summary.unpaidCount) || 0,
+    monthlyRevenueTotal: Number(summary.monthlyRevenueTotal) || 0,
+  };
 }
 
 export async function GET(request: NextRequest) {
-  const { errorResponse, supabase, user } = await requireRouteUser();
-  if (errorResponse || !user) {
+  const { errorResponse, supabase } = await requireRouteUser();
+  if (errorResponse) {
     return errorResponse;
   }
 
@@ -101,42 +156,42 @@ export async function GET(request: NextRequest) {
   const bookingStatusFilter = searchParams.get("bookingStatus")?.trim() || "All";
   const exportAll = searchParams.get("export") === "1";
 
-  const [bookingsResult, profileResult] = await Promise.all([
-    supabase
-      .from("bookings")
-      .select(
-        "id, booking_code, client_name, client_whatsapp, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, status, session_date, event_type, location, location_lat, location_lng, tracking_uuid, client_status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, payment_proof_url, payment_proof_drive_file_id, final_payment_proof_url, final_payment_proof_drive_file_id, extra_fields, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon))",
-      )
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("profiles")
-      .select(
-        "studio_name, table_column_preferences, form_sections, custom_client_statuses",
-      )
-      .eq("id", user.id)
-      .single(),
+  const [pageResult, metadataResult] = await Promise.all([
+    supabase.rpc("cd_get_finance_page", {
+      p_page: page,
+      p_per_page: perPage,
+      p_filter: filter,
+      p_search: searchQuery,
+      p_package_filter: packageFilter,
+      p_booking_status_filter: bookingStatusFilter,
+      p_export_all: exportAll,
+    }),
+    supabase.rpc("cd_get_finance_metadata"),
   ]);
 
-  if (bookingsResult.error) {
+  if (pageResult.error) {
     return NextResponse.json(
-      { error: bookingsResult.error.message },
+      { error: pageResult.error.message },
       { status: 500 },
     );
   }
 
-  if (profileResult.error) {
+  if (metadataResult.error) {
     return NextResponse.json(
-      { error: profileResult.error.message },
+      { error: metadataResult.error.message },
       { status: 500 },
     );
   }
 
-  const bookingStatusOptions = getBookingStatusOptions(
-    profileResult.data?.custom_client_statuses || DEFAULT_CLIENT_STATUSES,
-  );
+  const pageData = readRpcObject<FinancePageRpcResponse>(pageResult.data);
+  const metadataData = readRpcObject<FinanceMetadataResponse>(metadataResult.data);
+  const bookingStatusOptions = readStringArray(metadataData?.bookingStatusOptions);
+  const resolvedBookingStatusOptions =
+    bookingStatusOptions.length > 0
+      ? bookingStatusOptions
+      : getBookingStatusOptions(DEFAULT_CLIENT_STATUSES);
 
-  const bookings = ((bookingsResult.data || []) as unknown as BookingFinance[]).map((booking) => {
+  const bookings = (Array.isArray(pageData?.items) ? pageData.items : []).map((booking) => {
     const legacyService = normalizeLegacyServiceRecord(booking.services);
     const serviceSelections = normalizeBookingServiceSelections(
       booking.booking_services,
@@ -145,7 +200,7 @@ export async function GET(request: NextRequest) {
     const unifiedStatus = resolveUnifiedBookingStatus({
       status: booking.status,
       clientStatus: booking.client_status,
-      statuses: bookingStatusOptions,
+      statuses: resolvedBookingStatusOptions,
     });
 
     return {
@@ -160,138 +215,22 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  const packageOptions = Array.from(
-    new Set(
-      bookings
-        .flatMap((booking) =>
-          getBookingServiceNames(booking.service_selections || [], "main"),
-        )
-        .filter(Boolean),
-    ),
-  ).sort((left, right) => left.localeCompare(right));
-
-  const getUnifiedBookingStatus = (booking: BookingFinance) =>
-    resolveUnifiedBookingStatus({
-      status: booking.status,
-      clientStatus: booking.client_status,
-      statuses: bookingStatusOptions,
-    });
-
-  const filtered = (filter === "all"
-    ? bookings
-    : filter === "paid"
-        ? bookings.filter((booking) => !isCancelledBooking(booking) && booking.is_fully_paid)
-        : bookings.filter((booking) => !isCancelledBooking(booking) && !booking.is_fully_paid)
-  ).filter((booking) => {
-    const query = searchQuery.trim().toLowerCase();
-    const packageNames = getBookingServiceNames(booking.service_selections || [], "main");
-    const unifiedStatus = getUnifiedBookingStatus(booking);
-
-    const matchesSearch =
-      !query ||
-      booking.client_name.toLowerCase().includes(query) ||
-      booking.booking_code.toLowerCase().includes(query) ||
-      (booking.location || "").toLowerCase().includes(query) ||
-      (booking.service_label || booking.services?.name || "").toLowerCase().includes(query) ||
-      packageNames.some((name) => name.toLowerCase().includes(query));
-    const matchesPackage = packageFilter === "All" || packageNames.includes(packageFilter);
-    const matchesBookingStatus =
-      bookingStatusFilter === "All" || unifiedStatus === bookingStatusFilter;
-
-    return matchesSearch && matchesPackage && matchesBookingStatus;
-  });
-
-  const totalRevenue = bookings.reduce(
-    (sum, booking) =>
-      sum +
-      getNetVerifiedRevenueAmount({
-        total_price: booking.total_price,
-        dp_paid: booking.dp_paid,
-        dp_verified_amount: booking.dp_verified_amount,
-        dp_verified_at: booking.dp_verified_at,
-        dp_refund_amount: booking.dp_refund_amount,
-        dp_refunded_at: booking.dp_refunded_at,
-        final_adjustments: booking.final_adjustments,
-        final_payment_amount: booking.final_payment_amount,
-        final_paid_at: booking.final_paid_at,
-        settlement_status: booking.settlement_status,
-        is_fully_paid: booking.is_fully_paid,
-      }),
-    0,
-  );
-  const totalPending = bookings
-    .filter((booking) => !isCancelledBooking(booking) && !booking.is_fully_paid)
-    .reduce(
-      (sum, booking) =>
-        sum +
-        getRemainingFinalPayment({
-          total_price: booking.total_price,
-          dp_paid: booking.dp_paid,
-          final_adjustments: booking.final_adjustments,
-          final_payment_amount: booking.final_payment_amount,
-          final_paid_at: booking.final_paid_at,
-          settlement_status: booking.settlement_status,
-          is_fully_paid: booking.is_fully_paid,
-        }),
-      0,
-    );
-  const totalDP = bookings.reduce(
-    (sum, booking) =>
-      sum +
-      getVerifiedDpAmount({
-        total_price: booking.total_price,
-        dp_paid: booking.dp_paid,
-        dp_verified_amount: booking.dp_verified_amount,
-      }),
-    0,
-  );
-  const now = new Date();
-  const monthlyRevenueTotal = bookings.reduce((sum, booking) => {
-    const verifiedDp = isSameLocalMonth(booking.dp_verified_at, now)
-      ? Math.max(booking.dp_verified_amount || 0, 0)
-      : 0;
-    const verifiedFinalPayment = isSameLocalMonth(booking.final_paid_at, now)
-      ? Math.max(booking.final_payment_amount || 0, 0)
-      : 0;
-    const refundedDp = isSameLocalMonth(booking.dp_refunded_at, now)
-      ? Math.min(
-          Math.max(booking.dp_refund_amount || 0, 0),
-          Math.max(booking.dp_verified_amount || 0, 0),
-        )
-      : 0;
-    return sum + verifiedDp + verifiedFinalPayment - refundedDp;
-  }, 0);
-
-  const items = exportAll
-    ? filtered
-    : filtered.slice((page - 1) * perPage, (page - 1) * perPage + perPage);
-
   return NextResponse.json({
-    items,
-    totalItems: filtered.length,
+    items: bookings,
+    totalItems: Number(pageData?.totalItems) || 0,
     metadata: {
-      studioName: profileResult.data?.studio_name || "",
-      bookingStatusOptions,
-      packageOptions,
-      tableColumnPreferences:
-        profileResult.data?.table_column_preferences?.finance || null,
+      studioName:
+        typeof metadataData?.studioName === "string" ? metadataData.studioName : "",
+      bookingStatusOptions: resolvedBookingStatusOptions,
+      packageOptions: readStringArray(metadataData?.packageOptions),
+      tableColumnPreferences: metadataData?.tableColumnPreferences ?? null,
       formSectionsByEventType:
-        profileResult.data?.form_sections && typeof profileResult.data.form_sections === "object"
-          ? profileResult.data.form_sections
+        metadataData?.formSectionsByEventType &&
+        typeof metadataData.formSectionsByEventType === "object"
+          ? metadataData.formSectionsByEventType
           : {},
-      metadataRows: bookings.map((booking) => ({
-        event_type: booking.event_type,
-        extra_fields: booking.extra_fields || null,
-      })),
-      summary: {
-        totalRevenue,
-        totalPending,
-        totalDP,
-        totalBookings: bookings.length,
-        paidCount: bookings.filter((booking) => !isCancelledBooking(booking) && booking.is_fully_paid).length,
-        unpaidCount: bookings.filter((booking) => !isCancelledBooking(booking) && !booking.is_fully_paid).length,
-        monthlyRevenueTotal,
-      },
+      metadataRows: readMetadataRows(metadataData?.metadataRows),
+      summary: readSummary(metadataData?.summary),
     },
   });
 }

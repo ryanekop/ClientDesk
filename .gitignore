@@ -25,6 +25,7 @@
 *.pem
 *.sql
 !supabase_migration_dp_verify_trigger_status.sql
+!supabase_migration_bookings_finance_server_side_pagination.sql
 *.sh
 
 # debug

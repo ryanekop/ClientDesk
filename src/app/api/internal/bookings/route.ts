@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { extractBuiltInExtraFieldValues, extractCustomFieldSnapshots } from "@/lib/form-field-values";
 import { requireRouteUser } from "@/lib/pagination/route-user";
 import {
   getBookingServiceLabel,
-  getBookingServiceNames,
   normalizeBookingServiceSelections,
   normalizeLegacyServiceRecord,
   type BookingServiceSelection,
@@ -52,7 +50,7 @@ type BookingRow = {
   services: { id?: string; name: string; price?: number; is_addon?: boolean | null } | null;
   event_type: string | null;
   freelance?: FreelancerInfo | null;
-  booking_freelance?: Array<{ freelance: FreelancerInfo | null }>;
+  booking_freelance?: Array<{ freelance_id?: string | null; freelance: FreelancerInfo | null }>;
   booking_freelancers: FreelancerInfo[];
   tracking_uuid: string | null;
   location_detail: string | null;
@@ -61,6 +59,32 @@ type BookingRow = {
   service_selections?: BookingServiceSelection[];
   service_label?: string;
   created_at?: string;
+};
+
+type BookingPageRpcResponse = {
+  items?: BookingRow[];
+  totalItems?: number;
+};
+
+type BookingMetadataResponse = {
+  studioName?: string;
+  statusOptions?: string[];
+  queueTriggerStatus?: string;
+  dpVerifyTriggerStatus?: string;
+  defaultWaTarget?: "client" | "freelancer";
+  packages?: string[];
+  freelancerNames?: string[];
+  availableEventTypes?: string[];
+  formSectionsByEventType?: Record<string, unknown>;
+  tableColumnPreferences?: unknown;
+  metadataRows?: Array<{
+    event_type?: string | null;
+    extra_fields?: Record<string, unknown> | null;
+  }>;
+  extraFieldRows?: Array<{
+    event_type?: string | null;
+    extra_fields?: Record<string, unknown> | null;
+  }>;
 };
 
 function parsePositiveInt(value: string | null, fallback: number) {
@@ -85,9 +109,33 @@ function parseExtraFilters(value: string | null) {
   }
 }
 
+function readRpcObject<T>(value: unknown): T | null {
+  if (Array.isArray(value)) {
+    const firstItem = value[0];
+    return firstItem && typeof firstItem === "object" ? (firstItem as T) : null;
+  }
+
+  return value && typeof value === "object" ? (value as T) : null;
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function readMetadataRows(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is { event_type?: string | null; extra_fields?: Record<string, unknown> | null } =>
+          Boolean(item) && typeof item === "object",
+      )
+    : [];
+}
+
 export async function GET(request: NextRequest) {
-  const { errorResponse, supabase, user } = await requireRouteUser();
-  if (errorResponse || !user) {
+  const { errorResponse, supabase } = await requireRouteUser();
+  if (errorResponse) {
     return errorResponse;
   }
 
@@ -108,239 +156,109 @@ export async function GET(request: NextRequest) {
   const exportAll = searchParams.get("export") === "1";
   const extraFieldFilters = parseExtraFilters(searchParams.get("extraFilters"));
 
-  const [profileResult, bookingsResult] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select(
-        "studio_name, custom_client_statuses, queue_trigger_status, dp_verify_trigger_status, default_wa_target, form_sections, table_column_preferences",
-      )
-      .eq("id", user.id)
-      .single(),
-    supabase
-      .from("bookings")
-      .select(
-        "id, booking_code, client_name, client_whatsapp, booking_date, session_date, status, client_status, queue_position, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, location, location_lat, location_lng, location_detail, notes, event_type, tracking_uuid, extra_fields, created_at, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))",
-      )
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false }),
+  const [pageResult, metadataResult] = await Promise.all([
+    supabase.rpc("cd_get_bookings_page", {
+      p_page: page,
+      p_per_page: perPage,
+      p_search: searchQuery,
+      p_status_filter: statusFilter,
+      p_package_filter: packageFilter,
+      p_freelance_filter: freelanceFilter,
+      p_event_type_filter: eventTypeFilter,
+      p_date_from: dateFromFilter,
+      p_date_to: dateToFilter,
+      p_sort_order: sortOrder,
+      p_extra_filters: extraFieldFilters,
+      p_export_all: exportAll,
+    }),
+    supabase.rpc("cd_get_bookings_metadata", {
+      p_event_type_filter: eventTypeFilter,
+    }),
   ]);
 
-  if (profileResult.error) {
+  if (pageResult.error) {
     return NextResponse.json(
-      { error: profileResult.error.message },
+      { error: pageResult.error.message },
       { status: 500 },
     );
   }
 
-  if (bookingsResult.error) {
+  if (metadataResult.error) {
     return NextResponse.json(
-      { error: bookingsResult.error.message },
+      { error: metadataResult.error.message },
       { status: 500 },
     );
   }
 
-  const profileData = profileResult.data as {
-    studio_name?: string | null;
-    custom_client_statuses?: string[] | null;
-    queue_trigger_status?: string | null;
-    dp_verify_trigger_status?: string | null;
-    default_wa_target?: "client" | "freelancer" | null;
-    form_sections?: Record<string, unknown> | FormLayoutRow[] | null;
-    table_column_preferences?: { bookings?: unknown } | null;
-  } | null;
-  const statusOptions = getBookingStatusOptions(
-    profileData?.custom_client_statuses || DEFAULT_CLIENT_STATUSES,
-  );
-  const formSectionsByEventType =
-    profileData?.form_sections && typeof profileData.form_sections === "object"
-      ? profileData.form_sections
-      : {};
+  const pageData = readRpcObject<BookingPageRpcResponse>(pageResult.data);
+  const metadataData = readRpcObject<BookingMetadataResponse>(metadataResult.data);
+  const statusOptions = readStringArray(metadataData?.statusOptions);
+  const resolvedStatusOptions =
+    statusOptions.length > 0
+      ? statusOptions
+      : getBookingStatusOptions(DEFAULT_CLIENT_STATUSES);
 
-  const bookings = ((bookingsResult.data || []) as unknown as BookingRow[]).map(
-    (booking) => {
-      const junctionFreelancers = (booking.booking_freelance || [])
-        .map((bookingFreelance) => bookingFreelance.freelance)
-        .filter((item): item is FreelancerInfo => Boolean(item));
-      const legacyService = normalizeLegacyServiceRecord(booking.services);
-      const serviceSelections = normalizeBookingServiceSelections(
-        booking.booking_services,
-        booking.services,
-      );
-      const syncedStatus = resolveUnifiedBookingStatus({
-        status: booking.status,
-        clientStatus: booking.client_status,
-        statuses: statusOptions,
-      });
-
-      return {
-        ...booking,
-        status: syncedStatus,
-        client_status: syncedStatus,
-        booking_freelancers:
-          junctionFreelancers.length > 0
-            ? junctionFreelancers
-            : booking.freelance
-              ? [booking.freelance]
-              : [],
-        service_selections: serviceSelections,
-        service_label: getBookingServiceLabel(serviceSelections, {
-          kind: "main",
-          fallback: legacyService?.name || "-",
-        }),
-      };
-    },
-  );
-
-  const packages = Array.from(
-    new Set(
-      bookings
-        .flatMap((booking) =>
-          getBookingServiceNames(booking.service_selections || [], "main"),
-        )
-        .filter(Boolean),
-    ),
-  ).sort((left, right) => left.localeCompare(right));
-  const freelancerNames = Array.from(
-    new Set(
-      bookings
-        .flatMap((booking) =>
-          booking.booking_freelancers.map((freelancer) => freelancer.name),
-        )
-        .filter(Boolean),
-    ),
-  ).sort((left, right) => left.localeCompare(right));
-  const availableEventTypes = Array.from(
-    new Set(
-      bookings
-        .map((booking) => booking.event_type)
-        .filter((eventType): eventType is string => Boolean(eventType)),
-    ),
-  ).sort((left, right) => left.localeCompare(right));
-
-  const filteredBookings = bookings
-    .filter((booking) => {
-      const query = searchQuery.toLowerCase();
-      const matchesSearch =
-        !searchQuery ||
-        booking.client_name.toLowerCase().includes(query) ||
-        booking.booking_code.toLowerCase().includes(query) ||
-        (booking.location && booking.location.toLowerCase().includes(query));
-      const matchesStatus =
-        statusFilter === "All" || booking.status === statusFilter;
-      const matchesPackage =
-        packageFilter === "All" ||
-        getBookingServiceNames(
-          booking.service_selections || [],
-          "main",
-        ).includes(packageFilter);
-      const matchesFreelance =
-        freelanceFilter === "All" ||
-        booking.booking_freelancers.some(
-          (freelancer) => freelancer.name === freelanceFilter,
-        );
-      const sessionDateValue = booking.session_date
-        ? booking.session_date.slice(0, 10)
-        : "";
-      const matchesDateFrom =
-        !dateFromFilter || (sessionDateValue && sessionDateValue >= dateFromFilter);
-      const matchesDateTo =
-        !dateToFilter || (sessionDateValue && sessionDateValue <= dateToFilter);
-      const matchesEventType =
-        eventTypeFilter === "All" || booking.event_type === eventTypeFilter;
-      const builtInExtraFields = extractBuiltInExtraFieldValues(
-        booking.extra_fields,
-      );
-      const customFieldMap = Object.fromEntries(
-        extractCustomFieldSnapshots(booking.extra_fields).map((item) => [
-          item.id,
-          item.value,
-        ]),
-      ) as Record<string, string>;
-      const matchesExtraFields = Object.entries(extraFieldFilters).every(
-        ([fieldKey, filterValue]) => {
-          const normalizedFilter = filterValue.trim();
-          if (!normalizedFilter) return true;
-          const sourceValue = (
-            builtInExtraFields[fieldKey] ||
-            customFieldMap[fieldKey] ||
-            ""
-          ).trim();
-          if (!sourceValue) return false;
-
-          return sourceValue
-            .toLowerCase()
-            .includes(normalizedFilter.toLowerCase());
-        },
-      );
-
-      return (
-        matchesSearch &&
-        matchesStatus &&
-        matchesPackage &&
-        matchesFreelance &&
-        matchesDateFrom &&
-        matchesDateTo &&
-        matchesEventType &&
-        matchesExtraFields
-      );
-    })
-    .sort((left, right) => {
-      if (sortOrder === "booking_newest") {
-        const dateComparison = (right.booking_date || right.created_at || "")
-          .localeCompare(left.booking_date || left.created_at || "");
-        if (dateComparison !== 0) return dateComparison;
-        return (right.created_at || "").localeCompare(left.created_at || "");
-      }
-
-      if (sortOrder === "booking_oldest") {
-        const dateComparison = (left.booking_date || left.created_at || "")
-          .localeCompare(right.booking_date || right.created_at || "");
-        if (dateComparison !== 0) return dateComparison;
-        return (left.created_at || "").localeCompare(right.created_at || "");
-      }
-
-      if (sortOrder === "session_newest") {
-        return (left.session_date || "").localeCompare(right.session_date || "");
-      }
-
-      return (right.session_date || "").localeCompare(left.session_date || "");
+  const bookings = (Array.isArray(pageData?.items) ? pageData.items : []).map((booking) => {
+    const junctionFreelancers = (booking.booking_freelance || [])
+      .map((bookingFreelance) => bookingFreelance.freelance)
+      .filter((item): item is FreelancerInfo => Boolean(item));
+    const legacyService = normalizeLegacyServiceRecord(booking.services);
+    const serviceSelections = normalizeBookingServiceSelections(
+      booking.booking_services,
+      booking.services,
+    );
+    const syncedStatus = resolveUnifiedBookingStatus({
+      status: booking.status,
+      clientStatus: booking.client_status,
+      statuses: resolvedStatusOptions,
     });
 
-  const start = (page - 1) * perPage;
-  const items = exportAll
-    ? filteredBookings
-    : filteredBookings.slice(start, start + perPage);
+    return {
+      ...booking,
+      status: syncedStatus,
+      client_status: syncedStatus,
+      booking_freelancers:
+        junctionFreelancers.length > 0
+          ? junctionFreelancers
+          : booking.freelance
+            ? [booking.freelance]
+            : [],
+      service_selections: serviceSelections,
+      service_label: getBookingServiceLabel(serviceSelections, {
+        kind: "main",
+        fallback: legacyService?.name || "-",
+      }),
+    };
+  });
 
   return NextResponse.json({
-    items,
-    totalItems: filteredBookings.length,
+    items: bookings,
+    totalItems: Number(pageData?.totalItems) || 0,
     metadata: {
-      studioName: profileData?.studio_name || "",
-      statusOptions,
-      queueTriggerStatus: profileData?.queue_trigger_status || "Antrian Edit",
-      dpVerifyTriggerStatus: profileData?.dp_verify_trigger_status || "",
-      defaultWaTarget: profileData?.default_wa_target || "client",
-      packages,
-      freelancerNames,
-      availableEventTypes,
-      formSectionsByEventType,
-      tableColumnPreferences:
-        profileData?.table_column_preferences?.bookings || null,
-      metadataRows: bookings.map((booking) => ({
-        event_type: booking.event_type,
-        extra_fields: booking.extra_fields || null,
-      })),
-      extraFieldRows:
-        eventTypeFilter === "All"
-          ? []
-          : bookings
-              .filter((booking) => booking.event_type === eventTypeFilter)
-              .map((booking) => ({
-                event_type: booking.event_type,
-                extra_fields: booking.extra_fields || null,
-              })),
+      studioName:
+        typeof metadataData?.studioName === "string" ? metadataData.studioName : "",
+      statusOptions: resolvedStatusOptions,
+      queueTriggerStatus:
+        typeof metadataData?.queueTriggerStatus === "string"
+          ? metadataData.queueTriggerStatus
+          : "Antrian Edit",
+      dpVerifyTriggerStatus:
+        typeof metadataData?.dpVerifyTriggerStatus === "string"
+          ? metadataData.dpVerifyTriggerStatus
+          : "",
+      defaultWaTarget:
+        metadataData?.defaultWaTarget === "freelancer" ? "freelancer" : "client",
+      packages: readStringArray(metadataData?.packages),
+      freelancerNames: readStringArray(metadataData?.freelancerNames),
+      availableEventTypes: readStringArray(metadataData?.availableEventTypes),
+      formSectionsByEventType:
+        metadataData?.formSectionsByEventType &&
+        typeof metadataData.formSectionsByEventType === "object"
+          ? metadataData.formSectionsByEventType
+          : {},
+      tableColumnPreferences: metadataData?.tableColumnPreferences ?? null,
+      metadataRows: readMetadataRows(metadataData?.metadataRows),
+      extraFieldRows: readMetadataRows(metadataData?.extraFieldRows),
     },
   });
 }
-
-type FormLayoutRow = Record<string, unknown>;
