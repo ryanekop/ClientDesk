@@ -1,7 +1,7 @@
-import { normalizeEventTypeName } from "@/lib/event-type-config";
-
 export const UNIVERSITY_EXTRA_FIELD_KEY = "universitas";
 export const UNIVERSITY_REFERENCE_EXTRA_KEY = "universitas_ref_id";
+const LEGACY_PUBLIC_CUSTOM_EVENT_TYPE = "Lainnya";
+const PUBLIC_CUSTOM_EVENT_TYPE = "Custom/Lainnya";
 
 export type UniversityReferenceSource = "kip_kuliah" | "manual";
 
@@ -9,6 +9,16 @@ export type UniversityReferenceItem = {
   id: string;
   name: string;
 };
+
+function normalizeUniversityEventType(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (normalized === LEGACY_PUBLIC_CUSTOM_EVENT_TYPE) {
+    return PUBLIC_CUSTOM_EVENT_TYPE;
+  }
+  return normalized;
+}
 
 export function cleanUniversityName(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -23,7 +33,7 @@ export function isUniversityExtraField(params: {
   fieldKey: string | null | undefined;
 }) {
   return (
-    normalizeEventTypeName(params.eventType) === "Wisuda" &&
+    normalizeUniversityEventType(params.eventType) === "Wisuda" &&
     params.fieldKey === UNIVERSITY_EXTRA_FIELD_KEY
   );
 }
@@ -40,7 +50,7 @@ export function hasUniversityReferenceSelection(
   extraFields: Record<string, string> | null | undefined,
   eventType: string | null | undefined,
 ) {
-  if (normalizeEventTypeName(eventType) !== "Wisuda") {
+  if (normalizeUniversityEventType(eventType) !== "Wisuda") {
     return true;
   }
 
