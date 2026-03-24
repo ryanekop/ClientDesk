@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PageHeader } from "@/components/ui/page-header";
 import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -1363,10 +1364,36 @@ export default function FinancePage() {
         <div className="space-y-6">
             {successToastNode}
             <BookingWriteReadonlyBanner />
-            <div>
-                <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
-                <p className="text-muted-foreground">{t("subtitle")}</p>
-            </div>
+            <PageHeader
+                actions={(
+                    <>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full lg:w-auto"
+                            onClick={exportFinance}
+                        >
+                            <Download className="w-4 h-4" /> Export Excel
+                        </Button>
+                        <TableColumnManager
+                            title="Kelola Kolom Keuangan"
+                            description="Atur kolom yang tampil di tabel keuangan. Kolom Nama dan Aksi selalu terkunci."
+                            columns={columns}
+                            open={columnManagerOpen}
+                            onOpenChange={setColumnManagerOpen}
+                            onChange={setColumns}
+                            onSave={() => saveColumnPreferences(columns)}
+                            saving={savingColumns}
+                            triggerClassName="w-full lg:w-auto"
+                        />
+                    </>
+                )}
+            >
+                <div>
+                    <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
+                    <p className="text-muted-foreground">{t("subtitle")}</p>
+                </div>
+            </PageHeader>
 
             {/* Summary Cards */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1488,29 +1515,6 @@ export default function FinancePage() {
                         </div>
                     </div>
                 )}
-
-                <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-end">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="h-9 w-full gap-2 sm:w-auto"
-                        onClick={exportFinance}
-                    >
-                        <Download className="w-4 h-4" /> Export Excel
-                    </Button>
-                    <div className="w-full sm:w-auto [&>button]:w-full [&>button]:justify-center sm:[&>button]:w-auto">
-                        <TableColumnManager
-                            title="Kelola Kolom Keuangan"
-                            description="Atur kolom yang tampil di tabel keuangan. Kolom Nama dan Aksi selalu terkunci."
-                            columns={columns}
-                            open={columnManagerOpen}
-                            onOpenChange={setColumnManagerOpen}
-                            onChange={setColumns}
-                            onSave={() => saveColumnPreferences(columns)}
-                            saving={savingColumns}
-                        />
-                    </div>
-                </div>
             </div>
 
             {/* Mobile Cards */}

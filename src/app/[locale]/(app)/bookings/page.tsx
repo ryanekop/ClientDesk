@@ -21,6 +21,7 @@ import {
 import { getBookingWriteBlockedMessage } from "@/lib/booking-write-access";
 import { cn } from "@/lib/utils";
 import { BatchImportButton } from "@/components/batch-import";
+import { PageHeader } from "@/components/ui/page-header";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
 import { useSuccessToast } from "@/components/ui/success-toast";
@@ -1546,13 +1547,10 @@ export default function BookingsPage() {
             {successToastNode}
             <BookingWriteReadonlyBanner />
             {/* Header */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-foreground">{t("title")}</h2>
-                    <p className="text-muted-foreground text-sm">{t("subtitle")}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" className="gap-2 h-9" onClick={() => {
+            <PageHeader
+                actions={(
+                    <>
+                        <Button variant="outline" className="w-full lg:w-auto" onClick={() => {
                         const exportData = filteredBookings.map((b: Booking) => ({
                             [tb("exportBookingCode")]: b.booking_code,
                             [tb("exportClientName")]: b.client_name,
@@ -1569,40 +1567,48 @@ export default function BookingsPage() {
                         XLSX.utils.book_append_sheet(wb, ws, "Bookings");
                         XLSX.writeFile(wb, `bookings_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
                     }}>
-                        <Download className="w-4 h-4" /> {tb("export")}
-                    </Button>
-                    <TableColumnManager
-                        title="Kelola Kolom Daftar Booking"
-                        description="Atur kolom yang ditampilkan dan ubah urutannya. Kolom Nama dan Aksi selalu terkunci."
-                        columns={columns}
-                        open={columnManagerOpen}
-                        onOpenChange={setColumnManagerOpen}
-                        onChange={setColumns}
-                        onSave={() => saveColumnPreferences(columns)}
-                        saving={savingColumns}
-                    />
-                    <BatchImportButton
-                        onImported={() => fetchData()}
-                        canCommitBookings={canWriteBookings}
-                        bookingWriteBlockedMessage={bookingWriteBlockedMessage}
-                    />
-                    {canWriteBookings ? (
-                        <Link href="/bookings/new">
-                            <Button className="gap-2 h-9 bg-foreground text-background hover:bg-foreground/90">
+                            <Download className="w-4 h-4" /> {tb("export")}
+                        </Button>
+                        <TableColumnManager
+                            title="Kelola Kolom Daftar Booking"
+                            description="Atur kolom yang ditampilkan dan ubah urutannya. Kolom Nama dan Aksi selalu terkunci."
+                            columns={columns}
+                            open={columnManagerOpen}
+                            onOpenChange={setColumnManagerOpen}
+                            onChange={setColumns}
+                            onSave={() => saveColumnPreferences(columns)}
+                            saving={savingColumns}
+                            triggerClassName="w-full lg:w-auto"
+                        />
+                        <BatchImportButton
+                            onImported={() => fetchData()}
+                            canCommitBookings={canWriteBookings}
+                            bookingWriteBlockedMessage={bookingWriteBlockedMessage}
+                            buttonClassName="w-full lg:w-auto"
+                        />
+                        {canWriteBookings ? (
+                            <Button asChild className="w-full bg-foreground text-background hover:bg-foreground/90 lg:w-auto">
+                                <Link href="/bookings/new">
+                                    <Plus className="w-4 h-4" /> {tb("addClient")}
+                                </Link>
+                            </Button>
+                        ) : (
+                            <Button
+                                className="w-full bg-foreground text-background hover:bg-foreground/90 lg:w-auto"
+                                disabled
+                                title={bookingWriteBlockedMessage}
+                            >
                                 <Plus className="w-4 h-4" /> {tb("addClient")}
                             </Button>
-                        </Link>
-                    ) : (
-                        <Button
-                            className="gap-2 h-9 bg-foreground text-background hover:bg-foreground/90"
-                            disabled
-                            title={bookingWriteBlockedMessage}
-                        >
-                            <Plus className="w-4 h-4" /> {tb("addClient")}
-                        </Button>
-                    )}
+                        )}
+                    </>
+                )}
+            >
+                <div>
+                    <h2 className="text-2xl font-bold tracking-tight text-foreground">{t("title")}</h2>
+                    <p className="text-muted-foreground text-sm">{t("subtitle")}</p>
                 </div>
-            </div>
+            </PageHeader>
 
             {/* Search + Controls */}
             <div className="space-y-3">
@@ -1617,16 +1623,16 @@ export default function BookingsPage() {
                             className="h-9 w-full rounded-md border border-input bg-background/50 pl-9 pr-3 text-sm focus-visible:ring-1 focus-visible:ring-ring outline-none transition-all"
                         />
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                         <Button
                             variant="outline"
-                            className="h-9 gap-2"
+                            className="h-9 w-full gap-2 sm:w-auto"
                             onClick={() => setShowFilterPanel(prev => !prev)}
                         >
                             <ListOrdered className="w-4 h-4" />
                             Filter
                         </Button>
-                        <select value={sortOrder} onChange={e => setSortOrder(e.target.value as BookingSortOrder)} className={selectFilterClass}>
+                        <select value={sortOrder} onChange={e => setSortOrder(e.target.value as BookingSortOrder)} className={`${selectFilterClass} w-full sm:w-auto`}>
                             <option value="booking_newest">Urutkan: Booking Terbaru</option>
                             <option value="booking_oldest">Urutkan: Booking Terlama</option>
                             <option value="session_newest">Urutkan: Jadwal Sesi Terdekat</option>
@@ -1635,7 +1641,7 @@ export default function BookingsPage() {
                         {(statusFilter !== "All" || packageFilter !== "All" || freelanceFilter !== "All" || eventTypeFilter !== "All" || dateFromFilter || dateToFilter || Object.values(extraFieldFilters).some(Boolean) || searchQuery || sortOrder !== "booking_newest") && (
                             <button
                                 onClick={resetFilters}
-                                className="h-9 px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center gap-1.5 cursor-pointer"
+                                className="h-9 w-full px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer sm:w-auto"
                             >
                                 <X className="w-3.5 h-3.5" /> Reset
                             </button>

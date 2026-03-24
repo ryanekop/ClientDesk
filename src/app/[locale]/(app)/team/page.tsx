@@ -10,6 +10,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
+import { PageHeader } from "@/components/ui/page-header";
 import {
     lockBoundaryColumns,
     mergeTableColumnPreferences,
@@ -417,56 +418,74 @@ export default function TeamPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <PageHeader
+                actions={(
+                    <>
+                        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+                            <DialogTrigger asChild>
+                                <Button className="w-full lg:w-auto"><Plus className="w-4 h-4" /> {t("tambah")}</Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[500px]">
+                                <DialogHeader>
+                                    <DialogTitle>{t("tambahTitle")}</DialogTitle>
+                                    <DialogDescription>{t("tambahDesc")}</DialogDescription>
+                                </DialogHeader>
+                                <form action={(fd) => handleAdd(fd)} className="grid gap-4 py-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">{t("nama")}</label>
+                                        <input name="name" required placeholder={tt("namePlaceholder")} className={inputClass} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">{t("peran")}</label>
+                                        <select name="role" required className={inputClass}>
+                                            <option value="">{t("pilihPeran")}</option>
+                                            {roleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">{t("whatsapp")}</label>
+                                        <div className="flex gap-2">
+                                            <select value={addCountryCode} onChange={e => setAddCountryCode(e.target.value)} className={inputClass + " !w-28 shrink-0 cursor-pointer"}>
+                                                {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                                            </select>
+                                            <input name="whatsapp_number" type="tel" placeholder="8123456789"
+                                                onChange={e => {
+                                                    const val = e.target.value.replace(/[^0-9]/g, "");
+                                                    e.target.value = val.startsWith("0") ? val.slice(1) : val.startsWith("62") ? val.slice(2) : val;
+                                                }}
+                                                className={inputClass} />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Google Email</label>
+                                        <input name="google_email" type="email" placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
+                                    </div>
+                                    <TagInput tags={addTags} setTags={setAddTags} input={tagInput} setInput={setTagInput} inputClass={inputClass} />
+                                    <DialogFooter><Button type="submit">{t("simpan")}</Button></DialogFooter>
+                                </form>
+                            </DialogContent>
+                        </Dialog>
+                        {!loading && members.length > 0 ? (
+                            <TableColumnManager
+                                title="Kelola Kolom Tim/Freelance"
+                                description="Atur kolom yang tampil di tabel tim atau freelance. Kolom Nama dan Aksi selalu terkunci."
+                                columns={columns}
+                                open={columnManagerOpen}
+                                onOpenChange={setColumnManagerOpen}
+                                onChange={setColumns}
+                                onSave={() => saveColumnPreferences(columns)}
+                                saving={savingColumns}
+                                triggerClassName="w-full lg:w-auto"
+                            />
+                        ) : null}
+                    </>
+                )}
+            >
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
                     <p className="text-muted-foreground">{t("subtitle")}</p>
                 </div>
-                <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-                    <DialogTrigger asChild>
-                        <Button className="gap-2"><Plus className="w-4 h-4" /> {t("tambah")}</Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[500px]">
-                        <DialogHeader>
-                            <DialogTitle>{t("tambahTitle")}</DialogTitle>
-                            <DialogDescription>{t("tambahDesc")}</DialogDescription>
-                        </DialogHeader>
-                        <form action={(fd) => handleAdd(fd)} className="grid gap-4 py-4">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">{t("nama")}</label>
-                                <input name="name" required placeholder={tt("namePlaceholder")} className={inputClass} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">{t("peran")}</label>
-                                <select name="role" required className={inputClass}>
-                                    <option value="">{t("pilihPeran")}</option>
-                                    {roleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">{t("whatsapp")}</label>
-                                <div className="flex gap-2">
-                                    <select value={addCountryCode} onChange={e => setAddCountryCode(e.target.value)} className={inputClass + " !w-28 shrink-0 cursor-pointer"}>
-                                        {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
-                                    </select>
-                                    <input name="whatsapp_number" type="tel" placeholder="8123456789"
-                                        onChange={e => {
-                                            const val = e.target.value.replace(/[^0-9]/g, "");
-                                            e.target.value = val.startsWith("0") ? val.slice(1) : val.startsWith("62") ? val.slice(2) : val;
-                                        }}
-                                        className={inputClass} />
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">Google Email</label>
-                                <input name="google_email" type="email" placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
-                            </div>
-                            <TagInput tags={addTags} setTags={setAddTags} input={tagInput} setInput={setTagInput} inputClass={inputClass} />
-                            <DialogFooter><Button type="submit">{t("simpan")}</Button></DialogFooter>
-                        </form>
-                    </DialogContent>
-                </Dialog>
-            </div>
+            </PageHeader>
 
             {/* Search + Filter */}
             {!loading && members.length > 0 && (
@@ -486,21 +505,11 @@ export default function TeamPage() {
                         )}
                     </div>
                     {allTags.length > 0 && (
-                        <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className={selectFilterClass}>
+                        <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className={`${selectFilterClass} w-full sm:w-auto`}>
                             <option value="All">Semua Tag</option>
                             {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
                         </select>
                     )}
-                    <TableColumnManager
-                        title="Kelola Kolom Tim/Freelance"
-                        description="Atur kolom yang tampil di tabel tim atau freelance. Kolom Nama dan Aksi selalu terkunci."
-                        columns={columns}
-                        open={columnManagerOpen}
-                        onOpenChange={setColumnManagerOpen}
-                        onChange={setColumns}
-                        onSave={() => saveColumnPreferences(columns)}
-                        saving={savingColumns}
-                    />
                 </div>
             )}
 

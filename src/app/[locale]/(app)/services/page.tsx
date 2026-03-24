@@ -41,6 +41,7 @@ import {
   MoveVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import {
   Dialog,
@@ -963,36 +964,33 @@ export default function ServicesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
-          <p className="text-muted-foreground">{t("subtitle")}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant={isReorderMode ? "default" : "outline"}
-            className="gap-2"
-            onClick={() => {
-              setIsReorderMode((current) => !current);
-              setPageError("");
-            }}
-            disabled={loading || services.length === 0 || reorderSaving}
-          >
-            {reorderSaving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <MoveVertical className="h-4 w-4" />
-            )}
-            {isReorderMode ? ts("finishReorder") : ts("reorderPackages")}
-          </Button>
-          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" /> {t("tambah")}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+      <PageHeader
+        actions={
+          <>
+            <Button
+              type="button"
+              variant={isReorderMode ? "default" : "outline"}
+              className="w-full lg:w-auto"
+              onClick={() => {
+                setIsReorderMode((current) => !current);
+                setPageError("");
+              }}
+              disabled={loading || services.length === 0 || reorderSaving}
+            >
+              {reorderSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <MoveVertical className="h-4 w-4" />
+              )}
+              {isReorderMode ? ts("finishReorder") : ts("reorderPackages")}
+            </Button>
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+              <DialogTrigger asChild>
+                <Button className="w-full lg:w-auto">
+                  <Plus className="h-4 w-4" /> {t("tambah")}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>{t("tambahTitle")}</DialogTitle>
                 <DialogDescription>{t("tambahDesc")}</DialogDescription>
@@ -1153,10 +1151,16 @@ export default function ServicesPage() {
                   <Button type="submit">{t("simpan")}</Button>
                 </DialogFooter>
               </form>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          </>
+        }
+      >
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
+          <p className="text-muted-foreground">{t("subtitle")}</p>
         </div>
-      </div>
+      </PageHeader>
 
       {pageError ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
@@ -1187,7 +1191,7 @@ export default function ServicesPage() {
           <select
             value={selectedEventFilter}
             onChange={(event) => setSelectedEventFilter(event.target.value)}
-            className="h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer"
+            className="h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer sm:w-auto"
           >
             <option value="">{ts("allCategories")}</option>
             {usedEventTypes.map((eventType) => (

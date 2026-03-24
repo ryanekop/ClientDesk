@@ -38,6 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import type { TableColumnPreference } from "@/lib/table-column-prefs";
 
 type TableColumnManagerProps = {
@@ -50,6 +51,7 @@ type TableColumnManagerProps = {
   onSave: () => void | Promise<void>;
   saving?: boolean;
   triggerLabel?: string;
+  triggerClassName?: string;
 };
 
 function SortableColumnItem({
@@ -133,6 +135,7 @@ export function TableColumnManager({
   onSave,
   saving = false,
   triggerLabel = "Kelola Kolom",
+  triggerClassName,
 }: TableColumnManagerProps) {
   const [activeColumnId, setActiveColumnId] = React.useState<string | null>(null);
   const [mounted, setMounted] = React.useState(false);
@@ -188,7 +191,7 @@ export function TableColumnManager({
     <>
       <Button
         variant="outline"
-        className="h-9 gap-2"
+        className={cn("h-9 gap-2", triggerClassName)}
         onClick={() => onOpenChange(true)}
       >
         <Settings2 className="w-4 h-4" />

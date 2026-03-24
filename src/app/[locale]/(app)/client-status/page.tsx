@@ -17,6 +17,7 @@ import { getBookingWriteBlockedMessage } from "@/lib/booking-write-access";
 import { TablePagination, paginateArray } from "@/components/ui/table-pagination";
 import { useTranslations, useLocale } from "next-intl";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
+import { PageHeader } from "@/components/ui/page-header";
 import {
     lockBoundaryColumns,
     mergeTableColumnPreferences,
@@ -642,12 +643,28 @@ export default function ClientStatusPage() {
         <div className="space-y-6">
             {successToastNode}
             <BookingWriteReadonlyBanner />
-            <div>
-                <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                    <Activity className="w-6 h-6" /> {t("title")}
-                </h2>
-                <p className="text-muted-foreground text-sm">{t("subtitle")}</p>
-            </div>
+            <PageHeader
+                actions={(
+                    <TableColumnManager
+                        title="Kelola Kolom Status Booking"
+                        description="Atur kolom yang tampil di tabel status booking. Kolom Nama dan Aksi selalu terkunci."
+                        columns={columns}
+                        open={columnManagerOpen}
+                        onOpenChange={setColumnManagerOpen}
+                        onChange={setColumns}
+                        onSave={() => saveColumnPreferences(columns)}
+                        saving={savingColumns}
+                        triggerClassName="w-full lg:w-auto"
+                    />
+                )}
+            >
+                <div>
+                    <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                        <Activity className="w-6 h-6" /> {t("title")}
+                    </h2>
+                    <p className="text-muted-foreground text-sm">{t("subtitle")}</p>
+                </div>
+            </PageHeader>
 
             {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-3">
@@ -663,23 +680,13 @@ export default function ClientStatusPage() {
                 <select
                     value={filter}
                     onChange={e => setFilter(e.target.value)}
-                    className="h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer"
+                    className="h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer sm:w-auto"
                 >
                     <option value="">Semua</option>
                     {getBookingStatusOptions(clientStatuses).map(s => (
                         <option key={s} value={s}>{s}</option>
                     ))}
                 </select>
-                <TableColumnManager
-                    title="Kelola Kolom Status Booking"
-                    description="Atur kolom yang tampil di tabel status booking. Kolom Nama dan Aksi selalu terkunci."
-                    columns={columns}
-                    open={columnManagerOpen}
-                    onOpenChange={setColumnManagerOpen}
-                    onChange={setColumns}
-                    onSave={() => saveColumnPreferences(columns)}
-                    saving={savingColumns}
-                />
             </div>
 
             {/* Mobile Cards */}

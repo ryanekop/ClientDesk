@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 type Step = "upload" | "preview" | "confirm";
 
@@ -82,6 +83,7 @@ type BatchImportButtonProps = {
   onImported: () => void;
   canCommitBookings?: boolean;
   bookingWriteBlockedMessage?: string;
+  buttonClassName?: string;
 };
 
 function downloadBase64Xlsx(base64: string, fileName: string) {
@@ -107,6 +109,7 @@ export function BatchImportButton({
   onImported,
   canCommitBookings = true,
   bookingWriteBlockedMessage = "Akses booking terkunci.",
+  buttonClassName,
 }: BatchImportButtonProps) {
   const [open, setOpen] = React.useState(false);
   const [step, setStep] = React.useState<Step>("upload");
@@ -265,7 +268,7 @@ export function BatchImportButton({
     <>
       <Button
         variant="outline"
-        className="gap-2 h-9 shrink-0"
+        className={cn("h-9 gap-2 shrink-0", buttonClassName)}
         onClick={() => setOpen(true)}
         title="Batch Import"
       >
