@@ -16,6 +16,8 @@ type SuccessToastOptions = {
 
 const DEFAULT_AUTO_HIDE_MS = 2600;
 const DEFAULT_CLOSE_MS = 220;
+const SUCCESS_TOAST_OFFSET =
+  "calc(env(safe-area-inset-top, 0px) + var(--global-announcement-height, 0px) + var(--dashboard-topbar-height, 0px) + 16px)";
 
 export function SuccessToast({
   message,
@@ -27,10 +29,13 @@ export function SuccessToast({
   onClose: () => void;
 }) {
   return (
-    <div className="pointer-events-none fixed right-4 top-4 z-50">
+    <div
+      className="pointer-events-none fixed inset-x-4 z-50 sm:left-auto sm:right-4 sm:w-[24rem]"
+      style={{ top: SUCCESS_TOAST_OFFSET }}
+    >
       <div
         className={[
-          "pointer-events-auto flex max-w-sm items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-lg",
+          "pointer-events-auto flex w-full items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-lg sm:max-w-sm",
           closing
             ? "animate-out fade-out slide-out-to-right-8 duration-200"
             : "animate-in fade-in slide-in-from-right-8 duration-300",
@@ -39,7 +44,7 @@ export function SuccessToast({
         aria-live="polite"
       >
         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-        <p className="flex-1">{message}</p>
+        <p className="min-w-0 flex-1 break-words leading-5">{message}</p>
         <button
           type="button"
           className="shrink-0 rounded p-0.5 text-emerald-700/80 transition-colors hover:bg-emerald-100 hover:text-emerald-900"

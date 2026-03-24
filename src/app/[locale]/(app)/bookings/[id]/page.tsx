@@ -488,6 +488,18 @@ export default function BookingDetailPage() {
         });
     }, [locale]);
     const { showSuccessToast, successToastNode } = useSuccessToast();
+    const warningTitle = locale === "en" ? "Warning" : "Peringatan";
+    const copyTextWithSuccessToast = React.useCallback(
+        async (text: string, successMessage: string, errorMessage: string) => {
+            try {
+                await navigator.clipboard.writeText(text);
+                showSuccessToast(successMessage);
+            } catch {
+                showFeedback(errorMessage, warningTitle);
+            }
+        },
+        [showFeedback, showSuccessToast, warningTitle],
+    );
     const fastpikDashboardUrl = React.useMemo(
         () => `${FASTPIK_APP_BASE_URL}/${locale}/dashboard`,
         [locale],
@@ -497,24 +509,16 @@ export default function BookingDetailPage() {
         window.open(fastpikDashboardUrl, "_blank", "noopener,noreferrer");
         const projectId = booking?.fastpik_project_id?.trim();
         if (!projectId) return;
-        navigator.clipboard
-            .writeText(projectId)
-            .then(() => {
-                showFeedback(
-                    locale === "en"
-                        ? "Fastpik project ID copied."
-                        : "ID project Fastpik berhasil disalin.",
-                );
-            })
-            .catch(() => {
-                showFeedback(
-                    locale === "en"
-                        ? "Failed to copy Fastpik project ID."
-                        : "Gagal menyalin ID project Fastpik.",
-                    locale === "en" ? "Warning" : "Peringatan",
-                );
-            });
-    }, [booking?.fastpik_project_id, fastpikDashboardUrl, locale, showFeedback]);
+        void copyTextWithSuccessToast(
+            projectId,
+            locale === "en"
+                ? "Fastpik project ID copied."
+                : "ID project Fastpik berhasil disalin.",
+            locale === "en"
+                ? "Failed to copy Fastpik project ID."
+                : "Gagal menyalin ID project Fastpik.",
+        );
+    }, [booking?.fastpik_project_id, copyTextWithSuccessToast, fastpikDashboardUrl, locale]);
 
     const handleSyncFastpikManual = React.useCallback(async () => {
         if (!booking) return;
@@ -1921,16 +1925,43 @@ export default function BookingDetailPage() {
     const copyFastpikPassword = () => {
         const password = fastpikProjectInfo?.password || "";
         if (!password) {
-            showFeedback("Password Fastpik belum tersedia.");
+            showFeedback(
+                locale === "en"
+                    ? "Fastpik password is not available yet."
+                    : "Password Fastpik belum tersedia.",
+            );
             return;
         }
-        navigator.clipboard
-            .writeText(password)
-            .then(() => showFeedback("Password Fastpik berhasil disalin."))
-            .catch(() =>
-                showFeedback("Gagal menyalin password Fastpik.", "Peringatan"),
-            );
+        void copyTextWithSuccessToast(
+            password,
+            locale === "en"
+                ? "Fastpik password copied."
+                : "Password Fastpik berhasil disalin.",
+            locale === "en"
+                ? "Failed to copy Fastpik password."
+                : "Gagal menyalin password Fastpik.",
+        );
     };
+    const handleCopyGalleryLink = React.useCallback((url: string) => {
+        void copyTextWithSuccessToast(
+            url,
+            locale === "en" ? "Gallery link copied." : "Link galeri berhasil disalin.",
+            locale === "en"
+                ? "Failed to copy gallery link."
+                : "Gagal menyalin link galeri.",
+        );
+    }, [copyTextWithSuccessToast, locale]);
+    const handleCopyPortfolioLink = React.useCallback((url: string) => {
+        void copyTextWithSuccessToast(
+            url,
+            locale === "en"
+                ? "Portfolio link copied."
+                : "Link portofolio berhasil disalin.",
+            locale === "en"
+                ? "Failed to copy portfolio link."
+                : "Gagal menyalin link portofolio.",
+        );
+    }, [copyTextWithSuccessToast, locale]);
     const renderGalleryLinkCard = (
         label: string,
         url: string,
@@ -1943,7 +1974,7 @@ export default function BookingDetailPage() {
                 <Link2 className={`w-4 h-4 shrink-0 ${iconClassName}`} />
                 <span className="flex-1 truncate text-xs text-muted-foreground">{url}</span>
                 <button
-                    onClick={() => { navigator.clipboard.writeText(url); }}
+                    onClick={() => handleCopyGalleryLink(url)}
                     className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer"
                     title="Salin Link"
                 >
@@ -2650,7 +2681,7 @@ export default function BookingDetailPage() {
                     <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
                         <Link2 className="w-4 h-4 text-pink-500 shrink-0" />
                         <a href={booking.portfolio_url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate text-xs text-primary hover:underline">{booking.portfolio_url}</a>
-                        <button onClick={() => { navigator.clipboard.writeText(booking.portfolio_url!); }} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
+                        <button onClick={() => handleCopyPortfolioLink(booking.portfolio_url!)} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
                             <Copy className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={() => window.open(booking.portfolio_url!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">

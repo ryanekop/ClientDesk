@@ -406,7 +406,6 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
                       <thead className="bg-muted/50 sticky top-0">
                         <tr>
                           <th className="px-3 py-2 text-left font-medium text-muted-foreground">Row</th>
-                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Import ID (otomatis)</th>
                           <th className="px-3 py-2 text-left font-medium text-muted-foreground">Nama Klien</th>
                           <th className="px-3 py-2 text-left font-medium text-muted-foreground">Event</th>
                           <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
@@ -420,7 +419,6 @@ export function BatchImportButton({ onImported }: { onImported: () => void }) {
                           return (
                             <tr key={row.rowNumber} className="hover:bg-muted/30 align-top">
                               <td className="px-3 py-1.5 text-muted-foreground">{row.rowNumber}</td>
-                              <td className="px-3 py-1.5 font-mono">{row.externalImportId || "-"}</td>
                               <td className="px-3 py-1.5 font-medium">{row.clientName || "-"}</td>
                               <td className="px-3 py-1.5">{row.eventType || "-"}</td>
                               <td className="px-3 py-1.5">{row.status || "-"}</td>

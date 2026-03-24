@@ -20,6 +20,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     const router = useRouter();
     const locale = useLocale();
     const signingOutRef = React.useRef(false);
+    const layoutStyle = React.useMemo(
+        () =>
+            ({
+                "--dashboard-topbar-height": "64px",
+                height: "calc(100vh - var(--global-announcement-height, 0px))",
+            }) as React.CSSProperties,
+        [],
+    );
 
     const enforceSessionOnly = React.useCallback(async () => {
         if (signingOutRef.current) return;
@@ -52,9 +60,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     return (
         <div
             className="flex overflow-hidden bg-muted/30"
-            style={{
-                height: "calc(100vh - var(--global-announcement-height, 0px))",
-            }}
+            style={layoutStyle}
         >
             <Sidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
             <div className="flex flex-col flex-1 w-full overflow-hidden">
