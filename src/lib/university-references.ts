@@ -3,11 +3,19 @@ export const UNIVERSITY_REFERENCE_EXTRA_KEY = "universitas_ref_id";
 const LEGACY_PUBLIC_CUSTOM_EVENT_TYPE = "Lainnya";
 const PUBLIC_CUSTOM_EVENT_TYPE = "Custom/Lainnya";
 
-export type UniversityReferenceSource = "kip_kuliah" | "manual";
+export type UniversityReferenceSource =
+  | "kip_kuliah"
+  | "wikipedia_kedinasan"
+  | "wikipedia_poltekkes"
+  | "wikipedia_ptn"
+  | "wikipedia_ptkn"
+  | "manual";
 
 export type UniversityReferenceItem = {
   id: string;
   name: string;
+  abbreviation?: string | null;
+  displayName?: string;
 };
 
 function normalizeUniversityEventType(value: unknown): string | null {
@@ -26,6 +34,44 @@ export function cleanUniversityName(value: string) {
 
 export function normalizeUniversityName(value: string) {
   return cleanUniversityName(value).toLowerCase();
+}
+
+export function cleanUniversityAbbreviation(value: string | null | undefined) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+export function normalizeUniversityAbbreviation(
+  value: string | null | undefined,
+) {
+  return cleanUniversityAbbreviation(value).toLowerCase();
+}
+
+export function buildUniversityDisplayName(
+  name: string,
+  abbreviation?: string | null,
+) {
+  const cleanedName = cleanUniversityName(name);
+  const cleanedAbbreviation = cleanUniversityAbbreviation(abbreviation);
+  if (!cleanedName) return "";
+  if (!cleanedAbbreviation) return cleanedName;
+  return `${cleanedName} (${cleanedAbbreviation})`;
+}
+
+export function matchesUniversityDisplayValue(params: {
+  submittedValue: string;
+  name: string;
+  abbreviation?: string | null;
+}) {
+  const normalizedSubmitted = normalizeUniversityName(params.submittedValue);
+  if (!normalizedSubmitted) return false;
+
+  return (
+    normalizedSubmitted === normalizeUniversityName(params.name) ||
+    normalizedSubmitted ===
+      normalizeUniversityName(
+        buildUniversityDisplayName(params.name, params.abbreviation),
+      )
+  );
 }
 
 export function isUniversityExtraField(params: {

@@ -49,8 +49,9 @@ import {
     type BookingSpecialLinkRule,
 } from "@/lib/booking-special-offer";
 import {
+    buildUniversityDisplayName,
     cleanUniversityName,
-    normalizeUniversityName,
+    matchesUniversityDisplayValue,
     UNIVERSITY_EXTRA_FIELD_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
@@ -88,6 +89,7 @@ type AvailableServiceRow = {
 type UniversityReferenceRow = {
     id: string;
     name: string;
+    abbreviation?: string | null;
 };
 
 type BookingRequestBody = {
@@ -548,7 +550,7 @@ export async function POST(request: NextRequest) {
             const { data: universityReference, error: universityReferenceError } =
                 await supabaseAdmin
                     .from("university_references")
-                    .select("id, name")
+                    .select("id, name, abbreviation")
                     .eq("id", submittedUniversityRefId)
                     .maybeSingle<UniversityReferenceRow>();
 
@@ -562,10 +564,11 @@ export async function POST(request: NextRequest) {
                 );
             }
 
-            if (
-                normalizeUniversityName(universityReference.name) !==
-                normalizeUniversityName(submittedUniversityName)
-            ) {
+            if (!matchesUniversityDisplayValue({
+                submittedValue: submittedUniversityName,
+                name: universityReference.name,
+                abbreviation: universityReference.abbreviation,
+            })) {
                 return NextResponse.json(
                     {
                         success: false,
@@ -780,7 +783,10 @@ export async function POST(request: NextRequest) {
         const sanitizedExtraData: Record<string, unknown> = { ...rawExtraData };
         if (resolvedUniversityReference) {
             sanitizedExtraData[UNIVERSITY_EXTRA_FIELD_KEY] =
-                resolvedUniversityReference.name;
+                buildUniversityDisplayName(
+                    resolvedUniversityReference.name,
+                    resolvedUniversityReference.abbreviation,
+                );
             sanitizedExtraData[UNIVERSITY_REFERENCE_EXTRA_KEY] =
                 resolvedUniversityReference.id;
         } else {

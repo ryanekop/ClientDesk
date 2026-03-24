@@ -28,6 +28,7 @@
 !supabase_migration_bookings_finance_server_side_pagination.sql
 !supabase_migration_booking_listing_service_duration_payload.sql
 !supabase_migration_university_references.sql
+!supabase_migration_university_references_abbreviation.sql
 *.sh
 
 # debug

@@ -5,6 +5,7 @@ import { Check, Loader2, Search, Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {
+  buildUniversityDisplayName,
   cleanUniversityName,
   normalizeUniversityName,
   type UniversityReferenceItem,
@@ -117,7 +118,8 @@ export function UniversityAutocomplete({
                   Boolean(item) &&
                   typeof item === "object" &&
                   typeof (item as UniversityReferenceItem).id === "string" &&
-                  typeof (item as UniversityReferenceItem).name === "string",
+                  typeof (item as UniversityReferenceItem).name === "string" &&
+                  typeof (item as UniversityReferenceItem).displayName === "string",
               )
             : [],
         );
@@ -169,12 +171,28 @@ export function UniversityAutocomplete({
             typeof item === "object" &&
             typeof (item as UniversityReferenceItem).id === "string" &&
             typeof (item as UniversityReferenceItem).name === "string" &&
-            normalizeUniversityName(
-              (item as UniversityReferenceItem).name,
-            ) === normalizedValue,
+            [
+              normalizeUniversityName((item as UniversityReferenceItem).name),
+              normalizeUniversityName(
+                (item as UniversityReferenceItem).displayName ||
+                  buildUniversityDisplayName(
+                    (item as UniversityReferenceItem).name,
+                    (item as UniversityReferenceItem).abbreviation,
+                  ),
+              ),
+              normalizeUniversityName(
+                (item as UniversityReferenceItem).abbreviation || "",
+              ),
+            ].includes(normalizedValue),
         );
         if (exactMatch) {
-          onValueChange(exactMatch.name);
+          onValueChange(
+            exactMatch.displayName ||
+              buildUniversityDisplayName(
+                exactMatch.name,
+                exactMatch.abbreviation,
+              ),
+          );
           onSelect(exactMatch);
         }
       } catch {
@@ -196,7 +214,9 @@ export function UniversityAutocomplete({
   }
 
   function selectItem(item: UniversityReferenceItem) {
-    onValueChange(item.name);
+    onValueChange(
+      item.displayName || buildUniversityDisplayName(item.name, item.abbreviation),
+    );
     onSelect(item);
     setItems((current) => {
       const alreadyExists = current.some((entry) => entry.id === item.id);
@@ -329,7 +349,10 @@ export function UniversityAutocomplete({
                       : "hover:bg-muted/70",
                   )}
                 >
-                  <span className="truncate">{item.name}</span>
+                  <span className="truncate">
+                    {item.displayName ||
+                      buildUniversityDisplayName(item.name, item.abbreviation)}
+                  </span>
                   {selected ? (
                     <Check className="h-4 w-4 shrink-0 text-primary" />
                   ) : null}

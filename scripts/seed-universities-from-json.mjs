@@ -31,12 +31,19 @@ function normalizeUniversityName(value) {
   return cleanUniversityName(value).toLowerCase();
 }
 
+function cleanUniversityAbbreviation(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeUniversityAbbreviation(value) {
+  return cleanUniversityAbbreviation(value).toLowerCase();
+}
+
 function isSnapshotItem(value) {
   return (
     Boolean(value) &&
     typeof value === "object" &&
-    typeof value.name === "string" &&
-    typeof value.normalized_name === "string"
+    typeof value.name === "string"
   );
 }
 
@@ -53,7 +60,14 @@ async function loadSnapshot() {
     .map((item) => ({
       name: cleanUniversityName(item.name),
       normalized_name: normalizeUniversityName(item.name),
-      source: "kip_kuliah",
+      abbreviation: cleanUniversityAbbreviation(item.abbreviation),
+      normalized_abbreviation: cleanUniversityAbbreviation(item.abbreviation)
+        ? normalizeUniversityAbbreviation(item.abbreviation)
+        : null,
+      source:
+        typeof item.source === "string" && item.source.trim().length > 0
+          ? item.source
+          : "kip_kuliah",
       last_seen_at:
         typeof item.last_seen_at === "string" && item.last_seen_at.trim().length > 0
           ? item.last_seen_at
@@ -61,7 +75,11 @@ async function loadSnapshot() {
             ? parsed.generatedAt
             : new Date().toISOString(),
     }))
-    .filter((item) => item.name.length >= 2 && item.normalized_name.length >= 2);
+    .filter((item) => item.name.length >= 2 && item.normalized_name.length >= 2)
+    .map((item) => ({
+      ...item,
+      abbreviation: item.abbreviation || null,
+    }));
 
   if (items.length === 0) {
     throw new Error("Snapshot universitas kosong.");
@@ -85,7 +103,7 @@ async function main() {
 
   const { data: existingRows, error: existingError } = await supabase
     .from("university_references")
-    .select("normalized_name, source");
+    .select("name, normalized_name, abbreviation, normalized_abbreviation, source");
 
   if (existingError) {
     throw new Error(
@@ -107,7 +125,10 @@ async function main() {
         insertedCount += 1;
         rowsToWrite.push(item);
         existingByNormalizedName.set(item.normalized_name, {
+          name: item.name,
           normalized_name: item.normalized_name,
+          abbreviation: item.abbreviation,
+          normalized_abbreviation: item.normalized_abbreviation,
           source: item.source,
         });
         continue;
@@ -118,11 +139,23 @@ async function main() {
         continue;
       }
 
-      updatedCount += 1;
-      rowsToWrite.push(item);
-      existingByNormalizedName.set(item.normalized_name, {
+      const nextAbbreviation = item.abbreviation || existing.abbreviation || null;
+      const nextSource = existing.source || item.source;
+      const nextRow = {
+        name: item.name,
         normalized_name: item.normalized_name,
-        source: item.source,
+        abbreviation: nextAbbreviation,
+        normalized_abbreviation: nextAbbreviation
+          ? normalizeUniversityAbbreviation(nextAbbreviation)
+          : null,
+        source: nextSource,
+        last_seen_at: item.last_seen_at,
+      };
+
+      updatedCount += 1;
+      rowsToWrite.push(nextRow);
+      existingByNormalizedName.set(item.normalized_name, {
+        ...nextRow,
       });
     }
 

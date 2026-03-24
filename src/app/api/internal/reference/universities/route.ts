@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireRouteUser } from "@/lib/pagination/route-user";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
+  buildUniversityDisplayName,
   cleanUniversityName,
   normalizeUniversityName,
 } from "@/lib/university-references";
@@ -10,6 +11,7 @@ import {
 type UniversityRow = {
   id: string;
   name: string;
+  abbreviation?: string | null;
 };
 
 function isUniqueViolation(error: { code?: string | null } | null | undefined) {
@@ -48,7 +50,7 @@ export async function POST(request: NextRequest) {
 
   const { data: existing } = await supabase
     .from("university_references")
-    .select("id, name")
+    .select("id, name, abbreviation")
     .eq("normalized_name", normalizedName)
     .maybeSingle<UniversityRow>();
 
@@ -56,7 +58,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       created: false,
-      item: existing,
+      item: {
+        ...existing,
+        displayName: buildUniversityDisplayName(
+          existing.name,
+          existing.abbreviation,
+        ),
+      },
     });
   }
 
@@ -65,16 +73,18 @@ export async function POST(request: NextRequest) {
     .insert({
       name,
       normalized_name: normalizedName,
+      abbreviation: null,
+      normalized_abbreviation: null,
       source: "manual",
       last_seen_at: new Date().toISOString(),
     })
-    .select("id, name")
+    .select("id, name, abbreviation")
     .single<UniversityRow>();
 
   if (error && isUniqueViolation(error)) {
     const { data: retryExisting } = await supabase
       .from("university_references")
-      .select("id, name")
+      .select("id, name, abbreviation")
       .eq("normalized_name", normalizedName)
       .maybeSingle<UniversityRow>();
 
@@ -82,7 +92,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         created: false,
-        item: retryExisting,
+        item: {
+          ...retryExisting,
+          displayName: buildUniversityDisplayName(
+            retryExisting.name,
+            retryExisting.abbreviation,
+          ),
+        },
       });
     }
   }
@@ -97,6 +113,9 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     created: true,
-    item: data,
+    item: {
+      ...data,
+      displayName: buildUniversityDisplayName(data.name, data.abbreviation),
+    },
   });
 }

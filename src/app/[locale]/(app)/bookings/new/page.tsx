@@ -797,7 +797,7 @@ export default function NewBookingPage() {
                                                 setExtraFields(prev => {
                                                     const next = { ...prev };
                                                     if (item) {
-                                                        next[f.key] = item.name;
+                                                        next[f.key] = item.displayName || item.name;
                                                         next[UNIVERSITY_REFERENCE_EXTRA_KEY] = item.id;
                                                     } else {
                                                         delete next[UNIVERSITY_REFERENCE_EXTRA_KEY];

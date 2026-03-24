@@ -1266,7 +1266,7 @@ export function BookingFormClient({
               setExtraData((prev) => {
                 const next = { ...prev };
                 if (item) {
-                  next[field.key] = item.name;
+                  next[field.key] = item.displayName || item.name;
                   next[UNIVERSITY_REFERENCE_EXTRA_KEY] = item.id;
                 } else {
                   delete next[UNIVERSITY_REFERENCE_EXTRA_KEY];
