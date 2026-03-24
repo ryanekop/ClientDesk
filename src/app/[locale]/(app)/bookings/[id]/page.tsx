@@ -219,6 +219,20 @@ type EditableAdjustment = {
     created_at: string;
 };
 
+const RESPONSIVE_SECTION_HEADER_CLASS =
+    "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between";
+const RESPONSIVE_SECTION_ACTIONS_CLASS =
+    "grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap";
+const RESPONSIVE_ACTION_GROUP_CLASS =
+    "grid grid-cols-1 gap-2 sm:flex sm:flex-wrap";
+const RESPONSIVE_ACTION_BUTTON_CLASS =
+    "w-full justify-center sm:w-auto";
+const RESPONSIVE_ACTION_LINK_CLASS = "w-full sm:w-auto";
+const RESPONSIVE_INLINE_ACTION_CLASS =
+    "flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center";
+const RESPONSIVE_MONEY_INPUT_CLASS =
+    "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] sm:w-40";
+
 function StatusBadge({ status }: { status: string }) {
     const variants: Record<string, string> = {
         pending: "bg-slate-100 text-slate-700 dark:bg-slate-500/10 dark:text-slate-400",
@@ -243,9 +257,9 @@ function SettlementBadge({ status }: { status: SettlementStatus }) {
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
     return (
-        <div className="flex items-start gap-3 text-sm">
-            <span className="text-muted-foreground w-40 shrink-0">{label}</span>
-            <span className="flex-1">{value}</span>
+        <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-start sm:gap-3">
+            <div className="text-muted-foreground sm:w-40 sm:shrink-0">{label}</div>
+            <div className="min-w-0 flex-1 break-words">{value}</div>
         </div>
     );
 }
@@ -287,9 +301,9 @@ function LocationValue({
     const mapsUrl = buildGoogleMapsQueryUrl({ address, lat, lng });
     const dirUrl = buildGoogleMapsDirectionUrl({ address, lat, lng });
     return (
-        <span className="flex items-start gap-1.5">
-            <span className="flex-1">{address}</span>
-            <span className="flex gap-1 shrink-0 mt-0.5">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+            <div className="min-w-0 break-words">{address}</div>
+            <div className="flex gap-1 sm:mt-0.5 sm:shrink-0">
                 {mapsUrl && (
                     <button type="button" onClick={() => window.open(mapsUrl, "_blank")} title="Buka di Google Maps"
                         className="text-blue-600 hover:text-blue-700 transition-colors inline-flex items-center justify-center w-6 h-6 rounded hover:bg-blue-50 dark:hover:bg-blue-500/10">
@@ -302,8 +316,8 @@ function LocationValue({
                         <Navigation className="w-3.5 h-3.5" />
                     </button>
                 )}
-            </span>
-        </span>
+            </div>
+        </div>
     );
 }
 
@@ -328,7 +342,7 @@ function PaymentProofPanel({
     }, [previewSrc]);
 
     return (
-        <div className="rounded-xl border bg-card p-6 space-y-3">
+        <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
             <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                 <ImageIcon className="w-4 h-4" /> {title}
             </h3>
@@ -1931,7 +1945,7 @@ export default function BookingDetailPage() {
         if (!instagramValue.url) return rawValue;
         return (
             <a href={instagramValue.url} target="_blank" rel="noreferrer"
-                className="text-blue-600 hover:underline flex items-center gap-1">
+                className="inline-flex max-w-full items-center gap-1 break-all text-blue-600 hover:underline">
                 <Instagram className="w-3.5 h-3.5" /> {instagramValue.label}
             </a>
         );
@@ -1996,23 +2010,27 @@ export default function BookingDetailPage() {
     ) => (
         <div className="space-y-1.5">
             <p className="text-[11px] text-muted-foreground">{label}</p>
-            <div className={`flex items-center gap-2 p-3 rounded-lg border text-sm ${mutedBackground ? "bg-muted/20" : "bg-muted/30"}`}>
-                <Link2 className={`w-4 h-4 shrink-0 ${iconClassName}`} />
-                <span className="flex-1 truncate text-xs text-muted-foreground">{url}</span>
-                <button
-                    onClick={() => handleCopyGalleryLink(url)}
-                    className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer"
-                    title="Salin Link"
-                >
-                    <Copy className="w-3.5 h-3.5" />
-                </button>
-                <button
-                    onClick={() => window.open(url, "_blank")}
-                    className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer"
-                    title="Buka di Tab Baru"
-                >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                </button>
+            <div className={`flex min-w-0 flex-col gap-2 rounded-lg border p-3 text-sm ${mutedBackground ? "bg-muted/20" : "bg-muted/30"} sm:flex-row sm:items-center`}>
+                <div className="flex min-w-0 items-start gap-2">
+                    <Link2 className={`mt-0.5 w-4 h-4 shrink-0 ${iconClassName}`} />
+                    <span className="min-w-0 flex-1 break-all text-xs text-muted-foreground sm:truncate">{url}</span>
+                </div>
+                <div className="flex shrink-0 justify-end gap-1">
+                    <button
+                        onClick={() => handleCopyGalleryLink(url)}
+                        className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer"
+                        title="Salin Link"
+                    >
+                        <Copy className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                        onClick={() => window.open(url, "_blank")}
+                        className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer"
+                        title="Buka di Tab Baru"
+                    >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -2022,42 +2040,42 @@ export default function BookingDetailPage() {
         {successToastNode}
         <div className="max-w-4xl mx-auto space-y-6">
             {/* Header */}
-            <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
                     <Link href="/bookings">
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" className="shrink-0">
                             <ArrowLeft className="w-4 h-4" />
                         </Button>
                     </Link>
-                    <div>
+                    <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                            <h2 className="text-2xl font-bold tracking-tight">{booking.client_name}</h2>
+                            <h2 className="break-words text-2xl font-bold tracking-tight">{booking.client_name}</h2>
                             <StatusBadge status={booking.status} />
                         </div>
-                        <p className="text-muted-foreground text-sm">
+                        <p className="break-words text-muted-foreground text-sm">
                             {booking.booking_code}
                             {booking.event_type && booking.event_type !== "Umum" ? ` · ${booking.event_type}` : ""}
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:shrink-0">
                     <Button
                         variant="destructive"
                         size="sm"
-                        className="gap-1.5"
+                        className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
                         onClick={() => setDeleteBookingModalOpen(true)}
                         disabled={!canWriteBookings}
                     >
                         <Trash2 className="w-4 h-4" /> Hapus
                     </Button>
                     {canWriteBookings ? (
-                        <Link href={`/bookings/${booking.id}/edit`}>
-                            <Button variant="outline" size="sm" className="gap-1.5">
+                        <Link href={`/bookings/${booking.id}/edit`} className={RESPONSIVE_ACTION_LINK_CLASS}>
+                            <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}>
                                 <Edit2 className="w-4 h-4" /> Edit
                             </Button>
                         </Link>
                     ) : (
-                        <Button variant="outline" size="sm" className="gap-1.5" disabled>
+                        <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} disabled>
                             <Edit2 className="w-4 h-4" /> Edit
                         </Button>
                     )}
@@ -2067,12 +2085,12 @@ export default function BookingDetailPage() {
             <BookingWriteReadonlyBanner />
 
             {/* Quick Actions */}
-            <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => sendWA(booking.client_whatsapp, booking.client_name)}>
+            <div className={RESPONSIVE_ACTION_GROUP_CLASS}>
+                <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} onClick={() => sendWA(booking.client_whatsapp, booking.client_name)}>
                     <MessageSquare className="w-4 h-4 text-green-600" /> Whatsapp Klien
                 </Button>
                 {booking.booking_freelancers.length > 0 && (
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => {
+                    <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} onClick={() => {
                         if (booking.booking_freelancers.length === 1) {
                             sendWAFreelance(booking.booking_freelancers[0].whatsapp_number, booking.booking_freelancers[0].name);
                         } else {
@@ -2083,11 +2101,11 @@ export default function BookingDetailPage() {
                     </Button>
                 )}
                 {booking.drive_folder_url ? (
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
+                    <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
                         <Folder className="w-4 h-4 text-yellow-600" /> Buka Drive Folder
                     </Button>
                 ) : (
-                    <Button variant="outline" size="sm" className="gap-1.5" disabled={!isDriveConnected || creatingFolder || !canWriteBookings} onClick={handleCreateFolder}>
+                    <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} disabled={!isDriveConnected || creatingFolder || !canWriteBookings} onClick={handleCreateFolder}>
                         {creatingFolder ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderPlus className="w-4 h-4 text-yellow-600" />}
                         Buat Drive Folder
                     </Button>
@@ -2095,7 +2113,7 @@ export default function BookingDetailPage() {
             </div>
 
             {/* Informasi Klien */}
-            <div className="rounded-xl border bg-card p-6 space-y-3">
+            <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Informasi Klien</h3>
                 <InfoRow label="Nama" value={booking.client_name} />
                 {namaPasangan && (
@@ -2117,7 +2135,7 @@ export default function BookingDetailPage() {
             </div>
 
             {/* Detail Sesi */}
-            <div className="rounded-xl border bg-card p-6 space-y-3">
+            <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Detail Sesi</h3>
                 <InfoRow label="Jadwal" value={formatDate(booking.session_date)} />
                 {booking.location && (
@@ -2148,11 +2166,11 @@ export default function BookingDetailPage() {
             </div>
 
             {/* Keuangan */}
-            <div className="rounded-xl border bg-card p-6 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
+                <div className={RESPONSIVE_SECTION_HEADER_CLASS}>
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Keuangan</h3>
-                    <Link href="/finance">
-                        <Button variant="outline" size="sm" className="gap-1.5">
+                    <Link href="/finance" className={RESPONSIVE_ACTION_LINK_CLASS}>
+                        <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}>
                             <ExternalLink className="w-4 h-4" />
                             Buka Keuangan
                         </Button>
@@ -2164,26 +2182,27 @@ export default function BookingDetailPage() {
                     <InfoRow label="Paket Awal" value={formatCurrency(initialPriceBreakdown.packageTotal)} />
                     <InfoRow label="Add-on Awal" value={formatCurrency(initialPriceBreakdown.addonTotal)} />
                     {(editingAccommodation || Number(initialPriceBreakdown.accommodationFee) > 0) ? (
-                        <InfoRow
-                            label="Akomodasi"
-                            value={editingAccommodation ? (
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        value={accommodationInput}
-                                        onChange={(e) => setAccommodationInput(e.target.value)}
-                                        className="h-9 w-40 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                                    />
-                                    <Button size="sm" onClick={() => { void handleSaveAccommodation(); }} disabled={savingAccommodation}>
-                                        {savingAccommodation ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => {
-                                            setAccommodationInput(String(initialPriceBreakdown.accommodationFee || 0));
-                                            setEditingAccommodation(false);
+                    <InfoRow
+                        label="Akomodasi"
+                        value={editingAccommodation ? (
+                            <div className={RESPONSIVE_INLINE_ACTION_CLASS}>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    value={accommodationInput}
+                                    onChange={(e) => setAccommodationInput(e.target.value)}
+                                    className={RESPONSIVE_MONEY_INPUT_CLASS}
+                                />
+                                <Button size="sm" className={RESPONSIVE_ACTION_BUTTON_CLASS} onClick={() => { void handleSaveAccommodation(); }} disabled={savingAccommodation}>
+                                    {savingAccommodation ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className={RESPONSIVE_ACTION_BUTTON_CLASS}
+                                    onClick={() => {
+                                        setAccommodationInput(String(initialPriceBreakdown.accommodationFee || 0));
+                                        setEditingAccommodation(false);
                                         }}
                                         disabled={savingAccommodation}
                                     >
@@ -2191,12 +2210,12 @@ export default function BookingDetailPage() {
                                     </Button>
                                 </div>
                             ) : (
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className={RESPONSIVE_INLINE_ACTION_CLASS}>
                                     <span>{formatCurrency(initialPriceBreakdown.accommodationFee)}</span>
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-8 px-2.5"
+                                        className={`${RESPONSIVE_ACTION_BUTTON_CLASS} h-8 px-2.5`}
                                         onClick={() => {
                                             setAccommodationInput(String(initialPriceBreakdown.accommodationFee || 0));
                                             setEditingAccommodation(true);
@@ -2212,20 +2231,21 @@ export default function BookingDetailPage() {
                         <InfoRow
                             label="Diskon"
                             value={editingDiscount ? (
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className={RESPONSIVE_INLINE_ACTION_CLASS}>
                                     <input
                                         type="number"
                                         min={0}
                                         value={discountInput}
                                         onChange={(e) => setDiscountInput(e.target.value)}
-                                        className="h-9 w-40 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                        className={RESPONSIVE_MONEY_INPUT_CLASS}
                                     />
-                                    <Button size="sm" onClick={() => { void handleSaveDiscount(); }} disabled={savingDiscount}>
+                                    <Button size="sm" className={RESPONSIVE_ACTION_BUTTON_CLASS} onClick={() => { void handleSaveDiscount(); }} disabled={savingDiscount}>
                                         {savingDiscount ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
                                     </Button>
                                     <Button
                                         variant="ghost"
                                         size="sm"
+                                        className={RESPONSIVE_ACTION_BUTTON_CLASS}
                                         onClick={() => {
                                             setDiscountInput(String(initialPriceBreakdown.discountAmount || 0));
                                             setEditingDiscount(false);
@@ -2236,12 +2256,12 @@ export default function BookingDetailPage() {
                                     </Button>
                                 </div>
                             ) : (
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className={RESPONSIVE_INLINE_ACTION_CLASS}>
                                     <span>- {formatCurrency(initialPriceBreakdown.discountAmount)}</span>
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-8 px-2.5"
+                                        className={`${RESPONSIVE_ACTION_BUTTON_CLASS} h-8 px-2.5`}
                                         onClick={() => {
                                             setDiscountInput(String(initialPriceBreakdown.discountAmount || 0));
                                             setEditingDiscount(true);
@@ -2256,20 +2276,21 @@ export default function BookingDetailPage() {
                     <InfoRow
                         label="DP Dibayar"
                         value={editingDp ? (
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className={RESPONSIVE_INLINE_ACTION_CLASS}>
                                 <input
                                     type="number"
                                     min={0}
                                     value={dpInput}
                                     onChange={(e) => setDpInput(e.target.value)}
-                                    className="h-9 w-40 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    className={RESPONSIVE_MONEY_INPUT_CLASS}
                                 />
-                                <Button size="sm" onClick={() => { void handleSaveDp(); }} disabled={savingDp}>
+                                <Button size="sm" className={RESPONSIVE_ACTION_BUTTON_CLASS} onClick={() => { void handleSaveDp(); }} disabled={savingDp}>
                                     {savingDp ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
                                 </Button>
                                 <Button
                                     variant="ghost"
                                     size="sm"
+                                    className={RESPONSIVE_ACTION_BUTTON_CLASS}
                                     onClick={() => {
                                         setDpInput(String(booking.dp_paid || 0));
                                         setEditingDp(false);
@@ -2280,16 +2301,16 @@ export default function BookingDetailPage() {
                                 </Button>
                             </div>
                         ) : (
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className={RESPONSIVE_INLINE_ACTION_CLASS}>
                                 <span>{formatCurrency(booking.dp_paid)}</span>
-                                <Button variant="outline" size="sm" className="h-8 px-2.5" onClick={() => setEditingDp(true)}>
+                                <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} h-8 px-2.5`} onClick={() => setEditingDp(true)}>
                                     Edit DP
                                 </Button>
                                 {verifiedDpAmount > 0 ? (
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-8 px-2.5"
+                                        className={`${RESPONSIVE_ACTION_BUTTON_CLASS} h-8 px-2.5`}
                                         onClick={handleMarkDpUnverified}
                                         disabled={markingDpUnverified}
                                     >
@@ -2299,7 +2320,7 @@ export default function BookingDetailPage() {
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-8 px-2.5"
+                                        className={`${RESPONSIVE_ACTION_BUTTON_CLASS} h-8 px-2.5`}
                                         onClick={handleMarkDpVerified}
                                         disabled={markingDpVerified || booking.dp_paid <= 0}
                                     >
@@ -2356,15 +2377,15 @@ export default function BookingDetailPage() {
                 ))}
             </div>
 
-            <div className="rounded-xl border bg-card p-6 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="rounded-xl border bg-card p-4 space-y-4 sm:p-6">
+                <div className={RESPONSIVE_SECTION_HEADER_CLASS}>
                     <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Pelunasan Final</h3>
                         <SettlementBadge status={settlementStatus} />
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                        <Link href="/finance">
-                            <Button variant="outline" size="sm" className="gap-1.5">
+                    <div className={RESPONSIVE_SECTION_ACTIONS_CLASS}>
+                        <Link href="/finance" className={RESPONSIVE_ACTION_LINK_CLASS}>
+                            <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}>
                                 <ExternalLink className="w-4 h-4" />
                                 Keuangan
                             </Button>
@@ -2372,7 +2393,7 @@ export default function BookingDetailPage() {
                         <Button
                             variant="outline"
                             size="sm"
-                            className="gap-1.5"
+                            className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
                             onClick={() => window.open(`/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}&lang=${locale}&stage=final`, "_blank")}
                         >
                             <FileText className="w-4 h-4" />
@@ -2382,7 +2403,7 @@ export default function BookingDetailPage() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                className="gap-1.5"
+                                className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
                                 onClick={() => window.open(settlementLink, "_blank")}
                             >
                                 <ExternalLink className="w-4 h-4" />
@@ -2399,7 +2420,7 @@ export default function BookingDetailPage() {
                         </div>
                     ) : (
                         adjustmentItems.map((item) => (
-                            <div key={item.id} className="grid gap-3 rounded-xl border p-4">
+                            <div key={item.id} className="grid gap-3 rounded-xl border p-3 sm:p-4">
                                 <div className="grid gap-3 md:grid-cols-[1.6fr_0.6fr_0.8fr_auto]">
                                     <select
                                         value={item.service_id || ""}
@@ -2447,7 +2468,7 @@ export default function BookingDetailPage() {
                                         className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                                     />
                                 </div>
-                                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                                     <span>{item.service_id ? "Sumber: katalog add-on" : "Sumber: item manual lama / custom"}</span>
                                     <span>Total item: {formatCurrency(Number(item.amount) || 0)}</span>
                                 </div>
@@ -2456,28 +2477,28 @@ export default function BookingDetailPage() {
                     )}
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div className={RESPONSIVE_ACTION_GROUP_CLASS}>
                     <Button
                         variant="outline"
                         size="sm"
-                        className="gap-1.5"
+                        className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
                         onClick={() => addAdjustmentItem(filteredAddonServices[0])}
                         disabled={filteredAddonServices.length === 0}
                     >
                         <Upload className="w-4 h-4" />
                         Tambah Add-on
                     </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCustomAddonOpen(true)}>
+                    <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} onClick={() => setCustomAddonOpen(true)}>
                         <FileText className="w-4 h-4" />
                         Add-on Custom
                     </Button>
-                    <Button size="sm" className="gap-1.5" onClick={() => { void saveFinalAdjustments(); }} disabled={savingAdjustments}>
+                    <Button size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} onClick={() => { void saveFinalAdjustments(); }} disabled={savingAdjustments}>
                         {savingAdjustments ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                         Simpan Add-on
                     </Button>
                 </div>
 
-                <div className="rounded-xl bg-muted/30 border p-4 space-y-2 text-sm">
+                <div className="rounded-xl bg-muted/30 border p-3 space-y-2 text-sm sm:p-4">
                     <div className="flex justify-between gap-4"><span className="text-muted-foreground">Total Awal</span><span className="font-medium">{formatCurrency(booking.total_price)}</span></div>
                     <div className="flex justify-between gap-4"><span className="text-muted-foreground">Total Add-on Akhir</span><span className="font-medium">{formatCurrency(finalAdjustmentsTotal)}</span></div>
                     <div className="flex justify-between gap-4"><span className="text-muted-foreground">Total Final</span><span className="font-medium">{formatCurrency(finalInvoiceTotal)}</span></div>
@@ -2485,18 +2506,18 @@ export default function BookingDetailPage() {
                     <div className="flex justify-between gap-4 border-t pt-2"><span className="font-semibold">Sisa Pelunasan</span><span className="font-semibold text-amber-600 dark:text-amber-400">{formatCurrency(remaining)}</span></div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                    <Button size="sm" className="gap-1.5" onClick={handleSendFinalInvoice} disabled={sendingFinalInvoice || !booking.client_whatsapp || !canWriteBookings}>
+                <div className={RESPONSIVE_ACTION_GROUP_CLASS}>
+                    <Button size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} onClick={handleSendFinalInvoice} disabled={sendingFinalInvoice || !booking.client_whatsapp || !canWriteBookings}>
                         {sendingFinalInvoice ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
                         Kirim Invoice Final
                     </Button>
                     {booking.is_fully_paid ? (
-                        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleMarkFinalUnpaid} disabled={markingFinalUnpaid || !canWriteBookings}>
+                        <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} onClick={handleMarkFinalUnpaid} disabled={markingFinalUnpaid || !canWriteBookings}>
                             {markingFinalUnpaid ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
                             Batal Tandai Lunas
                         </Button>
                     ) : (
-                        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleMarkFinalPaid} disabled={markingFinalPaid || !canWriteBookings}>
+                        <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} onClick={handleMarkFinalPaid} disabled={markingFinalPaid || !canWriteBookings}>
                             {markingFinalPaid ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
                             Tandai Lunas
                         </Button>
@@ -2517,7 +2538,7 @@ export default function BookingDetailPage() {
                 )}
 
                 {(booking.final_payment_method || booking.final_payment_source) && (
-                    <div className="rounded-lg border p-4 space-y-2 text-sm">
+                    <div className="rounded-lg border p-3 space-y-2 text-sm sm:p-4">
                         <p className="font-medium">Data Pelunasan Masuk</p>
                         <InfoRow label="Metode" value={formatPaymentMethod(booking.final_payment_method)} />
                         <InfoRow label="Sumber" value={formatPaymentSource(booking.final_payment_source)} />
@@ -2550,13 +2571,13 @@ export default function BookingDetailPage() {
 
             {/* Catatan */}
             {booking.notes && (
-                <div className="rounded-xl border bg-card p-6 space-y-2">
+                <div className="rounded-xl border bg-card p-4 space-y-2 sm:p-6">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Catatan</h3>
                     <p className="text-sm whitespace-pre-wrap">{booking.notes}</p>
                 </div>
             )}
             {booking.admin_notes && (
-                <div className="rounded-xl border bg-card p-6 space-y-2">
+                <div className="rounded-xl border bg-card p-4 space-y-2 sm:p-6">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Catatan Admin</h3>
                     <p className="text-sm whitespace-pre-wrap">{booking.admin_notes}</p>
                 </div>
@@ -2564,17 +2585,17 @@ export default function BookingDetailPage() {
 
             {/* Link Pilih Foto (mengikuti mode tampilan link Fastpik) */}
             {(booking.fastpik_project_link || booking.drive_folder_url || booking.fastpik_project_edit_link || booking.fastpik_project_id) && (
-                <div className="rounded-xl border bg-card p-6 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
+                    <div className={RESPONSIVE_SECTION_HEADER_CLASS}>
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                             <Folder className="w-4 h-4" /> Link Pilih Foto
                         </h3>
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className={RESPONSIVE_SECTION_ACTIONS_CLASS}>
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="gap-1.5"
+                                className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
                                 onClick={() => void handleSyncFastpikManual()}
                                 disabled={syncingFastpik || !canWriteBookings}
                             >
@@ -2590,7 +2611,7 @@ export default function BookingDetailPage() {
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    className="gap-1.5"
+                                    className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
                                     onClick={() => window.open(booking.fastpik_project_edit_link!, "_blank", "noopener,noreferrer")}
                                 >
                                     <ExternalLink className="w-4 h-4" />
@@ -2601,7 +2622,7 @@ export default function BookingDetailPage() {
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    className="gap-1.5"
+                                    className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
                                     onClick={handleOpenFastpikDashboard}
                                 >
                                     <ExternalLink className="w-4 h-4" />
@@ -2655,13 +2676,13 @@ export default function BookingDetailPage() {
                                 label="Password"
                                 value={
                                     fastpikProjectInfo.password ? (
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                                             <span>{fastpikProjectInfo.password}</span>
                                             <Button
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
-                                                className="h-7 px-2"
+                                                className={`${RESPONSIVE_ACTION_BUTTON_CLASS} h-7 px-2`}
                                                 onClick={copyFastpikPassword}
                                             >
                                                 Salin
@@ -2711,37 +2732,41 @@ export default function BookingDetailPage() {
 
             {/* Link Portofolio IG */}
             {booking.portfolio_url && (
-                <div className="rounded-xl border bg-card p-6 space-y-3">
+                <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Portofolio Instagram</h3>
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
-                        <Link2 className="w-4 h-4 text-pink-500 shrink-0" />
-                        <a href={booking.portfolio_url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate text-xs text-primary hover:underline">{booking.portfolio_url}</a>
-                        <button onClick={() => handleCopyPortfolioLink(booking.portfolio_url!)} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
-                            <Copy className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => window.open(booking.portfolio_url!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">
-                            <ExternalLink className="w-3.5 h-3.5" />
-                        </button>
+                    <div className="flex min-w-0 flex-col gap-2 rounded-lg border bg-muted/30 p-3 text-sm sm:flex-row sm:items-center">
+                        <div className="flex min-w-0 items-start gap-2">
+                            <Link2 className="mt-0.5 w-4 h-4 text-pink-500 shrink-0" />
+                            <a href={booking.portfolio_url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 break-all text-xs text-primary hover:underline sm:truncate">{booking.portfolio_url}</a>
+                        </div>
+                        <div className="flex shrink-0 justify-end gap-1">
+                            <button onClick={() => handleCopyPortfolioLink(booking.portfolio_url!)} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Salin Link">
+                                <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => window.open(booking.portfolio_url!, "_blank")} className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer" title="Buka di Tab Baru">
+                                <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
 
             {/* File Klien — Upload ke Google Drive */}
             {isDriveConnected && (
-                <div className="rounded-xl border bg-card p-6 space-y-4">
+                <div className="rounded-xl border bg-card p-4 space-y-4 sm:p-6">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                         <FileText className="w-4 h-4" /> File Klien
                     </h3>
-                    <div className="flex items-start justify-between gap-2">
-                        <p className="text-xs text-muted-foreground break-words">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <p className="min-w-0 text-xs text-muted-foreground break-words">
                             📁 {driveFolderPathHint}
                         </p>
-                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <div className={RESPONSIVE_SECTION_ACTIONS_CLASS}>
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="gap-1.5"
+                                className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
                                 onClick={() => void handleRefreshDrivePathHint()}
                                 disabled={refreshingDrivePathHint}
                                 title="Refresh path preview dari setting Drive terbaru"
@@ -2753,7 +2778,7 @@ export default function BookingDetailPage() {
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="gap-1.5"
+                                className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
                                 onClick={() => window.open(booking.drive_folder_url!, "_blank", "noopener,noreferrer")}
                                 disabled={!booking.drive_folder_url}
                             >
@@ -2762,7 +2787,7 @@ export default function BookingDetailPage() {
                             </Button>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
                         <input
                             ref={fileInputRef}
                             type="file"
@@ -2771,7 +2796,7 @@ export default function BookingDetailPage() {
                             id="client-file-upload"
                         />
                         <Button
-                            variant="outline" size="sm" className="gap-1.5"
+                            variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
                             disabled={uploadingFile || !canWriteBookings}
                             onClick={() => fileInputRef.current?.click()}
                         >
@@ -2783,9 +2808,9 @@ export default function BookingDetailPage() {
                     {uploadedFiles.length > 0 && (
                         <div className="space-y-1">
                             {uploadedFiles.map((f, i) => (
-                                <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border text-xs">
+                                <div key={i} className="flex min-w-0 items-center gap-2 p-2 rounded-lg bg-muted/30 border text-xs">
                                     <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                                    <a href={f.url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate text-primary hover:underline">{f.name}</a>
+                                    <a href={f.url} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 break-all text-primary hover:underline sm:truncate">{f.name}</a>
                                     <button onClick={() => window.open(f.url, "_blank")} className="p-1 rounded hover:bg-muted cursor-pointer" title="Buka">
                                         <ExternalLink className="w-3 h-3" />
                                     </button>
@@ -2807,7 +2832,7 @@ export default function BookingDetailPage() {
             )}
 
             {/* Status Klien / Tracking */}
-            <div className="rounded-xl border bg-card p-6 space-y-4">
+            <div className="rounded-xl border bg-card p-4 space-y-4 sm:p-6">
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5"><ListOrdered className="w-4 h-4" /> Status Klien</h3>
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -2839,12 +2864,12 @@ export default function BookingDetailPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
                     <Button
                         size="sm"
                         onClick={() => { void handleSaveClientStatus(); }}
                         disabled={savingStatus || !canWriteBookings}
-                        className="gap-1.5"
+                        className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
                     >
                         {savingStatus ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                         Simpan Status
@@ -2853,25 +2878,29 @@ export default function BookingDetailPage() {
                 </div>
 
                 {booking.tracking_uuid && (
-                    <div className="flex items-center gap-2 p-3 rounded-lg border bg-muted/30 text-sm">
-                        <Link2 className="w-4 h-4 shrink-0 text-emerald-500" />
-                        <span className="flex-1 truncate text-xs text-muted-foreground">{trackingLink}</span>
-                        <button
-                            type="button"
-                            onClick={() => { void copyTrackingLink(); }}
-                            className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer"
-                            title="Salin Link"
-                        >
-                            <Copy className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => window.open(trackingLink, "_blank", "noopener,noreferrer")}
-                            className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer"
-                            title="Buka di Tab Baru"
-                        >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                        </button>
+                    <div className="flex min-w-0 flex-col gap-2 rounded-lg border bg-muted/30 p-3 text-sm sm:flex-row sm:items-center">
+                        <div className="flex min-w-0 items-start gap-2">
+                            <Link2 className="mt-0.5 w-4 h-4 shrink-0 text-emerald-500" />
+                            <span className="min-w-0 flex-1 break-all text-xs text-muted-foreground sm:truncate">{trackingLink}</span>
+                        </div>
+                        <div className="flex shrink-0 justify-end gap-1">
+                            <button
+                                type="button"
+                                onClick={() => { void copyTrackingLink(); }}
+                                className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer"
+                                title="Salin Link"
+                            >
+                                <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => window.open(trackingLink, "_blank", "noopener,noreferrer")}
+                                className="p-1.5 rounded hover:bg-muted transition-colors cursor-pointer"
+                                title="Buka di Tab Baru"
+                            >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
