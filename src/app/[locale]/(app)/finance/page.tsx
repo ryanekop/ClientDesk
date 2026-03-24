@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown, Copy, ClipboardCheck, Search } from "lucide-react";
+import { Clock, CheckCircle2, FileText, Loader2, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown, Copy, ClipboardCheck, Search, ListOrdered, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -107,6 +107,15 @@ type BookingFinance = {
     service_label?: string;
 };
 
+type FinanceFilterValue = "all" | "pending" | "paid";
+
+type FinanceFilterStoragePayload = {
+    searchQuery: string;
+    filter: FinanceFilterValue;
+    packageFilter: string;
+    bookingStatusFilter: string;
+};
+
 const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
     { id: "name", label: "Nama", visible: true, locked: true },
     { id: "total_price", label: "Harga Total", visible: true },
@@ -118,10 +127,22 @@ const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true },
 ];
+const FINANCE_FILTER_VALUES = ["all", "pending", "paid"] as const;
+const FINANCE_FILTER_STORAGE_PREFIX = "clientdesk:finance:filters";
 const FINANCE_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:finance:items_per_page";
 const FINANCE_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const FINANCE_DEFAULT_ITEMS_PER_PAGE = 10;
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeFinanceFilterValue(value: unknown): FinanceFilterValue {
+    return typeof value === "string" && FINANCE_FILTER_VALUES.includes(value as FinanceFilterValue)
+        ? (value as FinanceFilterValue)
+        : "all";
+}
 
 function normalizeFinanceItemsPerPage(value: unknown) {
     const parsed = typeof value === "number" ? value : Number(value);
@@ -132,6 +153,16 @@ function normalizeFinanceItemsPerPage(value: unknown) {
         : FINANCE_DEFAULT_ITEMS_PER_PAGE;
 }
 
+function isSameLocalMonth(dateValue: string | null, referenceDate: Date) {
+    if (!dateValue) return false;
+    const parsedDate = new Date(dateValue);
+    if (Number.isNaN(parsedDate.getTime())) return false;
+    return (
+        parsedDate.getFullYear() === referenceDate.getFullYear() &&
+        parsedDate.getMonth() === referenceDate.getMonth()
+    );
+}
+
 export default function FinancePage() {
     const supabase = createClient();
     const t = useTranslations("Finance");
@@ -139,7 +170,7 @@ export default function FinancePage() {
     const locale = useLocale();
     const [bookings, setBookings] = React.useState<BookingFinance[]>([]);
     const [loading, setLoading] = React.useState(true);
-    const [filter, setFilter] = React.useState<"all" | "pending" | "paid">("all");
+    const [filter, setFilter] = React.useState<FinanceFilterValue>("all");
     const [searchQuery, setSearchQuery] = React.useState("");
     const [packageFilter, setPackageFilter] = React.useState("All");
     const [bookingStatusFilter, setBookingStatusFilter] = React.useState("All");
@@ -149,6 +180,7 @@ export default function FinancePage() {
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
+    const [filtersHydrated, setFiltersHydrated] = React.useState(false);
     const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
     const [studioName, setStudioName] = React.useState("");
     const [savedTemplates, setSavedTemplates] = React.useState<
@@ -166,6 +198,7 @@ export default function FinancePage() {
     const [waMenuAnchorEl, setWaMenuAnchorEl] = React.useState<HTMLElement | null>(null);
     const [copiedInitialTemplateId, setCopiedInitialTemplateId] = React.useState<string | null>(null);
     const [copiedFinalTemplateId, setCopiedFinalTemplateId] = React.useState<string | null>(null);
+    const [showFilterPanel, setShowFilterPanel] = React.useState(false);
     const [mobileActionPicker, setMobileActionPicker] = React.useState<{
         open: boolean;
         booking: BookingFinance | null;
@@ -190,6 +223,14 @@ export default function FinancePage() {
         setCopyMenuAnchorEl(null);
         setWaMenuAnchorEl(null);
     }, []);
+
+    const resetFilters = React.useCallback(() => {
+        setFilter("all");
+        setSearchQuery("");
+        setPackageFilter("All");
+        setBookingStatusFilter("All");
+    }, []);
+
     const fetchBookings = React.useCallback(async () => {
         setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
@@ -259,6 +300,60 @@ export default function FinancePage() {
     React.useEffect(() => {
         void fetchBookings();
     }, [fetchBookings]);
+
+    React.useEffect(() => {
+        if (!currentUserId) {
+            setFiltersHydrated(false);
+            return;
+        }
+        setFiltersHydrated(false);
+        const storageKey = `${FINANCE_FILTER_STORAGE_PREFIX}:${currentUserId}`;
+
+        try {
+            const raw = window.localStorage.getItem(storageKey);
+            if (!raw) {
+                resetFilters();
+                return;
+            }
+
+            const parsed = JSON.parse(raw) as unknown;
+            if (!isObjectRecord(parsed)) {
+                resetFilters();
+                return;
+            }
+
+            const readString = (key: keyof FinanceFilterStoragePayload, fallback: string) => {
+                const value = parsed[key];
+                return typeof value === "string" ? value : fallback;
+            };
+
+            setSearchQuery(readString("searchQuery", ""));
+            setFilter(normalizeFinanceFilterValue(parsed.filter));
+            setPackageFilter(readString("packageFilter", "All") || "All");
+            setBookingStatusFilter(readString("bookingStatusFilter", "All") || "All");
+        } catch {
+            resetFilters();
+        } finally {
+            setFiltersHydrated(true);
+        }
+    }, [currentUserId, resetFilters]);
+
+    React.useEffect(() => {
+        if (!filtersHydrated || !currentUserId) return;
+        const storageKey = `${FINANCE_FILTER_STORAGE_PREFIX}:${currentUserId}`;
+        const payload: FinanceFilterStoragePayload = {
+            searchQuery,
+            filter,
+            packageFilter,
+            bookingStatusFilter,
+        };
+
+        try {
+            window.localStorage.setItem(storageKey, JSON.stringify(payload));
+        } catch {
+            // Ignore storage write failures.
+        }
+    }, [bookingStatusFilter, currentUserId, filter, filtersHydrated, packageFilter, searchQuery]);
 
     React.useEffect(() => {
         if (!currentUserId) {
@@ -1096,6 +1191,35 @@ export default function FinancePage() {
         dp_paid: booking.dp_paid,
         dp_verified_amount: booking.dp_verified_amount,
     }), 0);
+    const monthlyRevenueSummary = React.useMemo(() => {
+        const now = new Date();
+        const monthLabel = new Intl.DateTimeFormat(locale, {
+            month: "long",
+            year: "numeric",
+        }).format(now);
+        const total = bookings.reduce((sum, booking) => {
+            const verifiedDp = isSameLocalMonth(booking.dp_verified_at, now)
+                ? Math.max(booking.dp_verified_amount || 0, 0)
+                : 0;
+            const verifiedFinalPayment = isSameLocalMonth(booking.final_paid_at, now)
+                ? Math.max(booking.final_payment_amount || 0, 0)
+                : 0;
+            const refundedDp = isSameLocalMonth(booking.dp_refunded_at, now)
+                ? Math.min(
+                    Math.max(booking.dp_refund_amount || 0, 0),
+                    Math.max(booking.dp_verified_amount || 0, 0),
+                )
+                : 0;
+            return sum + verifiedDp + verifiedFinalPayment - refundedDp;
+        }, 0);
+
+        return { monthLabel, total };
+    }, [bookings, locale]);
+    const hasActiveFilters =
+        searchQuery.trim().length > 0 ||
+        filter !== "all" ||
+        packageFilter !== "All" ||
+        bookingStatusFilter !== "All";
 
     function exportFinance() {
         const wb = XLSX.utils.book_new();
@@ -1218,16 +1342,18 @@ export default function FinancePage() {
     });
 
     React.useEffect(() => {
+        if (loading) return;
         if (packageFilter !== "All" && !packageOptions.includes(packageFilter)) {
             setPackageFilter("All");
         }
-    }, [packageFilter, packageOptions]);
+    }, [loading, packageFilter, packageOptions]);
 
     React.useEffect(() => {
+        if (loading) return;
         if (bookingStatusFilter !== "All" && !bookingStatusOptions.includes(bookingStatusFilter)) {
             setBookingStatusFilter("All");
         }
-    }, [bookingStatusFilter, bookingStatusOptions]);
+    }, [bookingStatusFilter, bookingStatusOptions, loading]);
 
     React.useEffect(() => {
         setCurrentPage(1);
@@ -1243,7 +1369,7 @@ export default function FinancePage() {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 rounded-lg bg-green-100 dark:bg-green-500/10">
@@ -1253,6 +1379,16 @@ export default function FinancePage() {
                     </div>
                     <div className="text-2xl font-bold">{formatCurrency(totalRevenue)}</div>
                     <p className="text-xs text-muted-foreground mt-1">{t("dariSemuaBooking", { count: bookings.length })}</p>
+                </div>
+                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-lg bg-sky-100 dark:bg-sky-500/10">
+                            <Receipt className="w-5 h-5 text-sky-600 dark:text-sky-400" />
+                        </div>
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("monthlyRevenue")}</span>
+                    </div>
+                    <div className="text-2xl font-bold">{formatCurrency(monthlyRevenueSummary.total)}</div>
+                    <p className="text-xs text-muted-foreground mt-1">{t("monthlyRevenueSubtitle", { month: monthlyRevenueSummary.monthLabel })}</p>
                 </div>
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
                     <div className="flex items-center gap-3 mb-2">
@@ -1268,20 +1404,8 @@ export default function FinancePage() {
 
             {/* Filters */}
             <div className="space-y-3">
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                    {(["all", "pending", "paid"] as const).map((f) => (
-                        <button
-                            key={f}
-                            onClick={() => setFilter(f)}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer whitespace-nowrap ${filter === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
-                        >
-                            {f === "all" ? t("semua") : f === "paid" ? t("lunas") : t("belumLunas")}
-                        </button>
-                    ))}
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),220px,220px]">
-                    <div className="relative">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="relative flex-1">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <input
                             type="text"
@@ -1291,39 +1415,79 @@ export default function FinancePage() {
                             className="h-9 w-full rounded-md border border-input bg-background/50 pl-9 pr-3 text-sm outline-none transition-all focus-visible:ring-1 focus-visible:ring-ring"
                         />
                     </div>
-
-                    <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">{t("packageFilterLabel")}</label>
-                        <select
-                            value={packageFilter}
-                            onChange={(event) => setPackageFilter(event.target.value)}
-                            className={`${selectFilterClass} w-full`}
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="h-9 w-full gap-2 justify-center sm:w-auto"
+                            onClick={() => setShowFilterPanel((previous) => !previous)}
                         >
-                            <option value="All">{t("allPackages")}</option>
-                            {packageOptions.map((packageName) => (
-                                <option key={packageName} value={packageName}>
-                                    {packageName}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div className="space-y-1">
-                        <label className="text-xs font-medium text-muted-foreground">{t("bookingStatusFilterLabel")}</label>
-                        <select
-                            value={bookingStatusFilter}
-                            onChange={(event) => setBookingStatusFilter(event.target.value)}
-                            className={`${selectFilterClass} w-full`}
-                        >
-                            <option value="All">{t("allBookingStatuses")}</option>
-                            {bookingStatusOptions.map((statusOption) => (
-                                <option key={statusOption} value={statusOption}>
-                                    {statusOption}
-                                </option>
-                            ))}
-                        </select>
+                            <ListOrdered className="w-4 h-4" />
+                            {t("filterButton")}
+                        </Button>
+                        {hasActiveFilters && (
+                            <button
+                                type="button"
+                                onClick={resetFilters}
+                                className="h-9 w-full px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer sm:w-auto"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                                {t("resetFilters")}
+                            </button>
+                        )}
                     </div>
                 </div>
+
+                {showFilterPanel && (
+                    <div className="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-32 md:shrink-0 xl:w-36">{t("financeStatusFilterLabel")}</label>
+                                <select
+                                    value={filter}
+                                    onChange={(event) => setFilter(normalizeFinanceFilterValue(event.target.value))}
+                                    className={`${selectFilterClass} w-full`}
+                                >
+                                    <option value="all">{t("semua")}</option>
+                                    <option value="pending">{t("belumLunas")}</option>
+                                    <option value="paid">{t("lunas")}</option>
+                                </select>
+                            </div>
+
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-32 md:shrink-0 xl:w-36">{t("packageFilterLabel")}</label>
+                                <select
+                                    value={packageFilter}
+                                    onChange={(event) => setPackageFilter(event.target.value)}
+                                    className={`${selectFilterClass} w-full`}
+                                >
+                                    <option value="All">{t("allPackages")}</option>
+                                    {packageOptions.map((packageName) => (
+                                        <option key={packageName} value={packageName}>
+                                            {packageName}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-32 md:shrink-0 xl:w-36">{t("bookingStatusFilterLabel")}</label>
+                                <select
+                                    value={bookingStatusFilter}
+                                    onChange={(event) => setBookingStatusFilter(event.target.value)}
+                                    className={`${selectFilterClass} w-full`}
+                                >
+                                    <option value="All">{t("allBookingStatuses")}</option>
+                                    {bookingStatusOptions.map((statusOption) => (
+                                        <option key={statusOption} value={statusOption}>
+                                            {statusOption}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-end">
                     <Button
