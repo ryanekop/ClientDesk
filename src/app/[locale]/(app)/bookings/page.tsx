@@ -33,18 +33,14 @@ import {
 } from "@/utils/form-extra-fields";
 import {
     buildCustomFieldTemplateVars,
-    extractBuiltInExtraFieldValues,
     extractCustomFieldSnapshots,
     getGroupedCustomLayoutSections,
     type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
 import {
-    getBookingServiceLabel,
-    getBookingServiceNames,
-    normalizeLegacyServiceRecord,
-    normalizeBookingServiceSelections,
     type BookingServiceSelection,
 } from "@/lib/booking-services";
+import { buildBookingSessionDisplay } from "@/lib/booking-session-display";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
 import {
     lockBoundaryColumns,
@@ -60,7 +56,6 @@ import { getWhatsAppTemplateContent } from "@/lib/whatsapp-template";
 import {
     DEFAULT_CLIENT_STATUSES,
     getBookingStatusOptions,
-    resolveUnifiedBookingStatus,
 } from "@/lib/client-status";
 import {
     buildGoogleMapsQueryUrl,
@@ -143,7 +138,8 @@ const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
     { id: "invoice", label: "Invoice", visible: true },
     { id: "booking_date", label: "Tanggal Booking", visible: true },
     { id: "package", label: "Paket", visible: true },
-    { id: "schedule", label: "Jadwal", visible: true },
+    { id: "session_date_display", label: "Tanggal Sesi", visible: true },
+    { id: "session_time_display", label: "Jam Sesi", visible: true },
     { id: "location", label: "Lokasi", visible: true },
     { id: "status", label: "Status", visible: true },
     { id: "freelancer", label: "Freelance", visible: true },
@@ -1011,13 +1007,18 @@ export default function BookingsPage() {
         void copyFreelancerTemplate(booking, booking.booking_freelancers[0]);
     }
 
-    const formatDate = (d: string | null) => {
-        if (!d) return "-";
-        return formatSessionDate(d, { locale: locale === "en" ? "en" : "id", withDay: false });
-    };
-
     const formatCurrency = (n: number) =>
         n ? new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n) : "-";
+
+    const getSessionDisplay = React.useCallback((booking: Booking) => buildBookingSessionDisplay({
+        eventType: booking.event_type,
+        sessionDate: booking.session_date,
+        extraFields: booking.extra_fields,
+        bookingServices: booking.booking_services,
+        legacyService: booking.services,
+        serviceSelections: booking.service_selections,
+        locale: locale === "en" ? "en" : "id",
+    }), [locale]);
 
     function renderDesktopHeader(column: TableColumnPreference) {
         switch (column.id) {
@@ -1029,8 +1030,10 @@ export default function BookingsPage() {
                 return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("paket")}</th>;
             case "booking_date":
                 return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Tanggal Booking</th>;
-            case "schedule":
-                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("jadwal")}</th>;
+            case "session_date_display":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Tanggal Sesi</th>;
+            case "session_time_display":
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Jam Sesi</th>;
             case "location":
                 return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("location")}</th>;
             case "status":
@@ -1047,6 +1050,7 @@ export default function BookingsPage() {
     }
 
     function renderDesktopCell(booking: Booking, column: TableColumnPreference) {
+        const sessionDisplay = getSessionDisplay(booking);
         switch (column.id) {
             case "name":
                 return (
@@ -1080,8 +1084,10 @@ export default function BookingsPage() {
                             : "-"}
                     </td>
                 );
-            case "schedule":
-                return <td key={column.id} className="px-4 py-3 whitespace-nowrap text-muted-foreground font-light">{formatDate(booking.session_date)}</td>;
+            case "session_date_display":
+                return <td key={column.id} className="px-4 py-3 whitespace-pre-line text-muted-foreground font-light leading-5">{sessionDisplay.dateDisplay}</td>;
+            case "session_time_display":
+                return <td key={column.id} className="px-4 py-3 whitespace-pre-line text-muted-foreground font-light leading-5">{sessionDisplay.timeDisplay}</td>;
             case "location":
                 return (
                     <td key={column.id} className="px-4 py-3 max-w-[180px]">
@@ -1298,6 +1304,7 @@ export default function BookingsPage() {
     }
 
     function renderMobileValue(booking: Booking, column: TableColumnPreference) {
+        const sessionDisplay = getSessionDisplay(booking);
         switch (column.id) {
             case "invoice":
                 return booking.booking_code;
@@ -1312,8 +1319,10 @@ export default function BookingsPage() {
                         dateOnly: true,
                     })
                     : "-";
-            case "schedule":
-                return formatDate(booking.session_date);
+            case "session_date_display":
+                return sessionDisplay.dateDisplay;
+            case "session_time_display":
+                return sessionDisplay.timeDisplay;
             case "location":
                 return booking.location || "-";
             case "status":
@@ -1513,17 +1522,21 @@ export default function BookingsPage() {
         const response = await fetchPaginatedJson<Booking, BookingPageMetadata>(
             `/api/internal/bookings?${params.toString()}`,
         );
-        const exportData = response.items.map((booking) => ({
+        const exportData = response.items.map((booking) => {
+            const sessionDisplay = getSessionDisplay(booking);
+            return {
             [tb("exportBookingCode")]: booking.booking_code,
             [tb("exportClientName")]: booking.client_name,
             [tb("exportWhatsApp")]: booking.client_whatsapp || "",
-            [tb("exportSessionDate")]: booking.session_date ? formatSessionDate(booking.session_date, { dateOnly: true }) : "",
+            [tb("exportSessionDate")]: sessionDisplay.dateDisplay,
+            [tb("exportSessionTime")]: sessionDisplay.timeDisplay,
             [tb("exportLocation")]: booking.location || "",
             [tb("exportPackage")]: booking.service_label || booking.services?.name || "",
             [tb("exportTotalPrice")]: booking.total_price || 0,
             [tb("exportDPPaid")]: booking.dp_paid || 0,
             [tb("exportStatus")]: booking.status,
-        }));
+            };
+        });
         const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Bookings");
@@ -1713,7 +1726,7 @@ export default function BookingsPage() {
                                     .map((column) => (
                                         <div key={column.id} className="flex items-start justify-between gap-3">
                                             <span className="shrink-0">{column.label}</span>
-                                            <span className="max-w-[180px] truncate text-right text-foreground" title={String(renderMobileValue(booking, column) ?? "-")}>
+                                            <span className="max-w-[180px] whitespace-pre-line text-right text-foreground leading-5" title={String(renderMobileValue(booking, column) ?? "-")}>
                                                 {renderMobileValue(booking, column)}
                                             </span>
                                         </div>

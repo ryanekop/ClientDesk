@@ -372,6 +372,7 @@ export function BookingFormClient({
   const [uploadingProof, setUploadingProof] = React.useState(false);
   const [termsAccepted, setTermsAccepted] = React.useState(false);
   const [termsDialogOpen, setTermsDialogOpen] = React.useState(false);
+  const [termsCanBeAccepted, setTermsCanBeAccepted] = React.useState(false);
   const [packageDialogOpen, setPackageDialogOpen] = React.useState(false);
   const [addonDialogOpen, setAddonDialogOpen] = React.useState(false);
   const [packageSearchQuery, setPackageSearchQuery] = React.useState("");
@@ -379,6 +380,7 @@ export function BookingFormClient({
   const [error, setError] = React.useState("");
 
   const autoDpAmountRef = React.useRef<number | null>(null);
+  const termsContentRef = React.useRef<HTMLDivElement | null>(null);
   const isSpecialOfferActive = Boolean(normalizedOfferToken && specialOfferRule);
   const eventTypeLocked = isSpecialOfferActive && specialOfferRule?.eventTypeLocked === true;
   const packageLocked = isSpecialOfferActive && specialOfferRule?.packageLocked === true;
@@ -608,6 +610,11 @@ export function BookingFormClient({
 
     if (selectedPaymentMethod === "qris" && !effectiveVendor.qris_image_url) {
       setError(t("paymentNoQris"));
+      return;
+    }
+
+    if (proofRequired && !proofFile) {
+      setError(t("errorProof"));
       return;
     }
 
@@ -956,6 +963,10 @@ export function BookingFormClient({
     [effectiveVendor.form_terms_content],
   );
   const hasTerms = effectiveVendor.form_terms_enabled && !isRichTextEmpty(termsContent);
+  const proofRequired =
+    effectiveVendor.form_show_proof !== false &&
+    Boolean(selectedPaymentMethod) &&
+    selectedPaymentMethod !== "cash";
   const availablePaymentMethods = React.useMemo(
     () =>
       effectiveVendor.form_payment_methods.length > 0
@@ -971,6 +982,42 @@ export function BookingFormClient({
     () => [...services].sort(compareServicesByCatalogOrder),
     [services],
   );
+
+  React.useEffect(() => {
+    if (!hasTerms) {
+      setTermsAccepted(false);
+      setTermsCanBeAccepted(false);
+      return;
+    }
+
+    setTermsAccepted(false);
+    setTermsCanBeAccepted(false);
+  }, [hasTerms, termsContent]);
+
+  React.useEffect(() => {
+    if (!hasTerms || !termsDialogOpen || termsCanBeAccepted) return;
+
+    const container = termsContentRef.current;
+    if (!container) return;
+
+    const thresholdPx = 8;
+    const unlockIfReady = () => {
+      const canUnlock =
+        container.scrollHeight <= container.clientHeight + thresholdPx ||
+        container.scrollTop + container.clientHeight >=
+          container.scrollHeight - thresholdPx;
+      if (canUnlock) {
+        setTermsCanBeAccepted(true);
+      }
+    };
+
+    unlockIfReady();
+
+    const handleScroll = () => unlockIfReady();
+    window.requestAnimationFrame(unlockIfReady);
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [hasTerms, termsCanBeAccepted, termsDialogOpen]);
   const filteredServices = !eventType
     ? []
     : showAllActivePackages
@@ -1895,12 +1942,13 @@ export function BookingFormClient({
                 <input
                   id="booking-terms"
                   type="checkbox"
+                  disabled={!termsCanBeAccepted}
                   checked={termsAccepted}
                   onChange={(e) => {
                     setTermsAccepted(e.target.checked);
                     if (e.target.checked) setError("");
                   }}
-                  className="mt-1 h-4 w-4 rounded border-input accent-primary"
+                  className="mt-1 h-4 w-4 rounded border-input accent-primary disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 <label
                   htmlFor="booking-terms"
@@ -1922,6 +1970,11 @@ export function BookingFormClient({
                   {termsSuffixText ? ` ${termsSuffixText}` : ""}
                 </label>
               </div>
+              {!termsCanBeAccepted && (
+                <p className="text-xs text-muted-foreground">
+                  {t("termsReadHint")}
+                </p>
+              )}
             </section>
           )}
 
@@ -2109,6 +2162,7 @@ export function BookingFormClient({
                 </DialogDescription>
               </DialogHeader>
               <div
+                ref={termsContentRef}
                 className="max-h-[55vh] overflow-y-auto rounded-lg border bg-muted/20 p-4 text-sm leading-6 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:italic [&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:ml-5 [&_li]:list-item [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5"
                 dangerouslySetInnerHTML={{ __html: termsContent }}
               />

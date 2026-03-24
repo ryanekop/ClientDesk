@@ -74,6 +74,10 @@ type VendorRecord = {
     custom_client_statuses?: string[] | null;
 };
 
+type AvailableServiceRow = {
+    event_types?: string[] | null;
+};
+
 type BookingRequestBody = {
     vendorId?: string | null;
     vendorSlug: string;
@@ -481,6 +485,18 @@ export async function POST(request: NextRequest) {
         if (
             proofEnabled &&
             selectedPaymentMethod !== "cash" &&
+            !normalizedPaymentProofUrl &&
+            !paymentProofFile
+        ) {
+            return NextResponse.json(
+                { success: false, error: "Bukti pembayaran wajib diupload." },
+                { status: 400 },
+            );
+        }
+
+        if (
+            proofEnabled &&
+            selectedPaymentMethod !== "cash" &&
             paymentProofFile &&
             (!vendor.google_drive_access_token || !vendor.google_drive_refresh_token)
         ) {
@@ -527,8 +543,9 @@ export async function POST(request: NextRequest) {
                 ? isShowAllPackagesEventType(resolvedEventType)
                     ? (availableMainServices || [])[0]
                     : (availableMainServices || []).find((service) => {
-                    const eventTypes = Array.isArray((service as any).event_types)
-                        ? ((service as any).event_types as string[])
+                    const typedService = service as AvailableServiceRow;
+                    const eventTypes = Array.isArray(typedService.event_types)
+                        ? typedService.event_types
                         : [];
                     return eventTypes.length === 0 || eventTypes.some(
                         (type) => normalizeEventTypeName(type) === resolvedEventType,

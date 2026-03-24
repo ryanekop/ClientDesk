@@ -707,6 +707,11 @@ export default function SettlementClient({
                 previewUrl={proofPreview}
                 accept="image/*,.pdf"
                 label={t("paymentProof")}
+                helperText={
+                  selectedPaymentMethod === "qris"
+                    ? t("paymentProofQrisHint")
+                    : t("paymentProofBankHint")
+                }
                 emptyText={t("uploadProof")}
                 emptySubtext={t("dragDropHint")}
                 removeLabel={t("removeFile")}

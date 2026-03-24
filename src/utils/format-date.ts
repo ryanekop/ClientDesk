@@ -166,6 +166,38 @@ export function formatSessionTime(
     return `${hours}${separator}${minutes}`;
 }
 
+export function formatSessionTimeRange(
+    dateStr: string | null | undefined,
+    durationMinutes: number,
+    options: { separator?: "." | ":"; fallbackMinutes?: number } = {},
+): string {
+    const parts = parseSessionDateParts(dateStr);
+    if (!parts) return "-";
+
+    const separator = options.separator || ".";
+    const safeDuration =
+        Number.isFinite(durationMinutes) && durationMinutes > 0
+            ? Math.floor(durationMinutes)
+            : Math.max(Math.floor(options.fallbackMinutes ?? 120), 1);
+    const startLabel = formatSessionTime(dateStr, { separator });
+    const endDate = new Date(
+        Date.UTC(
+            parts.year,
+            parts.month - 1,
+            parts.day,
+            parts.hours,
+            parts.minutes,
+            parts.seconds,
+        ),
+    );
+    endDate.setUTCMinutes(endDate.getUTCMinutes() + safeDuration);
+
+    const endHours = String(endDate.getUTCHours()).padStart(2, "0");
+    const endMinutes = String(endDate.getUTCMinutes()).padStart(2, "0");
+
+    return `${startLabel} - ${endHours}${separator}${endMinutes}`;
+}
+
 /**
  * Get a Date object for calendar/comparison purposes using wall-clock parts.
  */

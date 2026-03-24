@@ -4,6 +4,7 @@ import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink, Upload, FileText, Trash2, AlertCircle, Image as ImageIcon, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FileDropzone } from "@/components/public/file-dropzone";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { useSuccessToast } from "@/components/ui/success-toast";
@@ -193,6 +194,8 @@ type AddonService = {
     event_types: string[] | null;
 };
 
+type BookingProofStage = "initial" | "final";
+
 type DrivePathProfile = {
     studio_name?: string | null;
     drive_folder_format?: string | null;
@@ -203,6 +206,9 @@ type DrivePathProfile = {
 type BookingProfileRow = {
     custom_client_statuses?: string[] | null;
     dp_verify_trigger_status?: string | null;
+    form_show_proof?: boolean | null;
+    google_drive_access_token?: string | null;
+    google_drive_refresh_token?: string | null;
     fastpik_link_display_mode?: FastpikLinkDisplayMode | null;
     fastpik_link_display_mode_booking_detail?: FastpikLinkDisplayMode | null;
 };
@@ -374,6 +380,143 @@ function PaymentProofPanel({
     );
 }
 
+function PaymentProofManager({
+    title,
+    url,
+    driveFileId,
+    alt,
+    linkLabel,
+    emptyLabel,
+    helperText,
+    uploadLabel,
+    uploading,
+    canUpload,
+    onUpload,
+    onError,
+}: {
+    title: string;
+    url: string | null;
+    driveFileId: string | null;
+    alt: string;
+    linkLabel: string;
+    emptyLabel: string;
+    helperText?: string;
+    uploadLabel: string;
+    uploading: boolean;
+    canUpload: boolean;
+    onUpload: (file: File) => Promise<boolean>;
+    onError: (message: string) => void;
+}) {
+    const [file, setFile] = React.useState<File | null>(null);
+    const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+    const [resetKey, setResetKey] = React.useState(0);
+
+    React.useEffect(() => () => {
+        if (previewUrl?.startsWith("blob:")) {
+            URL.revokeObjectURL(previewUrl);
+        }
+    }, [previewUrl]);
+
+    function handleFileSelect(nextFile: File | null) {
+        if (previewUrl?.startsWith("blob:")) {
+            URL.revokeObjectURL(previewUrl);
+        }
+
+        setFile(nextFile);
+
+        if (!nextFile) {
+            setPreviewUrl(null);
+            return;
+        }
+
+        if (nextFile.size > 5 * 1024 * 1024) {
+            setFile(null);
+            setPreviewUrl(null);
+            setResetKey((current) => current + 1);
+            onError("Ukuran file maksimal 5MB.");
+            return;
+        }
+
+        if (nextFile.type.startsWith("image/")) {
+            setPreviewUrl(URL.createObjectURL(nextFile));
+            return;
+        }
+
+        setPreviewUrl(null);
+    }
+
+    async function handleUpload() {
+        if (!file || uploading) return;
+        const success = await onUpload(file);
+        if (!success) return;
+
+        if (previewUrl?.startsWith("blob:")) {
+            URL.revokeObjectURL(previewUrl);
+        }
+
+        setFile(null);
+        setPreviewUrl(null);
+        setResetKey((current) => current + 1);
+    }
+
+    const uploadForm = canUpload ? (
+        <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
+            <FileDropzone
+                key={resetKey}
+                file={file}
+                previewUrl={previewUrl}
+                accept="image/*,.pdf"
+                label={uploadLabel}
+                helperText={helperText}
+                emptyText="Klik untuk upload bukti pembayaran"
+                emptySubtext="Atau drag & drop file di sini (JPG, PNG, PDF max 5MB)."
+                removeLabel="Hapus File"
+                onFileSelect={handleFileSelect}
+            />
+            <div className="flex justify-end">
+                <Button
+                    type="button"
+                    onClick={handleUpload}
+                    disabled={!file || uploading}
+                    className="gap-2"
+                >
+                    {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {uploading ? "Mengupload..." : uploadLabel}
+                </Button>
+            </div>
+        </div>
+    ) : null;
+
+    if (url) {
+        return (
+            <div className="space-y-4">
+                <PaymentProofPanel
+                    title={title}
+                    url={url}
+                    driveFileId={driveFileId}
+                    alt={alt}
+                    linkLabel={linkLabel}
+                />
+                {uploadForm}
+            </div>
+        );
+    }
+
+    return (
+        <div className="rounded-xl border bg-card p-4 space-y-4 sm:p-6">
+            <div className="space-y-3">
+                <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4" /> {title}
+                </h3>
+                <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-sm text-muted-foreground">
+                    {emptyLabel}
+                </div>
+            </div>
+            {uploadForm}
+        </div>
+    );
+}
+
 function toEditableAdjustments(items: FinalAdjustment[]): EditableAdjustment[] {
     return items.map((item) => ({
         id: item.id,
@@ -483,6 +626,8 @@ export default function BookingDetailPage() {
         title: string;
         message: string;
     }>({ open: false, title: "", message: "" });
+    const [proofUploadsEnabled, setProofUploadsEnabled] = React.useState(true);
+    const [uploadingProofStage, setUploadingProofStage] = React.useState<BookingProofStage | null>(null);
     const { canWriteBookings } = useBookingWriteAccess();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const currentDpValue = booking?.dp_paid ?? 0;
@@ -542,6 +687,63 @@ export default function BookingDetailPage() {
                 : "Gagal menyalin ID project Fastpik.",
         );
     }, [booking?.fastpik_project_id, copyTextWithSuccessToast, fastpikDashboardUrl, locale]);
+
+    const handleAdminPaymentProofUpload = React.useCallback(async (
+        stage: BookingProofStage,
+        file: File,
+    ) => {
+        if (!requireBookingWrite()) return false;
+        if (!booking) return false;
+
+        setUploadingProofStage(stage);
+        try {
+            const formData = new FormData();
+            formData.append("stage", stage);
+            formData.append("file", file);
+
+            const response = await fetch(`/api/internal/bookings/${booking.id}/payment-proof`, {
+                method: "POST",
+                body: formData,
+            });
+            const payload = await response.json().catch(() => null);
+
+            if (!response.ok || payload?.success !== true) {
+                showFeedback(
+                    payload?.error || "Gagal upload bukti pembayaran.",
+                    warningTitle,
+                );
+                return false;
+            }
+
+            setBooking((prev) => {
+                if (!prev) return prev;
+                if (stage === "final") {
+                    return {
+                        ...prev,
+                        final_payment_proof_url: payload.proofUrl || null,
+                        final_payment_proof_drive_file_id: payload.driveFileId || null,
+                    };
+                }
+
+                return {
+                    ...prev,
+                    payment_proof_url: payload.proofUrl || null,
+                    payment_proof_drive_file_id: payload.driveFileId || null,
+                };
+            });
+            showSuccessToast(
+                stage === "final"
+                    ? "Bukti pelunasan final berhasil diupload."
+                    : "Bukti pembayaran awal berhasil diupload.",
+            );
+            return true;
+        } catch {
+            showFeedback("Gagal upload bukti pembayaran.", warningTitle);
+            return false;
+        } finally {
+            setUploadingProofStage(null);
+        }
+    }, [booking, requireBookingWrite, showFeedback, showSuccessToast, warningTitle]);
 
     const handleSyncFastpikManual = React.useCallback(async () => {
         if (!requireBookingWrite()) return;
@@ -746,7 +948,7 @@ export default function BookingDetailPage() {
                 supabase.from("bookings")
                     .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, admin_notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, is_addon)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
-                supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, dp_verify_trigger_status, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode").eq("id", user.id).single(),
+                supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, dp_verify_trigger_status, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof").eq("id", user.id).single(),
                 supabase.from("services")
                     .select("id, name, price, description, event_types")
                     .eq("user_id", user.id)
@@ -781,6 +983,7 @@ export default function BookingDetailPage() {
                 ),
             );
             setBookingStatuses(statusOptions);
+            setProofUploadsEnabled(profileRow?.form_show_proof ?? true);
             const syncedStatus = resolveUnifiedBookingStatus({
                 status: rawBooking?.status,
                 clientStatus: rawBooking?.client_status,
@@ -1864,6 +2067,16 @@ export default function BookingDetailPage() {
         settlement_status: booking.settlement_status,
         is_fully_paid: booking.is_fully_paid,
     });
+    const normalizedSettlementStatus = (booking.settlement_status || "").trim().toLowerCase();
+    const hasFinalProofContext = Boolean(
+        booking.final_payment_method ||
+        booking.final_payment_source ||
+        (booking.final_payment_amount || 0) > 0 ||
+        booking.final_payment_proof_url ||
+        (normalizedSettlementStatus && normalizedSettlementStatus !== "pending"),
+    );
+    const showInitialProofSection = proofUploadsEnabled || Boolean(booking.payment_proof_url);
+    const showFinalProofSection = Boolean(booking.final_payment_proof_url) || (proofUploadsEnabled && hasFinalProofContext);
     const initialPriceBreakdown = getInitialBookingPriceBreakdown({
         totalPrice: booking.total_price,
         serviceSelections: booking.service_selections,
@@ -2548,24 +2761,37 @@ export default function BookingDetailPage() {
                 )}
             </div>
 
-            {/* Bukti Pembayaran Awal */}
-            {booking.payment_proof_url && (
-                <PaymentProofPanel
+            {showInitialProofSection && (
+                <PaymentProofManager
                     title="Bukti Pembayaran Awal"
                     url={booking.payment_proof_url}
                     driveFileId={booking.payment_proof_drive_file_id}
                     alt="Bukti Pembayaran Awal"
                     linkLabel="Buka bukti pembayaran awal"
+                    emptyLabel="Belum ada bukti pembayaran awal untuk booking ini."
+                    helperText="Upload atau ganti bukti pembayaran awal dari admin."
+                    uploadLabel={booking.payment_proof_url ? "Ganti Bukti Awal" : "Upload Bukti Awal"}
+                    uploading={uploadingProofStage === "initial"}
+                    canUpload={proofUploadsEnabled && canWriteBookings}
+                    onUpload={(file) => handleAdminPaymentProofUpload("initial", file)}
+                    onError={(message) => showFeedback(message, warningTitle)}
                 />
             )}
 
-            {booking.final_payment_proof_url && (
-                <PaymentProofPanel
+            {showFinalProofSection && (
+                <PaymentProofManager
                     title="Bukti Pelunasan Final"
                     url={booking.final_payment_proof_url}
                     driveFileId={booking.final_payment_proof_drive_file_id}
                     alt="Bukti Pelunasan Final"
                     linkLabel="Buka bukti pelunasan final"
+                    emptyLabel="Belum ada bukti pelunasan final untuk booking ini."
+                    helperText="Upload atau ganti bukti pelunasan final dari admin."
+                    uploadLabel={booking.final_payment_proof_url ? "Ganti Bukti Final" : "Upload Bukti Final"}
+                    uploading={uploadingProofStage === "final"}
+                    canUpload={proofUploadsEnabled && canWriteBookings}
+                    onUpload={(file) => handleAdminPaymentProofUpload("final", file)}
+                    onError={(message) => showFeedback(message, warningTitle)}
                 />
             )}
 

@@ -1688,7 +1688,7 @@ export default function FormBookingPage() {
                     </div>
                   ))}
                   <p className="text-[11px] text-muted-foreground">
-                    Jika dimatikan, field upload bukti pembayaran akan disembunyikan untuk transfer bank maupun QRIS. Untuk metode cash, field tetap nonaktif otomatis.
+                    Jika aktif, upload bukti pembayaran menjadi wajib untuk transfer bank dan QRIS di form booking maupun form settlement. Untuk metode cash, field tetap nonaktif otomatis.
                   </p>
                 </div>
               </div>
