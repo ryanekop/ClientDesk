@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useLocale } from "next-intl";
+import { useTranslations } from "next-intl";
 import { Folder, FolderPlus, ChevronRight, Loader2, Home, ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -24,6 +24,7 @@ type DriveBrowserStrings = {
     feedbackTitle?: string;
     createFolderFailed?: string;
     backLabel?: string;
+    dialogTitle?: string;
     createFolderLabel?: string;
     newFolderLabel?: string;
     newFolderPlaceholder?: string;
@@ -56,25 +57,23 @@ export function DriveBrowser({
     onFolderSelected,
     strings,
 }: DriveBrowserProps) {
-    const locale = useLocale();
-    const isEnglish = locale === "en";
+    const t = useTranslations("DriveBrowser");
     const uiStrings: Required<DriveBrowserStrings> = {
-        feedbackTitle: isEnglish ? "Information" : "Informasi",
-        createFolderFailed: isEnglish ? "Failed to create folder." : "Gagal membuat folder.",
-        backLabel: isEnglish ? "Back" : "Kembali",
-        createFolderLabel: isEnglish ? "Create Folder" : "Buat Folder",
-        newFolderLabel: isEnglish ? "New Folder Name" : "Nama Folder Baru",
-        newFolderPlaceholder: isEnglish ? "Folder name..." : "Nama folder...",
-        createAndSelectLabel: isEnglish ? "Create & Select" : "Buat & Pilih",
-        emptyStateTitle: isEnglish ? "No folders here." : "Tidak ada folder di sini.",
-        emptyStateHint: isEnglish ? "Create a new folder above." : "Buat folder baru di atas.",
-        selectThisFolderTitle: isEnglish ? "Select this folder" : "Pilih folder ini",
-        selectLabel: isEnglish ? "Select" : "Pilih",
-        footerHint: isEnglish
-            ? "Click a folder name to open it. Click \"Select\" to link it to the booking."
-            : "Klik nama folder untuk masuk. Klik \"Pilih\" untuk mengaitkan ke booking.",
-        closeLabel: isEnglish ? "Close" : "Tutup",
-        confirmLabel: "OK",
+        feedbackTitle: t("feedbackTitle"),
+        createFolderFailed: t("createFolderFailed"),
+        backLabel: t("backLabel"),
+        dialogTitle: t("dialogTitle"),
+        createFolderLabel: t("createFolderLabel"),
+        newFolderLabel: t("newFolderLabel"),
+        newFolderPlaceholder: t("newFolderPlaceholder"),
+        createAndSelectLabel: t("createAndSelectLabel"),
+        emptyStateTitle: t("emptyStateTitle"),
+        emptyStateHint: t("emptyStateHint"),
+        selectThisFolderTitle: t("selectThisFolderTitle"),
+        selectLabel: t("selectLabel"),
+        footerHint: t("footerHint"),
+        closeLabel: t("closeLabel"),
+        confirmLabel: t("confirmLabel"),
         ...strings,
     };
     const [folders, setFolders] = React.useState<DriveFolder[]>([]);
@@ -180,7 +179,7 @@ export function DriveBrowser({
             <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <Folder className="w-5 h-5 text-blue-500" /> Google Drive Browser
+                        <Folder className="w-5 h-5 text-blue-500" /> {uiStrings.dialogTitle}
                     </DialogTitle>
                 </DialogHeader>
 

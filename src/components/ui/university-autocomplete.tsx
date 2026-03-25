@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useLocale } from "next-intl";
+import { useTranslations } from "next-intl";
 import { Check, Loader2, Search, Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -41,34 +41,26 @@ export function UniversityAutocomplete({
   selectedId,
   onValueChange,
   onSelect,
-  placeholder = "Cari universitas...",
+  placeholder,
   required = false,
   disabled = false,
   inputClassName,
   allowManualCreate = false,
   strings,
 }: UniversityAutocompleteProps) {
-  const locale = useLocale();
+  const t = useTranslations("UniversityAutocomplete");
   const defaultStrings = React.useMemo<Required<UniversityAutocompleteStrings>>(
-    () =>
-      locale === "en"
-        ? {
-            noResults: "University not found.",
-            selectionHint: "Select a university from the available suggestions.",
-            searchError: "Failed to search universities.",
-            createLabel: (name: string) => `Add "${name}" to references`,
-            createError: "Failed to add university to references.",
-          }
-        : {
-            noResults: "Universitas tidak ditemukan.",
-            selectionHint: "Pilih universitas dari suggestion yang tersedia.",
-            searchError: "Gagal mencari universitas.",
-            createLabel: (name: string) => `Tambah "${name}" ke referensi`,
-            createError: "Gagal menambahkan universitas ke referensi.",
-          },
-    [locale],
+    () => ({
+      noResults: t("noResults"),
+      selectionHint: t("selectionHint"),
+      searchError: t("searchError"),
+      createLabel: (name: string) => t("createLabel", { name }),
+      createError: t("createError"),
+    }),
+    [t],
   );
   const uiStrings = { ...defaultStrings, ...strings };
+  const resolvedPlaceholder = placeholder || t("placeholder");
   const rootRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [open, setOpen] = React.useState(false);
@@ -273,7 +265,7 @@ export function UniversityAutocomplete({
           onChange={(event) => handleInputChange(event.target.value)}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           className={cn(DEFAULT_INPUT_CLASS, inputClassName)}
           required={required}
           disabled={disabled}

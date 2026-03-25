@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { AlertTriangle, Loader2, MapPin, X } from "lucide-react";
 import { LocationPointerIcon } from "@/components/icons/location-pointer-icon";
 
@@ -101,16 +101,16 @@ export function LocationAutocomplete({
   strings,
 }: LocationAutocompleteProps) {
   const locale = useLocale();
-  const isEnglish = locale === "en";
-  const resolvedPlaceholder = placeholder || (isEnglish ? "Search location..." : "Cari lokasi...");
+  const t = useTranslations("LocationAutocomplete");
+  const resolvedPlaceholder = placeholder || t("searchPlaceholder");
   const uiStrings = React.useMemo(
     () => ({
-      mapButtonTitle: isEnglish ? "Pick on Map" : "Pilih di Peta",
+      mapButtonTitle: t("mapButtonTitle"),
       ...strings,
     }),
-    [isEnglish, strings],
+    [strings, t],
   );
-  const normalizedMapsLanguage = mapsLanguage?.trim() || (isEnglish ? "en" : "id");
+  const normalizedMapsLanguage = mapsLanguage?.trim() || (locale === "en" ? "en" : "id");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const autocompleteRef = React.useRef<google.maps.places.Autocomplete | null>(
     null,
@@ -343,8 +343,7 @@ function MapPickerModal({
   ) => void;
   onClose: () => void;
 }) {
-  const locale = useLocale();
-  const isEnglish = locale === "en";
+  const t = useTranslations("LocationAutocomplete");
   const mapRef = React.useRef<HTMLDivElement>(null);
   const searchRef = React.useRef<HTMLInputElement>(null);
   const googleMapRef = React.useRef<google.maps.Map | null>(null);
@@ -357,44 +356,22 @@ function MapPickerModal({
   const [gpsLoading, setGpsLoading] = React.useState(false);
   const [gpsWarning, setGpsWarning] = React.useState<string | null>(null);
   const mapStrings = React.useMemo(
-    () =>
-      isEnglish
-        ? {
-            modalTitle: "Pick Location on Map",
-            mapSearchPlaceholder: "Search place on map...",
-            useMyLocationTitle: "Use my location",
-            useMyLocationLabel: "My Location",
-            gpsUnsupported: "This device does not support browser GPS.",
-            gpsAddressUnavailable:
-              "GPS location was found, but the address could not be resolved.",
-            gpsPermissionDenied: "Location permission denied. Enable GPS and try again.",
-            gpsUnavailable:
-              "Location is unavailable. Try moving to an area with better signal.",
-            gpsTimeout: "GPS timed out. Please try again.",
-            gpsGeneralError: "Failed to get GPS location. Please try again.",
-            selectedAddressFallback: "Click or drag the pin to select location",
-            cancelLabel: "Cancel",
-            confirmLabel: "Select Location",
-          }
-        : {
-            modalTitle: "Pilih Lokasi di Peta",
-            mapSearchPlaceholder: "Cari tempat di peta...",
-            useMyLocationTitle: "Gunakan lokasi saya",
-            useMyLocationLabel: "Lokasi Saya",
-            gpsUnsupported: "Perangkat ini tidak mendukung GPS browser.",
-            gpsAddressUnavailable:
-              "Lokasi GPS berhasil didapat, tapi alamat tidak bisa dibaca.",
-            gpsPermissionDenied:
-              "Izin lokasi ditolak. Silakan aktifkan GPS lalu coba lagi.",
-            gpsUnavailable:
-              "Lokasi tidak tersedia. Coba pindah ke area dengan sinyal lebih baik.",
-            gpsTimeout: "GPS timeout. Silakan coba lagi.",
-            gpsGeneralError: "Gagal mengambil lokasi GPS. Silakan coba lagi.",
-            selectedAddressFallback: "Klik atau drag pin untuk memilih lokasi",
-            cancelLabel: "Batal",
-            confirmLabel: "Pilih Lokasi",
-          },
-    [isEnglish],
+    () => ({
+      modalTitle: t("modalTitle"),
+      mapSearchPlaceholder: t("mapSearchPlaceholder"),
+      useMyLocationTitle: t("useMyLocationTitle"),
+      useMyLocationLabel: t("useMyLocationLabel"),
+      gpsUnsupported: t("gpsUnsupported"),
+      gpsAddressUnavailable: t("gpsAddressUnavailable"),
+      gpsPermissionDenied: t("gpsPermissionDenied"),
+      gpsUnavailable: t("gpsUnavailable"),
+      gpsTimeout: t("gpsTimeout"),
+      gpsGeneralError: t("gpsGeneralError"),
+      selectedAddressFallback: t("selectedAddressFallback"),
+      cancelLabel: t("cancelLabel"),
+      confirmLabel: t("confirmLabel"),
+    }),
+    [t],
   );
 
   React.useEffect(() => {

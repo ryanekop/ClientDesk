@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useLocale } from "next-intl";
+import { useTranslations } from "next-intl";
 import {
   AlertCircle,
   ArrowLeft,
@@ -132,101 +132,55 @@ type BatchImportStrings = {
   finishLabel: string;
 };
 
-function getDefaultBatchImportStrings(locale: string): BatchImportStrings {
-  if (locale === "en") {
-    return {
-      blockedBookingWriteFallback: "Booking access is locked.",
-      failedDownloadTemplate: "Failed to download template.",
-      failedValidateImport: "Failed to validate import file.",
-      failedCommitImport: "Failed to commit import.",
-      stepUpload: "Upload File",
-      stepPreview: "Preview & Validation",
-      stepConfirm: "Commit",
-      triggerTitle: "Batch Import",
-      triggerLabel: "Batch Import",
-      dialogTitle: "Batch Import Booking v2",
-      dialogDescription: "Upload an XLSX file, validate first, then commit when errors = 0.",
-      downloadTemplateLabel: "Download XLSX Template v2",
-      uploadPrimaryHint: "Upload an .xlsx file following template v2",
-      uploadHintAutoId: "External import ID is auto-generated, no manual input needed",
-      uploadHintAutoValidate: "Validation runs automatically after file selection",
-      validatingLabel: "Validating...",
-      chooseFileLabel: "Choose File",
-      rowsLabel: "rows",
-      statValid: "Valid",
-      statWarning: "Warning",
-      statError: "Error",
-      statTotal: "Total",
-      downloadValidationReportLabel: "Download Validation Report",
-      commitLockedMessage: "Commit is locked because errors still exist.",
-      headerRow: "Row",
-      headerClientName: "Client Name",
-      headerEvent: "Event",
-      headerStatus: "Status",
-      headerIssue: "Issue",
-      okLabel: "OK",
-      commitProcessingLabel: "Import commit is being processed...",
-      commitSuccessLabel: (count) => `${count} bookings imported successfully`,
-      commitFailedLabel: "Import commit failed",
-      commitSummaryLabel: (total, success, failed) =>
-        `Total ${total}, success ${success}, failed ${failed}`,
-      commitSyncSummaryLabel: (success, failed, skipped) =>
-        `Calendar Sync: success ${success}, failed ${failed}, skipped ${skipped}`,
-      downloadCommitReportLabel: "Download Commit Report",
-      waitingCommitLabel: "Waiting for commit process.",
-      closeLabel: "Close",
-      changeFileLabel: "Change File",
-      commitImportLabel: "Commit Import",
-      finishLabel: "Done",
-    };
-  }
+type BatchImportTranslator = ReturnType<typeof useTranslations<"BatchImport">>;
 
+function buildBatchImportStrings(t: BatchImportTranslator): BatchImportStrings {
   return {
-    blockedBookingWriteFallback: "Akses booking terkunci.",
-    failedDownloadTemplate: "Gagal download template.",
-    failedValidateImport: "Gagal memvalidasi file import.",
-    failedCommitImport: "Gagal commit import.",
-    stepUpload: "Upload File",
-    stepPreview: "Preview & Validasi",
-    stepConfirm: "Commit",
-    triggerTitle: "Batch Import",
-    triggerLabel: "Batch Import",
-    dialogTitle: "Batch Import Booking v2",
-    dialogDescription: "Upload file XLSX, validasi dulu, lalu commit saat error = 0.",
-    downloadTemplateLabel: "Download Template XLSX v2",
-    uploadPrimaryHint: "Upload file .xlsx sesuai template v2",
-    uploadHintAutoId: "External import ID digenerate otomatis, admin tidak perlu isi manual",
-    uploadHintAutoValidate: "Validasi akan jalan otomatis setelah file dipilih",
-    validatingLabel: "Memvalidasi...",
-    chooseFileLabel: "Pilih File",
-    rowsLabel: "baris",
-    statValid: "Valid",
-    statWarning: "Warning",
-    statError: "Error",
-    statTotal: "Total",
-    downloadValidationReportLabel: "Download Report Validasi",
-    commitLockedMessage: "Commit dikunci karena masih ada error.",
-    headerRow: "Row",
-    headerClientName: "Nama Klien",
-    headerEvent: "Event",
-    headerStatus: "Status",
-    headerIssue: "Issue",
-    okLabel: "OK",
-    commitProcessingLabel: "Commit import sedang diproses...",
-    commitSuccessLabel: (count) => `${count} booking berhasil diimport`,
-    commitFailedLabel: "Commit import gagal",
+    blockedBookingWriteFallback: t("blockedBookingWriteFallback"),
+    failedDownloadTemplate: t("failedDownloadTemplate"),
+    failedValidateImport: t("failedValidateImport"),
+    failedCommitImport: t("failedCommitImport"),
+    stepUpload: t("stepUpload"),
+    stepPreview: t("stepPreview"),
+    stepConfirm: t("stepConfirm"),
+    triggerTitle: t("triggerTitle"),
+    triggerLabel: t("triggerLabel"),
+    dialogTitle: t("dialogTitle"),
+    dialogDescription: t("dialogDescription"),
+    downloadTemplateLabel: t("downloadTemplateLabel"),
+    uploadPrimaryHint: t("uploadPrimaryHint"),
+    uploadHintAutoId: t("uploadHintAutoId"),
+    uploadHintAutoValidate: t("uploadHintAutoValidate"),
+    validatingLabel: t("validatingLabel"),
+    chooseFileLabel: t("chooseFileLabel"),
+    rowsLabel: t("rowsLabel"),
+    statValid: t("statValid"),
+    statWarning: t("statWarning"),
+    statError: t("statError"),
+    statTotal: t("statTotal"),
+    downloadValidationReportLabel: t("downloadValidationReportLabel"),
+    commitLockedMessage: t("commitLockedMessage"),
+    headerRow: t("headerRow"),
+    headerClientName: t("headerClientName"),
+    headerEvent: t("headerEvent"),
+    headerStatus: t("headerStatus"),
+    headerIssue: t("headerIssue"),
+    okLabel: t("okLabel"),
+    commitProcessingLabel: t("commitProcessingLabel"),
+    commitSuccessLabel: (count) => t("commitSuccessLabel", { count }),
+    commitFailedLabel: t("commitFailedLabel"),
     commitSummaryLabel: (total, success, failed) =>
-      `Total ${total}, berhasil ${success}, gagal ${failed}`,
+      t("commitSummaryLabel", { total, success, failed }),
     commitSyncSummaryLabel: (success, failed, skipped) =>
-      `Sync Calendar: berhasil ${success}, gagal ${failed}, dilewati ${skipped}`,
-    downloadCommitReportLabel: "Download Report Commit",
-    waitingCommitLabel: "Menunggu proses commit.",
-    closeLabel: "Tutup",
-    changeFileLabel: "Ganti File",
-    commitImportLabel: "Commit Import",
-    finishLabel: "Selesai",
+      t("commitSyncSummaryLabel", { success, failed, skipped }),
+    downloadCommitReportLabel: t("downloadCommitReportLabel"),
+    waitingCommitLabel: t("waitingCommitLabel"),
+    closeLabel: t("closeLabel"),
+    changeFileLabel: t("changeFileLabel"),
+    commitImportLabel: t("commitImportLabel"),
+    finishLabel: t("finishLabel"),
   };
-};
+}
 
 function downloadBase64Xlsx(base64: string, fileName: string) {
   const binary = atob(base64);
@@ -254,13 +208,13 @@ export function BatchImportButton({
   buttonClassName,
   strings,
 }: BatchImportButtonProps) {
-  const locale = useLocale();
+  const t = useTranslations("BatchImport");
   const ui = React.useMemo(
     () => ({
-      ...getDefaultBatchImportStrings(locale),
+      ...buildBatchImportStrings(t),
       ...strings,
     }),
-    [locale, strings],
+    [strings, t],
   );
   const blockedMessage =
     bookingWriteBlockedMessage || ui.blockedBookingWriteFallback;

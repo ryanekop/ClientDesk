@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useLocale } from "next-intl";
+import { useTranslations } from "next-intl";
 import type {
   CustomFieldItem,
   CustomSectionItem,
@@ -45,11 +45,11 @@ export function BookingAdminCustomFields({
   selectClass,
   strings,
 }: Props) {
-  const locale = useLocale();
+  const t = useTranslations("BookingAdminCustomFields");
   const uiStrings: Required<NonNullable<Props["strings"]>> = {
-    checkboxYes: locale === "en" ? "Yes" : "Ya",
-    checkboxNo: locale === "en" ? "No" : "Tidak",
-    selectPlaceholder: locale === "en" ? "Select..." : "Pilih...",
+    checkboxYes: t("checkboxYes"),
+    checkboxNo: t("checkboxNo"),
+    selectPlaceholder: t("selectPlaceholder"),
     ...strings,
   };
 
