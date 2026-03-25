@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2, CheckCircle2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -93,49 +93,72 @@ const COUNTRY_CODES = [
     { code: "+670", flag: "🇹🇱", name: "Timor Leste" },
 ];
 
-const EXTRA_FIELDS_DEF: Record<string, { key: string; label: string; labelEn: string; isLocation?: boolean; fullWidth?: boolean; required?: boolean; isNumeric?: boolean }[]> = {
+type ExtraFieldDefinition = {
+    key: string;
+    labelKey:
+        | "university"
+        | "faculty"
+        | "partnerName"
+        | "partnerInstagram"
+        | "estimatedGuests"
+        | "akadVenue"
+        | "receptionVenue"
+        | "pregnancyAge"
+        | "babyGender"
+        | "babyName"
+        | "dateOfBirth"
+        | "brandName"
+        | "contentType"
+        | "memberCount";
+    isLocation?: boolean;
+    fullWidth?: boolean;
+    required?: boolean;
+    isNumeric?: boolean;
+};
+
+const EXTRA_FIELDS_DEF: Record<string, ExtraFieldDefinition[]> = {
     Wisuda: [
-        { key: "universitas", label: "Universitas", labelEn: "University" },
-        { key: "fakultas", label: "Fakultas", labelEn: "Faculty" },
+        { key: "universitas", labelKey: "university" },
+        { key: "fakultas", labelKey: "faculty" },
     ],
     Wedding: [
-        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
-        { key: "instagram_pasangan", label: "Instagram Pasangan", labelEn: "Partner's Instagram", fullWidth: true },
-        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true, isNumeric: true },
-        { key: "tempat_akad", label: "Lokasi Akad", labelEn: "Akad Venue", isLocation: true, required: true },
-        { key: "tempat_resepsi", label: "Lokasi Resepsi", labelEn: "Reception Venue", isLocation: true, required: true },
+        { key: "nama_pasangan", labelKey: "partnerName", fullWidth: true, required: true },
+        { key: "instagram_pasangan", labelKey: "partnerInstagram", fullWidth: true },
+        { key: "jumlah_tamu", labelKey: "estimatedGuests", fullWidth: true, isNumeric: true },
+        { key: "tempat_akad", labelKey: "akadVenue", isLocation: true, required: true },
+        { key: "tempat_resepsi", labelKey: "receptionVenue", isLocation: true, required: true },
     ],
     Akad: [
-        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
-        { key: "instagram_pasangan", label: "Instagram Pasangan", labelEn: "Partner's Instagram", fullWidth: true },
-        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true, isNumeric: true },
+        { key: "nama_pasangan", labelKey: "partnerName", fullWidth: true, required: true },
+        { key: "instagram_pasangan", labelKey: "partnerInstagram", fullWidth: true },
+        { key: "jumlah_tamu", labelKey: "estimatedGuests", fullWidth: true, isNumeric: true },
     ],
     Resepsi: [
-        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
-        { key: "instagram_pasangan", label: "Instagram Pasangan", labelEn: "Partner's Instagram", fullWidth: true },
-        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true, isNumeric: true },
+        { key: "nama_pasangan", labelKey: "partnerName", fullWidth: true, required: true },
+        { key: "instagram_pasangan", labelKey: "partnerInstagram", fullWidth: true },
+        { key: "jumlah_tamu", labelKey: "estimatedGuests", fullWidth: true, isNumeric: true },
     ],
     Maternity: [
-        { key: "usia_kehamilan", label: "Usia Kehamilan", labelEn: "Pregnancy Age" },
-        { key: "gender_bayi", label: "Gender Bayi", labelEn: "Baby Gender" },
+        { key: "usia_kehamilan", labelKey: "pregnancyAge" },
+        { key: "gender_bayi", labelKey: "babyGender" },
     ],
     Newborn: [
-        { key: "nama_bayi", label: "Nama Bayi", labelEn: "Baby Name" },
-        { key: "tanggal_lahir", label: "Tanggal Lahir", labelEn: "Date of Birth" },
+        { key: "nama_bayi", labelKey: "babyName" },
+        { key: "tanggal_lahir", labelKey: "dateOfBirth" },
     ],
     Komersil: [
-        { key: "nama_brand", label: "Nama Brand", labelEn: "Brand Name" },
-        { key: "tipe_konten", label: "Tipe Konten", labelEn: "Content Type" },
+        { key: "nama_brand", labelKey: "brandName" },
+        { key: "tipe_konten", labelKey: "contentType" },
     ],
-    Family: [{ key: "jumlah_anggota", label: "Jumlah Anggota", labelEn: "Members" }],
+    Family: [{ key: "jumlah_anggota", labelKey: "memberCount" }],
     Lamaran: [
-        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
-        { key: "instagram_pasangan", label: "Instagram Pasangan", labelEn: "Partner's Instagram", fullWidth: true },
-        { key: "jumlah_tamu", label: "Estimasi Tamu", labelEn: "Estimated Guests", fullWidth: true, isNumeric: true },
+        { key: "nama_pasangan", labelKey: "partnerName", fullWidth: true, required: true },
+        { key: "instagram_pasangan", labelKey: "partnerInstagram", fullWidth: true },
+        { key: "jumlah_tamu", labelKey: "estimatedGuests", fullWidth: true, isNumeric: true },
     ],
     Prewedding: [
-        { key: "nama_pasangan", label: "Nama Pasangan", labelEn: "Partner's Name", fullWidth: true, required: true },
-        { key: "instagram_pasangan", label: "Instagram Pasangan", labelEn: "Partner's Instagram", fullWidth: true },
+        { key: "nama_pasangan", labelKey: "partnerName", fullWidth: true, required: true },
+        { key: "instagram_pasangan", labelKey: "partnerInstagram", fullWidth: true },
     ],
 };
 
@@ -218,6 +241,7 @@ export default function EditBookingPage() {
     const id = params.id as string;
     const router = useRouter();
     const locale = useLocale();
+    const tBookingEditor = useTranslations("BookingEditor");
     const supabase = createClient();
 
     const [loading, setLoading] = React.useState(true);
@@ -306,10 +330,10 @@ export default function EditBookingPage() {
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
             open: true,
-            title: title || (locale === "en" ? "Information" : "Informasi"),
+            title: title || tBookingEditor("feedbackTitle"),
             message,
         });
-    }, [locale]);
+    }, [tBookingEditor]);
     const requireBookingWrite = useBookingWriteGuard(({ message, title }) => {
         showFeedback(message, title);
     });
@@ -599,7 +623,7 @@ export default function EditBookingPage() {
             setSelectedServiceIds(prev => (prev.includes(s.id) ? prev : [...prev, s.id]));
             setCustomServiceName(""); setCustomServicePrice(""); setCustomServiceDesc("");
             setShowCustomServicePopup(false);
-        } else { showFeedback("Gagal menyimpan paket."); }
+        } else { showFeedback(tBookingEditor("failedSavePackage")); }
         setSavingCustomService(false);
     }
 
@@ -620,7 +644,7 @@ export default function EditBookingPage() {
             setFreelancerIds(prev => prev.length < 5 ? [...prev, f.id] : prev);
             setCustomFreelancerName(""); setCustomFreelancerWa(""); setCustomFreelancerRole("Photographer"); setCustomFreelancerCountryCode("+62");
             setShowCustomFreelancerPopup(false);
-        } else { console.error(error); showFeedback("Gagal menyimpan freelance."); }
+        } else { console.error(error); showFeedback(tBookingEditor("failedSaveFreelancer")); }
         setSavingCustomFreelancer(false);
     }
 
@@ -640,17 +664,17 @@ export default function EditBookingPage() {
         setSaving(true);
 
         if (eventType === "Wedding" && (!extraFields.tempat_akad || !extraFields.tempat_resepsi)) {
-            showFeedback("Lokasi Akad dan Lokasi Resepsi wajib diisi untuk acara Wedding.");
+            showFeedback(tBookingEditor("errorWeddingLocationRequired"));
             setSaving(false);
             return;
         }
         if (selectedServiceIds.length === 0) {
-            showFeedback("Pilih minimal satu paket utama.");
+            showFeedback(tBookingEditor("errorSelectMainPackage"));
             setSaving(false);
             return;
         }
         if (!hasUniversityReferenceSelection(extraFields, eventType)) {
-            showFeedback("Silakan pilih universitas dari suggestion yang tersedia.");
+            showFeedback(tBookingEditor("errorUniversitySuggestionRequired"));
             setSaving(false);
             return;
         }
@@ -811,7 +835,7 @@ export default function EditBookingPage() {
         setSaving(false);
 
         if (error) {
-            showFeedback("Gagal menyimpan perubahan.");
+            showFeedback(tBookingEditor("failedSaveChanges"));
             return;
         }
 
@@ -870,18 +894,26 @@ export default function EditBookingPage() {
                     });
                     if (!res.ok) {
                         const err = await res.json().catch(() => ({}));
-                        setCalendarWarning(`⚠️ Booking tersimpan, tetapi sinkronisasi Google Calendar gagal: ${err.error || "Google Calendar belum terkoneksi"}`);
+                        setCalendarWarning(
+                            tBookingEditor("calendarSyncFailed", {
+                                reason: err.error || tBookingEditor("googleCalendarNotConnected"),
+                            }),
+                        );
                         setTimeout(() => setCalendarWarning(null), 5000);
                     } else if (noEmailNames.length > 0) {
-                        setCalendarWarning(`⚠️ Invite tim belum lengkap: ${noEmailNames.join(", ")} belum punya Google Email`);
+                        setCalendarWarning(
+                            tBookingEditor("calendarInviteIncomplete", {
+                                names: noEmailNames.join(", "),
+                            }),
+                        );
                         setTimeout(() => setCalendarWarning(null), 5000);
                     }
                 } catch {
-                    setCalendarWarning("⚠️ Booking tersimpan, tetapi sinkronisasi Google Calendar gagal dijalankan.");
+                    setCalendarWarning(tBookingEditor("calendarSyncFailedRun"));
                     setTimeout(() => setCalendarWarning(null), 5000);
                 }
             } else if (freelancerIds.length > 0) {
-                setCalendarWarning("⚠️ Calendar invite tidak terkirim: jadwal sesi belum diisi");
+                setCalendarWarning(tBookingEditor("calendarInviteSkippedNoSession"));
                 setTimeout(() => setCalendarWarning(null), 5000);
             }
         }
@@ -938,7 +970,7 @@ export default function EditBookingPage() {
         setMarkingDpVerified(false);
 
         if (error) {
-            showFeedback("Gagal menandai DP sebagai terverifikasi.");
+            showFeedback(tBookingEditor("failedVerifyDp"));
             return;
         }
 
@@ -961,7 +993,7 @@ export default function EditBookingPage() {
         setMarkingDpUnverified(false);
 
         if (error) {
-            showFeedback("Gagal membatalkan verifikasi DP.");
+            showFeedback(tBookingEditor("failedUnverifyDp"));
             return;
         }
 
@@ -1018,7 +1050,7 @@ export default function EditBookingPage() {
             ? "DP Terverifikasi"
             : dpPaidValue > 0
                 ? "DP Menunggu Verifikasi"
-                : "Belum Dibayar";
+                : tBookingEditor("unpaid");
     const settlementStatus = getSettlementStatus(settlementStatusValue);
     const initialPriceBreakdown = {
         packageTotal: packageTotalValue,
@@ -1066,7 +1098,7 @@ export default function EditBookingPage() {
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Nama{reqMark}</label>
-                            <input required value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Nama klien" className={inputClass} />
+                            <input required value={clientName} onChange={e => setClientName(e.target.value)} placeholder={tBookingEditor("clientNamePlaceholderEdit")} className={inputClass} />
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Nomor WhatsApp{reqMark}</label>
@@ -1084,9 +1116,11 @@ export default function EditBookingPage() {
                     </div>
                     {currentExtraFields.length > 0 && (
                         <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 pt-3 border-t border-dashed">
-                            {currentExtraFields.map(f => (
+                            {currentExtraFields.map(f => {
+                                const fieldLabel = tBookingEditor(`extraFieldLabels.${f.labelKey}`);
+                                return (
                                 <div key={f.key} className={`space-y-1.5 ${f.isLocation || f.fullWidth || currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
-                                    <label className="text-xs font-medium text-muted-foreground">{locale === "id" ? f.label : f.labelEn}{f.required && <span className="text-red-500 ml-0.5">*</span>}</label>
+                                    <label className="text-xs font-medium text-muted-foreground">{fieldLabel}{f.required && <span className="text-red-500 ml-0.5">*</span>}</label>
                                     {isUniversityExtraField({
                                         eventType,
                                         fieldKey: f.key,
@@ -1109,7 +1143,7 @@ export default function EditBookingPage() {
                                                     return next;
                                                 })
                                             }
-                                            placeholder={locale === "en" ? "Search university..." : "Cari universitas..."}
+                                            placeholder={tBookingEditor("searchUniversity")}
                                             required={f.required}
                                             allowManualCreate
                                         />
@@ -1127,24 +1161,24 @@ export default function EditBookingPage() {
                                                 }));
                                             }}
                                             placeholder={
-                                                locale === "en"
-                                                    ? `Search ${f.labelEn.toLowerCase()} location...`
-                                                    : `Cari lokasi ${f.label.toLowerCase()}...`
+                                                tBookingEditor("searchLocationField", {
+                                                    field: fieldLabel.toLowerCase(),
+                                                })
                                             }
                                             initialLat={extraLocationCoords[f.key]?.lat ?? null}
                                             initialLng={extraLocationCoords[f.key]?.lng ?? null}
                                         />
                                     ) : f.isNumeric ? (
-                                        <input placeholder={f.label} value={extraFields[f.key] || ""} onChange={e => {
+                                        <input placeholder={fieldLabel} value={extraFields[f.key] || ""} onChange={e => {
                                             const raw = e.target.value.replace(/[^0-9]/g, "");
                                             const num = parseInt(raw, 10);
                                             setExtraFields(prev => ({ ...prev, [f.key]: raw === "" ? "" : new Intl.NumberFormat("id-ID").format(num) }));
                                         }} className={inputClass} required={f.required} inputMode="numeric" />
                                     ) : (
-                                        <input placeholder={f.label} value={extraFields[f.key] || ""} onChange={e => setExtraFields(prev => ({ ...prev, [f.key]: e.target.value }))} className={inputClass} required={f.required} />
+                                        <input placeholder={fieldLabel} value={extraFields[f.key] || ""} onChange={e => setExtraFields(prev => ({ ...prev, [f.key]: e.target.value }))} className={inputClass} required={f.required} />
                                     )}
                                 </div>
-                            ))}
+                            );})}
                         </div>
                     )}
                     {clientCustomItems.length > 0 && (
@@ -1267,9 +1301,7 @@ export default function EditBookingPage() {
                                         );
                                     }}
                                     placeholder={
-                                        locale === "en"
-                                            ? "Search session location..."
-                                            : "Cari lokasi sesi foto..."
+                                        tBookingEditor("searchSessionLocation")
                                     }
                                     initialLat={locationCoords.lat}
                                     initialLng={locationCoords.lng}
@@ -1278,7 +1310,7 @@ export default function EditBookingPage() {
                         )}
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Detail Lokasi</label>
-                            <input value={locationDetail} onChange={e => setLocationDetail(e.target.value)} placeholder="Contoh: Gedung Utama, Lt. 3, Ruang Ballroom A" className={inputClass} />
+                            <input value={locationDetail} onChange={e => setLocationDetail(e.target.value)} placeholder={tBookingEditor("locationDetailExample")} className={inputClass} />
                         </div>
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Paket / Layanan{reqMark}</label>
@@ -1291,7 +1323,7 @@ export default function EditBookingPage() {
                                     <span className="text-left">
                                         {selectedMainServices.length > 0
                                             ? `${selectedMainServices.length} paket dipilih`
-                                            : "Pilih Paket / Layanan"}
+                                            : tBookingEditor("selectPackageService")}
                                     </span>
                                     <span className="text-xs font-medium text-primary">
                                         Buka Daftar
@@ -1337,7 +1369,7 @@ export default function EditBookingPage() {
                                 <span className="text-left">
                                     {selectedAddonServices.length > 0
                                         ? `${selectedAddonServices.length} add-on dipilih`
-                                        : "Pilih Add-on"}
+                                        : tBookingEditor("selectAddon")}
                                 </span>
                                 <span className="text-xs font-medium text-primary">
                                     Buka Daftar
@@ -1599,7 +1631,7 @@ export default function EditBookingPage() {
                     <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                         <StickyNote className="w-4 h-4" /> Catatan Admin
                     </h3>
-                    <textarea rows={4} value={adminNotes} onChange={e => setAdminNotes(e.target.value)} placeholder="Catatan internal admin (tidak tampil ke klien/freelance)..." className={textareaClass} />
+                    <textarea rows={4} value={adminNotes} onChange={e => setAdminNotes(e.target.value)} placeholder={tBookingEditor("adminNotesPlaceholder")} className={textareaClass} />
                 </div>
 
                 {/* Link Google Drive */}
@@ -1782,7 +1814,7 @@ export default function EditBookingPage() {
                     <div className="space-y-4 py-2">
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Nama Paket <span className="text-red-500">*</span></label>
-                            <input value={customServiceName} onChange={e => setCustomServiceName(e.target.value)} placeholder="Contoh: Paket Gold" className={inputClass} autoFocus />
+                            <input value={customServiceName} onChange={e => setCustomServiceName(e.target.value)} placeholder={tBookingEditor("customPackageExampleEdit")} className={inputClass} autoFocus />
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Deskripsi</label>
