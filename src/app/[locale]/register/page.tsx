@@ -112,6 +112,11 @@ export default function RegisterPage() {
                             <p className="text-muted-foreground text-sm">
                                 {t("confirmEmailSent")}
                             </p>
+                            <p className="text-muted-foreground text-sm">
+                                {t("checkEmailSpamHintPrefix")}{" "}
+                                <span className="font-semibold">spam/junk</span>{" "}
+                                {t("checkEmailSpamHintSuffix")}
+                            </p>
                             <p className="text-xs text-muted-foreground font-mono bg-muted rounded-md px-3 py-2">
                                 {email}
                             </p>

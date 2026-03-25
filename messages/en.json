@@ -613,6 +613,8 @@
         "hasAccount": "Already have an account?",
         "checkEmail": "Check Your Email",
         "confirmEmailSent": "We have sent a confirmation link to your email. Click the link to activate your account.",
+        "checkEmailSpamHintPrefix": "If the email isn't in your inbox, check the",
+        "checkEmailSpamHintSuffix": "folder in your email.",
         "backToLogin": "Back to Login",
         "nameRequired": "Full name is required.",
         "passwordMismatch": "Passwords do not match.",

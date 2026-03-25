@@ -613,6 +613,8 @@
         "hasAccount": "Sudah punya akun?",
         "checkEmail": "Cek Email Anda",
         "confirmEmailSent": "Kami telah mengirimkan link konfirmasi ke email Anda. Klik link tersebut untuk mengaktifkan akun.",
+        "checkEmailSpamHintPrefix": "Jika email belum masuk ke inbox, cek folder",
+        "checkEmailSpamHintSuffix": "di email Anda.",
         "backToLogin": "Kembali ke Login",
         "nameRequired": "Nama lengkap wajib diisi.",
         "passwordMismatch": "Kata sandi tidak cocok.",
