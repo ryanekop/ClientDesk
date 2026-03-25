@@ -235,10 +235,10 @@ export function Topbar({ onMenuClick }: TopbarProps) {
           </button>
 
           <div
-            className={`absolute right-0 top-full mt-2 w-56 rounded-lg border bg-card shadow-lg z-50 overflow-hidden origin-top-right transform-gpu transition-[opacity,transform] duration-200 ease-out will-change-[opacity,transform] motion-reduce:transition-none ${
+            className={`absolute right-0 top-full mt-2 w-56 rounded-lg border bg-card shadow-lg z-50 overflow-hidden transition-all duration-200 ease-out origin-top-right ${
               profileOpen
-                ? "pointer-events-auto translate-y-0 opacity-100"
-                : "pointer-events-none -translate-y-1 opacity-0"
+                ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
             }`}
           >
             {/* Header */}

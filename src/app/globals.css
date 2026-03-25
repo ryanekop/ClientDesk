@@ -185,7 +185,9 @@
     [role="button"],
     [role="tab"],
     summary,
-    .card {
+    .card,
+    [class*="border"],
+    [class*="shadow"] {
         transition:
             background-color 0.2s ease,
             color 0.2s ease,

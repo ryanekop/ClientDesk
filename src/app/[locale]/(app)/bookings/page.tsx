@@ -1674,8 +1674,8 @@ export default function BookingsPage() {
             </PageHeader>
 
             {/* Search + Controls */}
-            <div className="space-y-3">
-                <div className="flex items-center gap-2">
+            <div className="space-y-3 sm:space-y-0">
+                <div className="flex items-center gap-2 sm:gap-3">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
@@ -1695,9 +1695,25 @@ export default function BookingsPage() {
                         <ListOrdered className="w-4 h-4" />
                         <span className="hidden sm:inline">Filter</span>
                     </Button>
+                    <div className="hidden sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+                        <select value={sortOrder} onChange={e => setSortOrder(e.target.value as BookingSortOrder)} className={`${selectFilterClass} w-auto`}>
+                                <option value="booking_newest">Urutkan: Booking Terbaru</option>
+                                <option value="booking_oldest">Urutkan: Booking Terlama</option>
+                                <option value="session_newest">Urutkan: Jadwal Sesi Terdekat</option>
+                                <option value="session_oldest">Urutkan: Jadwal Sesi Terjauh</option>
+                        </select>
+                        {(statusFilter !== "All" || packageFilter !== "All" || freelanceFilter !== "All" || eventTypeFilter !== "All" || dateFromFilter || dateToFilter || Object.values(extraFieldFilters).some(Boolean) || searchQuery || sortOrder !== "booking_newest") && (
+                            <button
+                                onClick={resetFilters}
+                                className="h-9 px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                                <X className="w-3.5 h-3.5" /> Reset
+                            </button>
+                        )}
+                    </div>
                 </div>
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-                    <select value={sortOrder} onChange={e => setSortOrder(e.target.value as BookingSortOrder)} className={`${selectFilterClass} w-full sm:w-auto`}>
+                <div className="flex w-full flex-col gap-2 sm:hidden">
+                    <select value={sortOrder} onChange={e => setSortOrder(e.target.value as BookingSortOrder)} className={`${selectFilterClass} w-full`}>
                             <option value="booking_newest">Urutkan: Booking Terbaru</option>
                             <option value="booking_oldest">Urutkan: Booking Terlama</option>
                             <option value="session_newest">Urutkan: Jadwal Sesi Terdekat</option>
@@ -1706,7 +1722,7 @@ export default function BookingsPage() {
                     {(statusFilter !== "All" || packageFilter !== "All" || freelanceFilter !== "All" || eventTypeFilter !== "All" || dateFromFilter || dateToFilter || Object.values(extraFieldFilters).some(Boolean) || searchQuery || sortOrder !== "booking_newest") && (
                         <button
                             onClick={resetFilters}
-                            className="h-9 w-full px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer sm:w-auto"
+                            className="h-9 w-full px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                         >
                             <X className="w-3.5 h-3.5" /> Reset
                         </button>

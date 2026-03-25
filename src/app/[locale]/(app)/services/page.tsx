@@ -1387,7 +1387,7 @@ export default function ServicesPage() {
         </div>
       ) : null}
 
-      {loading && isReorderMode ? (
+      {loading ? (
         <div className="space-y-4">
           <CardListSkeleton count={3} withBadge />
         </div>

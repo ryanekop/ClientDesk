@@ -97,17 +97,19 @@ export function MobileNav({ isAuthenticated = false }: LandingAuthProps) {
         {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </Button>
 
-      <AnimatePresence initial={false}>
+      <AnimatePresence>
         {open ? (
           <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
+            initial={{ opacity: 0, y: -8, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.95 }}
             transition={{
-              duration: 0.2,
-              ease: [0.22, 1, 0.36, 1],
+              type: "spring",
+              stiffness: 500,
+              damping: 40,
+              mass: 0.8,
             }}
-            className="absolute top-[65px] left-4 right-4 z-50 rounded-2xl border bg-card shadow-xl overflow-hidden will-change-[transform,opacity]"
+            className="absolute top-[65px] left-4 right-4 z-50 rounded-2xl border bg-card shadow-xl overflow-hidden"
           >
             <div className="p-3">
               {navItems.map((item) => (
@@ -272,10 +274,10 @@ export function LandingNav() {
           )}
         </Button>
         <div
-          className={`absolute right-0 top-full mt-2 w-56 rounded-lg border bg-card shadow-lg z-50 overflow-hidden origin-top-right transform-gpu transition-[opacity,transform] duration-200 ease-out will-change-[opacity,transform] motion-reduce:transition-none ${
+          className={`absolute right-0 top-full mt-2 w-56 rounded-lg border bg-card shadow-lg z-50 overflow-hidden transition-all duration-200 ease-out origin-top-right ${
             menuOpen
-              ? "pointer-events-auto translate-y-0 opacity-100"
-              : "pointer-events-none -translate-y-1 opacity-0"
+              ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+              : "opacity-0 scale-95 -translate-y-1 pointer-events-none"
           }`}
         >
           <div className="px-4 py-3 border-b">
