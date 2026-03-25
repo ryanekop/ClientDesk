@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireRouteUser } from "@/lib/pagination/route-user";
 import { createServiceClient } from "@/lib/supabase/service";
+import { apiText } from "@/lib/i18n/api-errors";
 import {
   buildUniversityDisplayName,
   cleanUniversityName,
@@ -33,14 +34,14 @@ export async function POST(request: NextRequest) {
 
   if (name.length < 2) {
     return NextResponse.json(
-      { success: false, error: "Nama universitas minimal 2 karakter." },
+      { success: false, error: apiText(request, "universityNameMin2") },
       { status: 400 },
     );
   }
 
   if (name.length > 160) {
     return NextResponse.json(
-      { success: false, error: "Nama universitas terlalu panjang." },
+      { success: false, error: apiText(request, "universityNameTooLong") },
       { status: 400 },
     );
   }
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest) {
 
   if (error || !data) {
     return NextResponse.json(
-      { success: false, error: error?.message || "Gagal menambah universitas." },
+      { success: false, error: error?.message || apiText(request, "failedCreateUniversity") },
       { status: 500 },
     );
   }

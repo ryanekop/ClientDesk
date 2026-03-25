@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiText } from "@/lib/i18n/api-errors";
 import { createClient } from "@/utils/supabase/server";
 import { deleteFileFromDrive } from "@/utils/google/drive";
 
@@ -8,7 +9,10 @@ export async function POST(request: NextRequest) {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ success: false, error: "Tidak terautentikasi" }, { status: 401 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "unauthorized") },
+                { status: 401 },
+            );
         }
 
         const { data: profile } = await supabase
@@ -18,13 +22,19 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (!profile?.google_drive_access_token || !profile?.google_drive_refresh_token) {
-            return NextResponse.json({ success: false, error: "Google Drive belum terhubung." }, { status: 400 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "driveNotConnected") },
+                { status: 400 },
+            );
         }
 
         const { fileId } = await request.json();
 
         if (!fileId) {
-            return NextResponse.json({ success: false, error: "File ID wajib diisi." }, { status: 400 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "fileIdRequired") },
+                { status: 400 },
+            );
         }
 
         await deleteFileFromDrive(
@@ -34,7 +44,9 @@ export async function POST(request: NextRequest) {
         );
 
         return NextResponse.json({ success: true });
-    } catch (err: any) {
-        return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    } catch (err: unknown) {
+        const message =
+            err instanceof Error ? err.message : apiText(request, "failedDeleteFile");
+        return NextResponse.json({ success: false, error: message }, { status: 500 });
     }
 }

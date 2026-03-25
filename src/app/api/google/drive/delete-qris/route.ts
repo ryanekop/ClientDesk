@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { apiText } from "@/lib/i18n/api-errors";
 import { createClient } from "@/utils/supabase/server";
 import { deleteFileFromDrive } from "@/utils/google/drive";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
     try {
         const supabase = await createClient();
         const {
@@ -11,7 +12,7 @@ export async function POST() {
 
         if (!user) {
             return NextResponse.json(
-                { success: false, error: "Tidak terautentikasi." },
+                { success: false, error: apiText(request, "unauthorized") },
                 { status: 401 },
             );
         }
@@ -49,7 +50,7 @@ export async function POST() {
         return NextResponse.json({ success: true });
     } catch (error) {
         const message =
-            error instanceof Error ? error.message : "Terjadi kesalahan saat menghapus QRIS.";
+            error instanceof Error ? error.message : apiText(request, "failedDeleteQris");
         return NextResponse.json({ success: false, error: message }, { status: 500 });
     }
 }

@@ -8,9 +8,18 @@ import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
 import { normalizeGoogleCalendarEventIds } from "@/lib/booking-calendar-sessions";
 import { deleteCalendarEvent } from "@/utils/google/calendar";
+import { apiText } from "@/lib/i18n/api-errors";
+import { resolveApiLocale } from "@/lib/i18n/api-locale";
 
 type DeleteBookingCalendarRequest = {
   bookingId?: string;
+};
+
+type BookingCalendarRow = {
+  id: string;
+  booking_code: string;
+  google_calendar_event_id: string | null;
+  google_calendar_event_ids: unknown;
 };
 
 function isNotFoundCalendarError(error: unknown) {
@@ -24,12 +33,13 @@ function isNotFoundCalendarError(error: unknown) {
 
 export async function POST(request: NextRequest) {
   try {
+    const locale = resolveApiLocale(request);
     const payload = (await request.json()) as DeleteBookingCalendarRequest;
     const bookingId = typeof payload.bookingId === "string" ? payload.bookingId : "";
 
     if (!bookingId) {
       return NextResponse.json(
-        { success: false, error: "Missing bookingId" },
+        { success: false, error: apiText(request, "bookingIdRequired") },
         { status: 400 },
       );
     }
@@ -41,30 +51,30 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json(
-        { success: false, error: "Tidak terautentikasi" },
+        { success: false, error: apiText(request, "unauthorized") },
         { status: 401 },
       );
     }
 
-    await assertBookingWriteAccessForUser(user.id);
+    await assertBookingWriteAccessForUser(user.id, { locale });
 
     const { data: booking } = await supabase
       .from("bookings")
       .select("id, booking_code, google_calendar_event_id, google_calendar_event_ids")
       .eq("id", bookingId)
       .eq("user_id", user.id)
-      .maybeSingle();
+      .maybeSingle<BookingCalendarRow>();
 
     if (!booking) {
       return NextResponse.json(
-        { success: false, error: "Booking tidak ditemukan." },
+        { success: false, error: apiText(request, "bookingNotFound") },
         { status: 404 },
       );
     }
 
     const eventIdMap = normalizeGoogleCalendarEventIds(
-      (booking as any).google_calendar_event_ids,
-      (booking as any).google_calendar_event_id,
+      booking.google_calendar_event_ids,
+      booking.google_calendar_event_id,
     );
     const eventIds = Array.from(
       new Set(
@@ -91,7 +101,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Gagal memuat profil Google Calendar. Silakan coba lagi.",
+          error: apiText(request, "failedLoadCalendarProfile"),
         },
         { status: 500 },
       );
@@ -111,8 +121,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Koneksi Google Calendar belum lengkap. Silakan hubungkan ulang di Pengaturan.",
+          error: apiText(request, "incompleteCalendarConnection"),
         },
         { status: 400 },
       );

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getCalendarClient } from "@/utils/google/calendar";
+import { apiText } from "@/lib/i18n/api-errors";
 
 export async function GET(request: NextRequest) {
     try {
@@ -8,7 +9,10 @@ export async function GET(request: NextRequest) {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ success: false, error: "Tidak terautentikasi" }, { status: 401 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "unauthorized") },
+                { status: 401 },
+            );
         }
 
         const { data: profile } = await supabase
@@ -18,7 +22,10 @@ export async function GET(request: NextRequest) {
             .single();
 
         if (!profile?.google_access_token || !profile?.google_refresh_token) {
-            return NextResponse.json({ success: false, error: "Google Calendar belum terhubung." }, { status: 400 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "calendarNotConnected") },
+                { status: 400 },
+            );
         }
 
         const url = new URL(request.url);
@@ -38,7 +45,7 @@ export async function GET(request: NextRequest) {
 
         const events = (res.data.items || []).map((event) => ({
             id: event.id,
-            title: event.summary || "(Tanpa Judul)",
+            title: event.summary || apiText(request, "untitled"),
             start: event.start?.dateTime || event.start?.date || "",
             end: event.end?.dateTime || event.end?.date || "",
             description: event.description || "",
@@ -47,7 +54,8 @@ export async function GET(request: NextRequest) {
         }));
 
         return NextResponse.json({ success: true, events });
-    } catch (err: any) {
-        return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : apiText(request, "failedLoadCalendarProfile");
+        return NextResponse.json({ success: false, error: message }, { status: 500 });
     }
 }

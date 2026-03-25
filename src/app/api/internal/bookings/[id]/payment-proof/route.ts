@@ -4,6 +4,7 @@ import {
   assertBookingWriteAccessForUser,
   BookingWriteAccessDeniedError,
 } from "@/lib/booking-write-access.server";
+import { apiText } from "@/lib/i18n/api-errors";
 import { uploadPaymentProofToDrive } from "@/lib/payment-proof-drive";
 import { requireRouteUser } from "@/lib/pagination/route-user";
 import { deleteFileFromDrive } from "@/utils/google/drive";
@@ -57,7 +58,7 @@ export async function POST(
     const { id } = await context.params;
     if (!id) {
       return NextResponse.json(
-        { success: false, error: "Booking tidak ditemukan." },
+        { success: false, error: apiText(request, "bookingNotFound") },
         { status: 400 },
       );
     }
@@ -68,28 +69,28 @@ export async function POST(
 
     if (!isValidStage(stageValue)) {
       return NextResponse.json(
-        { success: false, error: "Stage bukti pembayaran tidak valid." },
+        { success: false, error: apiText(request, "invalidProofStage") },
         { status: 400 },
       );
     }
 
     if (!(fileValue instanceof File) || fileValue.size <= 0) {
       return NextResponse.json(
-        { success: false, error: "File bukti pembayaran wajib diupload." },
+        { success: false, error: apiText(request, "paymentProofRequired") },
         { status: 400 },
       );
     }
 
     if (fileValue.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { success: false, error: "Ukuran file maksimal 5MB." },
+        { success: false, error: apiText(request, "maxFile5mb") },
         { status: 400 },
       );
     }
 
     if (!isAcceptedProofFile(fileValue)) {
       return NextResponse.json(
-        { success: false, error: "Format file tidak didukung. Gunakan JPG, PNG, atau PDF." },
+        { success: false, error: apiText(request, "unsupportedProofFormat") },
         { status: 400 },
       );
     }
@@ -115,28 +116,28 @@ export async function POST(
 
     if (bookingError) {
       return NextResponse.json(
-        { success: false, error: bookingError.message || "Gagal memuat booking." },
+        { success: false, error: bookingError.message || apiText(request, "failedLoadBooking") },
         { status: 500 },
       );
     }
 
     if (!booking) {
       return NextResponse.json(
-        { success: false, error: "Booking tidak ditemukan." },
+        { success: false, error: apiText(request, "bookingNotFound") },
         { status: 404 },
       );
     }
 
     if (profileError) {
       return NextResponse.json(
-        { success: false, error: profileError.message || "Gagal memuat profil." },
+        { success: false, error: profileError.message || apiText(request, "failedLoadProfile") },
         { status: 500 },
       );
     }
 
     if ((profile?.form_show_proof ?? true) === false) {
       return NextResponse.json(
-        { success: false, error: "Fitur bukti pembayaran sedang dinonaktifkan." },
+        { success: false, error: apiText(request, "paymentProofDisabled") },
         { status: 400 },
       );
     }
@@ -146,7 +147,7 @@ export async function POST(
       !profile?.google_drive_refresh_token
     ) {
       return NextResponse.json(
-        { success: false, error: "Google Drive admin belum terhubung." },
+        { success: false, error: apiText(request, "driveNotConnected") },
         { status: 400 },
       );
     }
@@ -206,7 +207,7 @@ export async function POST(
       }
 
       return NextResponse.json(
-        { success: false, error: updateError.message || "Gagal menyimpan bukti pembayaran." },
+        { success: false, error: updateError.message || apiText(request, "failedSavePaymentProof") },
         { status: 500 },
       );
     }
@@ -242,7 +243,7 @@ export async function POST(
     }
 
     const message =
-      error instanceof Error ? error.message : "Gagal upload bukti pembayaran.";
+      error instanceof Error ? error.message : apiText(request, "failedUploadPaymentProof");
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 },

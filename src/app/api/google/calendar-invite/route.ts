@@ -14,9 +14,12 @@ import {
     isNoScheduleSyncError,
     updateBookingCalendarSyncState,
 } from "@/lib/google-calendar-sync";
+import { apiText } from "@/lib/i18n/api-errors";
+import { resolveApiLocale } from "@/lib/i18n/api-locale";
 
 export async function POST(req: NextRequest) {
     try {
+        const locale = resolveApiLocale(req);
         const payload = (await req.json()) as {
             bookingId?: string;
             attendeeEmails?: unknown;
@@ -24,27 +27,36 @@ export async function POST(req: NextRequest) {
         const bookingId = typeof payload.bookingId === "string" ? payload.bookingId : "";
 
         if (!bookingId) {
-            return NextResponse.json({ error: "Missing bookingId" }, { status: 400 });
+            return NextResponse.json(
+                { error: apiText(req, "bookingIdRequired") },
+                { status: 400 },
+            );
         }
 
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        if (!user) {
+            return NextResponse.json(
+                { error: apiText(req, "unauthorized") },
+                { status: 401 },
+            );
+        }
 
-        await assertBookingWriteAccessForUser(user.id, { locale: "en" });
+        await assertBookingWriteAccessForUser(user.id, { locale });
 
         const profileResult = await fetchGoogleCalendarProfileSchemaSafe(supabase, user.id);
         if (profileResult.error) {
+            const profileErrorMessage = apiText(req, "failedLoadCalendarProfile");
             await updateBookingCalendarSyncState({
                 supabase,
                 bookingId,
                 userId: user.id,
                 status: "failed",
-                errorMessage: "Gagal memuat profil Google Calendar. Silakan coba lagi.",
+                errorMessage: profileErrorMessage,
             });
             console.error("Google Calendar profile query failed:", profileResult.error);
             return NextResponse.json(
-                { error: "Gagal memuat profil Google Calendar. Silakan coba lagi." },
+                { error: profileErrorMessage },
                 { status: 500 },
             );
         }
@@ -61,15 +73,16 @@ export async function POST(req: NextRequest) {
             : "";
 
         if (!hasOAuthTokenPair(accessToken, refreshToken)) {
+            const tokenErrorMessage = apiText(req, "incompleteCalendarConnection");
             await updateBookingCalendarSyncState({
                 supabase,
                 bookingId,
                 userId: user.id,
                 status: "failed",
-                errorMessage: "Koneksi Google Calendar belum lengkap. Silakan hubungkan ulang di Pengaturan.",
+                errorMessage: tokenErrorMessage,
             });
             return NextResponse.json(
-                { error: "Koneksi Google Calendar belum lengkap. Silakan hubungkan ulang di Pengaturan." },
+                { error: tokenErrorMessage },
                 { status: 400 },
             );
         }
@@ -83,7 +96,10 @@ export async function POST(req: NextRequest) {
             .single();
 
         if (!booking) {
-            return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+            return NextResponse.json(
+                { error: apiText(req, "bookingNotFound") },
+                { status: 404 },
+            );
         }
 
         let attendeeEmails: string[] = [];
@@ -97,7 +113,7 @@ export async function POST(req: NextRequest) {
         } catch (error) {
             const message = getGoogleCalendarSyncErrorMessage(
                 error,
-                "Gagal memuat assignment freelancer untuk sinkronisasi kalender.",
+                apiText(req, "failedLoadFreelanceAssignments"),
             );
             await updateBookingCalendarSyncState({
                 supabase,
@@ -110,6 +126,12 @@ export async function POST(req: NextRequest) {
         }
 
         try {
+            const bookingRecord = booking as {
+                extra_fields?: Record<string, unknown> | null;
+                google_calendar_event_id?: string | null;
+                google_calendar_event_ids?: unknown;
+                booking_services?: unknown;
+            };
             const syncedEvent = await syncBookingCalendarEvent({
                 profile: {
                     accessToken,
@@ -132,15 +154,15 @@ export async function POST(req: NextRequest) {
                     locationDetail: booking.location_detail,
                     eventType: booking.event_type,
                     notes: booking.notes,
-                    extraFields: (booking as any).extra_fields,
+                    extraFields: bookingRecord.extra_fields ?? null,
                     freelancerNames: resolveBookingFreelancerNames({
                         bookingFreelance: (booking as { booking_freelance?: unknown }).booking_freelance,
                         legacyFreelance: (booking as { freelance?: unknown }).freelance,
                     }),
-                    googleCalendarEventId: (booking as any).google_calendar_event_id,
-                    googleCalendarEventIds: (booking as any).google_calendar_event_ids,
+                    googleCalendarEventId: bookingRecord.google_calendar_event_id ?? null,
+                    googleCalendarEventIds: bookingRecord.google_calendar_event_ids,
                     services: booking.services,
-                    bookingServices: (booking as any).booking_services,
+                    bookingServices: bookingRecord.booking_services,
                 },
                 attendeeEmails,
             });
@@ -186,11 +208,15 @@ export async function POST(req: NextRequest) {
                 { status: syncStatus === "skipped" ? 400 : 500 },
             );
         }
-    } catch (error: any) {
+    } catch (error) {
         if (error instanceof BookingWriteAccessDeniedError) {
             return NextResponse.json({ error: error.message }, { status: error.status });
         }
         console.error("Calendar invite error:", error);
-        return NextResponse.json({ error: error.message || "Failed to send calendar invite" }, { status: 500 });
+        const message = error instanceof Error ? error.message : apiText(req, "failedSendCalendarInvite");
+        return NextResponse.json(
+            { error: message },
+            { status: 500 },
+        );
     }
 }

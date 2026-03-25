@@ -14,6 +14,8 @@ import {
     isNoScheduleSyncError,
     updateBookingCalendarSyncState,
 } from "@/lib/google-calendar-sync";
+import { apiText } from "@/lib/i18n/api-errors";
+import { resolveApiLocale } from "@/lib/i18n/api-locale";
 
 type SyncRequestBody = {
     bookingIds?: string[];
@@ -22,14 +24,18 @@ type SyncRequestBody = {
 
 export async function POST(request: NextRequest) {
     try {
+        const locale = resolveApiLocale(request);
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ success: false, error: "Tidak terautentikasi" }, { status: 401 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "unauthorized") },
+                { status: 401 },
+            );
         }
 
-        await assertBookingWriteAccessForUser(user.id);
+        await assertBookingWriteAccessForUser(user.id, { locale });
 
         const payload = await request.json() as SyncRequestBody;
         const bookingIdsFromPayload = Array.isArray(payload.bookingIds)
@@ -43,12 +49,15 @@ export async function POST(request: NextRequest) {
         const bookingIds = Array.from(new Set([...bookingIdsFromPayload, ...bookingIdsFromEvents]));
 
         if (bookingIds.length === 0) {
-            return NextResponse.json({ success: false, error: "Tidak ada event untuk disinkronkan." }, { status: 400 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "noEventsToSync") },
+                { status: 400 },
+            );
         }
 
         const profileResult = await fetchGoogleCalendarProfileSchemaSafe(supabase, user.id);
         if (profileResult.error) {
-            const profileErrorMessage = "Gagal memuat profil Google Calendar. Silakan coba lagi.";
+            const profileErrorMessage = apiText(request, "failedLoadCalendarProfile");
             for (const bookingId of bookingIds) {
                 await updateBookingCalendarSyncState({
                     supabase,
@@ -77,7 +86,7 @@ export async function POST(request: NextRequest) {
             : "";
 
         if (!hasOAuthTokenPair(accessToken, refreshToken)) {
-            const tokenErrorMessage = "Koneksi Google Calendar belum lengkap. Silakan hubungkan ulang di Pengaturan.";
+            const tokenErrorMessage = apiText(request, "incompleteCalendarConnection");
             for (const bookingId of bookingIds) {
                 await updateBookingCalendarSyncState({
                     supabase,
@@ -107,7 +116,7 @@ export async function POST(request: NextRequest) {
         } catch (error) {
             const attendeeErrorMessage = getGoogleCalendarSyncErrorMessage(
                 error,
-                "Gagal memuat assignment freelancer untuk sinkronisasi kalender.",
+                apiText(request, "failedLoadFreelanceAssignments"),
             );
             for (const bookingId of bookingIds) {
                 await updateBookingCalendarSyncState({
@@ -160,7 +169,9 @@ export async function POST(request: NextRequest) {
                             legacyFreelance: (booking as { freelance?: unknown }).freelance,
                         }),
                         googleCalendarEventId: booking.google_calendar_event_id,
-                        googleCalendarEventIds: (booking as any).google_calendar_event_ids,
+                        googleCalendarEventIds:
+                            (booking as { google_calendar_event_ids?: unknown })
+                                .google_calendar_event_ids,
                         services: booking.services,
                         bookingServices: booking.booking_services,
                     },

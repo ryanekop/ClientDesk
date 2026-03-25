@@ -3,6 +3,7 @@ import {
     assertBookingWriteAccessForUser,
     BookingWriteAccessDeniedError,
 } from "@/lib/booking-write-access.server";
+import { apiText } from "@/lib/i18n/api-errors";
 import { createClient } from "@/utils/supabase/server";
 import { createBookingFolder, findOrCreateNestedPath } from "@/utils/google/drive";
 import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
@@ -13,7 +14,10 @@ export async function POST(request: NextRequest) {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ success: false, error: "Tidak terautentikasi" }, { status: 401 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "unauthorized") },
+                { status: 401 },
+            );
         }
 
         await assertBookingWriteAccessForUser(user.id);
@@ -25,7 +29,10 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (!profile?.google_drive_access_token || !profile?.google_drive_refresh_token) {
-            return NextResponse.json({ success: false, error: "Google Drive belum terhubung." }, { status: 400 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "driveNotConnected") },
+                { status: 400 },
+            );
         }
 
         const { bookingId, folderName, parentId, bookingCode, clientName } = await request.json();
@@ -57,7 +64,10 @@ export async function POST(request: NextRequest) {
         }
 
         if (!resolvedFolderName && !bookingContext && (!bookingCode || !clientName)) {
-            return NextResponse.json({ success: false, error: "Nama folder wajib diisi." }, { status: 400 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "folderNameRequired") },
+                { status: 400 },
+            );
         }
 
         const result = bookingContext || (bookingCode && clientName)
@@ -106,7 +116,8 @@ export async function POST(request: NextRequest) {
                 { status: err.status },
             );
         }
-        const message = err instanceof Error ? err.message : "Gagal membuat folder.";
+        const message =
+            err instanceof Error ? err.message : apiText(request, "failedCreateFolder");
         return NextResponse.json({ success: false, error: message }, { status: 500 });
     }
 }

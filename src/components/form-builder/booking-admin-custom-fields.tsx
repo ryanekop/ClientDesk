@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useLocale } from "next-intl";
 import type {
   CustomFieldItem,
   CustomSectionItem,
@@ -15,13 +16,21 @@ type Props = {
   inputClass: string;
   textareaClass: string;
   selectClass: string;
+  strings?: {
+    checkboxYes?: string;
+    checkboxNo?: string;
+    selectPlaceholder?: string;
+  };
 };
 
-function getOptions(field: CustomFieldItem): string[] {
+function getOptions(
+  field: CustomFieldItem,
+  strings: Required<NonNullable<Props["strings"]>>,
+): string[] {
   if (field.type === "checkbox") {
     return field.options && field.options.length > 0
       ? field.options
-      : ["Ya", "Tidak"];
+      : [strings.checkboxYes, strings.checkboxNo];
   }
 
   return field.options || [];
@@ -34,7 +43,16 @@ export function BookingAdminCustomFields({
   inputClass,
   textareaClass,
   selectClass,
+  strings,
 }: Props) {
+  const locale = useLocale();
+  const uiStrings: Required<NonNullable<Props["strings"]>> = {
+    checkboxYes: locale === "en" ? "Yes" : "Ya",
+    checkboxNo: locale === "en" ? "No" : "Tidak",
+    selectPlaceholder: locale === "en" ? "Select..." : "Pilih...",
+    ...strings,
+  };
+
   return (
     <>
       {items.map((item) => {
@@ -52,7 +70,7 @@ export function BookingAdminCustomFields({
           );
         }
 
-        const options = getOptions(item);
+        const options = getOptions(item, uiStrings);
         const isFullWidth = item.type === "textarea" || item.type === "checkbox";
 
         return (
@@ -81,7 +99,9 @@ export function BookingAdminCustomFields({
                 className={selectClass}
                 required={item.required}
               >
-                <option value="">{item.placeholder || "Pilih..."}</option>
+                <option value="">
+                  {item.placeholder || uiStrings.selectPlaceholder}
+                </option>
                 {options.map((option) => (
                   <option key={option} value={option}>
                     {option}

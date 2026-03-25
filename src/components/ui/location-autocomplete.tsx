@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useLocale } from "next-intl";
 import { AlertTriangle, Loader2, MapPin, X } from "lucide-react";
 import { LocationPointerIcon } from "@/components/icons/location-pointer-icon";
 
@@ -30,7 +31,7 @@ let googleMapsLoaded = false;
 let googleMapsLoading = false;
 const loadCallbacks: (() => void)[] = [];
 
-function loadGoogleMaps(): Promise<void> {
+function loadGoogleMaps(language: string): Promise<void> {
   return new Promise((resolve) => {
     if (googleMapsLoaded && window.google?.maps) {
       resolve();
@@ -41,7 +42,8 @@ function loadGoogleMaps(): Promise<void> {
     googleMapsLoading = true;
 
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&language=id`;
+    const normalizedLanguage = language.trim() || "id";
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&language=${encodeURIComponent(normalizedLanguage)}`;
     script.async = true;
     script.defer = true;
     script.onload = () => {
@@ -81,17 +83,34 @@ interface LocationAutocompleteProps {
   name?: string;
   initialLat?: number | null;
   initialLng?: number | null;
+  mapsLanguage?: string;
+  strings?: {
+    mapButtonTitle?: string;
+  };
 }
 
 export function LocationAutocomplete({
   value,
   onChange,
   onLocationChange,
-  placeholder = "Cari lokasi...",
+  placeholder,
   name,
   initialLat,
   initialLng,
+  mapsLanguage,
+  strings,
 }: LocationAutocompleteProps) {
+  const locale = useLocale();
+  const isEnglish = locale === "en";
+  const resolvedPlaceholder = placeholder || (isEnglish ? "Search location..." : "Cari lokasi...");
+  const uiStrings = React.useMemo(
+    () => ({
+      mapButtonTitle: isEnglish ? "Pick on Map" : "Pilih di Peta",
+      ...strings,
+    }),
+    [isEnglish, strings],
+  );
+  const normalizedMapsLanguage = mapsLanguage?.trim() || (isEnglish ? "en" : "id");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const autocompleteRef = React.useRef<google.maps.places.Autocomplete | null>(
     null,
@@ -190,11 +209,11 @@ export function LocationAutocomplete({
   const handleFocus = React.useCallback(() => {
     if (loadTriggered) return;
     setLoadTriggered(true);
-    loadGoogleMaps().then(() => {
+    loadGoogleMaps(normalizedMapsLanguage).then(() => {
       setReady(true);
       initAutocomplete();
     });
-  }, [loadTriggered, initAutocomplete]);
+  }, [loadTriggered, initAutocomplete, normalizedMapsLanguage]);
 
   // Jika script sudah ter-load sebelumnya (oleh instance lain), langsung pakai
   React.useEffect(() => {
@@ -251,7 +270,7 @@ export function LocationAutocomplete({
                 });
               }}
               onFocus={handleFocus}
-              placeholder={placeholder}
+              placeholder={resolvedPlaceholder}
               className={inputClass + " pr-8"}
               autoComplete="off"
             />
@@ -271,7 +290,7 @@ export function LocationAutocomplete({
           <button
             type="button"
             onClick={openMapPicker}
-            title="Pilih di Peta"
+            title={uiStrings.mapButtonTitle}
             className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors shrink-0"
           >
             <MapPin className="w-4 h-4" />
@@ -284,6 +303,7 @@ export function LocationAutocomplete({
         <MapPickerModal
           center={mapCenter}
           currentValue={value}
+          mapsLanguage={normalizedMapsLanguage}
           onSelect={(address, lat, lng, source) => {
             onChange(address);
             setHasAutocompleteBias(true);
@@ -308,11 +328,13 @@ export function LocationAutocomplete({
 function MapPickerModal({
   center,
   currentValue,
+  mapsLanguage,
   onSelect,
   onClose,
 }: {
   center: { lat: number; lng: number };
   currentValue: string;
+  mapsLanguage: string;
   onSelect: (
     address: string,
     lat: number,
@@ -321,6 +343,8 @@ function MapPickerModal({
   ) => void;
   onClose: () => void;
 }) {
+  const locale = useLocale();
+  const isEnglish = locale === "en";
   const mapRef = React.useRef<HTMLDivElement>(null);
   const searchRef = React.useRef<HTMLInputElement>(null);
   const googleMapRef = React.useRef<google.maps.Map | null>(null);
@@ -332,6 +356,46 @@ function MapPickerModal({
   );
   const [gpsLoading, setGpsLoading] = React.useState(false);
   const [gpsWarning, setGpsWarning] = React.useState<string | null>(null);
+  const mapStrings = React.useMemo(
+    () =>
+      isEnglish
+        ? {
+            modalTitle: "Pick Location on Map",
+            mapSearchPlaceholder: "Search place on map...",
+            useMyLocationTitle: "Use my location",
+            useMyLocationLabel: "My Location",
+            gpsUnsupported: "This device does not support browser GPS.",
+            gpsAddressUnavailable:
+              "GPS location was found, but the address could not be resolved.",
+            gpsPermissionDenied: "Location permission denied. Enable GPS and try again.",
+            gpsUnavailable:
+              "Location is unavailable. Try moving to an area with better signal.",
+            gpsTimeout: "GPS timed out. Please try again.",
+            gpsGeneralError: "Failed to get GPS location. Please try again.",
+            selectedAddressFallback: "Click or drag the pin to select location",
+            cancelLabel: "Cancel",
+            confirmLabel: "Select Location",
+          }
+        : {
+            modalTitle: "Pilih Lokasi di Peta",
+            mapSearchPlaceholder: "Cari tempat di peta...",
+            useMyLocationTitle: "Gunakan lokasi saya",
+            useMyLocationLabel: "Lokasi Saya",
+            gpsUnsupported: "Perangkat ini tidak mendukung GPS browser.",
+            gpsAddressUnavailable:
+              "Lokasi GPS berhasil didapat, tapi alamat tidak bisa dibaca.",
+            gpsPermissionDenied:
+              "Izin lokasi ditolak. Silakan aktifkan GPS lalu coba lagi.",
+            gpsUnavailable:
+              "Lokasi tidak tersedia. Coba pindah ke area dengan sinyal lebih baik.",
+            gpsTimeout: "GPS timeout. Silakan coba lagi.",
+            gpsGeneralError: "Gagal mengambil lokasi GPS. Silakan coba lagi.",
+            selectedAddressFallback: "Klik atau drag pin untuk memilih lokasi",
+            cancelLabel: "Batal",
+            confirmLabel: "Pilih Lokasi",
+          },
+    [isEnglish],
+  );
 
   React.useEffect(() => {
     if (!gpsWarning) return;
@@ -438,15 +502,15 @@ function MapPickerModal({
     if (googleMapsLoaded && window.google?.maps) {
       initMap();
     } else {
-      loadGoogleMaps().then(() => {
+      loadGoogleMaps(mapsLanguage).then(() => {
         initMap();
       });
     }
-  }, [center, currentValue]);
+  }, [center, currentValue, mapsLanguage]);
 
   function handleUseCurrentLocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setGpsWarning("Perangkat ini tidak mendukung GPS browser.");
+      setGpsWarning(mapStrings.gpsUnsupported);
       return;
     }
 
@@ -480,7 +544,7 @@ function MapPickerModal({
           }
 
           setSelectedAddress(fallbackAddressFromCoords(lat, lng));
-          setGpsWarning("Lokasi GPS berhasil didapat, tapi alamat tidak bisa dibaca.");
+          setGpsWarning(mapStrings.gpsAddressUnavailable);
         });
       },
       (error) => {
@@ -488,16 +552,16 @@ function MapPickerModal({
 
         switch (error.code) {
           case error.PERMISSION_DENIED:
-            setGpsWarning("Izin lokasi ditolak. Silakan aktifkan GPS lalu coba lagi.");
+            setGpsWarning(mapStrings.gpsPermissionDenied);
             break;
           case error.POSITION_UNAVAILABLE:
-            setGpsWarning("Lokasi tidak tersedia. Coba pindah ke area dengan sinyal lebih baik.");
+            setGpsWarning(mapStrings.gpsUnavailable);
             break;
           case error.TIMEOUT:
-            setGpsWarning("GPS timeout. Silakan coba lagi.");
+            setGpsWarning(mapStrings.gpsTimeout);
             break;
           default:
-            setGpsWarning("Gagal mengambil lokasi GPS. Silakan coba lagi.");
+            setGpsWarning(mapStrings.gpsGeneralError);
             break;
         }
       },
@@ -519,7 +583,7 @@ function MapPickerModal({
       <div className="bg-card rounded-xl shadow-2xl w-[90vw] max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h3 className="font-semibold text-sm">Pilih Lokasi di Peta</h3>
+          <h3 className="font-semibold text-sm">{mapStrings.modalTitle}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -534,7 +598,7 @@ function MapPickerModal({
             <input
               ref={searchRef}
               type="text"
-              placeholder="Cari tempat di peta..."
+              placeholder={mapStrings.mapSearchPlaceholder}
               className={inputClass + " flex-1"}
               autoComplete="off"
             />
@@ -543,14 +607,14 @@ function MapPickerModal({
               onClick={handleUseCurrentLocation}
               disabled={gpsLoading}
               className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium hover:bg-rose-100 hover:border-rose-300 transition-colors disabled:opacity-60 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-200 dark:hover:bg-rose-900/30"
-              title="Gunakan lokasi saya"
+              title={mapStrings.useMyLocationTitle}
             >
               {gpsLoading ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <LocationPointerIcon className="w-3.5 h-3.5" />
               )}
-              Lokasi Saya
+              {mapStrings.useMyLocationLabel}
             </button>
           </div>
           {gpsWarning && (
@@ -572,7 +636,7 @@ function MapPickerModal({
         {/* Footer */}
         <div className="px-4 py-3 border-t flex items-center justify-between gap-3 bg-muted/30">
           <p className="text-xs text-muted-foreground truncate flex-1">
-            {selectedAddress || "Klik atau drag pin untuk memilih lokasi"}
+            {selectedAddress || mapStrings.selectedAddressFallback}
           </p>
           <div className="flex gap-2 shrink-0">
             <button
@@ -580,7 +644,7 @@ function MapPickerModal({
               onClick={onClose}
               className="inline-flex items-center justify-center h-8 px-3 rounded-md border border-input bg-background text-sm hover:bg-accent transition-colors"
             >
-              Batal
+              {mapStrings.cancelLabel}
             </button>
             <button
               type="button"
@@ -597,7 +661,7 @@ function MapPickerModal({
               }}
               className="inline-flex items-center justify-center h-8 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors gap-1.5"
             >
-              <MapPin className="w-3.5 h-3.5" /> Pilih Lokasi
+              <MapPin className="w-3.5 h-3.5" /> {mapStrings.confirmLabel}
             </button>
           </div>
         </div>

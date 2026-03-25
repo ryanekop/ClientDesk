@@ -3,6 +3,7 @@ import {
   invalidatePublicCachesForBooking,
   invalidatePublicCachesForProfile,
 } from "@/lib/public-cache-invalidation";
+import { apiText } from "@/lib/i18n/api-errors";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/utils/supabase/server";
 
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json(
-      { success: false, error: "Unauthorized" },
+      { success: false, error: apiText(request, "unauthorized") },
       { status: 401 },
     );
   }
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
 
   if (!scope) {
     return NextResponse.json(
-      { success: false, error: "scope is required" },
+      { success: false, error: apiText(request, "scopeRequired") },
       { status: 400 },
     );
   }
@@ -122,7 +123,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "bookingCode atau trackingUuid wajib diisi.",
+          error: apiText(request, "bookingCodeOrTrackingRequired"),
         },
         { status: 400 },
       );
@@ -136,7 +137,7 @@ export async function POST(request: NextRequest) {
 
     if (!ownedBooking) {
       return NextResponse.json(
-        { success: false, error: "Booking tidak ditemukan." },
+        { success: false, error: apiText(request, "bookingNotFound") },
         { status: 404 },
       );
     }
@@ -156,7 +157,7 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json(
-    { success: false, error: "scope tidak didukung." },
+    { success: false, error: apiText(request, "unsupportedScope") },
     { status: 400 },
   );
 }

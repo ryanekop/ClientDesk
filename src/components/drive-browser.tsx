@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useLocale } from "next-intl";
 import { Folder, FolderPlus, ChevronRight, Loader2, Home, ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -19,6 +20,23 @@ type BreadcrumbItem = {
     name: string;
 };
 
+type DriveBrowserStrings = {
+    feedbackTitle?: string;
+    createFolderFailed?: string;
+    backLabel?: string;
+    createFolderLabel?: string;
+    newFolderLabel?: string;
+    newFolderPlaceholder?: string;
+    createAndSelectLabel?: string;
+    emptyStateTitle?: string;
+    emptyStateHint?: string;
+    selectThisFolderTitle?: string;
+    selectLabel?: string;
+    footerHint?: string;
+    closeLabel?: string;
+    confirmLabel?: string;
+};
+
 interface DriveBrowserProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -26,6 +44,7 @@ interface DriveBrowserProps {
     defaultFolderName: string;
     onFolderCreated: (url: string) => void;
     onFolderSelected: (url: string) => void;
+    strings?: DriveBrowserStrings;
 }
 
 export function DriveBrowser({
@@ -35,7 +54,29 @@ export function DriveBrowser({
     defaultFolderName,
     onFolderCreated,
     onFolderSelected,
+    strings,
 }: DriveBrowserProps) {
+    const locale = useLocale();
+    const isEnglish = locale === "en";
+    const uiStrings: Required<DriveBrowserStrings> = {
+        feedbackTitle: isEnglish ? "Information" : "Informasi",
+        createFolderFailed: isEnglish ? "Failed to create folder." : "Gagal membuat folder.",
+        backLabel: isEnglish ? "Back" : "Kembali",
+        createFolderLabel: isEnglish ? "Create Folder" : "Buat Folder",
+        newFolderLabel: isEnglish ? "New Folder Name" : "Nama Folder Baru",
+        newFolderPlaceholder: isEnglish ? "Folder name..." : "Nama folder...",
+        createAndSelectLabel: isEnglish ? "Create & Select" : "Buat & Pilih",
+        emptyStateTitle: isEnglish ? "No folders here." : "Tidak ada folder di sini.",
+        emptyStateHint: isEnglish ? "Create a new folder above." : "Buat folder baru di atas.",
+        selectThisFolderTitle: isEnglish ? "Select this folder" : "Pilih folder ini",
+        selectLabel: isEnglish ? "Select" : "Pilih",
+        footerHint: isEnglish
+            ? "Click a folder name to open it. Click \"Select\" to link it to the booking."
+            : "Klik nama folder untuk masuk. Klik \"Pilih\" untuk mengaitkan ke booking.",
+        closeLabel: isEnglish ? "Close" : "Tutup",
+        confirmLabel: "OK",
+        ...strings,
+    };
     const [folders, setFolders] = React.useState<DriveFolder[]>([]);
     const [loading, setLoading] = React.useState(false);
     const [breadcrumbs, setBreadcrumbs] = React.useState<BreadcrumbItem[]>([
@@ -53,21 +94,14 @@ export function DriveBrowser({
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
             open: true,
-            title: title || "Informasi",
+            title: title || uiStrings.feedbackTitle,
             message,
         });
-    }, []);
+    }, [uiStrings.feedbackTitle]);
 
     const currentFolderId = breadcrumbs[breadcrumbs.length - 1].id;
 
-    React.useEffect(() => {
-        if (open) {
-            loadFolder(currentFolderId);
-            setNewFolderName(defaultFolderName);
-        }
-    }, [open]);
-
-    async function loadFolder(parentId: string) {
+    const loadFolder = React.useCallback(async (parentId: string) => {
         setLoading(true);
         try {
             const res = await fetch(`/api/google/drive/list?parentId=${parentId}`);
@@ -81,7 +115,14 @@ export function DriveBrowser({
             console.error(err);
         }
         setLoading(false);
-    }
+    }, []);
+
+    React.useEffect(() => {
+        if (open) {
+            loadFolder(currentFolderId);
+            setNewFolderName(defaultFolderName);
+        }
+    }, [open, currentFolderId, defaultFolderName, loadFolder]);
 
     function navigateToFolder(folder: DriveFolder) {
         setBreadcrumbs(prev => [...prev, { id: folder.id, name: folder.name }]);
@@ -118,10 +159,10 @@ export function DriveBrowser({
                 onOpenChange(false);
                 setShowNewFolder(false);
             } else {
-                showFeedback(data.error || "Gagal membuat folder.");
+                showFeedback(data.error || uiStrings.createFolderFailed);
             }
         } catch {
-            showFeedback("Gagal membuat folder.");
+            showFeedback(uiStrings.createFolderFailed);
         }
         setCreating(false);
     }
@@ -171,7 +212,7 @@ export function DriveBrowser({
                         onClick={handleBack}
                         className="h-7 px-2 gap-1 text-xs"
                     >
-                        <ArrowLeft className="w-3.5 h-3.5" /> Kembali
+                        <ArrowLeft className="w-3.5 h-3.5" /> {uiStrings.backLabel}
                     </Button>
                     <div className="flex-1" />
                     <Button
@@ -179,7 +220,7 @@ export function DriveBrowser({
                         onClick={() => { setShowNewFolder(!showNewFolder); setNewFolderName(defaultFolderName); }}
                         className="h-7 px-3 gap-1.5 text-xs"
                     >
-                        <FolderPlus className="w-3.5 h-3.5" /> Buat Folder
+                        <FolderPlus className="w-3.5 h-3.5" /> {uiStrings.createFolderLabel}
                     </Button>
                 </div>
 
@@ -187,11 +228,13 @@ export function DriveBrowser({
                 {showNewFolder && (
                     <div className="flex gap-2 items-end p-3 rounded-lg border bg-muted/30">
                         <div className="flex-1 space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Nama Folder Baru</label>
+                            <label className="text-xs font-medium text-muted-foreground">
+                                {uiStrings.newFolderLabel}
+                            </label>
                             <input
                                 value={newFolderName}
                                 onChange={e => setNewFolderName(e.target.value)}
-                                placeholder="Nama folder..."
+                                placeholder={uiStrings.newFolderPlaceholder}
                                 autoFocus
                                 className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-8 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                                 onKeyDown={e => { if (e.key === "Enter") handleCreateFolder(); }}
@@ -203,7 +246,7 @@ export function DriveBrowser({
                             disabled={creating || !newFolderName.trim()}
                         >
                             {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderPlus className="w-3.5 h-3.5" />}
-                            Buat & Pilih
+                            {uiStrings.createAndSelectLabel}
                         </Button>
                     </div>
                 )}
@@ -217,8 +260,8 @@ export function DriveBrowser({
                     ) : folders.length === 0 ? (
                         <div className="text-center py-12 text-muted-foreground text-sm">
                             <Folder className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                            <p>Tidak ada folder di sini.</p>
-                            <p className="text-xs mt-1">Buat folder baru di atas.</p>
+                            <p>{uiStrings.emptyStateTitle}</p>
+                            <p className="text-xs mt-1">{uiStrings.emptyStateHint}</p>
                         </div>
                     ) : (
                         <div className="space-y-0.5 px-1">
@@ -239,9 +282,9 @@ export function DriveBrowser({
                                         variant="ghost" size="sm"
                                         className="h-7 px-2 gap-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-500/10"
                                         onClick={e => { e.stopPropagation(); handleSelectFolder(folder); }}
-                                        title="Pilih folder ini"
+                                        title={uiStrings.selectThisFolderTitle}
                                     >
-                                        <Check className="w-3.5 h-3.5" /> Pilih
+                                        <Check className="w-3.5 h-3.5" /> {uiStrings.selectLabel}
                                     </Button>
                                 </div>
                             ))}
@@ -251,9 +294,11 @@ export function DriveBrowser({
 
                 <DialogFooter className="border-t pt-3">
                     <p className="text-xs text-muted-foreground flex-1">
-                        Klik nama folder untuk masuk. Klik &quot;Pilih&quot; untuk mengaitkan ke booking.
+                        {uiStrings.footerHint}
                     </p>
-                    <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Tutup</Button>
+                    <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+                        {uiStrings.closeLabel}
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -262,7 +307,7 @@ export function DriveBrowser({
             onOpenChange={(open) => setFeedbackDialog((prev) => ({ ...prev, open }))}
             title={feedbackDialog.title}
             message={feedbackDialog.message}
-            confirmLabel="OK"
+            confirmLabel={uiStrings.confirmLabel}
         />
         </>
     );

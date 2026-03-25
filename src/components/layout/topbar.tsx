@@ -22,6 +22,8 @@ import { clearClientDeskSessionOnlyState } from "@/lib/auth/session-only";
 import { resolveDashboardRouteTitle } from "@/lib/dashboard-route-title";
 
 function TopbarClock() {
+  const locale = useLocale();
+  const dateLocale = locale === "en" ? "en-US" : "id-ID";
   const [now, setNow] = React.useState<Date | null>(null);
 
   React.useEffect(() => {
@@ -36,18 +38,20 @@ function TopbarClock() {
         className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground tabular-nums mr-1"
         aria-hidden="true"
       >
-        <span className="font-medium opacity-0">Kam, 12 Mar</span>
+        <span className="font-medium opacity-0">
+          {locale === "en" ? "Thu, 12 Mar" : "Kam, 12 Mar"}
+        </span>
         <span className="text-foreground font-bold opacity-0">23.59.59</span>
       </div>
     );
   }
 
-  const dateStr = now.toLocaleDateString("id-ID", {
+  const dateStr = now.toLocaleDateString(dateLocale, {
     weekday: "short",
     day: "numeric",
     month: "short",
   });
-  const timeStr = now.toLocaleTimeString("id-ID", {
+  const timeStr = now.toLocaleTimeString(dateLocale, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",

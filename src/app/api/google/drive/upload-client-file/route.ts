@@ -3,9 +3,27 @@ import {
     assertBookingWriteAccessForUser,
     BookingWriteAccessDeniedError,
 } from "@/lib/booking-write-access.server";
+import { apiText } from "@/lib/i18n/api-errors";
 import { createClient } from "@/utils/supabase/server";
 import { findOrCreateNestedPath, uploadFileToDrive } from "@/utils/google/drive";
 import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
+
+type DriveProfileRow = {
+    google_drive_access_token: string | null;
+    google_drive_refresh_token: string | null;
+    drive_folder_format: string | null;
+    drive_folder_format_map: Record<string, string> | null;
+    drive_folder_structure_map: Record<string, string[] | string> | null;
+    studio_name: string | null;
+};
+
+type BookingFolderSourceRow = {
+    client_name: string | null;
+    booking_code: string | null;
+    event_type: string | null;
+    session_date: string | null;
+    extra_fields: Record<string, unknown> | null;
+};
 
 export async function POST(request: NextRequest) {
     try {
@@ -13,7 +31,10 @@ export async function POST(request: NextRequest) {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ success: false, error: "Tidak terautentikasi" }, { status: 401 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "unauthorized") },
+                { status: 401 },
+            );
         }
 
         await assertBookingWriteAccessForUser(user.id);
@@ -22,10 +43,13 @@ export async function POST(request: NextRequest) {
             .from("profiles")
             .select("google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, studio_name")
             .eq("id", user.id)
-            .single();
+            .single<DriveProfileRow>();
 
         if (!profile?.google_drive_access_token || !profile?.google_drive_refresh_token) {
-            return NextResponse.json({ success: false, error: "Google Drive belum terhubung." }, { status: 400 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "driveNotConnected") },
+                { status: 400 },
+            );
         }
 
         const formData = await request.formData();
@@ -36,20 +60,23 @@ export async function POST(request: NextRequest) {
         const file = formData.get("file") as File;
 
         if (!bookingId || !file) {
-            return NextResponse.json({ success: false, error: "Data tidak lengkap." }, { status: 400 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "missingRequiredData") },
+                { status: 400 },
+            );
         }
 
         const { data: bookingRecord } = await supabase
             .from("bookings")
             .select("client_name, booking_code, event_type, session_date, extra_fields")
             .eq("id", bookingId)
-            .single();
+            .single<BookingFolderSourceRow>();
 
         const baseSegments = buildDriveFolderPathSegments({
-            structureMap: (profile as any).drive_folder_structure_map,
-            legacyFormat: (profile as any).drive_folder_format,
-            legacyFormatMap: (profile as any).drive_folder_format_map,
-            studioName: (profile as any).studio_name || "Client Desk",
+            structureMap: profile.drive_folder_structure_map,
+            legacyFormat: profile.drive_folder_format,
+            legacyFormatMap: profile.drive_folder_format_map,
+            studioName: profile.studio_name || "Client Desk",
             bookingCode: bookingRecord?.booking_code || bookingCode || "",
             clientName: bookingRecord?.client_name || clientName || "Client",
             eventType: bookingRecord?.event_type || eventType || null,
@@ -68,7 +95,10 @@ export async function POST(request: NextRequest) {
         );
 
         if (!folder.folderId) {
-            return NextResponse.json({ success: false, error: "Gagal membuat folder." }, { status: 500 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "failedCreateFolder") },
+                { status: 500 },
+            );
         }
 
         // Read file into buffer
@@ -114,13 +144,15 @@ export async function POST(request: NextRequest) {
             fileName: file.name,
             folderUrl: folder.folderUrl,
         });
-    } catch (err: any) {
+    } catch (err: unknown) {
         if (err instanceof BookingWriteAccessDeniedError) {
             return NextResponse.json(
                 { success: false, error: err.message },
                 { status: err.status },
             );
         }
-        return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+        const message =
+            err instanceof Error ? err.message : apiText(request, "failedUploadFile");
+        return NextResponse.json({ success: false, error: message }, { status: 500 });
     }
 }

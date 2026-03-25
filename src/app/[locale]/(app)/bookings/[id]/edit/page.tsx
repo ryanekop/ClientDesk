@@ -1126,7 +1126,11 @@ export default function EditBookingPage() {
                                                             : { lat: meta.lat, lng: meta.lng },
                                                 }));
                                             }}
-                                            placeholder={`Cari lokasi ${f.label.toLowerCase()}...`}
+                                            placeholder={
+                                                locale === "en"
+                                                    ? `Search ${f.labelEn.toLowerCase()} location...`
+                                                    : `Cari lokasi ${f.label.toLowerCase()}...`
+                                            }
                                             initialLat={extraLocationCoords[f.key]?.lat ?? null}
                                             initialLng={extraLocationCoords[f.key]?.lng ?? null}
                                         />
@@ -1262,7 +1266,11 @@ export default function EditBookingPage() {
                                                 : { lat: meta.lat, lng: meta.lng },
                                         );
                                     }}
-                                    placeholder="Cari lokasi sesi foto..."
+                                    placeholder={
+                                        locale === "en"
+                                            ? "Search session location..."
+                                            : "Cari lokasi sesi foto..."
+                                    }
                                     initialLat={locationCoords.lat}
                                     initialLng={locationCoords.lng}
                                 />

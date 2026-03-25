@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiText } from "@/lib/i18n/api-errors";
 import { createClient } from "@/utils/supabase/server";
 import {
   FASTPIK_SYNC_CHUNK_SIZE,
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json(
-        { success: false, error: "Tidak terautentikasi." },
+        { success: false, error: apiText(request, "unauthorized") },
         { status: 401 },
       );
     }
@@ -48,11 +49,14 @@ export async function POST(request: NextRequest) {
       success: true,
       ...result,
     });
-  } catch (error: any) {
+  } catch (error) {
     return NextResponse.json(
       {
         success: false,
-        error: error?.message || "Gagal batch sync ke Fastpik.",
+        error:
+          error instanceof Error
+            ? error.message
+            : apiText(request, "failedBatchSyncFastpik"),
       },
       { status: 500 },
     );

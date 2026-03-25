@@ -3,6 +3,7 @@ import {
   assertBookingWriteAccessForUser,
   BookingWriteAccessDeniedError,
 } from "@/lib/booking-write-access.server";
+import { apiText } from "@/lib/i18n/api-errors";
 import { createClient } from "@/utils/supabase/server";
 import { syncBookingToFastpik } from "@/lib/fastpik-integration/server";
 
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json(
-        { success: false, error: "Tidak terautentikasi." },
+        { success: false, error: apiText(request, "unauthorized") },
         { status: 401 },
       );
     }
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
       typeof body.bookingId === "string" ? body.bookingId.trim() : "";
     if (!bookingId) {
       return NextResponse.json(
-        { success: false, error: "bookingId wajib diisi." },
+        { success: false, error: apiText(request, "bookingIdRequired") },
         { status: 400 },
       );
     }
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
       fastpikProjectInfo: result.fastpikProjectInfo || null,
       message: result.message,
     });
-  } catch (error: any) {
+  } catch (error) {
     if (error instanceof BookingWriteAccessDeniedError) {
       return NextResponse.json(
         {
@@ -80,7 +81,10 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         status: "failed",
-        message: error?.message || "Gagal sinkron booking ke Fastpik.",
+        message:
+          error instanceof Error
+            ? error.message
+            : apiText(request, "failedSyncFastpikBooking"),
       },
       { status: 500 },
     );

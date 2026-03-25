@@ -1,8 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   assertBookingWriteAccessForUser,
   BookingWriteAccessDeniedError,
 } from "@/lib/booking-write-access.server";
+import { apiT, apiText } from "@/lib/i18n/api-errors";
+import { resolveApiLocale, type AppLocale } from "@/lib/i18n/api-locale";
 import { createClient } from "@/utils/supabase/server";
 import {
   buildCommitReportFile,
@@ -102,7 +104,7 @@ async function insertOneBooking(
   }
 
   if (!bookingRow) {
-    throw new Error(insertError?.message || "Gagal menyimpan booking.");
+    throw new Error(insertError?.message || "failedSaveBooking");
   }
 
   const bookingServiceRows = [
@@ -126,7 +128,7 @@ async function insertOneBooking(
       .insert(bookingServiceRows);
     if (error) {
       await supabase.from("bookings").delete().eq("id", bookingRow.id);
-      throw new Error(error.message || "Gagal menyimpan relasi layanan booking.");
+      throw new Error(error.message || "failedSaveBookingServices");
     }
   }
 
@@ -141,7 +143,7 @@ async function insertOneBooking(
       );
     if (error) {
       await supabase.from("bookings").delete().eq("id", bookingRow.id);
-      throw new Error(error.message || "Gagal menyimpan assignment freelance.");
+      throw new Error(error.message || "failedSaveFreelanceAssignments");
     }
   }
 
@@ -157,6 +159,7 @@ async function syncImportedBookings(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   bookingIds: string[],
+  locale: AppLocale,
 ): Promise<ImportSyncSummary> {
   const fallback: ImportSyncSummary = {
     successCount: 0,
@@ -170,7 +173,7 @@ async function syncImportedBookings(
 
   const profileResult = await fetchGoogleCalendarProfileSchemaSafe(supabase, userId);
   if (profileResult.error) {
-    const message = "Gagal memuat profil Google Calendar. Silakan coba lagi.";
+    const message = apiT(locale, "failedLoadCalendarProfile");
     await Promise.allSettled(
       bookingIds.map((bookingId) =>
         updateBookingCalendarSyncState({
@@ -201,8 +204,7 @@ async function syncImportedBookings(
       : "";
 
   if (!hasOAuthTokenPair(accessToken, refreshToken)) {
-    const message =
-      "Koneksi Google Calendar belum lengkap. Silakan hubungkan ulang di Pengaturan.";
+    const message = apiT(locale, "incompleteCalendarConnection");
     await Promise.allSettled(
       bookingIds.map((bookingId) =>
         updateBookingCalendarSyncState({
@@ -261,7 +263,7 @@ async function syncImportedBookings(
   } catch (error) {
     const message = getGoogleCalendarSyncErrorMessage(
       error,
-      "Gagal memuat assignment freelancer untuk sinkronisasi kalender.",
+      apiT(locale, "failedLoadFreelanceAssignments"),
     );
 
     await Promise.allSettled(
@@ -371,8 +373,9 @@ async function syncImportedBookings(
   };
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const locale = resolveApiLocale(request);
     const supabase = await createClient();
     const {
       data: { user },
@@ -380,7 +383,7 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json(
-        { success: false, error: "Tidak terautentikasi." },
+        { success: false, error: apiText(request, "unauthorized") },
         { status: 401 },
       );
     }
@@ -391,14 +394,14 @@ export async function POST(request: Request) {
     const file = formData.get("file");
     if (!(file instanceof File)) {
       return NextResponse.json(
-        { success: false, error: "File .xlsx wajib diupload." },
+        { success: false, error: apiText(request, "xlsxRequired") },
         { status: 400 },
       );
     }
 
     if (!file.name.toLowerCase().endsWith(".xlsx")) {
       return NextResponse.json(
-        { success: false, error: "Format file harus .xlsx." },
+        { success: false, error: apiText(request, "invalidXlsxFormat") },
         { status: 400 },
       );
     }
@@ -406,7 +409,7 @@ export async function POST(request: Request) {
     const { context, error } = await loadImportContext(supabase, user.id);
     if (!context || error) {
       return NextResponse.json(
-        { success: false, error: error || "Gagal memuat context import." },
+        { success: false, error: error || apiText(request, "failedLoadImportContext") },
         { status: 500 },
       );
     }
@@ -424,7 +427,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "File masih mengandung error validasi. Commit dibatalkan.",
+          error: apiText(request, "commitCancelledValidation"),
           canCommit: false,
           summary: validation.summary,
           previewRows: validation.previewRows,
@@ -442,7 +445,18 @@ export async function POST(request: Request) {
         const created = await insertOneBooking(supabase, user.id, row);
         inserted.push(created);
       } catch (error) {
-        runtimeError = error instanceof Error ? error.message : "Gagal menyimpan booking.";
+        const rawError = error instanceof Error ? error.message : "";
+        if (rawError === "failedSaveBooking") {
+          runtimeError = apiText(request, "failedSaveBooking");
+        } else if (rawError === "failedSaveBookingServices") {
+          runtimeError = apiText(request, "failedSaveBookingServices");
+        } else if (rawError === "failedSaveFreelanceAssignments") {
+          runtimeError = apiText(request, "failedSaveFreelanceAssignments");
+        } else if (rawError) {
+          runtimeError = rawError;
+        } else {
+          runtimeError = apiText(request, "failedSaveBooking");
+        }
         break;
       }
     }
@@ -457,7 +471,7 @@ export async function POST(request: Request) {
         rowNumber: row.rowNumber,
         externalImportId: row.externalImportId,
         status: "failed",
-        error: `Import dibatalkan: ${runtimeError}`,
+        error: apiText(request, "importCancelledRuntime", { reason: runtimeError }),
       }));
 
       const report = buildCommitReportFile(
@@ -495,6 +509,7 @@ export async function POST(request: Request) {
       supabase,
       user.id,
       inserted.map((item) => item.id),
+      locale,
     );
 
     const report = buildCommitReportFile(
@@ -522,7 +537,7 @@ export async function POST(request: Request) {
       );
     }
     const message =
-      error instanceof Error ? error.message : "Gagal melakukan commit import.";
+      error instanceof Error ? error.message : apiText(request, "failedCommitImport");
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

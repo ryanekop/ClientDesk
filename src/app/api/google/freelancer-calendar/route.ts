@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getCalendarClient } from "@/utils/google/calendar";
+import { apiText } from "@/lib/i18n/api-errors";
 
 export async function GET(request: NextRequest) {
     try {
@@ -8,7 +9,10 @@ export async function GET(request: NextRequest) {
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
-            return NextResponse.json({ success: false, error: "Tidak terautentikasi" }, { status: 401 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "unauthorized") },
+                { status: 401 },
+            );
         }
 
         const { data: profile } = await supabase
@@ -18,13 +22,19 @@ export async function GET(request: NextRequest) {
             .single();
 
         if (!profile?.google_access_token || !profile?.google_refresh_token) {
-            return NextResponse.json({ success: false, error: "Google Calendar belum terhubung." }, { status: 400 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "calendarNotConnected") },
+                { status: 400 },
+            );
         }
 
         const url = new URL(request.url);
         const calendarEmail = url.searchParams.get("email");
         if (!calendarEmail) {
-            return NextResponse.json({ success: false, error: "Email parameter required." }, { status: 400 });
+            return NextResponse.json(
+                { success: false, error: apiText(request, "emailParameterRequired") },
+                { status: 400 },
+            );
         }
 
         const timeMin = url.searchParams.get("timeMin") || new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).toISOString();
@@ -43,7 +53,7 @@ export async function GET(request: NextRequest) {
 
         const events = (res.data.items || []).map((event) => ({
             id: event.id,
-            title: event.summary || "(Tanpa Judul)",
+            title: event.summary || apiText(request, "untitled"),
             start: event.start?.dateTime || event.start?.date || "",
             end: event.end?.dateTime || event.end?.date || "",
             description: event.description || "",
@@ -52,11 +62,30 @@ export async function GET(request: NextRequest) {
         }));
 
         return NextResponse.json({ success: true, events });
-    } catch (err: any) {
+    } catch (error) {
+        const maybeStatus =
+            typeof error === "object" &&
+            error !== null &&
+            "response" in error &&
+            typeof (error as { response?: { status?: number } }).response?.status === "number"
+                ? (error as { response?: { status?: number } }).response?.status
+                : null;
+        const maybeCode =
+            typeof error === "object" &&
+            error !== null &&
+            "code" in error &&
+            typeof (error as { code?: number | string }).code !== "undefined"
+                ? (error as { code?: number | string }).code
+                : null;
+
         // Common error: 404 if calendar not shared
-        if (err.code === 404 || err.response?.status === 404) {
-            return NextResponse.json({ success: false, error: "Kalender freelancer tidak ditemukan. Pastikan freelancer sudah share kalendernya ke email Anda." }, { status: 404 });
+        if (maybeCode === 404 || maybeStatus === 404) {
+            return NextResponse.json(
+                { success: false, error: apiText(request, "freelancerCalendarNotFound") },
+                { status: 404 },
+            );
         }
-        return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+        const message = error instanceof Error ? error.message : apiText(request, "failedLoadCalendarProfile");
+        return NextResponse.json({ success: false, error: message }, { status: 500 });
     }
 }

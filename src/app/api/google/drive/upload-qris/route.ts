@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiText } from "@/lib/i18n/api-errors";
 import { createClient } from "@/utils/supabase/server";
 import {
     buildDriveFileHdUrl,
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
 
         if (!user) {
             return NextResponse.json(
-                { success: false, error: "Tidak terautentikasi." },
+                { success: false, error: apiText(request, "unauthorized") },
                 { status: 401 },
             );
         }
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
 
         if (!profile?.google_drive_access_token || !profile?.google_drive_refresh_token) {
             return NextResponse.json(
-                { success: false, error: "Google Drive belum terhubung." },
+                { success: false, error: apiText(request, "driveNotConnected") },
                 { status: 400 },
             );
         }
@@ -39,14 +40,14 @@ export async function POST(request: NextRequest) {
         const file = formData.get("file");
         if (!(file instanceof File)) {
             return NextResponse.json(
-                { success: false, error: "File QRIS tidak ditemukan." },
+                { success: false, error: apiText(request, "qrisFileNotFound") },
                 { status: 400 },
             );
         }
 
         if (!file.type.startsWith("image/")) {
             return NextResponse.json(
-                { success: false, error: "File QRIS harus berupa gambar." },
+                { success: false, error: apiText(request, "qrisImageOnly") },
                 { status: 400 },
             );
         }
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
 
         if (!folder.folderId) {
             return NextResponse.json(
-                { success: false, error: "Folder QRIS tidak dapat dibuat." },
+                { success: false, error: apiText(request, "failedCreateFolder") },
                 { status: 500 },
             );
         }
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
 
         if (!uploaded.fileId) {
             return NextResponse.json(
-                { success: false, error: "Upload QRIS gagal." },
+                { success: false, error: apiText(request, "failedUploadFile") },
                 { status: 500 },
             );
         }
@@ -130,7 +131,7 @@ export async function POST(request: NextRequest) {
         });
     } catch (error) {
         const message =
-            error instanceof Error ? error.message : "Terjadi kesalahan saat upload QRIS.";
+            error instanceof Error ? error.message : apiText(request, "failedUploadFile");
         return NextResponse.json({ success: false, error: message }, { status: 500 });
     }
 }

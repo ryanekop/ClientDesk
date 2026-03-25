@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useLocale } from "next-intl";
 import { Check, Loader2, Search, Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ import {
 type UniversityAutocompleteStrings = {
   noResults?: string;
   selectionHint?: string;
+  searchError?: string;
   createLabel?: (name: string) => string;
   createError?: string;
 };
@@ -34,13 +36,6 @@ type UniversityAutocompleteProps = {
 const DEFAULT_INPUT_CLASS =
   "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 pr-8 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 
-const DEFAULT_STRINGS: Required<UniversityAutocompleteStrings> = {
-  noResults: "Universitas tidak ditemukan.",
-  selectionHint: "Pilih universitas dari suggestion yang tersedia.",
-  createLabel: (name: string) => `Tambah "${name}" ke referensi`,
-  createError: "Gagal menambahkan universitas ke referensi.",
-};
-
 export function UniversityAutocomplete({
   value,
   selectedId,
@@ -53,7 +48,27 @@ export function UniversityAutocomplete({
   allowManualCreate = false,
   strings,
 }: UniversityAutocompleteProps) {
-  const uiStrings = { ...DEFAULT_STRINGS, ...strings };
+  const locale = useLocale();
+  const defaultStrings = React.useMemo<Required<UniversityAutocompleteStrings>>(
+    () =>
+      locale === "en"
+        ? {
+            noResults: "University not found.",
+            selectionHint: "Select a university from the available suggestions.",
+            searchError: "Failed to search universities.",
+            createLabel: (name: string) => `Add "${name}" to references`,
+            createError: "Failed to add university to references.",
+          }
+        : {
+            noResults: "Universitas tidak ditemukan.",
+            selectionHint: "Pilih universitas dari suggestion yang tersedia.",
+            searchError: "Gagal mencari universitas.",
+            createLabel: (name: string) => `Tambah "${name}" ke referensi`,
+            createError: "Gagal menambahkan universitas ke referensi.",
+          },
+    [locale],
+  );
+  const uiStrings = { ...defaultStrings, ...strings };
   const rootRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [open, setOpen] = React.useState(false);
@@ -107,7 +122,7 @@ export function UniversityAutocomplete({
 
         const payload = await response.json().catch(() => ({ items: [] }));
         if (!response.ok) {
-          throw new Error(payload.error || "Gagal mencari universitas.");
+          throw new Error(uiStrings.searchError);
         }
 
         setItems(
@@ -128,7 +143,7 @@ export function UniversityAutocomplete({
         setError(
           fetchError instanceof Error
             ? fetchError.message
-            : "Gagal mencari universitas.",
+            : uiStrings.searchError,
         );
       } finally {
         if (!controller.signal.aborted) {
@@ -141,7 +156,7 @@ export function UniversityAutocomplete({
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [searchTerm]);
+  }, [searchTerm, uiStrings.searchError]);
 
   const invalidSelection =
     searchTerm.length > 0 && !selectedId && !loading && !creating;

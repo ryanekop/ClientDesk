@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { apiText } from "@/lib/i18n/api-errors";
 import { invalidatePublicCachesForProfile } from "@/lib/public-cache-invalidation";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/utils/supabase/server";
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json(
-      { success: false, error: "Tidak terautentikasi." },
+      { success: false, error: apiText(request, "unauthorized") },
       { status: 401 },
     );
   }
@@ -117,28 +118,28 @@ export async function POST(request: NextRequest) {
 
   if (!assetType) {
     return NextResponse.json(
-      { success: false, error: "assetType tidak valid." },
+      { success: false, error: apiText(request, "invalidAssetType") },
       { status: 400 },
     );
   }
 
   if (!(file instanceof File)) {
     return NextResponse.json(
-      { success: false, error: "File tidak ditemukan." },
+      { success: false, error: apiText(request, "fileNotFound") },
       { status: 400 },
     );
   }
 
   if (!ALLOWED_MIME_TYPES.includes(file.type as (typeof ALLOWED_MIME_TYPES)[number])) {
     return NextResponse.json(
-      { success: false, error: "File harus berupa PNG, JPG, atau WEBP." },
+      { success: false, error: apiText(request, "invalidImageMimePngJpgWebp") },
       { status: 400 },
     );
   }
 
   if (assetType === "invoice_logo" && file.type === "image/webp") {
     return NextResponse.json(
-      { success: false, error: "Logo invoice gunakan PNG atau JPG." },
+      { success: false, error: apiText(request, "invoiceLogoPngJpgOnly") },
       { status: 400 },
     );
   }
@@ -150,8 +151,8 @@ export async function POST(request: NextRequest) {
         success: false,
         error:
           assetType === "invoice_logo"
-            ? "Ukuran logo melebihi 500KB."
-            : "Ukuran avatar melebihi 1MB.",
+            ? apiText(request, "invoiceLogoTooLarge")
+            : apiText(request, "avatarTooLarge"),
       },
       { status: 400 },
     );
@@ -190,7 +191,7 @@ export async function POST(request: NextRequest) {
 
   if (uploadError) {
     return NextResponse.json(
-      { success: false, error: uploadError.message || "Upload gagal." },
+      { success: false, error: uploadError.message || apiText(request, "uploadFailed") },
       { status: 500 },
     );
   }
@@ -211,7 +212,7 @@ export async function POST(request: NextRequest) {
   if (updateError) {
     await service.storage.from(BRANDING_BUCKET).remove([objectPath]);
     return NextResponse.json(
-      { success: false, error: updateError.message || "Gagal menyimpan profil." },
+      { success: false, error: updateError.message || apiText(request, "failedSaveProfile") },
       { status: 500 },
     );
   }
