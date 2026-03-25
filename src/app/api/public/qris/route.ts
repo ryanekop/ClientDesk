@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { buildDriveImageUrl } from "@/lib/payment-config";
+import { buildDriveImageUrl, isLegacyDriveImageUrl } from "@/lib/payment-config";
 import { getDriveFilePublicLinks } from "@/utils/google/drive";
 
 export const dynamic = "force-dynamic";
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
   }
 
   const fallbackUrl =
-    profile.qris_image_url?.trim() ||
+    (isLegacyDriveImageUrl(profile.qris_image_url) ? "" : profile.qris_image_url?.trim()) ||
     (profile.qris_drive_file_id?.trim()
       ? buildDriveImageUrl(profile.qris_drive_file_id)
       : "");

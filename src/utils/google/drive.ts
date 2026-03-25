@@ -177,8 +177,20 @@ export async function uploadFileToDrive(
     };
 }
 
-export function buildDriveFilePublicUrl(fileId: string) {
-    return `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`;
+export function buildDriveFilePublicUrl(
+    fileId: string,
+    resourceKey?: string | null
+) {
+    const params = new URLSearchParams({
+        id: fileId,
+        sz: "w2000",
+    });
+
+    if (resourceKey && resourceKey.trim()) {
+        params.set("resourcekey", resourceKey.trim());
+    }
+
+    return `https://drive.google.com/thumbnail?${params.toString()}`;
 }
 
 export async function getDriveFilePublicLinks(
@@ -196,6 +208,11 @@ export async function getDriveFilePublicLinks(
     const thumbnailLink = res.data.thumbnailLink || null;
     const webViewLink = res.data.webViewLink || null;
     const resourceKey = res.data.resourceKey || null;
+    const thumbnailUrl = buildDriveFilePublicUrl(fileId, resourceKey);
+    const preferredThumbnailUrl =
+        (resourceKey ? thumbnailUrl : null) ||
+        thumbnailLink ||
+        thumbnailUrl;
 
     return {
         fileId: res.data.id || fileId,
@@ -203,9 +220,9 @@ export async function getDriveFilePublicLinks(
         webContentLink,
         thumbnailLink,
         webViewLink,
+        thumbnailUrl,
         preferredUrl:
-            webContentLink ||
-            thumbnailLink ||
+            preferredThumbnailUrl ||
             buildDriveFilePublicUrl(fileId),
     };
 }

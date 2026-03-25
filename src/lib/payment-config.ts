@@ -119,7 +119,23 @@ type PublicQrisImageOptions = {
 
 export function isLegacyDriveImageUrl(url: string | null | undefined) {
   if (!url) return false;
-  return /https:\/\/drive\.google\.com\/thumbnail\?/i.test(url);
+
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+
+    if (!host.endsWith("drive.google.com")) return false;
+    if (path === "/uc") return true;
+
+    if (path === "/thumbnail") {
+      return !parsed.searchParams.get("resourcekey");
+    }
+
+    return false;
+  } catch {
+    return /https:\/\/drive\.google\.com\/(thumbnail\?|uc\?)/i.test(url);
+  }
 }
 
 export function buildPublicQrisImageUrl(options: PublicQrisImageOptions) {

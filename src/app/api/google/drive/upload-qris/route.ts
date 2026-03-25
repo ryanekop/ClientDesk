@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        let qrisImageUrl = uploaded.downloadUrl || buildDriveFilePublicUrl(uploaded.fileId);
+        let qrisImageUrl = buildDriveFilePublicUrl(uploaded.fileId);
         try {
             const publicLinks = await getDriveFilePublicLinks(
                 profile.google_drive_access_token,
