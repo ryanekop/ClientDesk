@@ -5,6 +5,7 @@ import type { BookingWriteAccessState } from "@/lib/booking-write-access";
 import { BookingWriteAccessProvider } from "@/lib/booking-write-access-context";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
+import { DashboardTitleSync } from "./dashboard-title-sync";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
 import { createClient } from "@/utils/supabase/client";
@@ -65,6 +66,7 @@ export function DashboardLayout({
 
     return (
         <BookingWriteAccessProvider value={bookingWriteAccess}>
+            <DashboardTitleSync />
             <div
                 className="flex overflow-hidden bg-muted/30"
                 style={layoutStyle}

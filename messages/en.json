@@ -34,6 +34,25 @@
         "pengaturan": "Settings",
         "logout": "Log out"
     },
+    "DashboardTitle": {
+        "appDefault": "Client Desk",
+        "dashboard": "Dashboard",
+        "bookings": "Bookings",
+        "createBooking": "Create Booking",
+        "editBooking": "Edit Booking",
+        "bookingDetail": "Booking Detail",
+        "calendar": "Calendar",
+        "services": "Services / Packages",
+        "finance": "Finance",
+        "team": "Team / Freelance",
+        "formBooking": "Booking Form",
+        "formSettlement": "Settlement Form",
+        "formSpecialBooking": "Special Booking Form",
+        "statusBooking": "Booking Status",
+        "changelog": "Changelog",
+        "settings": "Settings",
+        "profile": "Profile"
+    },
     "Dashboard": {
         "welcome": "Welcome, {name}!",
         "subtitle": "Studio activity summary.",

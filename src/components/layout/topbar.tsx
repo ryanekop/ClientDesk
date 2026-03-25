@@ -19,6 +19,7 @@ import { createClient } from "@/utils/supabase/client";
 import { signOut } from "@/app/actions/auth";
 import { useChangelogUnread } from "@/components/changelog-modal";
 import { clearClientDeskSessionOnlyState } from "@/lib/auth/session-only";
+import { resolveDashboardRouteTitle } from "@/lib/dashboard-route-title";
 
 function TopbarClock() {
   const [now, setNow] = React.useState<Date | null>(null);
@@ -75,30 +76,15 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   } | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
   const t = useTranslations("Topbar");
+  const titleT = useTranslations("DashboardTitle");
   const locale = useLocale();
   const pathname = usePathname();
   const { hasUnread } = useChangelogUnread();
 
-  const pageTitle = React.useMemo(() => {
-    if (pathname.startsWith("/bookings/new")) return "Buat Booking";
-    if (pathname.startsWith("/bookings/") && pathname.endsWith("/edit"))
-      return "Edit Booking";
-    if (pathname.startsWith("/bookings/")) return "Detail Booking";
-    if (pathname.startsWith("/bookings")) return "Daftar Booking";
-    if (pathname.startsWith("/calendar")) return "Kalender";
-    if (pathname.startsWith("/finance")) return "Keuangan";
-    if (pathname.startsWith("/services")) return "Layanan / Paket";
-    if (pathname.startsWith("/team")) return "Tim / Freelance";
-    if (pathname.startsWith("/form-booking")) return "Form Booking";
-    if (pathname.startsWith("/settlement-form")) return "Form Pelunasan";
-    if (pathname.startsWith("/special-booking-form")) return "Form Booking Khusus";
-    if (pathname.startsWith("/client-status")) return "Status Booking";
-    if (pathname.startsWith("/changelog")) return "Log Perubahan";
-    if (pathname.startsWith("/settings")) return "Pengaturan";
-    if (pathname.startsWith("/profile")) return "Profil";
-    if (pathname.startsWith("/dashboard")) return "Dashboard";
-    return "Client Desk";
-  }, [pathname]);
+  const pageTitle = React.useMemo(
+    () => resolveDashboardRouteTitle(pathname, titleT),
+    [pathname, titleT],
+  );
 
   React.useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -203,7 +189,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
           <Link href="/changelog">
             <Megaphone className="h-4 w-4 text-muted-foreground" />
             <span className="hidden text-sm font-medium sm:inline">
-              Log Perubahan
+              {titleT("changelog")}
             </span>
             {hasUnread && (
               <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-emerald-500 sm:static sm:ml-1" />

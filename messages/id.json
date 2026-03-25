@@ -34,6 +34,25 @@
         "pengaturan": "Pengaturan",
         "logout": "Log out"
     },
+    "DashboardTitle": {
+        "appDefault": "Client Desk",
+        "dashboard": "Dashboard",
+        "bookings": "Daftar Booking",
+        "createBooking": "Buat Booking",
+        "editBooking": "Edit Booking",
+        "bookingDetail": "Detail Booking",
+        "calendar": "Kalender",
+        "services": "Layanan / Paket",
+        "finance": "Keuangan",
+        "team": "Tim / Freelance",
+        "formBooking": "Form Booking",
+        "formSettlement": "Form Pelunasan",
+        "formSpecialBooking": "Form Booking Khusus",
+        "statusBooking": "Status Booking",
+        "changelog": "Log Perubahan",
+        "settings": "Pengaturan",
+        "profile": "Profil"
+    },
     "Dashboard": {
         "welcome": "Selamat datang, {name}!",
         "subtitle": "Ringkasan aktivitas Studio.",
