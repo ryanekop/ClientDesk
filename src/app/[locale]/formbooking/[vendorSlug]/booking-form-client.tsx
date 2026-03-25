@@ -379,7 +379,7 @@ export function BookingFormClient({
   const [uploadingProof, setUploadingProof] = React.useState(false);
   const [termsAccepted, setTermsAccepted] = React.useState(false);
   const [termsDialogOpen, setTermsDialogOpen] = React.useState(false);
-  const [termsCanBeAccepted, setTermsCanBeAccepted] = React.useState(false);
+  const [termsViewedOnce, setTermsViewedOnce] = React.useState(false);
   const [packageDialogOpen, setPackageDialogOpen] = React.useState(false);
   const [addonDialogOpen, setAddonDialogOpen] = React.useState(false);
   const [packageSearchQuery, setPackageSearchQuery] = React.useState("");
@@ -387,7 +387,6 @@ export function BookingFormClient({
   const [error, setError] = React.useState("");
 
   const autoDpAmountRef = React.useRef<number | null>(null);
-  const termsContentRef = React.useRef<HTMLDivElement | null>(null);
   const isSpecialOfferActive = Boolean(normalizedOfferToken && specialOfferRule);
   const eventTypeLocked = isSpecialOfferActive && specialOfferRule?.eventTypeLocked === true;
   const packageLocked = isSpecialOfferActive && specialOfferRule?.packageLocked === true;
@@ -978,6 +977,7 @@ export function BookingFormClient({
     [effectiveVendor.form_terms_content],
   );
   const hasTerms = effectiveVendor.form_terms_enabled && !isRichTextEmpty(termsContent);
+  const canAcceptTerms = termsViewedOnce;
   const proofRequired =
     effectiveVendor.form_show_proof !== false &&
     Boolean(selectedPaymentMethod) &&
@@ -998,49 +998,24 @@ export function BookingFormClient({
     [services],
   );
 
-  function syncTermsCanBeAccepted(container: HTMLDivElement | null = termsContentRef.current) {
-    if (!container) return;
-
-    const thresholdPx = 8;
-    const canUnlock =
-      container.scrollHeight <= container.clientHeight + thresholdPx ||
-      container.scrollTop + container.clientHeight >=
-        container.scrollHeight - thresholdPx;
-
-    if (canUnlock) {
-      setTermsCanBeAccepted(true);
+  const handleTermsDialogOpenChange = React.useCallback((open: boolean) => {
+    setTermsDialogOpen(open);
+    if (open) {
+      setTermsViewedOnce(true);
     }
-  }
-
-  function handleTermsContentScroll(event: React.UIEvent<HTMLDivElement>) {
-    syncTermsCanBeAccepted(event.currentTarget);
-  }
+  }, []);
 
   React.useEffect(() => {
     if (!hasTerms) {
       setTermsAccepted(false);
-      setTermsCanBeAccepted(false);
+      setTermsViewedOnce(false);
+      setTermsDialogOpen(false);
       return;
     }
 
     setTermsAccepted(false);
-    setTermsCanBeAccepted(false);
-  }, [hasTerms, termsContent]);
-
-  React.useEffect(() => {
-    if (!hasTerms || !termsDialogOpen || termsCanBeAccepted) return;
-
-    const container = termsContentRef.current;
-    if (!container) return;
-
-    syncTermsCanBeAccepted(container);
-
-    const frameId = window.requestAnimationFrame(() => {
-      syncTermsCanBeAccepted(container);
-    });
-
-    return () => window.cancelAnimationFrame(frameId);
-  }, [hasTerms, termsCanBeAccepted, termsDialogOpen, termsContent]);
+    setTermsViewedOnce(false);
+  }, [hasTerms]);
   const filteredServices = !eventType
     ? []
     : showAllActivePackages
@@ -1817,17 +1792,19 @@ export function BookingFormClient({
               selectedSource={selectedPaymentSource}
               onSelectMethod={setSelectedPaymentMethod}
               onSelectSource={setSelectedPaymentSource}
-              bankAccounts={enabledBankAccounts}
-              qrisImageUrl={effectiveVendor.qris_image_url}
-              brandColor={brandColor}
-              labels={{
-                methodLabel: `${t("paymentMethod")} *`,
-                bankLabel: `${t("paymentSourceBank")} *`,
-                bankEmpty: t("paymentNoBank"),
-                qrisLabel: t("paymentSourceQris"),
-                cashNote: t("paymentCashNote"),
-                accountNumberLabel: t("accountNumberLabel"),
-                copyLabel: t("copyLabel"),
+                bankAccounts={enabledBankAccounts}
+                qrisImageUrl={effectiveVendor.qris_image_url}
+                brandColor={brandColor}
+                labels={{
+                  methodLabel: `${t("paymentMethod")} *`,
+                  bankLabel: `${t("paymentSourceBank")} *`,
+                  bankEmpty: t("paymentNoBank"),
+                  qrisLabel: t("paymentSourceQris"),
+                  qrisEmpty: t("paymentNoQris"),
+                  qrisLoadError: t("qrisLoadError"),
+                  cashNote: t("paymentCashNote"),
+                  accountNumberLabel: t("accountNumberLabel"),
+                  copyLabel: t("copyLabel"),
                 copiedLabel: t("copiedLabel"),
                 bankDescriptions: {
                   bank: t("paymentMethodBankDesc"),
@@ -1994,7 +1971,7 @@ export function BookingFormClient({
                 <input
                   id="booking-terms"
                   type="checkbox"
-                  disabled={!termsCanBeAccepted}
+                  disabled={!canAcceptTerms}
                   checked={termsAccepted}
                   onChange={(e) => {
                     setTermsAccepted(e.target.checked);
@@ -2012,7 +1989,7 @@ export function BookingFormClient({
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      setTermsDialogOpen(true);
+                      handleTermsDialogOpenChange(true);
                     }}
                     className="inline-flex items-center gap-1 font-semibold text-primary underline underline-offset-4 cursor-pointer"
                   >
@@ -2022,7 +1999,7 @@ export function BookingFormClient({
                   {termsSuffixText ? ` ${termsSuffixText}` : ""}
                 </label>
               </div>
-              {!termsCanBeAccepted && (
+              {!canAcceptTerms && (
                 <p className="text-xs text-muted-foreground">
                   {t("termsReadHint")}
                 </p>
@@ -2205,7 +2182,7 @@ export function BookingFormClient({
         </Dialog>
 
         {hasTerms && (
-          <Dialog open={termsDialogOpen} onOpenChange={setTermsDialogOpen}>
+          <Dialog open={termsDialogOpen} onOpenChange={handleTermsDialogOpenChange}>
             <DialogContent className="sm:max-w-2xl flex max-h-[85vh] flex-col overflow-hidden overflow-y-hidden">
               <DialogHeader>
                 <DialogTitle>{termsLinkText}</DialogTitle>
@@ -2214,8 +2191,6 @@ export function BookingFormClient({
                 </DialogDescription>
               </DialogHeader>
               <div
-                ref={termsContentRef}
-                onScroll={handleTermsContentScroll}
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border bg-muted/20 p-4 text-sm leading-6 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:italic [&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:ml-5 [&_li]:list-item [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5"
                 style={{ WebkitOverflowScrolling: "touch" }}
                 dangerouslySetInnerHTML={{ __html: termsContent }}

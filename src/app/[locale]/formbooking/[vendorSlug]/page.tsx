@@ -16,6 +16,8 @@ import {
   normalizeSpecialOfferToken,
 } from "@/lib/booking-special-offer";
 
+export const dynamic = "force-dynamic";
+
 type RawVendor = {
   id: string;
   studio_name: string | null;

@@ -122,6 +122,7 @@
         "paymentMethodBankDescSingle": "Transfer via {bank}",
         "paymentNoBank": "No active bank accounts are available for this booking form.",
         "paymentNoQris": "QRIS is not available yet.",
+        "qrisLoadError": "The QRIS image could not be loaded on this device. Try refreshing the page or contact the admin.",
         "paymentCashNote": "Cash payments do not require payment proof upload.",
         "buktiPembayaran": "Payment Proof",
         "paymentProofBankHint": "Upload payment proof after completing the bank transfer.",
@@ -162,7 +163,7 @@
         "termsAgreementDefault": "I have read and agree to the",
         "termsLinkDefault": "Terms & Conditions",
         "termsDialogDescription": "Please read the following terms and conditions before continuing your booking.",
-        "termsReadHint": "Open the Terms & Conditions link and scroll to the bottom to enable the consent checkbox.",
+        "termsReadHint": "Open the Terms & Conditions link once to enable the consent checkbox.",
         "tutup": "Close"
     },
     "Bookings": {
@@ -1002,6 +1003,8 @@
         "bankAccount": "Choose Bank Account",
         "bankEmpty": "No active bank accounts are available.",
         "qris": "QRIS",
+        "qrisEmpty": "QRIS is not available yet.",
+        "qrisLoadError": "The QRIS image could not be loaded on this device. Try refreshing the page or contact the admin.",
         "paymentMethodBankDesc": "Choose a bank account for payment",
         "paymentMethodQrisDesc": "Pay by scanning QRIS",
         "paymentMethodCashDesc": "Pay in cash to the admin",

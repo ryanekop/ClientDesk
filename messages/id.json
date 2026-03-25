@@ -122,6 +122,7 @@
         "paymentMethodBankDescSingle": "Transfer via {bank}",
         "paymentNoBank": "Belum ada rekening bank aktif untuk form booking ini.",
         "paymentNoQris": "QRIS belum tersedia.",
+        "qrisLoadError": "Gambar QRIS gagal dimuat di perangkat ini. Coba refresh halaman atau hubungi admin.",
         "paymentCashNote": "Pembayaran cash tidak memerlukan upload bukti pembayaran.",
         "buktiPembayaran": "Bukti Pembayaran",
         "paymentProofBankHint": "Wajib upload bukti pembayaran setelah transfer bank.",
@@ -162,7 +163,7 @@
         "termsAgreementDefault": "Saya telah membaca & setuju terhadap",
         "termsLinkDefault": "Syarat & Ketentuan",
         "termsDialogDescription": "Silakan baca syarat dan ketentuan berikut sebelum melanjutkan booking.",
-        "termsReadHint": "Buka tautan Syarat & Ketentuan lalu scroll sampai bawah untuk mengaktifkan checklist persetujuan.",
+        "termsReadHint": "Buka tautan Syarat & Ketentuan sekali untuk mengaktifkan checklist persetujuan.",
         "tutup": "Tutup"
     },
     "Bookings": {
@@ -1002,6 +1003,8 @@
         "bankAccount": "Pilih Rekening",
         "bankEmpty": "Belum ada rekening aktif yang tersedia.",
         "qris": "QRIS",
+        "qrisEmpty": "QRIS belum tersedia.",
+        "qrisLoadError": "Gambar QRIS gagal dimuat di perangkat ini. Coba refresh halaman atau hubungi admin.",
         "paymentMethodBankDesc": "Pilih bank tujuan pembayaran",
         "paymentMethodQrisDesc": "Bayar dengan scan QRIS",
         "paymentMethodCashDesc": "Bayar tunai saat bertemu admin",

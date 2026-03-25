@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   Copy,
   CreditCard,
+  ImageOff,
   QrCode,
 } from "lucide-react";
 import {
@@ -31,6 +32,8 @@ type PaymentMethodSectionProps = {
     bankLabel: string;
     bankEmpty: string;
     qrisLabel: string;
+    qrisEmpty: string;
+    qrisLoadError: string;
     cashNote: string;
     accountNumberLabel: string;
     copyLabel: string;
@@ -51,6 +54,7 @@ export function PaymentMethodSection({
   labels,
 }: PaymentMethodSectionProps) {
   const [copiedAccount, setCopiedAccount] = React.useState<string | null>(null);
+  const [qrisImageFailed, setQrisImageFailed] = React.useState(false);
   const desktopGridClass =
     methods.length <= 1
       ? "md:grid-cols-1"
@@ -71,6 +75,10 @@ export function PaymentMethodSection({
       setCopiedAccount(null);
     }
   }
+
+  React.useEffect(() => {
+    setQrisImageFailed(false);
+  }, [qrisImageUrl]);
 
   return (
     <div className="space-y-5">
@@ -248,15 +256,23 @@ export function PaymentMethodSection({
             }}
           >
             <div className="flex min-h-64 items-center justify-center rounded-xl bg-background/90 p-6">
-              {qrisImageUrl ? (
+              {qrisImageUrl && !qrisImageFailed ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={qrisImageUrl}
                   alt="QRIS"
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                  onError={() => setQrisImageFailed(true)}
                   className="max-h-[22rem] w-full object-contain"
                 />
               ) : (
-                <p className="text-sm text-muted-foreground">{labels.bankEmpty}</p>
+                <div className="max-w-sm space-y-2 text-center text-sm text-muted-foreground">
+                  {qrisImageUrl ? (
+                    <ImageOff className="mx-auto h-5 w-5" aria-hidden="true" />
+                  ) : null}
+                  <p>{qrisImageUrl ? labels.qrisLoadError : labels.qrisEmpty}</p>
+                </div>
               )}
             </div>
           </div>

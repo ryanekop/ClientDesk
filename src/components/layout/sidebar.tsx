@@ -101,7 +101,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
             {/* Mobile Drawer Overlay */}
             <div
                 className={cn(
-                    "fixed inset-0 z-40 bg-black/50 md:hidden transition-all duration-300 ease-in-out",
+                    "fixed inset-x-0 bottom-0 top-[var(--global-announcement-height)] z-[70] bg-black/50 md:hidden transition-all duration-300 ease-in-out",
                     isOpen ? "opacity-100 visible" : "opacity-0 invisible"
                 )}
                 onClick={() => setIsOpen(false)}
@@ -109,7 +109,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
 
             <aside
                 className={cn(
-                    "fixed inset-y-0 left-0 z-40 bg-background shadow-[1px_0_5px_rgba(0,0,0,0.02)] transition-all duration-300 ease-in-out md:static flex flex-col overflow-hidden whitespace-nowrap",
+                    "fixed bottom-0 left-0 top-[var(--global-announcement-height)] z-[80] h-[calc(100dvh-var(--global-announcement-height))] bg-background shadow-[1px_0_5px_rgba(0,0,0,0.02)] transition-all duration-300 ease-in-out md:static md:top-auto md:bottom-auto md:z-auto md:h-auto flex flex-col overflow-hidden whitespace-nowrap",
                     isCollapsed ? "w-16" : "w-64",
                     isOpen ? "translate-x-0 w-64" : "-translate-x-full md:translate-x-0"
                 )}

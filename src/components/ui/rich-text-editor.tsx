@@ -37,6 +37,11 @@ type ToolbarButtonProps = {
   children: React.ReactNode;
 };
 
+function normalizeEditorHtml(value: string) {
+  const sanitized = sanitizeRichTextHtml(value);
+  return isRichTextEmpty(sanitized) ? "" : sanitized;
+}
+
 function ToolbarButton({
   active = false,
   disabled = false,
@@ -67,7 +72,7 @@ export function RichTextEditor({
   placeholder = "Tulis konten...",
   disabled = false,
 }: RichTextEditorProps) {
-  const [initialContent] = React.useState(() => sanitizeRichTextHtml(value));
+  const [initialContent] = React.useState(() => normalizeEditorHtml(value));
   const lastAppliedValueRef = React.useRef<string>(initialContent);
 
   const editor = useEditor({
@@ -85,18 +90,20 @@ export function RichTextEditor({
     content: initialContent,
     editable: !disabled,
     onUpdate: ({ editor: currentEditor }) => {
-      lastAppliedValueRef.current = currentEditor.getHTML();
+      const normalized = normalizeEditorHtml(currentEditor.getHTML());
+      lastAppliedValueRef.current = normalized;
+      onChange(normalized);
     },
     onBlur: ({ editor: currentEditor }) => {
       const html = currentEditor.getHTML();
-      const sanitized = sanitizeRichTextHtml(html);
+      const normalized = normalizeEditorHtml(html);
 
-      if (sanitized !== html) {
-        currentEditor.commands.setContent(sanitized, { emitUpdate: false });
+      if (normalized !== html) {
+        currentEditor.commands.setContent(normalized, { emitUpdate: false });
       }
 
-      lastAppliedValueRef.current = sanitized;
-      onChange(isRichTextEmpty(sanitized) ? "" : sanitized);
+      lastAppliedValueRef.current = normalized;
+      onChange(normalized);
     },
     editorProps: {
       attributes: {
@@ -115,11 +122,11 @@ export function RichTextEditor({
     if (!editor) return;
     if (editor.isFocused) return;
 
-    const sanitized = sanitizeRichTextHtml(value);
-    if (sanitized === sanitizeRichTextHtml(lastAppliedValueRef.current)) return;
+    const normalized = normalizeEditorHtml(value);
+    if (normalized === lastAppliedValueRef.current) return;
 
-    lastAppliedValueRef.current = sanitized;
-    editor.commands.setContent(sanitized, { emitUpdate: false });
+    lastAppliedValueRef.current = normalized;
+    editor.commands.setContent(normalized, { emitUpdate: false });
   }, [editor, value]);
 
   if (!editor) {

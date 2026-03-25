@@ -689,6 +689,8 @@ export default function SettlementClient({
                 bankLabel: t("bankAccount"),
                 bankEmpty: t("bankEmpty"),
                 qrisLabel: t("qris"),
+                qrisEmpty: t("qrisEmpty"),
+                qrisLoadError: t("qrisLoadError"),
                 cashNote: t("cashInfo"),
                 accountNumberLabel: t("accountNumberLabel"),
                 copyLabel: t("copyLabel"),
