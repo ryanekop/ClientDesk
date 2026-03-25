@@ -111,12 +111,6 @@ export function getEventTypeSettings({
     normalizedActive.length > 0
       ? normalizedActive.filter((item) => allEventTypes.includes(item))
       : [...allEventTypes];
-  if (
-    allEventTypes.includes(PUBLIC_CUSTOM_EVENT_TYPE) &&
-    !activeOrder.includes(PUBLIC_CUSTOM_EVENT_TYPE)
-  ) {
-    activeOrder.push(PUBLIC_CUSTOM_EVENT_TYPE);
-  }
   const activeSet = new Set(activeOrder);
   const inactive = allEventTypes.filter((item) => !activeSet.has(item));
   const ordered = [...activeOrder, ...inactive];

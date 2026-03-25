@@ -1569,18 +1569,18 @@ export default function BookingsPage() {
                                 {canWriteBookings ? (
                                     <Link
                                         href="/bookings/new"
-                                        className="inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-medium"
+                                        className="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap px-2.5 text-[13px] font-medium"
                                     >
-                                        <Plus className="w-4 h-4" /> {tb("addClient")}
+                                        <Plus className="h-4 w-4 shrink-0" /> {tb("addClientShort")}
                                     </Link>
                                 ) : (
                                     <button
                                         type="button"
                                         disabled
                                         title={bookingWriteBlockedMessage}
-                                        className="inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                                        className="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap px-2.5 text-[13px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
                                     >
-                                        <Plus className="w-4 h-4" /> {tb("addClient")}
+                                        <Plus className="h-4 w-4 shrink-0" /> {tb("addClientShort")}
                                     </button>
                                 )}
                                 <button

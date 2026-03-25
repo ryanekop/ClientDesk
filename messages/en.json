@@ -639,6 +639,7 @@
     },
     "BookingsPage": {
         "addClient": "Add New Client",
+        "addClientShort": "Add Client",
         "export": "Export",
         "moreActions": "More Actions",
         "allStatus": "All Statuses",

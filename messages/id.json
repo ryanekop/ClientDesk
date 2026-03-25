@@ -639,6 +639,7 @@
     },
     "BookingsPage": {
         "addClient": "Tambah Klien Baru",
+        "addClientShort": "Tambah Klien",
         "export": "Export",
         "moreActions": "Aksi Lainnya",
         "allStatus": "Semua Status",

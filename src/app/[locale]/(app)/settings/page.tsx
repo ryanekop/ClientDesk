@@ -773,11 +773,10 @@ export default function SettingsPage() {
   const eventTypeItems = React.useMemo<SortableConfigItem[]>(
     () =>
       eventTypeSettings.map((item) => {
-        const isCustomShowAll = item.name === PUBLIC_CUSTOM_EVENT_TYPE;
         return {
           id: item.name,
           label: item.name,
-          active: isCustomShowAll ? undefined : item.active,
+          active: item.active,
           editable: !item.builtIn,
           removable: !item.builtIn,
           badge: item.builtIn ? (
@@ -821,12 +820,7 @@ export default function SettingsPage() {
       orderedNames.filter((name) => prev.includes(name)),
     );
     setActiveEventTypes((prev) =>
-      Array.from(
-        new Set([
-          ...orderedNames.filter((name) => prev.includes(name)),
-          PUBLIC_CUSTOM_EVENT_TYPE,
-        ]),
-      ),
+      orderedNames.filter((name) => prev.includes(name)),
     );
   }
 
@@ -878,20 +872,13 @@ export default function SettingsPage() {
   }
 
   function toggleEventTypeActive(name: string) {
-    if (name === PUBLIC_CUSTOM_EVENT_TYPE) return;
     setActiveEventTypes((prev) =>
       prev.includes(name)
-        ? Array.from(
-            new Set([
-              ...prev.filter((item) => item !== name),
-              PUBLIC_CUSTOM_EVENT_TYPE,
-            ]),
-          )
+        ? prev.filter((item) => item !== name)
         : [
             ...eventTypeSettings
             .map((item) => item.name)
             .filter((item) => item === name || prev.includes(item)),
-            PUBLIC_CUSTOM_EVENT_TYPE,
           ],
     );
   }
@@ -900,12 +887,7 @@ export default function SettingsPage() {
     if (name === PUBLIC_CUSTOM_EVENT_TYPE) return;
     setCustomEventTypes((prev) => prev.filter((item) => item !== name));
     setActiveEventTypes((prev) =>
-      Array.from(
-        new Set([
-          ...prev.filter((item) => item !== name),
-          PUBLIC_CUSTOM_EVENT_TYPE,
-        ]),
-      ),
+      prev.filter((item) => item !== name),
     );
     setCalendarEventFormats((prev) => {
       const next = { ...prev };
@@ -1639,9 +1621,7 @@ export default function SettingsPage() {
       const normalizedCustomEventTypes = mergeCustomEventTypes(customEventTypes);
       const normalizedActiveEventTypes = getActiveEventTypes({
         customEventTypes: normalizedCustomEventTypes,
-        activeEventTypes: Array.from(
-          new Set([...activeEventTypes, PUBLIC_CUSTOM_EVENT_TYPE]),
-        ),
+        activeEventTypes,
       });
       await saveProfilePatch({
         form_event_types: normalizedActiveEventTypes,
@@ -4039,13 +4019,7 @@ export default function SettingsPage() {
                       if (!value || availableEventTypes.includes(value)) return;
                       setCustomEventTypes((prev) => [...prev, value]);
                       setActiveEventTypes((prev) =>
-                        Array.from(
-                          new Set([
-                            ...prev,
-                            value,
-                            PUBLIC_CUSTOM_EVENT_TYPE,
-                          ]),
-                        ),
+                        Array.from(new Set([...prev, value])),
                       );
                       setNewCustomEventType("");
                     }}
@@ -4060,13 +4034,7 @@ export default function SettingsPage() {
                       if (!value || availableEventTypes.includes(value)) return;
                       setCustomEventTypes((prev) => [...prev, value]);
                       setActiveEventTypes((prev) =>
-                        Array.from(
-                          new Set([
-                            ...prev,
-                            value,
-                            PUBLIC_CUSTOM_EVENT_TYPE,
-                          ]),
-                        ),
+                        Array.from(new Set([...prev, value])),
                       );
                       setNewCustomEventType("");
                     }}
