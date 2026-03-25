@@ -18,6 +18,7 @@ import {
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import { UpcomingBookingCard } from "@/components/dashboard/dashboard-widgets";
 import { DashboardChangelogPopup } from "@/components/changelog-modal";
+import { CustomDomainPromo } from "@/components/dashboard/custom-domain-promo";
 import { getTranslations, getLocale } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import type { ChangelogEntry } from "@/lib/changelog";
@@ -280,6 +281,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <DashboardChangelogPopup entries={changelogEntries} locale={locale} />
+      <CustomDomainPromo />
 
       {/* Header */}
       <div>
