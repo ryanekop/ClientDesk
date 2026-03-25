@@ -55,9 +55,11 @@ import {
     UNIVERSITY_EXTRA_FIELD_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
+import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 
 type VendorRecord = {
     id: string;
+    vendor_slug?: string | null;
     studio_name?: string | null;
     whatsapp_number?: string | null;
     min_dp_percent?: number | null;
@@ -201,6 +203,7 @@ function extractMissingColumnFromSupabaseError(
 
 const VENDOR_SELECT_COLUMNS = [
     "id",
+    "vendor_slug",
     "studio_name",
     "whatsapp_number",
     "min_dp_percent",
@@ -1114,6 +1117,13 @@ export async function POST(request: NextRequest) {
         } catch {
             bookingConfirmTemplate = null;
         }
+
+        invalidatePublicCachesForBooking({
+            bookingCode: booking.booking_code,
+            trackingUuid: null,
+            userId: vendor.id,
+            vendorSlug: vendor.vendor_slug || null,
+        });
 
         return NextResponse.json({
             success: true,

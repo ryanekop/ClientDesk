@@ -13,8 +13,10 @@ import {
   getSettlementStatus,
 } from "@/lib/final-settlement";
 import { uploadPaymentProofToDrive } from "@/lib/payment-proof-drive";
+import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 
 type VendorRecord = {
+  vendor_slug: string | null;
   qris_image_url: string | null;
   qris_drive_file_id: string | null;
   form_payment_methods: PaymentMethod[] | null;
@@ -112,7 +114,7 @@ export async function POST(request: NextRequest) {
 
     const { data: vendor } = await supabaseAdmin
       .from("profiles")
-      .select("qris_image_url, qris_drive_file_id, form_payment_methods, settlement_form_payment_methods, form_show_proof, bank_accounts, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, studio_name")
+      .select("vendor_slug, qris_image_url, qris_drive_file_id, form_payment_methods, settlement_form_payment_methods, form_show_proof, bank_accounts, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, studio_name")
       .eq("id", booking.user_id)
       .single();
 
@@ -259,6 +261,13 @@ export async function POST(request: NextRequest) {
         { status: 500 },
       );
     }
+
+    invalidatePublicCachesForBooking({
+      bookingCode: booking.booking_code,
+      trackingUuid,
+      userId: booking.user_id,
+      vendorSlug: vendorRecord.vendor_slug || null,
+    });
 
     return NextResponse.json({ success: true });
   } catch {

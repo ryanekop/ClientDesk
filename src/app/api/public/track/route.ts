@@ -11,7 +11,6 @@ import {
     shouldShowTrackingFileLinksForClientStatus,
     shouldShowFinalInvoiceForClientStatus,
 } from "@/lib/client-status";
-import { normalizeFastpikLinkDisplayMode } from "@/lib/fastpik-link-display";
 import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
 import { resolveFastpikProjectInfoFromExtraFields } from "@/lib/fastpik-project-info";
 import {
@@ -19,24 +18,12 @@ import {
     type FastpikLiveBookingFields,
 } from "@/lib/fastpik-live-sync";
 import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
+import { getTrackBasePayloadCached } from "@/lib/public-track-data";
 
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-
-type ProfileTrackDisplayRow = {
-    studio_name: string | null;
-    custom_client_statuses: string[] | null;
-    final_invoice_visible_from_status: string | null;
-    tracking_file_links_visible_from_status?: string | null;
-    fastpik_link_display_mode: "both" | "prefer_fastpik" | "drive_only" | null;
-    fastpik_link_display_mode_tracking?:
-        | "both"
-        | "prefer_fastpik"
-        | "drive_only"
-        | null;
-};
 
 export async function GET(request: NextRequest) {
     const uuid = request.nextUrl.searchParams.get("uuid");
@@ -44,58 +31,30 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: false, error: "uuid required" }, { status: 400 });
     }
 
-    const { data: booking } = await supabaseAdmin
-        .from("bookings")
-        .select("id, user_id, booking_code, tracking_uuid, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, location, extra_fields, services(name), created_at")
-        .eq("tracking_uuid", uuid)
-        .single();
-
-    if (!booking) {
+    const locale = request.nextUrl.searchParams.get("locale") || "id";
+    const basePayload = await getTrackBasePayloadCached(uuid, locale);
+    if (!basePayload) {
         return NextResponse.json({ success: false, error: "Booking not found" }, { status: 404 });
     }
 
-    const locale = request.nextUrl.searchParams.get("locale") || "id";
+    const {
+        booking: cachedBooking,
+        vendorName,
+        customClientStatuses,
+        finalInvoiceVisibleFromStatus,
+        trackingFileLinksVisibleFromStatus,
+        fastpikLinkDisplayMode: profileLinkMode,
+    } = basePayload;
+
     const liveFastpikResult = await hydrateFastpikLiveData({
         supabase: supabaseAdmin,
-        booking: booking as FastpikLiveBookingFields,
+        booking: cachedBooking as FastpikLiveBookingFields,
         locale,
     });
     const effectiveBooking = {
-        ...booking,
+        ...cachedBooking,
         ...liveFastpikResult.booking,
     };
-
-    let vendorName = "";
-    let customClientStatuses: string[] | null = null;
-    let finalInvoiceVisibleFromStatus: string | null = null;
-    let trackingFileLinksVisibleFromStatus: string | null = null;
-    let profileLinkMode: "both" | "prefer_fastpik" | "drive_only" =
-        "prefer_fastpik";
-    if (effectiveBooking?.user_id) {
-        const { data: profileWithSplitMode, error: profileWithSplitModeError } = await supabaseAdmin
-            .from("profiles")
-            .select("studio_name, custom_client_statuses, final_invoice_visible_from_status, tracking_file_links_visible_from_status, fastpik_link_display_mode, fastpik_link_display_mode_tracking")
-            .eq("id", effectiveBooking.user_id)
-            .single();
-        let v = profileWithSplitMode as ProfileTrackDisplayRow | null;
-        if (!v && profileWithSplitModeError) {
-            const { data: legacyProfile } = await supabaseAdmin
-                .from("profiles")
-                .select("studio_name, custom_client_statuses, final_invoice_visible_from_status, tracking_file_links_visible_from_status, fastpik_link_display_mode")
-                .eq("id", effectiveBooking.user_id)
-                .single();
-            v = legacyProfile as ProfileTrackDisplayRow | null;
-        }
-        vendorName = v?.studio_name || "";
-        customClientStatuses = (v?.custom_client_statuses as string[] | null) || null;
-        finalInvoiceVisibleFromStatus = v?.final_invoice_visible_from_status || null;
-        trackingFileLinksVisibleFromStatus =
-            v?.tracking_file_links_visible_from_status || null;
-        profileLinkMode = normalizeFastpikLinkDisplayMode(
-            v?.fastpik_link_display_mode_tracking ??
-                v?.fastpik_link_display_mode,
-        );
-    }
 
     const finalAdjustments = normalizeFinalAdjustments(effectiveBooking.final_adjustments);
     const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(effectiveBooking.extra_fields);
@@ -117,7 +76,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
         success: true,
         booking: {
-            bookingCode: booking.booking_code,
+            bookingCode: effectiveBooking.booking_code,
             trackingUuid: effectiveBooking.tracking_uuid,
             clientName: effectiveBooking.client_name,
             sessionDate: effectiveBooking.session_date,

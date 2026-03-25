@@ -78,6 +78,18 @@ export default function ProfilePage() {
         }
     });
 
+    const invalidateProfilePublicCache = React.useEffectEvent(async () => {
+        try {
+            await fetch("/api/internal/cache/invalidate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ scope: "profile" }),
+            });
+        } catch {
+            // Best effort cache invalidation.
+        }
+    });
+
     const saveProfilePatch = React.useEffectEvent(async (patch: Record<string, unknown>) => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
@@ -90,6 +102,8 @@ export default function ProfilePage() {
         if (error) {
             throw error;
         }
+
+        await invalidateProfilePublicCache();
     });
 
     async function fetchProfile() {
@@ -180,22 +194,36 @@ export default function ProfilePage() {
         e.target.value = ""; // reset so same file can be selected again
     }
 
-    // After crop, save as base64 data URI
+    // After crop, upload to public storage and save URL in profile
     async function handleCroppedAvatar(blob: Blob) {
         setShowCrop(false);
         setCropSrc(null);
         if (!userId) return;
 
         try {
-            const reader = new FileReader();
-            reader.onload = async () => {
-                const base64 = reader.result as string;
-                await saveProfilePatch({
-                    avatar_url: base64,
-                });
-                setAvatarUrl(base64);
-            };
-            reader.readAsDataURL(blob);
+            const extension = blob.type === "image/png" ? "png" : "jpg";
+            const uploadFile = new File(
+                [blob],
+                `avatar-${Date.now()}.${extension}`,
+                { type: blob.type || "image/jpeg" },
+            );
+            const formData = new FormData();
+            formData.append("assetType", "avatar");
+            formData.append("file", uploadFile);
+
+            const response = await fetch("/api/profile/branding-upload", {
+                method: "POST",
+                body: formData,
+            });
+            const payload = (await response.json().catch(() => null)) as
+                | { success?: boolean; url?: string; error?: string }
+                | null;
+
+            if (!response.ok || !payload?.url) {
+                throw new Error(payload?.error || "Gagal menyimpan foto.");
+            }
+
+            setAvatarUrl(payload.url);
         } catch {
             showFeedback("Gagal menyimpan foto.");
         }

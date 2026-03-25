@@ -1032,6 +1032,18 @@ export default function SettingsPage() {
     }
   });
 
+  const invalidateProfilePublicCache = React.useEffectEvent(async () => {
+    try {
+      await fetch("/api/internal/cache/invalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "profile" }),
+      });
+    } catch {
+      // Best effort cache invalidation.
+    }
+  });
+
   const fetchAll = React.useEffectEvent(async (silent?: boolean) => {
     // Jika silent=true, skip loading spinner — untuk background refresh setelah save
     if (!silent) setLoading(true);
@@ -1334,6 +1346,7 @@ export default function SettingsPage() {
           .eq("id", user.id);
 
         if (!error) {
+          await invalidateProfilePublicCache();
           return;
         }
 
@@ -2063,16 +2076,37 @@ export default function SettingsPage() {
     if (!profile?.id) return;
     setLogoUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = reader.result as string;
-        await saveProfilePatch({ invoice_logo_url: base64 });
-        setLogoUrl(base64);
-        setLogoUploading(false);
-      };
-      reader.readAsDataURL(blob);
+      const extension =
+        blob.type === "image/png"
+          ? "png"
+          : blob.type === "image/webp"
+            ? "webp"
+            : "jpg";
+      const uploadFile = new File(
+        [blob],
+        `invoice-logo-${Date.now()}.${extension}`,
+        { type: blob.type || "image/jpeg" },
+      );
+      const formData = new FormData();
+      formData.append("assetType", "invoice_logo");
+      formData.append("file", uploadFile);
+
+      const response = await fetch("/api/profile/branding-upload", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { success?: boolean; url?: string; error?: string }
+        | null;
+
+      if (!response.ok || !payload?.url) {
+        throw new Error(payload?.error || "Gagal menyimpan logo.");
+      }
+
+      setLogoUrl(payload.url);
     } catch {
       showFeedback("Gagal menyimpan logo.");
+    } finally {
       setLogoUploading(false);
     }
   }

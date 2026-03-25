@@ -6,45 +6,13 @@ import {
 } from "./booking-form-client";
 import type { Metadata } from "next";
 import {
-  normalizeBankAccounts,
-  normalizePaymentMethods,
-  resolveDriveImageUrl,
-} from "@/lib/payment-config";
-import {
   isBookingSpecialLinkAvailable,
   normalizeBookingSpecialLinkRule,
   normalizeSpecialOfferToken,
 } from "@/lib/booking-special-offer";
+import { getVendorPublicPayloadCached } from "@/lib/public-vendor-data";
 
 export const dynamic = "force-dynamic";
-
-type RawVendor = {
-  id: string;
-  studio_name: string | null;
-  whatsapp_number: string | null;
-  min_dp_percent: number | null;
-  min_dp_map: Record<string, number | { mode: string; value: number }> | null;
-  avatar_url: string | null;
-  invoice_logo_url: string | null;
-  form_brand_color: string | null;
-  form_greeting: string | null;
-  form_event_types: string[] | null;
-  custom_event_types: string[] | null;
-  form_show_location: boolean | null;
-  form_show_notes: boolean | null;
-  form_show_addons: boolean | null;
-  form_show_proof: boolean | null;
-  form_terms_enabled: boolean | null;
-  form_terms_agreement_text: string | null;
-  form_terms_link_text: string | null;
-  form_terms_suffix_text: string | null;
-  form_terms_content: string | null;
-  form_sections: unknown[] | Record<string, unknown[]> | null;
-  form_payment_methods: string[] | null;
-  qris_image_url: string | null;
-  qris_drive_file_id: string | null;
-  bank_accounts: Vendor["bank_accounts"] | null;
-};
 
 // Admin client — runs server-side only, never exposed to browser
 const supabaseAdmin = createClient(
@@ -62,15 +30,8 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { vendorSlug } = await params;
-
-  const { data: vendor } = (await supabaseAdmin
-    .from("profiles")
-    .select("studio_name, form_greeting")
-    .eq("vendor_slug", vendorSlug)
-    .single()) as {
-    data: Pick<RawVendor, "studio_name" | "form_greeting"> | null;
-    error: unknown;
-  };
+  const vendorPayload = await getVendorPublicPayloadCached(vendorSlug);
+  const vendor = vendorPayload?.vendor;
 
   if (!vendor) {
     return { title: "Form Booking" };
@@ -93,18 +54,8 @@ export default async function PublicBookingFormPage({
 }: PageProps) {
   const { vendorSlug } = await params;
 
-  // Fetch vendor data server-side (no useEffect, no API route needed for initial load)
-  const { data: vendor } = (await supabaseAdmin
-    .from("profiles")
-    .select(
-      "id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, " +
-        "avatar_url, invoice_logo_url, form_brand_color, form_greeting, " +
-        "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_addons, form_show_proof, " +
-        "form_terms_enabled, form_terms_agreement_text, form_terms_link_text, form_terms_suffix_text, form_terms_content, " +
-        "form_sections, form_payment_methods, qris_image_url, qris_drive_file_id, bank_accounts",
-    )
-    .eq("vendor_slug", vendorSlug)
-    .single()) as { data: RawVendor | null; error: unknown };
+  const vendorPayload = await getVendorPublicPayloadCached(vendorSlug);
+  const vendor = vendorPayload?.vendor || null;
 
   // Vendor tidak ditemukan — render langsung di server, tidak perlu client state
   if (!vendor) {
@@ -123,47 +74,11 @@ export default async function PublicBookingFormPage({
     );
   }
 
-  // Fetch services — bisa paralel karena kita sudah punya vendor.id dari query di atas
-  const { data: services } = (await supabaseAdmin
-    .from("services")
-    .select("id, name, price, original_price, description, event_types, is_addon, is_public, sort_order, created_at")
-    .eq("user_id", vendor.id)
-    .eq("is_active", true)
-    .eq("is_public", true)
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: true })) as { data: Service[] | null; error: unknown };
-
-  // Normalise tipe agar cocok dengan Vendor type di client component
-  const vendorData: Vendor = {
-    id: vendor.id,
-    studio_name: vendor.studio_name ?? null,
-    whatsapp_number: vendor.whatsapp_number ?? null,
-    min_dp_percent: vendor.min_dp_percent ?? null,
-    min_dp_map: (vendor.min_dp_map as Record<string, number | { mode: string; value: number }> | null) ?? null,
-    avatar_url: vendor.avatar_url ?? null,
-    invoice_logo_url: vendor.invoice_logo_url ?? null,
-    form_brand_color: vendor.form_brand_color ?? "#000000",
-    form_greeting: vendor.form_greeting ?? null,
-    form_event_types: (vendor.form_event_types as string[] | null) ?? null,
-    custom_event_types: (vendor.custom_event_types as string[]) ?? [],
-    form_show_location: vendor.form_show_location ?? true,
-    form_show_notes: vendor.form_show_notes ?? true,
-    form_show_addons: vendor.form_show_addons ?? true,
-    form_show_proof: vendor.form_show_proof ?? true,
-    form_terms_enabled: vendor.form_terms_enabled ?? false,
-    form_terms_agreement_text: vendor.form_terms_agreement_text ?? null,
-    form_terms_link_text: vendor.form_terms_link_text ?? null,
-    form_terms_suffix_text: vendor.form_terms_suffix_text ?? null,
-    form_terms_content: vendor.form_terms_content ?? null,
-    form_sections: (vendor.form_sections as Vendor["form_sections"]) ?? [],
-    form_payment_methods: normalizePaymentMethods(vendor.form_payment_methods),
-    qris_image_url: resolveDriveImageUrl(
-      vendor.qris_image_url,
-      vendor.qris_drive_file_id,
-      { vendorSlug },
-    ),
-    bank_accounts: normalizeBankAccounts(vendor.bank_accounts),
-  };
+  const vendorData = {
+    ...vendor,
+    min_dp_map: vendor.min_dp_map || {},
+    form_sections: vendor.form_sections || [],
+  } as Vendor;
 
   const resolvedSearchParams = searchParams ? await searchParams : null;
   const offerQueryValue = Array.isArray(resolvedSearchParams?.offer)
@@ -216,7 +131,7 @@ export default async function PublicBookingFormPage({
     <BookingFormClient
       vendorSlug={vendorSlug}
       vendor={vendorData}
-      services={(services ?? []) as Service[]}
+      services={(vendorPayload?.services || []) as Service[]}
       specialOfferToken={offerToken || null}
       specialOfferRule={specialOfferRule}
     />

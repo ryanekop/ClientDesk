@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { formatSessionDate } from "@/utils/format-date";
 import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
+import { getInvoicePayloadCached } from "@/lib/public-invoice-data";
 import {
   getFinalAdjustmentsTotal,
   getRemainingFinalPayment,
@@ -158,6 +159,45 @@ const labels: Record<string, Record<string, string>> = {
   },
 };
 
+async function resolveInvoiceLogoBytes(source: string) {
+  const trimmed = source.trim();
+  if (!trimmed) return null;
+
+  const dataUriMatch = trimmed.match(/^data:image\/(png|jpe?g|webp);base64,(.+)$/i);
+  if (dataUriMatch) {
+    const mime = dataUriMatch[1].toLowerCase();
+    const base64Payload = dataUriMatch[2];
+    if (mime === "webp") {
+      return null;
+    }
+    return {
+      bytes: Buffer.from(base64Payload, "base64"),
+      format: mime === "png" ? "png" : "jpg",
+    } as const;
+  }
+
+  try {
+    const response = await fetch(trimmed, { cache: "no-store" });
+    if (!response.ok) return null;
+    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    if (!contentType.startsWith("image/")) return null;
+    if (
+      !contentType.includes("png") &&
+      !contentType.includes("jpeg") &&
+      !contentType.includes("jpg")
+    ) {
+      return null;
+    }
+    const bytes = Buffer.from(await response.arrayBuffer());
+    return {
+      bytes,
+      format: contentType.includes("png") ? "png" : "jpg",
+    } as const;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const lang = request.nextUrl.searchParams.get("lang") || "id";
@@ -168,26 +208,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Booking code required" }, { status: 400 });
   }
 
-  const { data: booking, error } = await supabaseAdmin
-    .from("bookings")
-    .select(
-      "id, booking_code, client_name, client_whatsapp, booking_date, session_date, event_type, extra_fields, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, user_id, services(id, name, price, description, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, description, is_addon))",
-    )
-    .eq("booking_code", code)
-    .single();
-
-  if (!booking || error) {
+  const cachedPayload = await getInvoicePayloadCached(code, stage, lang);
+  if (!cachedPayload) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
-
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select("studio_name, invoice_logo_url")
-    .eq("id", booking.user_id)
-    .single();
+  const { booking, profile } = cachedPayload;
 
   const studioName = profile?.studio_name || "Studio";
-  const logoBase64 = profile?.invoice_logo_url || null;
+  const logoSource = profile?.invoice_logo_url || null;
   const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
   const adjustments = normalizeFinalAdjustments(booking.final_adjustments);
   const adjustmentsTotal = getFinalAdjustmentsTotal(adjustments);
@@ -469,28 +497,27 @@ export async function GET(request: NextRequest) {
   };
 
   let logoDrawn = false;
-  if (logoBase64) {
+  if (logoSource) {
     try {
-      const base64Data = logoBase64.replace(/^data:image\/(png|jpe?g);base64,/, "");
-      const imageBytes = Buffer.from(base64Data, "base64");
-      let image;
-      if (logoBase64.includes("image/png")) {
-        image = await pdfDoc.embedPng(imageBytes);
-      } else {
-        image = await pdfDoc.embedJpg(imageBytes);
+      const logoBytes = await resolveInvoiceLogoBytes(logoSource);
+      if (logoBytes) {
+        const image =
+          logoBytes.format === "png"
+            ? await pdfDoc.embedPng(logoBytes.bytes)
+            : await pdfDoc.embedJpg(logoBytes.bytes);
+        const maxW = 148;
+        const maxH = 52;
+        const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+        const drawW = image.width * scale;
+        const drawH = image.height * scale;
+        page.drawImage(image, {
+          x: MARGIN_X,
+          y: y - drawH + 22,
+          width: drawW,
+          height: drawH,
+        });
+        logoDrawn = true;
       }
-      const maxW = 148;
-      const maxH = 52;
-      const scale = Math.min(maxW / image.width, maxH / image.height, 1);
-      const drawW = image.width * scale;
-      const drawH = image.height * scale;
-      page.drawImage(image, {
-        x: MARGIN_X,
-        y: y - drawH + 22,
-        width: drawW,
-        height: drawH,
-      });
-      logoDrawn = true;
     } catch {
       logoDrawn = false;
     }

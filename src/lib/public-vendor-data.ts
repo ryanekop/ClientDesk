@@ -1,0 +1,248 @@
+import { unstable_cache } from "next/cache";
+import {
+  normalizeBankAccounts,
+  normalizePaymentMethods,
+  resolveDriveImageUrl,
+} from "@/lib/payment-config";
+import {
+  buildVendorCacheTag,
+  buildVendorUserCacheTag,
+} from "@/lib/public-cache-tags";
+import { createServiceClient } from "@/lib/supabase/service";
+
+type VendorStampRow = {
+  id: string;
+  vendor_slug: string | null;
+  updated_at: string | null;
+};
+
+type VendorProfileRow = {
+  id: string;
+  vendor_slug: string | null;
+  studio_name: string | null;
+  whatsapp_number: string | null;
+  min_dp_percent: number | null;
+  min_dp_map: Record<string, number | { mode: string; value: number }> | null;
+  avatar_url: string | null;
+  invoice_logo_url: string | null;
+  form_brand_color: string | null;
+  form_greeting: string | null;
+  form_event_types: string[] | null;
+  custom_event_types: string[] | null;
+  form_show_location: boolean | null;
+  form_show_notes: boolean | null;
+  form_show_addons: boolean | null;
+  form_show_proof: boolean | null;
+  form_terms_enabled: boolean | null;
+  form_terms_agreement_text: string | null;
+  form_terms_link_text: string | null;
+  form_terms_suffix_text: string | null;
+  form_terms_content: string | null;
+  form_sections: unknown[] | Record<string, unknown[]> | null;
+  form_payment_methods: string[] | null;
+  qris_image_url: string | null;
+  qris_drive_file_id: string | null;
+  bank_accounts: unknown[] | null;
+};
+
+type VendorServiceRow = {
+  id: string;
+  name: string;
+  price: number;
+  original_price: number | null;
+  description: string | null;
+  event_types: string[] | null;
+  is_addon: boolean;
+  is_public: boolean;
+  sort_order: number | null;
+  created_at: string;
+};
+
+export type PublicVendorPayload = {
+  vendor: {
+    id: string;
+    vendor_slug: string | null;
+    studio_name: string | null;
+    whatsapp_number: string | null;
+    min_dp_percent: number | null;
+    min_dp_map: Record<string, number | { mode: string; value: number }>;
+    avatar_url: string | null;
+    invoice_logo_url: string | null;
+    form_brand_color: string;
+    form_greeting: string | null;
+    form_event_types: string[] | null;
+    custom_event_types: string[];
+    form_show_location: boolean;
+    form_show_notes: boolean;
+    form_show_addons: boolean;
+    form_show_proof: boolean;
+    form_terms_enabled: boolean;
+    form_terms_agreement_text: string | null;
+    form_terms_link_text: string | null;
+    form_terms_suffix_text: string | null;
+    form_terms_content: string | null;
+    form_sections: unknown[] | Record<string, unknown[]>;
+    form_payment_methods: string[];
+    qris_image_url: string | null;
+    bank_accounts: ReturnType<typeof normalizeBankAccounts>;
+  };
+  services: VendorServiceRow[];
+};
+
+function normalizeSlug(slug: string | null | undefined) {
+  return (slug || "").trim();
+}
+
+async function fetchVendorStamp(args: {
+  vendorSlug: string;
+  tenantId?: string | null;
+}) {
+  const supabase = createServiceClient();
+  const selectVendorStamp = () =>
+    supabase
+      .from("profiles")
+      .select("id, vendor_slug, updated_at")
+      .eq("vendor_slug", args.vendorSlug);
+
+  if (args.tenantId) {
+    const { data, error } = await selectVendorStamp()
+      .eq("tenant_id", args.tenantId)
+      .maybeSingle<VendorStampRow>();
+    if (!error) {
+      return data || null;
+    }
+
+    if (!/tenant_id|column/i.test(error.message || "")) {
+      return null;
+    }
+  }
+
+  const { data } = await selectVendorStamp().maybeSingle<VendorStampRow>();
+  return data || null;
+}
+
+async function fetchVendorPayloadById(args: {
+  vendorId: string;
+  vendorSlugForQris: string;
+}) {
+  const supabase = createServiceClient();
+  const { data: vendorRaw } = await supabase
+    .from("profiles")
+    .select(
+      "id, vendor_slug, studio_name, whatsapp_number, min_dp_percent, min_dp_map, " +
+        "avatar_url, invoice_logo_url, form_brand_color, form_greeting, " +
+        "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_addons, form_show_proof, " +
+        "form_terms_enabled, form_terms_agreement_text, form_terms_link_text, form_terms_suffix_text, form_terms_content, " +
+        "form_sections, form_payment_methods, qris_image_url, qris_drive_file_id, bank_accounts",
+    )
+    .eq("id", args.vendorId)
+    .maybeSingle<VendorProfileRow>();
+
+  if (!vendorRaw) {
+    return null;
+  }
+
+  const { data: services } = await supabase
+    .from("services")
+    .select(
+      "id, name, price, original_price, description, event_types, is_addon, is_public, sort_order, created_at",
+    )
+    .eq("user_id", vendorRaw.id)
+    .eq("is_active", true)
+    .eq("is_public", true)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  const payload: PublicVendorPayload = {
+    vendor: {
+      id: vendorRaw.id,
+      vendor_slug: vendorRaw.vendor_slug ?? null,
+      studio_name: vendorRaw.studio_name ?? null,
+      whatsapp_number: vendorRaw.whatsapp_number ?? null,
+      min_dp_percent: vendorRaw.min_dp_percent ?? null,
+      min_dp_map: vendorRaw.min_dp_map || {},
+      avatar_url: vendorRaw.avatar_url ?? null,
+      invoice_logo_url: vendorRaw.invoice_logo_url ?? null,
+      form_brand_color: vendorRaw.form_brand_color || "#000000",
+      form_greeting: vendorRaw.form_greeting ?? null,
+      form_event_types: vendorRaw.form_event_types || null,
+      custom_event_types: vendorRaw.custom_event_types || [],
+      form_show_location: vendorRaw.form_show_location ?? true,
+      form_show_notes: vendorRaw.form_show_notes ?? true,
+      form_show_addons: vendorRaw.form_show_addons ?? true,
+      form_show_proof: vendorRaw.form_show_proof ?? true,
+      form_terms_enabled: vendorRaw.form_terms_enabled ?? false,
+      form_terms_agreement_text: vendorRaw.form_terms_agreement_text || null,
+      form_terms_link_text: vendorRaw.form_terms_link_text || null,
+      form_terms_suffix_text: vendorRaw.form_terms_suffix_text || null,
+      form_terms_content: vendorRaw.form_terms_content || null,
+      form_sections: vendorRaw.form_sections || [],
+      form_payment_methods: normalizePaymentMethods(vendorRaw.form_payment_methods),
+      qris_image_url: resolveDriveImageUrl(
+        vendorRaw.qris_image_url,
+        vendorRaw.qris_drive_file_id,
+        { vendorSlug: args.vendorSlugForQris },
+      ),
+      bank_accounts: normalizeBankAccounts(vendorRaw.bank_accounts),
+    },
+    services: (services || []) as VendorServiceRow[],
+  };
+
+  return payload;
+}
+
+async function getVendorPayloadByStamp(stamp: VendorStampRow, tenantId?: string | null) {
+  const normalizedSlug = normalizeSlug(stamp.vendor_slug);
+  const cacheKey = [
+    "public-vendor-payload",
+    tenantId ? tenantId.trim().toLowerCase() : "global",
+    normalizedSlug.toLowerCase(),
+    stamp.id,
+    stamp.updated_at || "no-updated-at",
+  ];
+
+  const cached = unstable_cache(
+    async () =>
+      fetchVendorPayloadById({
+        vendorId: stamp.id,
+        vendorSlugForQris: normalizedSlug,
+      }),
+    cacheKey,
+    {
+      revalidate: false,
+      tags: [
+        buildVendorCacheTag(normalizedSlug),
+        buildVendorUserCacheTag(stamp.id),
+      ],
+    },
+  );
+
+  return cached();
+}
+
+export async function getVendorPublicPayloadCached(vendorSlug: string) {
+  const normalizedSlug = normalizeSlug(vendorSlug);
+  if (!normalizedSlug) return null;
+
+  const stamp = await fetchVendorStamp({ vendorSlug: normalizedSlug });
+  if (!stamp) return null;
+
+  return getVendorPayloadByStamp(stamp, null);
+}
+
+export async function getVendorPublicPayloadForTenantCached(
+  tenantId: string,
+  vendorSlug: string,
+) {
+  const normalizedSlug = normalizeSlug(vendorSlug);
+  const normalizedTenantId = (tenantId || "").trim();
+  if (!normalizedSlug || !normalizedTenantId) return null;
+
+  const stamp = await fetchVendorStamp({
+    vendorSlug: normalizedSlug,
+    tenantId: normalizedTenantId,
+  });
+  if (!stamp) return null;
+
+  return getVendorPayloadByStamp(stamp, normalizedTenantId);
+}
