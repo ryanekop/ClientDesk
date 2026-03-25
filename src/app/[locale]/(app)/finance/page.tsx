@@ -764,7 +764,19 @@ export default function FinancePage() {
             });
         }
 
-        return `Halo ${booking.client_name}, invoice final untuk booking ${booking.booking_code} sudah kami siapkan.\n\nPaket: ${booking.service_label || booking.services?.name || "-"}\nTotal awal: ${formatCurrency(booking.total_price)}\nAdd-on akhir: ${formatCurrency(finalTotal - booking.total_price)}\nTotal final: ${formatCurrency(finalTotal)}\nDP terbayar: ${formatCurrency(booking.dp_paid)}\nSisa pelunasan: ${formatCurrency(remaining)}\n\nInvoice final: ${invoiceLink}\nForm pelunasan: ${settlementLink || "-"}${trackingLink ? `\nTracking: ${trackingLink}` : ""}\n\nSilakan lakukan pelunasan dan upload bukti bayar melalui link di atas. Terima kasih.`;
+        return tf("finalInvoiceFallbackMessage", {
+            clientName: booking.client_name,
+            bookingCode: booking.booking_code,
+            packageName: booking.service_label || booking.services?.name || "-",
+            initialTotal: formatCurrency(booking.total_price),
+            addonTotal: formatCurrency(finalTotal - booking.total_price),
+            finalTotal: formatCurrency(finalTotal),
+            dpPaid: formatCurrency(booking.dp_paid),
+            remaining: formatCurrency(remaining),
+            invoiceLink,
+            settlementLink: settlementLink || "-",
+            trackingLine: trackingLink ? `\n${tf("trackingLabel")}: ${trackingLink}` : "",
+        });
     }
 
     function sendInitialInvoiceWhatsApp(booking: BookingFinance) {
@@ -839,7 +851,7 @@ export default function FinancePage() {
                 : buildFinalInvoiceMessage(booking);
         try {
             await navigator.clipboard.writeText(message);
-            showSuccessToast("Template invoice berhasil disalin.");
+            showSuccessToast(tf("invoiceTemplateCopied"));
             if (stage === "initial") {
                 setCopiedInitialTemplateId(booking.id);
                 setTimeout(() => {
@@ -858,7 +870,7 @@ export default function FinancePage() {
         } catch {
             setFeedbackDialog({
                 open: true,
-                message: locale === "en" ? "Failed to copy template." : "Gagal menyalin template.",
+                message: tf("failedCopyTemplate"),
             });
         }
     }
@@ -1263,10 +1275,10 @@ export default function FinancePage() {
             ["Ringkasan Keuangan", "", ""],
             ["", "", ""],
             ["Total Pemasukan", exportSummary.totalRevenue, ""],
-            ["Sisa Tagihan (Belum Lunas)", exportSummary.totalPending, ""],
+            [tf("exportOutstandingUnpaidLabel"), exportSummary.totalPending, ""],
             ["Total DP Diterima", exportSummary.totalDP, ""],
             ["Jumlah Booking Lunas", exportSummary.paidCount, ""],
-            ["Jumlah Booking Belum Lunas", exportSummary.unpaidCount, ""],
+            [tf("exportUnpaidBookingCountLabel"), exportSummary.unpaidCount, ""],
             ["", "", ""],
             ["Ringkasan per Bulan", "", ""],
             ["Bulan", "Total Harga", "Pemasukan Bersih"],
@@ -1294,7 +1306,7 @@ export default function FinancePage() {
             const initialBreakdown = getInitialPriceBreakdown(b);
             return {
                 "Kode Booking": b.booking_code,
-                "Nama Klien": b.client_name,
+                [tf("exportClientNameLabel")]: b.client_name,
                 "Paket": b.service_label || b.services?.name || "-",
                 "Jadwal": b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "-",
                 "Total Harga": getFinalInvoiceTotal(b.total_price, b.final_adjustments),

@@ -15,7 +15,7 @@ import {
   Settings2,
   Trash2,
 } from "lucide-react";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
@@ -83,6 +83,7 @@ function compareServices(a: ServiceOption, b: ServiceOption) {
 export default function SpecialBookingFormPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const locale = useLocale();
+  const t = useTranslations("SpecialBookingForm");
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [actionLoadingId, setActionLoadingId] = React.useState<string | null>(
@@ -158,7 +159,7 @@ export default function SpecialBookingFormPage() {
     } = await supabase.auth.getUser();
     if (!user) {
       setLoading(false);
-      setFormError("Sesi login tidak ditemukan.");
+      setFormError(t("sessionNotFound"));
       return;
     }
 
@@ -186,17 +187,17 @@ export default function SpecialBookingFormPage() {
 
     if (profileError || !profile) {
       setLoading(false);
-      setFormError(profileError?.message || "Gagal memuat profil.");
+      setFormError(profileError?.message || t("failedLoadProfile"));
       return;
     }
     if (serviceError) {
       setLoading(false);
-      setFormError(serviceError.message || "Gagal memuat layanan.");
+      setFormError(serviceError.message || t("failedLoadServices"));
       return;
     }
     if (linkError) {
       setLoading(false);
-      setFormError(linkError.message || "Gagal memuat link booking khusus.");
+      setFormError(linkError.message || t("failedLoadSpecialLinks"));
       return;
     }
 
@@ -220,7 +221,7 @@ export default function SpecialBookingFormPage() {
         .filter((row: BookingSpecialLinkRule | null): row is BookingSpecialLinkRule => Boolean(row)),
     );
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, t]);
 
   React.useEffect(() => {
     void loadData();
@@ -276,7 +277,7 @@ export default function SpecialBookingFormPage() {
     clearMessage();
 
     if (!profileId) {
-      setFormError("Profil admin belum siap.");
+      setFormError(t("profileNotReady"));
       return;
     }
 
@@ -294,15 +295,15 @@ export default function SpecialBookingFormPage() {
     const discountAmount = parseRupiahInput(discountAmountInput);
 
     if (eventTypeLocked && normalizedEventTypes.length === 0) {
-      setFormError("Saat Jenis Acara dikunci, pilih minimal satu jenis acara.");
+      setFormError(t("lockedEventTypeValidation"));
       return;
     }
     if (packageLocked && normalizedPackageIds.length === 0) {
-      setFormError("Saat Paket dikunci, pilih minimal satu paket.");
+      setFormError(t("lockedPackageValidation"));
       return;
     }
     if (addonLocked && normalizedAddonIds.length === 0) {
-      setFormError("Saat Add-on dikunci, pilih minimal satu add-on.");
+      setFormError(t("lockedAddonValidation"));
       return;
     }
 
@@ -327,13 +328,13 @@ export default function SpecialBookingFormPage() {
 
       setSaving(false);
       if (error) {
-        setFormError(error.message || "Gagal menyimpan perubahan.");
+        setFormError(error.message || t("failedSaveChanges"));
         return;
       }
 
       resetForm();
       await loadData();
-      showSuccessToast("Perubahan link berhasil disimpan.");
+      showSuccessToast(t("linkUpdated"));
       return;
     }
 
@@ -353,13 +354,13 @@ export default function SpecialBookingFormPage() {
 
     setSaving(false);
     if (error) {
-      setFormError(error.message || "Gagal membuat link.");
+      setFormError(error.message || t("failedCreateLink"));
       return;
     }
 
     resetForm();
     await loadData();
-    showSuccessToast("Link booking khusus berhasil dibuat.");
+    showSuccessToast(t("linkCreated"));
   }
 
   function buildPublicOfferUrl(link: BookingSpecialLinkRule) {
@@ -372,14 +373,14 @@ export default function SpecialBookingFormPage() {
     clearMessage();
     const url = buildPublicOfferUrl(link);
     if (!url) {
-      setFormError("Vendor slug belum tersedia. Cek profil dulu.");
+      setFormError(t("vendorSlugNotReady"));
       return;
     }
     try {
       await navigator.clipboard.writeText(url);
-      showSuccessToast("URL link berhasil disalin.");
+      showSuccessToast(t("linkCopied"));
     } catch {
-      setFormError("Gagal menyalin URL link.");
+      setFormError(t("failedCopyLink"));
     }
   }
 
@@ -387,7 +388,7 @@ export default function SpecialBookingFormPage() {
     clearMessage();
     const url = buildPublicOfferUrl(link);
     if (!url) {
-      setFormError("Vendor slug belum tersedia. Cek profil dulu.");
+      setFormError(t("vendorSlugNotReady"));
       return;
     }
     window.open(url, "_blank", "noopener,noreferrer");
@@ -404,7 +405,7 @@ export default function SpecialBookingFormPage() {
     setActionLoadingId(null);
 
     if (error) {
-      setFormError(error.message || "Gagal memperbarui status link.");
+      setFormError(error.message || t("failedUpdateLinkStatus"));
       return;
     }
     await loadData();
@@ -425,7 +426,7 @@ export default function SpecialBookingFormPage() {
     setActionLoadingId(null);
 
     if (error) {
-      setFormError(error.message || "Gagal mengaktifkan ulang link.");
+      setFormError(error.message || t("failedReactivateLink"));
       return;
     }
     await loadData();
@@ -444,7 +445,7 @@ export default function SpecialBookingFormPage() {
     setActionLoadingId(null);
 
     if (error) {
-      setFormError(error.message || "Gagal menghapus link.");
+      setFormError(error.message || t("failedDeleteLink"));
       return;
     }
     if (editingLinkId === link.id) {
@@ -452,7 +453,7 @@ export default function SpecialBookingFormPage() {
     }
     await loadData();
     setDeleteConfirmDialog({ open: false, link: null });
-    showSuccessToast("Link booking khusus berhasil dihapus.");
+    showSuccessToast(t("linkDeleted"));
   }
 
   if (loading) {
@@ -468,10 +469,9 @@ export default function SpecialBookingFormPage() {
       {successToastNode}
 
       <div>
-        <h2 className="text-2xl font-bold tracking-tight">Form Booking Khusus</h2>
+        <h2 className="text-2xl font-bold tracking-tight">{t("pageTitle")}</h2>
         <p className="text-muted-foreground">
-          Buat link booking khusus dengan aturan lock/unlock Paket dan Add-on,
-          plus biaya akomodasi dan diskon nominal.
+          {t("pageSubtitle")}
         </p>
       </div>
 
@@ -488,21 +488,21 @@ export default function SpecialBookingFormPage() {
         >
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              {editingLinkId ? "Edit Link" : "Buat Link Baru"}
+              {editingLinkId ? t("editLinkHeading") : t("createLinkHeading")}
             </h3>
             {editingLinkId ? (
               <Button type="button" variant="ghost" size="sm" onClick={resetForm}>
-                Batal Edit
+                {t("cancelEdit")}
               </Button>
             ) : null}
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Nama Link</label>
+            <label className="text-sm font-medium">{t("linkNameLabel")}</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Contoh: Wedding Luar Kota - Klien A"
+              placeholder={t("linkNamePlaceholder")}
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
             />
           </div>
@@ -510,9 +510,9 @@ export default function SpecialBookingFormPage() {
           <div className="rounded-lg border p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">Jenis Acara</p>
+                <p className="text-sm font-medium">{t("eventTypeLabel")}</p>
                 <p className="text-xs text-muted-foreground">
-                  Saat lock, klien hanya bisa memilih dari whitelist ini.
+                  {t("eventTypeHint")}
                 </p>
               </div>
               <button
@@ -522,18 +522,18 @@ export default function SpecialBookingFormPage() {
               >
                 {eventTypeLocked ? (
                   <>
-                    <Lock className="h-3.5 w-3.5" /> Lock
+                    <Lock className="h-3.5 w-3.5" /> {t("lockLabel")}
                   </>
                 ) : (
                   <>
-                    <LockOpen className="h-3.5 w-3.5" /> Unlock
+                    <LockOpen className="h-3.5 w-3.5" /> {t("unlockLabel")}
                   </>
                 )}
               </button>
             </div>
             <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
               {availableEventTypes.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Belum ada jenis acara aktif.</p>
+                <p className="text-xs text-muted-foreground">{t("noActiveEventTypes")}</p>
               ) : (
                 availableEventTypes.map((eventTypeName) => {
                   const selected = selectedEventTypes.includes(eventTypeName);
@@ -559,9 +559,9 @@ export default function SpecialBookingFormPage() {
           <div className="rounded-lg border p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">Paket</p>
+                <p className="text-sm font-medium">{t("packageLabel")}</p>
                 <p className="text-xs text-muted-foreground">
-                  Saat unlock, pilihan di bawah jadi prefill opsional.
+                  {t("packageHint")}
                 </p>
               </div>
               <button
@@ -571,18 +571,18 @@ export default function SpecialBookingFormPage() {
               >
                 {packageLocked ? (
                   <>
-                    <Lock className="h-3.5 w-3.5" /> Lock
+                    <Lock className="h-3.5 w-3.5" /> {t("lockLabel")}
                   </>
                 ) : (
                   <>
-                    <LockOpen className="h-3.5 w-3.5" /> Unlock
+                    <LockOpen className="h-3.5 w-3.5" /> {t("unlockLabel")}
                   </>
                 )}
               </button>
             </div>
             <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
               {packageOptions.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Belum ada paket aktif publik.</p>
+                <p className="text-xs text-muted-foreground">{t("noActivePublicPackages")}</p>
               ) : (
                 packageOptions.map((service) => {
                   const selected = selectedPackageIds.includes(service.id);
@@ -613,9 +613,9 @@ export default function SpecialBookingFormPage() {
           <div className="rounded-lg border p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">Add-on</p>
+                <p className="text-sm font-medium">{t("addonLabel")}</p>
                 <p className="text-xs text-muted-foreground">
-                  Saat unlock, pilihan di bawah jadi prefill opsional.
+                  {t("addonHint")}
                 </p>
               </div>
               <button
@@ -625,18 +625,18 @@ export default function SpecialBookingFormPage() {
               >
                 {addonLocked ? (
                   <>
-                    <Lock className="h-3.5 w-3.5" /> Lock
+                    <Lock className="h-3.5 w-3.5" /> {t("lockLabel")}
                   </>
                 ) : (
                   <>
-                    <LockOpen className="h-3.5 w-3.5" /> Unlock
+                    <LockOpen className="h-3.5 w-3.5" /> {t("unlockLabel")}
                   </>
                 )}
               </button>
             </div>
             <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
               {addonOptions.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Belum ada add-on aktif publik.</p>
+                <p className="text-xs text-muted-foreground">{t("noActivePublicAddons")}</p>
               ) : (
                 addonOptions.map((service) => {
                   const selected = selectedAddonIds.includes(service.id);
@@ -666,7 +666,7 @@ export default function SpecialBookingFormPage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Biaya Akomodasi (Rp)</label>
+              <label className="text-sm font-medium">{t("accommodationFeeLabel")}</label>
               <input
                 type="text"
                 inputMode="numeric"
@@ -679,7 +679,7 @@ export default function SpecialBookingFormPage() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Diskon Nominal (Rp)</label>
+              <label className="text-sm font-medium">{t("discountAmountLabel")}</label>
               <input
                 type="text"
                 inputMode="numeric"
@@ -700,13 +700,13 @@ export default function SpecialBookingFormPage() {
               onChange={(e) => setIsActive(e.target.checked)}
               className="h-4 w-4 accent-primary"
             />
-            Link aktif
+            {t("activeLink")}
           </label>
 
           <div className="flex items-center gap-2">
             <Button type="submit" disabled={saving} className="gap-2">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {editingLinkId ? "Simpan Perubahan" : "Buat Link"}
+              {editingLinkId ? t("saveChangesButton") : t("createLinkButton")}
             </Button>
             <Button
               type="button"
@@ -716,7 +716,7 @@ export default function SpecialBookingFormPage() {
               className="gap-2"
             >
               <RefreshCw className="h-4 w-4" />
-              Refresh
+              {t("refreshButton")}
             </Button>
           </div>
         </form>
@@ -724,17 +724,16 @@ export default function SpecialBookingFormPage() {
         <div className={`space-y-3 ${mobileTab === "settings" ? "hidden lg:block" : ""}`}>
           <div className="rounded-xl border bg-card p-4 shadow-sm">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              Daftar Link Booking Khusus
+              {t("specialLinkListTitle")}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              URL akan mengarah ke form booking publik yang sama, dengan token
-              `offer` sesuai link.
+              {t("specialLinkListDescription")}
             </p>
           </div>
 
           {links.length === 0 ? (
             <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-              Belum ada link booking khusus.
+              {t("noSpecialLinks")}
             </div>
           ) : (
             links.map((link) => {
@@ -746,22 +745,22 @@ export default function SpecialBookingFormPage() {
                     <div>
                       <p className="font-semibold">{link.name}</p>
                       <p className="mt-1 text-xs text-muted-foreground break-all">
-                        Token: {link.token}
+                        {t("tokenLabel")}: {link.token}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       {link.isActive ? (
                         <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                          Aktif
+                          {t("statusActive")}
                         </span>
                       ) : (
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                          Nonaktif
+                          {t("statusInactive")}
                         </span>
                       )}
                       {consumed ? (
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-                          Sudah Digunakan
+                          {t("statusConsumed")}
                         </span>
                       ) : null}
                     </div>
@@ -769,20 +768,31 @@ export default function SpecialBookingFormPage() {
 
                   <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
                     <p>
-                      Jenis Acara: {link.eventTypeLocked ? "Lock" : "Unlock"} ·{" "}
-                      {link.eventTypes.length} pilihan
+                      {t("eventTypeSummary", {
+                        mode: link.eventTypeLocked ? t("lockLabel") : t("unlockLabel"),
+                        count: link.eventTypes.length,
+                        optionsLabel: t("optionsLabel"),
+                      })}
                     </p>
                     <p>
-                      Paket: {link.packageLocked ? "Lock" : "Unlock"} ·{" "}
-                      {link.packageServiceIds.length} pilihan
+                      {t("packageSummary", {
+                        mode: link.packageLocked ? t("lockLabel") : t("unlockLabel"),
+                        count: link.packageServiceIds.length,
+                        optionsLabel: t("optionsLabel"),
+                      })}
                     </p>
                     <p>
-                      Add-on: {link.addonLocked ? "Lock" : "Unlock"} ·{" "}
-                      {link.addonServiceIds.length} pilihan
+                      {t("addonSummary", {
+                        mode: link.addonLocked ? t("lockLabel") : t("unlockLabel"),
+                        count: link.addonServiceIds.length,
+                        optionsLabel: t("optionsLabel"),
+                      })}
                     </p>
                     <p>
-                      Akomodasi {formatCurrency(link.accommodationFee)} · Diskon{" "}
-                      {formatCurrency(link.discountAmount)}
+                      {t("priceSummary", {
+                        accommodation: formatCurrency(link.accommodationFee),
+                        discount: formatCurrency(link.discountAmount),
+                      })}
                     </p>
                   </div>
 
@@ -795,7 +805,7 @@ export default function SpecialBookingFormPage() {
                       onClick={() => void copyLink(link)}
                     >
                       <Copy className="h-3.5 w-3.5" />
-                      Copy URL
+                      {t("copyUrlButton")}
                     </Button>
                     <Button
                       type="button"
@@ -805,7 +815,7 @@ export default function SpecialBookingFormPage() {
                       onClick={() => editLink(link)}
                     >
                       <Pencil className="h-3.5 w-3.5" />
-                      Edit
+                      {t("editButton")}
                     </Button>
                     <Button
                       type="button"
@@ -815,7 +825,7 @@ export default function SpecialBookingFormPage() {
                       onClick={() => openLink(link)}
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
-                      Buka Link
+                      {t("openLinkButton")}
                     </Button>
                     <Button
                       type="button"
@@ -830,7 +840,7 @@ export default function SpecialBookingFormPage() {
                       ) : (
                         <Power className="h-3.5 w-3.5" />
                       )}
-                      {link.isActive ? "Nonaktifkan" : "Aktifkan"}
+                      {link.isActive ? t("deactivateButton") : t("activateButton")}
                     </Button>
                     {consumed ? (
                       <Button
@@ -842,7 +852,7 @@ export default function SpecialBookingFormPage() {
                         disabled={isBusy}
                       >
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        Aktifkan Ulang
+                        {t("reactivateButton")}
                       </Button>
                     ) : null}
                     <Button
@@ -856,7 +866,7 @@ export default function SpecialBookingFormPage() {
                       disabled={isBusy}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                      Hapus
+                      {t("deleteButton")}
                     </Button>
                   </div>
                 </div>
@@ -874,7 +884,7 @@ export default function SpecialBookingFormPage() {
             className={`flex flex-1 cursor-pointer flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${mobileTab === "settings" ? "text-primary" : "text-muted-foreground"}`}
           >
             <Settings2 className="h-5 w-5" />
-            Pengaturan
+            {t("mobileSettingsTab")}
           </button>
           <button
             type="button"
@@ -882,7 +892,7 @@ export default function SpecialBookingFormPage() {
             className={`flex flex-1 cursor-pointer flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${mobileTab === "links" ? "text-primary" : "text-muted-foreground"}`}
           >
             <List className="h-5 w-5" />
-            Daftar Link
+            {t("mobileLinksTab")}
           </button>
         </div>
       </div>
@@ -895,10 +905,12 @@ export default function SpecialBookingFormPage() {
             link: open ? prev.link : null,
           }))
         }
-        title="Konfirmasi"
-        message={`Hapus link "${deleteConfirmDialog.link?.name || ""}"?`}
-        cancelLabel="Batal"
-        confirmLabel="Hapus"
+        title={t("deleteConfirmTitle")}
+        message={t("deleteConfirmMessage", {
+          name: deleteConfirmDialog.link?.name || "",
+        })}
+        cancelLabel={t("cancelButton")}
+        confirmLabel={t("deleteButton")}
         confirmVariant="destructive"
         onConfirm={confirmDeleteLink}
         loading={

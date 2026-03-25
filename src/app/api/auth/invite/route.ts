@@ -1,9 +1,11 @@
 export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/utils/supabase/server'
 import { isMainClientDeskDomain } from '@/lib/booking-url-mode'
 import { resolveTenant } from '@/lib/tenant-resolver'
+import { resolveApiLocale } from '@/lib/i18n/api-locale'
+import { apiT } from '@/lib/i18n/api-errors'
 import {
     getRequestHostname,
     normalizeAuthLocale,
@@ -26,20 +28,22 @@ function isValidEmail(value: string) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+    const requestLocale = resolveApiLocale(request)
+
     try {
         const body = await request.json().catch(() => ({})) as {
             email?: string
             locale?: string
         }
         const email = typeof body.email === 'string' ? body.email.trim() : ''
-        const locale = normalizeAuthLocale(body.locale)
+        const locale = normalizeAuthLocale(body.locale || requestLocale)
 
         if (!email) {
-            return NextResponse.json({ error: 'Email wajib diisi' }, { status: 400 })
+            return NextResponse.json({ error: apiT(requestLocale, 'emailRequired') }, { status: 400 })
         }
         if (!isValidEmail(email)) {
-            return NextResponse.json({ error: 'Format email tidak valid' }, { status: 400 })
+            return NextResponse.json({ error: apiT(requestLocale, 'invalidEmailFormat') }, { status: 400 })
         }
 
         const supabase = await createServerClient()
@@ -55,24 +59,24 @@ export async function POST(request: Request) {
             .maybeSingle()
 
         if (profileError || !profile) {
-            return NextResponse.json({ error: 'Akses profil tidak valid' }, { status: 403 })
+            return NextResponse.json({ error: apiT(requestLocale, 'invalidProfileAccess') }, { status: 403 })
         }
 
         const role = normalizeRole(profile.role)
         if (role !== 'admin' && role !== 'staff') {
-            return NextResponse.json({ error: 'Hanya admin/staff yang boleh mengundang user' }, { status: 403 })
+            return NextResponse.json({ error: apiT(requestLocale, 'inviteAdminStaffOnly') }, { status: 403 })
         }
 
         const hostname = getRequestHostname(request)
         if (!hostname) {
-            return NextResponse.json({ error: 'Host request tidak valid' }, { status: 400 })
+            return NextResponse.json({ error: apiT(requestLocale, 'invalidRequestHost') }, { status: 400 })
         }
 
         const tenant = await resolveTenant(hostname, { bypassCache: true })
         const isMainDomain = isMainClientDeskDomain(hostname)
 
         if (tenant.id === 'default' && !isMainDomain) {
-            return NextResponse.json({ error: 'Domain tenant tidak dikenali' }, { status: 400 })
+            return NextResponse.json({ error: apiT(requestLocale, 'tenantDomainUnknown') }, { status: 400 })
         }
 
         if (!isMainDomain && tenant.id !== 'default' && profile.tenant_id !== tenant.id) {
@@ -97,6 +101,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true, user: data.user, redirectTo })
     } catch (error) {
         console.error('Invite API error:', error)
-        return NextResponse.json({ error: 'Gagal mengirim undangan' }, { status: 500 })
+        return NextResponse.json({ error: apiT(requestLocale, 'failedSendInvite') }, { status: 500 })
     }
 }

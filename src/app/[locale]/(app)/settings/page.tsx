@@ -176,30 +176,12 @@ type ConnectedGoogleAccountResponse = {
 };
 
 const templateTypes = [
-  {
-    value: "whatsapp_client",
-    label: "Kirim Detail Booking ke Klien (Admin → Klien).",
-  },
-  {
-    value: "whatsapp_freelancer",
-    label: "Kirim Detail Booking ke Freelance (Admin → Freelance).",
-  },
-  {
-    value: "whatsapp_booking_confirm",
-    label: "Kirim konfirmasi booking ke Admin (Klien → Admin).",
-  },
-  {
-    value: "invoice",
-    label: "Kirim Invoice ke Klien (Admin → Klien).",
-  },
-  {
-    value: "whatsapp_settlement_client",
-    label: "Kirim Invoice Pelunasan ke Klien (Admin → Klien).",
-  },
-  {
-    value: "whatsapp_settlement_confirm",
-    label: "Kirim Konfirmasi Pelunasan ke Admin (Klien → Admin).",
-  },
+  { value: "whatsapp_client" },
+  { value: "whatsapp_freelancer" },
+  { value: "whatsapp_booking_confirm" },
+  { value: "invoice" },
+  { value: "whatsapp_settlement_client" },
+  { value: "whatsapp_settlement_confirm" },
 ];
 
 const EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES = new Set([
@@ -267,7 +249,6 @@ const templateHeaderToneByType: Record<string, string> = {
 const DEFAULT_QUEUE_TRIGGER_STATUS = "Antrian Edit";
 const DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS = "Sesi Foto / Acara";
 const DEFAULT_TRACKING_FILE_LINKS_VISIBLE_FROM_STATUS = "Sesi Foto / Acara";
-const SETTINGS_SAVED_MESSAGE = "✅ Pengaturan berhasil disimpan";
 const MULTI_SESSION_WHATSAPP_VARS = getMultiSessionTemplateTokens("whatsapp");
 
 const variableHints: Record<string, string[]> = {
@@ -729,9 +710,9 @@ export default function SettingsPage() {
   }>({ open: false, scope: null });
   const [resetSaving, setResetSaving] = React.useState(false);
   const unsupportedProfileColumnsRef = React.useRef<Set<string>>(new Set());
-  const feedbackTitle = locale === "en" ? "Information" : "Informasi";
-  const defaultSettingsSavedToastMessage =
-    locale === "en" ? "Settings saved." : "Pengaturan berhasil disimpan.";
+  const feedbackTitle = tp("feedbackTitle");
+  const settingsSavedMessage = tp("settingsSavedMessage");
+  const defaultSettingsSavedToastMessage = tp("settingsSavedToast");
   const showFeedback = React.useCallback(
     (message: string, title?: string) => {
       setFeedbackDialog({
@@ -1010,7 +991,7 @@ export default function SettingsPage() {
     const response = await fetch("/api/profile/ensure", { method: "POST" });
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
-      throw new Error(payload?.error || "Gagal menyiapkan profil.");
+      throw new Error(payload?.error || tp("failedPrepareProfile"));
     }
   });
 
@@ -1312,7 +1293,7 @@ export default function SettingsPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) {
-        throw new Error("User tidak ditemukan.");
+        throw new Error(tp("userNotFound"));
       }
 
       await ensureProfileRecord();
@@ -1345,7 +1326,7 @@ export default function SettingsPage() {
         throw error;
       }
 
-      throw new Error("Gagal menyimpan profil.");
+      throw new Error(tp("failedSaveProfile"));
     },
   );
 
@@ -1382,20 +1363,20 @@ export default function SettingsPage() {
         | null;
 
       if (!response.ok) {
-        throw new Error(payload?.error || "Gagal memperbarui mode URL booking.");
+        throw new Error(payload?.error || tp("failedUpdateBookingUrlMode"));
       }
 
       setDisableBookingSlug(payload?.tenant?.disable_booking_slug === true);
       setDefaultBookingVendorSlug(
         payload?.tenant?.default_booking_vendor_slug || "",
       );
-      setSavedMsg(SETTINGS_SAVED_MESSAGE);
+      setSavedMsg(settingsSavedMessage);
       showSettingsSavedToast();
       setTimeout(() => setSavedMsg(""), 3000);
     } catch (error) {
       console.error("Tenant booking mode update error:", error);
       setDisableBookingSlug(previousDisableBookingSlug);
-      setSavedMsg("Gagal menyimpan mode URL booking.");
+      setSavedMsg(tp("failedSaveBookingUrlMode"));
       setTimeout(() => setSavedMsg(""), 3000);
     } finally {
       setBookingModeSaving(false);
@@ -1417,13 +1398,13 @@ export default function SettingsPage() {
       });
 
       setVendorSlug(slug);
-      setSavedMsg(SETTINGS_SAVED_MESSAGE);
+      setSavedMsg(settingsSavedMessage);
       showSettingsSavedToast();
       setTimeout(() => setSavedMsg(""), 3000);
       void fetchAll(true);
     } catch (error) {
       console.error("Settings save error:", error);
-      setSavedMsg("Gagal menyimpan.");
+      setSavedMsg(tp("failedSave"));
       setTimeout(() => setSavedMsg(""), 3000);
     } finally {
       setSaving(false);
@@ -1447,13 +1428,13 @@ export default function SettingsPage() {
         drive_folder_format_map: driveFolderFormats,
         drive_folder_structure_map: driveFolderStructures,
       });
-      setSavedMsg(SETTINGS_SAVED_MESSAGE);
+      setSavedMsg(settingsSavedMessage);
       showSettingsSavedToast();
       setTimeout(() => setSavedMsg(""), 3000);
       void fetchAll(true);
     } catch (error) {
       console.error("Google settings save error:", error);
-      setSavedMsg("Gagal menyimpan.");
+      setSavedMsg(tp("failedSave"));
       setTimeout(() => setSavedMsg(""), 3000);
     } finally {
       setSaving(false);
@@ -1508,12 +1489,12 @@ export default function SettingsPage() {
 
   async function persistFastpikSettings(options?: { showSavedMessage?: boolean }) {
     if (!profile) {
-      throw new Error("Profil tidak ditemukan.");
+      throw new Error(tp("profileNotFound"));
     }
 
     await saveProfilePatch(buildFastpikProfilePatch());
     if (options?.showSavedMessage) {
-      setSavedMsg(SETTINGS_SAVED_MESSAGE);
+      setSavedMsg(settingsSavedMessage);
       showSettingsSavedToast();
       setTimeout(() => setSavedMsg(""), 3000);
     }
@@ -1527,7 +1508,7 @@ export default function SettingsPage() {
       void fetchAll(true);
     } catch (error) {
       console.error("Fastpik settings save error:", error);
-      setSavedMsg("Gagal menyimpan.");
+      setSavedMsg(tp("failedSave"));
       setTimeout(() => setSavedMsg(""), 3000);
     } finally {
       setSaving(false);
@@ -1555,15 +1536,15 @@ export default function SettingsPage() {
         typeof payload?.message === "string"
           ? payload.message
           : response.ok
-            ? "Koneksi Fastpik berhasil."
-            : "Koneksi Fastpik gagal.";
+            ? tp("fastpikConnectionSuccess")
+            : tp("fastpikConnectionFailed");
       setFastpikLastSyncStatus(status);
       setFastpikLastSyncMessage(message);
       setFastpikLastSyncAt(new Date().toISOString());
       setFastpikActionMessage(message);
       void fetchAll(true);
     } catch (error: any) {
-      const message = error?.message || "Koneksi Fastpik gagal.";
+      const message = error?.message || tp("fastpikConnectionFailed");
       setFastpikLastSyncStatus("failed");
       setFastpikLastSyncMessage(message);
       setFastpikLastSyncAt(new Date().toISOString());
@@ -1588,10 +1569,15 @@ export default function SettingsPage() {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error || "Batch sync Fastpik gagal.");
+        throw new Error(payload?.error || tp("fastpikBatchSyncFailed"));
       }
 
-      const message = `Batch selesai. Total ${payload.total || 0}, sukses ${payload.successCount || 0}, warning ${payload.warningCount || 0}, gagal ${payload.failedCount || 0}.`;
+      const message = tp("fastpikBatchCompleted", {
+        total: payload.total || 0,
+        successCount: payload.successCount || 0,
+        warningCount: payload.warningCount || 0,
+        failedCount: payload.failedCount || 0,
+      });
       const status: "idle" | "success" | "warning" | "failed" | "syncing" =
         (payload.failedCount || 0) > 0
           ? "failed"
@@ -1605,7 +1591,7 @@ export default function SettingsPage() {
       setFastpikActionMessage(message);
       void fetchAll(true);
     } catch (error: any) {
-      const message = error?.message || "Batch sync Fastpik gagal.";
+      const message = error?.message || tp("fastpikBatchSyncFailed");
       setFastpikLastSyncStatus("failed");
       setFastpikLastSyncMessage(message);
       setFastpikLastSyncAt(new Date().toISOString());
@@ -1635,7 +1621,7 @@ export default function SettingsPage() {
       void fetchAll(true);
     } catch (error) {
       console.error("Event type save error:", error);
-      showFeedback("Gagal menyimpan jenis acara global.");
+      showFeedback(tp("failedSaveGlobalEventTypes"));
     } finally {
       setEventTypeSaving(false);
     }
@@ -1650,7 +1636,7 @@ export default function SettingsPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      showFeedback("User tidak ditemukan.");
+      showFeedback(tp("userNotFound"));
       return;
     }
     setTemplateSaving(true);
@@ -1672,7 +1658,7 @@ export default function SettingsPage() {
       });
 
       if (changedKeys.length === 0) {
-        setTemplateSavedMsg(SETTINGS_SAVED_MESSAGE);
+        setTemplateSavedMsg(settingsSavedMessage);
         showSettingsSavedToast();
         setTimeout(() => setTemplateSavedMsg(""), 3000);
         return;
@@ -1695,7 +1681,7 @@ export default function SettingsPage() {
         const storedType = getStoredTemplateType(type);
         const storedName = getStoredTemplateName(
           type,
-          templateTypes.find((tt) => tt.value === type)?.label || type,
+          tp(templateTitleKeyByType[type] || "templateInvoice"),
         );
 
         if (existing) {
@@ -1741,13 +1727,13 @@ export default function SettingsPage() {
       }
 
       setTemplates(nextTemplates);
-      setTemplateSavedMsg(SETTINGS_SAVED_MESSAGE);
+      setTemplateSavedMsg(settingsSavedMessage);
       showSettingsSavedToast();
       setTimeout(() => setTemplateSavedMsg(""), 3000);
       void fetchAll(true);
     } catch (error) {
       console.error("Template save error:", error);
-      showFeedback("Gagal menyimpan template.");
+      showFeedback(tp("failedSaveTemplate"));
     } finally {
       setTemplateSaving(false);
     }
@@ -1791,7 +1777,7 @@ export default function SettingsPage() {
       setTimeout(() => setStatusSaved(false), 3000);
     } catch (error) {
       console.error("Status save error:", error);
-      showFeedback("Gagal menyimpan status.");
+      showFeedback(tp("failedSaveStatus"));
     } finally {
       setStatusSaving(false);
     }
@@ -1829,7 +1815,7 @@ export default function SettingsPage() {
       drive_folder_format_map: defaultDriveFormats,
       drive_folder_structure_map: defaultDriveStructures,
     });
-    setSavedMsg(SETTINGS_SAVED_MESSAGE);
+    setSavedMsg(settingsSavedMessage);
     showSettingsSavedToast();
     setTimeout(() => setSavedMsg(""), 3000);
     void fetchAll(true);
@@ -1839,7 +1825,7 @@ export default function SettingsPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) throw new Error("User tidak ditemukan.");
+    if (!user) throw new Error(tp("userNotFound"));
 
     const managedTemplateTypes = new Set(templateTypes.map((item) => item.value));
     const managedTemplateIds = templates
@@ -1861,7 +1847,7 @@ export default function SettingsPage() {
     setTemplateContents({});
     setTemplateContentsEn({});
     templateBaselineRef.current = { contents: {}, contentsEn: {} };
-    setTemplateSavedMsg(SETTINGS_SAVED_MESSAGE);
+    setTemplateSavedMsg(settingsSavedMessage);
     showSettingsSavedToast();
     setTimeout(() => setTemplateSavedMsg(""), 3000);
     void fetchAll(true);
@@ -1934,7 +1920,7 @@ export default function SettingsPage() {
       setResetModal({ open: false, scope: null });
     } catch (error) {
       console.error("Reset settings error:", error);
-      showFeedback("Gagal mengembalikan ke default.");
+      showFeedback(tp("failedResetToDefault"));
     } finally {
       setResetSaving(false);
     }
@@ -2033,9 +2019,7 @@ export default function SettingsPage() {
   // Logo handlers
   function handleLogoFileSelected(file: File) {
     if (file.size > 500 * 1024) {
-      showFeedback(
-        "Ukuran file melebihi 500KB. Silakan pilih gambar yang lebih kecil.",
-      );
+      showFeedback(tp("fileTooLarge"));
       return;
     }
     if (!file.type.startsWith("image/")) {
@@ -2080,12 +2064,12 @@ export default function SettingsPage() {
         | null;
 
       if (!response.ok || !payload?.url) {
-        throw new Error(payload?.error || "Gagal menyimpan logo.");
+        throw new Error(payload?.error || tp("failedSaveLogo"));
       }
 
       setLogoUrl(payload.url);
     } catch {
-      showFeedback("Gagal menyimpan logo.");
+      showFeedback(tp("failedSaveLogo"));
     } finally {
       setLogoUploading(false);
     }
@@ -2121,7 +2105,7 @@ export default function SettingsPage() {
   const tabs = [
     { key: "umum", label: tp("tabGeneral") },
     { key: "template", label: tp("tabTemplates") },
-    { key: "status", label: "Status Booking" },
+    { key: "status", label: tp("tabStatus") },
     { key: "jenis-acara", label: tp("tabEventTypes") },
     { key: "google", label: tp("tabGoogle") },
     { key: "fastpik", label: tp("tabFastpik") },
@@ -2132,29 +2116,24 @@ export default function SettingsPage() {
     { title: string; description: string }
   > = {
     umum: {
-      title: "Balikkan Pengaturan Umum ke Default?",
-      description:
-        "Format Google Calendar dan Google Drive akan dikembalikan ke default dan langsung disimpan.",
+      title: tp("resetGeneralTitle"),
+      description: tp("resetGeneralDescription"),
     },
     template: {
-      title: "Balikkan Template ke Default?",
-      description:
-        "Semua template custom (WhatsApp + Invoice) akan dihapus dan langsung disimpan.",
+      title: tp("resetTemplateTitle"),
+      description: tp("resetTemplateDescription"),
     },
     status: {
-      title: "Balikkan Status Booking ke Default?",
-      description:
-        "Status Booking dan Status Klien akan kembali ke nilai bawaan dan langsung disimpan.",
+      title: tp("resetStatusTitle"),
+      description: tp("resetStatusDescription"),
     },
     "jenis-acara": {
-      title: "Balikkan Jenis Acara ke Default?",
-      description:
-        "Semua jenis acara custom akan dihapus dan jenis acara bawaan akan diaktifkan kembali.",
+      title: tp("resetEventTypesTitle"),
+      description: tp("resetEventTypesDescription"),
     },
     google: {
-      title: "Balikkan Pengaturan Google ke Default?",
-      description:
-        "Format Google Calendar dan Google Drive akan dikembalikan ke default dan langsung disimpan.",
+      title: tp("resetGoogleTitle"),
+      description: tp("resetGoogleDescription"),
     },
   };
 
@@ -3329,7 +3308,7 @@ export default function SettingsPage() {
                         <input
                           value={newDriveSegment}
                           onChange={(e) => setNewDriveSegment(e.target.value)}
-                          placeholder="Contoh: {year}"
+                          placeholder={tp("driveSegmentExamplePlaceholder")}
                           className={inputClass}
                         />
                         <Button
@@ -3787,7 +3766,7 @@ export default function SettingsPage() {
                       return;
                     }
                     if (customClientStatuses.length <= 2) {
-                      showFeedback("Minimal 2 status harus ada.");
+                      showFeedback(tp("minimumClientStatuses"));
                       return;
                     }
                     setNormalizedClientStatuses((prev) =>
@@ -3809,7 +3788,7 @@ export default function SettingsPage() {
                         setNewClientStatusName("");
                       }
                     }}
-                    placeholder="Nama status klien baru..."
+                    placeholder={tp("newClientStatusPlaceholder")}
                     className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   />
                   <Button
@@ -3880,14 +3859,10 @@ export default function SettingsPage() {
 
                 <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
                   <p className="text-sm font-medium">
-                    {locale === "en"
-                      ? "Final Invoice Visibility"
-                      : "Tampilkan Invoice Final Mulai Status"}
+                    {tp("finalInvoiceVisibilityTitle")}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {locale === "en"
-                      ? "Choose the first client status where the final invoice card should appear on the tracking page."
-                      : "Pilih status klien pertama saat kartu invoice final mulai ditampilkan di halaman tracking."}
+                    {tp("finalInvoiceVisibilityDescription")}
                   </p>
                   <select
                     value={resolveFinalInvoiceVisibleFromStatus(
@@ -3916,14 +3891,10 @@ export default function SettingsPage() {
 
                 <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
                   <p className="text-sm font-medium">
-                    {locale === "en"
-                      ? "File Link Visibility"
-                      : "Tampilkan Link File Mulai Status"}
+                    {tp("fileLinkVisibilityTitle")}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {locale === "en"
-                      ? "Choose the first client status where Google Drive and Fastpik links appear on the tracking page."
-                      : "Pilih status klien pertama saat link Google Drive dan Fastpik mulai ditampilkan di halaman tracking."}
+                    {tp("fileLinkVisibilityDescription")}
                   </p>
                   <select
                     value={resolveTrackingFileLinksVisibleFromStatus(
@@ -3978,7 +3949,7 @@ export default function SettingsPage() {
                 </Button>
                 {statusSaved && (
                   <span className="text-sm text-green-600 dark:text-green-400">
-                    {SETTINGS_SAVED_MESSAGE}
+                    {settingsSavedMessage}
                   </span>
                 )}
               </div>
@@ -4078,7 +4049,7 @@ export default function SettingsPage() {
                 </Button>
                 {eventTypeSaved && (
                   <span className="text-sm text-green-600 dark:text-green-400">
-                    {SETTINGS_SAVED_MESSAGE}
+                    {settingsSavedMessage}
                   </span>
                 )}
               </div>
@@ -4122,12 +4093,12 @@ export default function SettingsPage() {
               <DialogTitle className="text-xl">
                 {resetModal.scope
                   ? resetDialogMeta[resetModal.scope].title
-                  : "Balik ke Default?"}
+                  : tp("resetToDefaultTitle")}
               </DialogTitle>
               <DialogDescription>
                 {resetModal.scope
                   ? resetDialogMeta[resetModal.scope].description
-                  : "Pengaturan akan dikembalikan ke default."}
+                  : tp("resetToDefaultDescription")}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="sm:justify-center gap-2 pt-2">
@@ -4137,7 +4108,7 @@ export default function SettingsPage() {
                 onClick={() => setResetModal({ open: false, scope: null })}
                 disabled={resetSaving}
               >
-                Batal
+                {t("batal")}
               </Button>
               <Button
                 variant="destructive"
@@ -4150,7 +4121,7 @@ export default function SettingsPage() {
                 ) : (
                   <RotateCcw className="w-4 h-4 mr-2" />
                 )}
-                Balik ke Default
+                {tp("resetToDefault")}
               </Button>
             </DialogFooter>
           </DialogContent>

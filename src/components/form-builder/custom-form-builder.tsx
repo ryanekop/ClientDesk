@@ -55,7 +55,7 @@ const FIELD_TYPES: { value: CustomFieldType; label: string }[] = [
   { value: "textarea", label: "Teks Panjang" },
   { value: "number", label: "Angka" },
   { value: "select", label: "Pilihan (Dropdown)" },
-  { value: "checkbox", label: "Centang (Ya/Tidak)" },
+  { value: "checkbox", label: "Checkbox (Yes/No)" },
 ];
 
 const inputClass =
@@ -577,7 +577,7 @@ export default function CustomFormBuilder({
                     itemsLength={itemsLength}
                     onMove={(direction) => moveItem(sectionId, index, direction)}
                     onDelete={() => deleteItem(sectionId, item.id)}
-                    deleteTitle="Hapus divider"
+                    deleteTitle="Delete divider"
                   />
                 </div>
               </div>
@@ -668,7 +668,7 @@ export default function CustomFormBuilder({
                     itemsLength={itemsLength}
                     onMove={(direction) => moveItem(sectionId, index, direction)}
                     onDelete={() => deleteItem(sectionId, item.id)}
-                    deleteTitle="Hapus field"
+                    deleteTitle="Delete field"
                   />
                 </div>
               </div>
@@ -765,7 +765,7 @@ export default function CustomFormBuilder({
                       }}
                       placeholder={
                         item.type === "checkbox"
-                          ? "Ya, Tidak"
+                          ? "Yes, No"
                           : "Opsi 1, Opsi 2"
                       }
                       className={inputClass}

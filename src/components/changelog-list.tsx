@@ -18,31 +18,37 @@ import {
 const SECTION_META: Record<
   ChangelogBadge,
   {
-    label: { id: string; en: string };
+    defaultLabel: string;
     icon: ElementType;
     tone: string;
   }
 > = {
   new: {
-    label: { id: "Fitur", en: "Features" },
+    defaultLabel: "Features",
     icon: Sparkles,
     tone: "text-amber-500",
   },
   improvement: {
-    label: { id: "Peningkatan", en: "Improvements" },
+    defaultLabel: "Improvements",
     icon: Rocket,
     tone: "text-emerald-500",
   },
   fix: {
-    label: { id: "Perbaikan", en: "Fixes" },
+    defaultLabel: "Fixes",
     icon: Wrench,
     tone: "text-blue-500",
   },
   update: {
-    label: { id: "Update", en: "Updates" },
+    defaultLabel: "Updates",
     icon: Megaphone,
     tone: "text-slate-500",
   },
+};
+
+type ChangelogLabels = {
+  latest?: string;
+  empty?: string;
+  sections?: Partial<Record<ChangelogBadge, string>>;
 };
 
 function formatReleaseDate(date: string, locale: string) {
@@ -67,14 +73,16 @@ export function ChangelogReleaseCard({
   isLatest = false,
   compact = false,
   className,
+  labels,
 }: {
   release: ChangelogRelease;
   locale: string;
   isLatest?: boolean;
   compact?: boolean;
   className?: string;
+  labels?: ChangelogLabels;
 }) {
-  const latestLabel = locale === "en" ? "Latest" : "Latest";
+  const latestLabel = labels?.latest || "Latest";
 
   return (
     <section
@@ -123,7 +131,7 @@ export function ChangelogReleaseCard({
           const sectionMeta = SECTION_META[section.badge];
           const SectionIcon = sectionMeta.icon;
           const sectionLabel =
-            locale === "en" ? sectionMeta.label.en : sectionMeta.label.id;
+            labels?.sections?.[section.badge] || sectionMeta.defaultLabel;
 
           return (
             <section
@@ -172,11 +180,13 @@ export function ChangelogReleaseList({
   locale,
   compact = false,
   className,
+  labels,
 }: {
   entries: ChangelogEntry[];
   locale: string;
   compact?: boolean;
   className?: string;
+  labels?: ChangelogLabels;
 }) {
   const releases = groupChangelogEntries(entries);
 
@@ -188,9 +198,7 @@ export function ChangelogReleaseList({
           className,
         )}
       >
-        {locale === "en"
-          ? "There are no changelog notes yet."
-          : "Belum ada catatan perubahan."}
+        {labels?.empty || "There are no changelog notes yet."}
       </div>
     );
   }
@@ -204,6 +212,7 @@ export function ChangelogReleaseList({
           locale={locale}
           isLatest={index === 0}
           compact={compact}
+          labels={labels}
         />
       ))}
     </div>

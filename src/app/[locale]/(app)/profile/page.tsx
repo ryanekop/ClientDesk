@@ -63,10 +63,10 @@ export default function ProfilePage() {
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
             open: true,
-            title: title || (locale === "en" ? "Information" : "Informasi"),
+            title: title || t("infoTitle"),
             message,
         });
-    }, [locale]);
+    }, [t]);
 
     React.useEffect(() => { fetchProfile(); }, []);
 
@@ -74,7 +74,7 @@ export default function ProfilePage() {
         const response = await fetch("/api/profile/ensure", { method: "POST" });
         if (!response.ok) {
             const payload = await response.json().catch(() => null);
-            throw new Error(payload?.error || "Gagal menyiapkan profil.");
+            throw new Error(payload?.error || t("failedPrepareProfile"));
         }
     });
 
@@ -93,7 +93,7 @@ export default function ProfilePage() {
     const saveProfilePatch = React.useEffectEvent(async (patch: Record<string, unknown>) => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
-            throw new Error("User tidak ditemukan.");
+            throw new Error(t("userNotFound"));
         }
 
         await ensureProfileRecord();
@@ -174,7 +174,7 @@ export default function ProfilePage() {
             setSavedMsg(t("berhasilSimpan"));
         } catch (error) {
             console.error("Save error:", error);
-            setSavedMsg("Gagal menyimpan.");
+            setSavedMsg(t("failedSave"));
         } finally {
             setTimeout(() => setSavedMsg(""), 3000);
             setSaving(false);
@@ -220,12 +220,12 @@ export default function ProfilePage() {
                 | null;
 
             if (!response.ok || !payload?.url) {
-                throw new Error(payload?.error || "Gagal menyimpan foto.");
+                throw new Error(payload?.error || t("failedSavePhoto"));
             }
 
             setAvatarUrl(payload.url);
         } catch {
-            showFeedback("Gagal menyimpan foto.");
+            showFeedback(t("failedSavePhoto"));
         }
     }
 

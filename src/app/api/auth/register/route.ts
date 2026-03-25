@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { resolveApiLocale } from '@/lib/i18n/api-locale'
+import { apiT } from '@/lib/i18n/api-errors'
 
 function getSupabaseAdmin() {
     return createClient(
@@ -10,17 +12,19 @@ function getSupabaseAdmin() {
     )
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+    const locale = resolveApiLocale(request)
+
     try {
         const { email, captchaToken } = await request.json()
 
         if (!email) {
-            return NextResponse.json({ error: 'Email wajib diisi' }, { status: 400 })
+            return NextResponse.json({ error: apiT(locale, 'emailRequired') }, { status: 400 })
         }
 
         // Verify Cloudflare Turnstile captcha
         if (!captchaToken) {
-            return NextResponse.json({ error: 'Captcha belum diverifikasi' }, { status: 400 })
+            return NextResponse.json({ error: apiT(locale, 'captchaNotVerified') }, { status: 400 })
         }
 
         const turnstileRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
@@ -35,7 +39,7 @@ export async function POST(request: Request) {
 
         const turnstileData = await turnstileRes.json()
         if (!turnstileData.success) {
-            return NextResponse.json({ error: 'Verifikasi captcha gagal' }, { status: 400 })
+            return NextResponse.json({ error: apiT(locale, 'captchaVerificationFailed') }, { status: 400 })
         }
 
         // Check if email already registered using admin API
@@ -45,7 +49,7 @@ export async function POST(request: Request) {
 
         if (existingUser) {
             if (existingUser.email_confirmed_at) {
-                return NextResponse.json({ error: 'Email ini sudah terdaftar. Silakan login.' }, { status: 409 })
+                return NextResponse.json({ error: apiT(locale, 'emailAlreadyRegisteredPleaseLogin') }, { status: 409 })
             } else {
                 // Unconfirmed user — delete stale record so they can re-register
                 await admin.auth.admin.deleteUser(existingUser.id)
@@ -55,6 +59,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ valid: true })
     } catch (error) {
         console.error('[Register] Validate error:', error)
-        return NextResponse.json({ error: 'Terjadi kesalahan saat validasi' }, { status: 500 })
+        return NextResponse.json({ error: apiT(locale, 'validationUnexpectedError') }, { status: 500 })
     }
 }

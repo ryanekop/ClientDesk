@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   ClipboardCheck,
   Copy,
@@ -59,6 +59,7 @@ function createSnapshot(input: SettingsSnapshot): SettingsSnapshot {
 export default function SettlementFormPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const locale = useLocale();
+  const t = useTranslations("SettlementFormPage");
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   const [loading, setLoading] = React.useState(true);
@@ -223,12 +224,12 @@ export default function SettlementFormPage() {
 
   async function persistSettings(
     nextSettings: SettingsSnapshot,
-    successMessage = "Tersimpan!",
+    successMessage = t("saved"),
   ) {
     if (!profileId) return false;
 
     if (nextSettings.settlement_form_payment_methods.length === 0) {
-      setSavedMsg("Pilih minimal satu metode pembayaran.");
+      setSavedMsg(t("validationSelectAtLeastOneMethod"));
       setSaveMessageTone("error");
       return false;
     }
@@ -236,12 +237,12 @@ export default function SettlementFormPage() {
       nextSettings.settlement_form_payment_methods.includes("bank") &&
       enabledBankCount === 0
     ) {
-      setSavedMsg("Belum ada rekening bank aktif. Atur dulu di Form Booking.");
+      setSavedMsg(t("validationNoActiveBank"));
       setSaveMessageTone("error");
       return false;
     }
     if (nextSettings.settlement_form_payment_methods.includes("qris") && !hasQris) {
-      setSavedMsg("QRIS belum tersedia. Upload dulu di Form Booking.");
+      setSavedMsg(t("validationNoQris"));
       setSaveMessageTone("error");
       return false;
     }
@@ -260,7 +261,7 @@ export default function SettlementFormPage() {
     setSaving(false);
 
     if (error) {
-      setSavedMsg("Gagal menyimpan.");
+      setSavedMsg(t("failedSave"));
       setSaveMessageTone("error");
       setTimeout(() => setSavedMsg(""), 3000);
       return false;
@@ -298,7 +299,7 @@ export default function SettlementFormPage() {
       settlement_form_payment_methods: resetPaymentMethods,
       settlement_form_lang: DEFAULTS.lang,
     };
-    const saved = await persistSettings(nextSettings, "Berhasil reset ke default.");
+    const saved = await persistSettings(nextSettings, t("resetSuccess"));
     if (!saved) return;
 
     setBrandColor(nextSettings.settlement_form_brand_color);
@@ -312,11 +313,11 @@ export default function SettlementFormPage() {
     if (!settlementUrl) return;
     try {
       await navigator.clipboard.writeText(settlementUrl);
-      showSuccessToast("URL form pelunasan berhasil disalin.");
+      showSuccessToast(t("urlCopied"));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      setSavedMsg("Gagal menyalin URL.");
+      setSavedMsg(t("failedCopyUrl"));
       setSaveMessageTone("error");
       setTimeout(() => setSavedMsg(""), 3000);
     }
@@ -384,7 +385,7 @@ export default function SettlementFormPage() {
                 <input
                   value={greeting}
                   onChange={(e) => setGreeting(e.target.value)}
-                  placeholder="Silakan lanjutkan pelunasan booking Anda."
+                  placeholder={t("greetingPlaceholder")}
                   className={inputClass}
                 />
                 <p className="text-xs text-muted-foreground">
@@ -425,21 +426,21 @@ export default function SettlementFormPage() {
                   description:
                     enabledBankCount > 0
                       ? `${enabledBankCount} rekening aktif`
-                      : "Belum ada rekening aktif",
+                      : t("noActiveBankAccount"),
                   icon: CreditCard,
                 },
                 {
                   id: "qris" as PaymentMethod,
                   title: "QRIS",
                   description: hasQris
-                    ? "QRIS tersedia"
-                    : "QRIS belum tersedia",
+                    ? t("qrisAvailable")
+                    : t("qrisNotAvailable"),
                   icon: QrCode,
                 },
                 {
                   id: "cash" as PaymentMethod,
                   title: "Cash",
-                  description: "Pelunasan tunai diverifikasi admin",
+                  description: t("cashVerifiedByAdmin"),
                   icon: Banknote,
                 },
               ].map((method) => {

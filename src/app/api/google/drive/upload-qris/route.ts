@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         const folder = await findOrCreateNestedPath(
             profile.google_drive_access_token,
             profile.google_drive_refresh_token,
-            ["Data Booking Client Desk", "Pengaturan Pembayaran"],
+            ["Data Booking Client Desk", "Payment Settings"],
         );
 
         if (!folder.folderId) {

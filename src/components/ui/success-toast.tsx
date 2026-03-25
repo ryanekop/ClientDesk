@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { CheckCircle2, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 type SuccessToastState = {
   message: string;
@@ -28,6 +29,8 @@ export function SuccessToast({
   closing: boolean;
   onClose: () => void;
 }) {
+  const t = useTranslations("SuccessToast");
+
   return (
     <div
       className="pointer-events-none fixed inset-x-4 z-50 sm:left-auto sm:right-4 sm:w-[24rem]"
@@ -49,7 +52,7 @@ export function SuccessToast({
           type="button"
           className="shrink-0 rounded p-0.5 text-emerald-700/80 transition-colors hover:bg-emerald-100 hover:text-emerald-900"
           onClick={onClose}
-          aria-label="Tutup notifikasi"
+          aria-label={t("closeNotification")}
         >
           <X className="h-4 w-4" />
         </button>

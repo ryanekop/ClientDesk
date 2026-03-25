@@ -125,7 +125,7 @@ export type GroupedCustomLayoutSection = {
 const BUILT_IN_SECTIONS: BuiltInSectionDefinition[] = [
   {
     sectionId: "client_info",
-    title: "Informasi Klien",
+    title: "Client Information",
     category: "Klien",
   },
   {
@@ -176,25 +176,25 @@ const WEDDING_BUILT_IN_FIELDS: BuiltInFieldDefinition[] = [
   },
   {
     builtinId: "akad_date",
-    label: "Tanggal Akad",
+    label: "Ceremony Date",
     category: "Sesi",
     sectionId: "session_details",
   },
   {
     builtinId: "akad_time",
-    label: "Jam Akad",
+    label: "Ceremony Time",
     category: "Sesi",
     sectionId: "session_details",
   },
   {
     builtinId: "resepsi_date",
-    label: "Tanggal Resepsi",
+    label: "Reception Date",
     category: "Sesi",
     sectionId: "session_details",
   },
   {
     builtinId: "resepsi_time",
-    label: "Jam Resepsi",
+    label: "Reception Time",
     category: "Sesi",
     sectionId: "session_details",
   },
@@ -431,7 +431,7 @@ export function getBuiltInFieldDefinitions(
       ? [
           {
             builtinId: "location_detail" as const,
-            label: "Detail Lokasi",
+            label: "Location Details",
             category: "Sesi" as const,
             sectionId: "session_details" as const,
           },
@@ -445,7 +445,7 @@ export function getBuiltInFieldDefinitions(
           },
           {
             builtinId: "location_detail" as const,
-            label: "Detail Lokasi",
+            label: "Location Details",
             category: "Sesi" as const,
             sectionId: "session_details" as const,
           },

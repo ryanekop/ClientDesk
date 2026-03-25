@@ -604,8 +604,8 @@ export default function TeamPage() {
             ) : queryState.totalItems === 0 ? (
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-12 text-center">
                     <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <h3 className="font-semibold text-lg mb-1">{hasActiveListFilters ? "Tidak ada hasil" : t("belumAda")}</h3>
-                    <p className="text-muted-foreground text-sm">{hasActiveListFilters ? "Coba ubah kata kunci pencarian atau filter tag." : t("belumAdaDesc")}</p>
+                    <h3 className="font-semibold text-lg mb-1">{hasActiveListFilters ? tt("noResults") : t("belumAda")}</h3>
+                    <p className="text-muted-foreground text-sm">{hasActiveListFilters ? tt("noResultsDesc") : t("belumAdaDesc")}</p>
                 </div>
             ) : (
                 <>

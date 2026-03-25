@@ -2,23 +2,12 @@
 
 import * as React from "react";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 type AnnouncementSegment = {
   text: string;
   bold?: boolean;
 };
-
-const ANNOUNCEMENT_SEGMENTS: AnnouncementSegment[] = [
-  { text: "Admin sedang libur lebaran dulu ygy mulai tanggal" },
-  { text: " 20-27 Maret", bold: true },
-  {
-    text: ". Segala konsultasi dan masalah akan dijawab slow respon di DM Instagram. Admin tidak akan mengupdate website (fitur & bug fixing) selama periode itu. ",
-  },
-  {
-    text: "✨🌙 Taqabbalallahu Minna wa minkum. Minal Aidzin Wal Faidzin, Mohon Maaf Lahir dan Batin 1447 H 🌙✨",
-    bold: true,
-  },
-];
 
 const MARQUEE_ITEM_GAP_PX = 40;
 const MARQUEE_SPEED_PX_PER_SECOND = 44;
@@ -33,8 +22,11 @@ function shouldHideAnnouncement(pathname: string): boolean {
   return EXCLUDED_PATTERNS.some((pattern) => pattern.test(pathname));
 }
 
-function renderAnnouncementMessage(keyPrefix: string) {
-  return ANNOUNCEMENT_SEGMENTS.map((segment, index) => {
+function renderAnnouncementMessage(
+  keyPrefix: string,
+  segments: AnnouncementSegment[],
+) {
+  return segments.map((segment, index) => {
     if (segment.bold) {
       return (
         <strong key={`${keyPrefix}-segment-${index}`} className="font-bold">
@@ -52,6 +44,7 @@ function renderAnnouncementMessage(keyPrefix: string) {
 }
 
 export function GlobalHolidayAnnouncement() {
+  const t = useTranslations("GlobalHolidayAnnouncement");
   const pathname = usePathname();
   const announcementRef = React.useRef<HTMLDivElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -61,6 +54,15 @@ export function GlobalHolidayAnnouncement() {
   const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false);
   const [marqueeDistancePx, setMarqueeDistancePx] = React.useState(1200);
   const [marqueeDurationSec, setMarqueeDurationSec] = React.useState(30);
+  const announcementSegments = React.useMemo<AnnouncementSegment[]>(
+    () => [
+      { text: t("prefixText") },
+      { text: ` ${t("dateRange")}`, bold: true },
+      { text: t("noticeText") },
+      { text: t("greetingText"), bold: true },
+    ],
+    [t],
+  );
 
   const isVisible = React.useMemo(() => {
     if (!pathname) return true;
@@ -196,7 +198,7 @@ export function GlobalHolidayAnnouncement() {
           className="pointer-events-none absolute -z-10 whitespace-nowrap text-sm font-medium opacity-0"
           aria-hidden="true"
         >
-          {renderAnnouncementMessage("measure")}
+          {renderAnnouncementMessage("measure", announcementSegments)}
         </span>
 
         {shouldAnimate ? (
@@ -205,15 +207,15 @@ export function GlobalHolidayAnnouncement() {
             style={marqueeStyle}
           >
             <span ref={firstMarqueeItemRef} className="announcement-marquee-item">
-              {renderAnnouncementMessage("marquee-primary")}
+              {renderAnnouncementMessage("marquee-primary", announcementSegments)}
             </span>
             <span className="announcement-marquee-item" aria-hidden="true">
-              {renderAnnouncementMessage("marquee-duplicate")}
+              {renderAnnouncementMessage("marquee-duplicate", announcementSegments)}
             </span>
           </div>
         ) : (
           <p className="w-full truncate whitespace-nowrap text-center text-sm font-semibold">
-            {renderAnnouncementMessage("static")}
+            {renderAnnouncementMessage("static", announcementSegments)}
           </p>
         )}
       </div>

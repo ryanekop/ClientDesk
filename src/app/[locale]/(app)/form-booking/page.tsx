@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useTenant } from "@/lib/tenant-context";
 import {
   ExternalLink,
@@ -195,6 +195,7 @@ function createFormBookingSnapshot({
 export default function FormBookingPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const locale = useLocale();
+  const t = useTranslations("FormBookingPage");
   const tenant = useTenant();
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -689,21 +690,21 @@ export default function FormBookingPage() {
     const enabledBanks = getEnabledBankAccounts(bankAccounts);
 
     if (formPaymentMethods.length === 0) {
-      setSavedMsg("Pilih minimal satu metode pembayaran.");
+      setSavedMsg(t("validationSelectAtLeastOneMethod"));
       setSaveMessageTone("error");
       setSaving(false);
       return false;
     }
 
     if (formPaymentMethods.includes("bank") && enabledBanks.length === 0) {
-      setSavedMsg("Aktifkan minimal satu rekening bank untuk form booking.");
+      setSavedMsg(t("validationNeedOneActiveBank"));
       setSaveMessageTone("error");
       setSaving(false);
       return false;
     }
 
     if (formPaymentMethods.includes("qris") && (!isDriveConnected || !qrisImageUrl)) {
-      setSavedMsg("QRIS memerlukan Google Drive terhubung dan gambar QRIS yang sudah diupload.");
+      setSavedMsg(t("validationQrisRequiresDrive"));
       setSaveMessageTone("error");
       setSaving(false);
       return false;
@@ -734,7 +735,7 @@ export default function FormBookingPage() {
       .eq("id", profileId);
 
     if (error) {
-      setSavedMsg("Gagal menyimpan.");
+      setSavedMsg(t("failedSave"));
       setSaveMessageTone("error");
       setTimeout(() => setSavedMsg(""), 3000);
       setSaving(false);
@@ -767,7 +768,7 @@ export default function FormBookingPage() {
       ),
     );
     setSavedMsg("");
-    showSuccessToast("Pengaturan form booking berhasil disimpan.");
+    showSuccessToast(t("saveSuccess"));
     setIframeKey((k) => k + 1);
     setSaving(false);
     return true;
@@ -830,7 +831,7 @@ export default function FormBookingPage() {
     setSaving(false);
 
     if (error) {
-      setSavedMsg("Gagal reset default.");
+      setSavedMsg(t("failedResetDefault"));
       setSaveMessageTone("error");
       setTimeout(() => setSavedMsg(""), 3000);
       return;
@@ -883,18 +884,18 @@ export default function FormBookingPage() {
     setLastSavedSnapshot(nextSnapshot);
     setSavedMsg("");
     setSaveMessageTone("success");
-    showSuccessToast("Pengaturan form booking berhasil direset ke default.");
+    showSuccessToast(t("resetSuccess"));
     setIframeKey((k) => k + 1);
   }
 
   async function copyUrl() {
     try {
       await navigator.clipboard.writeText(formUrl);
-      showSuccessToast("URL form booking berhasil disalin.");
+      showSuccessToast(t("urlCopied"));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      setSavedMsg("Gagal menyalin URL form.");
+      setSavedMsg(t("failedCopyUrl"));
       setSaveMessageTone("error");
       setTimeout(() => setSavedMsg(""), 3000);
     }
@@ -969,16 +970,16 @@ export default function FormBookingPage() {
       const result = await res.json();
 
       if (!result.success) {
-        setSavedMsg(result.error || "Gagal upload QRIS.");
+        setSavedMsg(result.error || t("failedUploadQris"));
         setSaveMessageTone("error");
         return;
       }
 
       setQrisImageUrl(result.qrisImageUrl || null);
-      setSavedMsg("QRIS berhasil diupload.");
+      setSavedMsg(t("uploadQrisSuccess"));
       setSaveMessageTone("success");
     } catch {
-      setSavedMsg("Gagal upload QRIS.");
+      setSavedMsg(t("failedUploadQris"));
       setSaveMessageTone("error");
     } finally {
       if (qrisInputRef.current) qrisInputRef.current.value = "";
@@ -995,16 +996,16 @@ export default function FormBookingPage() {
       const result = await res.json();
 
       if (!result.success) {
-        setSavedMsg(result.error || "Gagal menghapus QRIS.");
+        setSavedMsg(result.error || t("failedDeleteQris"));
         setSaveMessageTone("error");
         return;
       }
 
       setQrisImageUrl(null);
-      setSavedMsg("QRIS berhasil dihapus.");
+      setSavedMsg(t("deleteQrisSuccess"));
       setSaveMessageTone("success");
     } catch {
-      setSavedMsg("Gagal menghapus QRIS.");
+      setSavedMsg(t("failedDeleteQris"));
       setSaveMessageTone("error");
     } finally {
       setQrisDeleting(false);
@@ -1521,14 +1522,14 @@ export default function FormBookingPage() {
                         ) : (
                           <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                         )}
-                        <p className="text-sm font-medium">
-                          {isDriveConnected
-                            ? "Klik untuk upload QRIS"
-                            : "Hubungkan Google Drive untuk upload QRIS"}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Format gambar PNG / JPG. Akan tampil di form booking publik.
-                        </p>
+                          <p className="text-sm font-medium">
+                            {isDriveConnected
+                            ? t("clickToUploadQris")
+                            : t("connectDriveToUploadQris")}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                          {t("qrisUploadFormatHint")}
+                          </p>
                       </button>
                     )}
 
@@ -1542,14 +1543,14 @@ export default function FormBookingPage() {
                   </div>
 
                   <div className="rounded-lg border bg-background px-4 py-3 text-xs text-muted-foreground">
-                    Ringkasan: {formPaymentMethods.length > 0 ? formPaymentMethods.map(getPaymentMethodLabel).join(", ") : "belum ada metode aktif"}.
+                    {t("summaryLabel")}: {formPaymentMethods.length > 0 ? formPaymentMethods.map(getPaymentMethodLabel).join(", ") : t("summaryNoActiveMethod")}.
                     {formPaymentMethods.includes("bank")
-                      ? ` Rekening aktif: ${enabledBankAccounts.length}.`
+                      ? ` ${t("summaryActiveBankAccounts", { count: enabledBankAccounts.length })}.`
                       : ""}
                     {formPaymentMethods.includes("qris")
                       ? qrisImageUrl
-                        ? " QRIS siap ditampilkan."
-                        : " QRIS belum diupload."
+                        ? ` ${t("summaryQrisReady")}`
+                        : ` ${t("summaryQrisNotUploaded")}`
                       : ""}
                   </div>
                 </div>
@@ -1589,7 +1590,7 @@ export default function FormBookingPage() {
                     <input
                       value={greeting}
                       onChange={(e) => setGreeting(e.target.value)}
-                      placeholder="Silakan isi formulir di bawah ini untuk booking."
+                      placeholder={t("greetingPlaceholder")}
                       className={inputClass}
                     />
                     <p className="text-xs text-muted-foreground">
@@ -1614,7 +1615,7 @@ export default function FormBookingPage() {
                     <p className="text-xs text-muted-foreground">
                       {locale === "en"
                         ? "Choose the language for the public booking form."
-                        : "Pilih bahasa untuk form booking publik."}
+                        : t("formLanguageHelp")}
                     </p>
                   </div>
                 </div>
@@ -1985,7 +1986,7 @@ export default function FormBookingPage() {
                       size="icon"
                       className="h-8 w-8"
                       onClick={() => void copyUrl()}
-                      title="Salin URL"
+                      title={t("copyUrlButtonTitle")}
                     >
                       {copied ? (
                         <ClipboardCheck className="w-3.5 h-3.5 text-green-500" />
@@ -1998,7 +1999,7 @@ export default function FormBookingPage() {
                       size="icon"
                       className="h-8 w-8"
                       onClick={() => window.open(formUrl, "_blank")}
-                      title="Buka di tab baru"
+                      title={t("openInNewTabTitle")}
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                     </Button>
@@ -2022,7 +2023,7 @@ export default function FormBookingPage() {
                       <span className="text-[11px] text-muted-foreground truncate block">
                         {formUrl
                           ? formUrl.replace(/^https?:\/\//, "")
-                          : "Memuat preview..."}
+                          : t("loadingPreview")}
                       </span>
                     </div>
                   </div>
@@ -2052,7 +2053,7 @@ export default function FormBookingPage() {
                       <div className="flex h-full items-center justify-center bg-muted/10">
                         <div className="flex flex-col items-center gap-2 text-muted-foreground">
                           <Loader2 className="h-5 w-5 animate-spin" />
-                          <span className="text-xs">Menyiapkan preview...</span>
+                          <span className="text-xs">{t("preparingPreview")}</span>
                         </div>
                       </div>
                     )}
@@ -2063,11 +2064,11 @@ export default function FormBookingPage() {
               <div className="flex items-center justify-center h-64 rounded-2xl border bg-muted/20">
                 <div className="text-center px-6 space-y-2">
                   <p className="text-3xl">📋</p>
-                  <p className="text-sm font-medium">Form belum aktif</p>
+                  <p className="text-sm font-medium">{t("formNotActive")}</p>
                   <p className="text-xs text-muted-foreground">
                     {!studioName
-                      ? "Atur Nama Studio di Pengaturan terlebih dahulu."
-                      : "Klik \"Simpan Pengaturan\" untuk mengaktifkan form booking."}
+                      ? t("studioNameRequired")
+                      : t("clickSaveToActivateForm")}
                   </p>
                 </div>
               </div>
