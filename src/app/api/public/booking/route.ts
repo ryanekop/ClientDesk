@@ -1045,6 +1045,7 @@ export async function POST(request: NextRequest) {
                         eventType: resolvedEventType,
                         notes,
                         extraFields: sanitizedExtraData,
+                        freelancerNames: [],
                         googleCalendarEventIds: null,
                         services: mainServices[0] || null,
                         bookingServices: bookingServicesForSync,

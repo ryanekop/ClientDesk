@@ -7,6 +7,7 @@ import {
   normalizeGoogleCalendarEventIds,
   resolveBookingCalendarSessions,
 } from "@/lib/booking-calendar-sessions";
+import { formatBookingFreelancerNames } from "@/lib/booking-freelancers";
 import {
   DEFAULT_CALENDAR_EVENT_DESCRIPTION,
   DEFAULT_CALENDAR_EVENT_FORMAT,
@@ -34,6 +35,7 @@ type CalendarBookingConfig = {
   bookingCode: string;
   clientName: string;
   clientWhatsapp?: string | null;
+  freelancerNames?: string[] | null;
   sessionDate: string | null;
   location?: string | null;
   locationLat?: number | null;
@@ -100,6 +102,9 @@ export async function syncBookingCalendarEvent({
   let primaryStart: GoogleCalendarDateTime | null = null;
   let primaryEnd: GoogleCalendarDateTime | null = null;
   let primaryEventId: string | null = null;
+  const freelanceLabel = formatBookingFreelancerNames(
+    Array.isArray(booking.freelancerNames) ? booking.freelancerNames : [],
+  );
 
   for (let index = 0; index < sessions.length; index++) {
     const session = sessions[index];
@@ -119,6 +124,7 @@ export async function syncBookingCalendarEvent({
       {
         client_name: booking.clientName,
         client_whatsapp: booking.clientWhatsapp || "-",
+        freelance: freelanceLabel,
         service_name: serviceName,
         event_type: booking.eventType || "-",
         booking_code: booking.bookingCode,

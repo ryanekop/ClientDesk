@@ -2161,6 +2161,7 @@ export default function SettingsPage() {
     payment_method: "Transfer Bank",
     studio_name: studioName || "Memori Studio",
     freelancer_name: "Andi",
+    freelance: "Andi, Bima",
     client_whatsapp: "+628123456789",
     event_type: selectedEventType,
     day_name: "Rabu",

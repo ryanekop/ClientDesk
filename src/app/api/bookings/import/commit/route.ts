@@ -21,6 +21,7 @@ import {
   isDuplicateBookingCodeError,
 } from "@/lib/booking-code";
 import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
+import { resolveBookingFreelancerNames } from "@/lib/booking-freelancers";
 import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
 import { resolveBookingFreelancerAttendeeEmails } from "@/lib/google-calendar-attendees";
@@ -224,7 +225,7 @@ async function syncImportedBookings(
   const { data: bookings } = await supabase
     .from("bookings")
     .select(
-      "id, booking_code, client_name, client_whatsapp, session_date, location, location_lat, location_lng, location_detail, notes, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon, affects_schedule))",
+      "id, booking_code, client_name, client_whatsapp, session_date, location, location_lat, location_lng, location_detail, notes, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))",
     )
     .eq("user_id", userId)
     .in("id", bookingIds);
@@ -246,6 +247,8 @@ async function syncImportedBookings(
     google_calendar_event_ids?: unknown;
     services?: unknown;
     booking_services?: unknown;
+    freelance?: unknown;
+    booking_freelance?: unknown;
   }>;
 
   let attendeeEmailsByBooking: Record<string, string[]> = {};
@@ -311,6 +314,10 @@ async function syncImportedBookings(
           eventType: booking.event_type,
           notes: booking.notes,
           extraFields: booking.extra_fields,
+          freelancerNames: resolveBookingFreelancerNames({
+            bookingFreelance: booking.booking_freelance,
+            legacyFreelance: booking.freelance,
+          }),
           googleCalendarEventId: booking.google_calendar_event_id,
           googleCalendarEventIds: booking.google_calendar_event_ids,
           services: booking.services,

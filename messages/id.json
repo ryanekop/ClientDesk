@@ -163,7 +163,7 @@
         "termsAgreementDefault": "Saya telah membaca & setuju terhadap",
         "termsLinkDefault": "Syarat & Ketentuan",
         "termsDialogDescription": "Silakan baca syarat dan ketentuan berikut sebelum melanjutkan booking.",
-        "termsReadHint": "Buka tautan Syarat & Ketentuan sekali untuk mengaktifkan checklist persetujuan.",
+        "termsReadHint": "Buka & baca Syarat & Ketentuan dulu untuk membuka checklist persetujuan.",
         "tutup": "Tutup"
     },
     "Bookings": {

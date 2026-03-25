@@ -65,6 +65,7 @@ export const DEFAULT_DRIVE_FOLDER_STRUCTURE = [DEFAULT_DRIVE_FOLDER_FORMAT];
 export const CALENDAR_TEMPLATE_VARIABLES = [
     "{{client_name}}",
     "{{client_whatsapp}}",
+    "{{freelance}}",
     "{{service_name}}",
     "{{event_type}}",
     "{{booking_code}}",

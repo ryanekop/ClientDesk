@@ -73,6 +73,8 @@ import {
   UNIVERSITY_EXTRA_FIELD_KEY,
   UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
+import { useTenant } from "@/lib/tenant-context";
+import { shouldHideTenantBranding } from "@/lib/tenant-branding";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -253,6 +255,11 @@ export function BookingFormClient({
   const slug = vendorSlug || slugFromParams;
   const localeCode = params?.locale === "en" ? "en" : "id";
   const t = useTranslations("BookingForm");
+  const tenant = useTenant();
+  const showPoweredBy = !shouldHideTenantBranding({
+    id: tenant.id,
+    domain: tenant.domain,
+  });
   const normalizedOfferToken = normalizeSpecialOfferToken(specialOfferToken);
   const previewMode = searchParams.get("preview") === "1";
   const previewStorageKey = searchParams.get("previewKey") || "";
@@ -2208,9 +2215,11 @@ export function BookingFormClient({
           </Dialog>
         )}
 
-        <p className="text-center text-xs text-muted-foreground pb-4">
-          Powered by <span className="font-semibold">Client Desk</span>
-        </p>
+        {showPoweredBy && (
+          <p className="text-center text-xs text-muted-foreground pb-4">
+            Powered by <span className="font-semibold">Client Desk</span>
+          </p>
+        )}
       </div>
     </div>
   );

@@ -5,6 +5,8 @@ import { Check, Clock, HardDrive, ExternalLink, Download } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
 import { resolveFastpikLinkDisplay } from "@/lib/fastpik-link-display";
+import { useTenant } from "@/lib/tenant-context";
+import { shouldHideTenantBranding } from "@/lib/tenant-branding";
 
 type BookingData = {
     bookingCode: string;
@@ -76,6 +78,11 @@ interface TrackingClientProps {
 export default function TrackingClient({ booking, vendorName, customStatuses }: TrackingClientProps) {
     const t = useTranslations("Track");
     const locale = useLocale();
+    const tenant = useTenant();
+    const showPoweredBy = !shouldHideTenantBranding({
+        id: tenant.id,
+        domain: tenant.domain,
+    });
     const [passwordCopied, setPasswordCopied] = React.useState(false);
 
     // Build steps from custom statuses or fallback to defaults
@@ -462,9 +469,11 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                     </div>
                 )}
 
-                <p className="text-center text-xs text-muted-foreground pb-4">
-                    Powered by <span className="font-semibold">Client Desk</span>
-                </p>
+                {showPoweredBy && (
+                    <p className="text-center text-xs text-muted-foreground pb-4">
+                        Powered by <span className="font-semibold">Client Desk</span>
+                    </p>
+                )}
             </div>
         </div>
     );

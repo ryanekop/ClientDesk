@@ -730,10 +730,13 @@ export default function SettlementClient({
             <button
               type="submit"
               disabled={submitting || uploadingProof}
-              className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-              style={{ backgroundColor: brandColor }}
+              className="flex w-full h-12 items-center justify-center gap-2 rounded-lg text-base font-semibold text-white shadow-lg transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer"
+              style={{
+                backgroundColor: brandColor,
+                boxShadow: `0 10px 15px -3px ${brandColor}33`,
+              }}
             >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
               {submitting ? t("sending") : t("submit")}
             </button>
           </form>

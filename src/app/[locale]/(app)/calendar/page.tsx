@@ -21,6 +21,7 @@ import {
     getBookingServiceLabel,
     normalizeBookingServiceSelections,
 } from "@/lib/booking-services";
+import { formatBookingFreelancerNames, resolveBookingFreelancerNames } from "@/lib/booking-freelancers";
 import {
     normalizeGoogleCalendarEventIds,
     resolveBookingCalendarSessions,
@@ -417,7 +418,7 @@ export default function CalendarPage() {
 
         const { data } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, session_date, status, location, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, google_calendar_sync_status, google_calendar_sync_error, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon, affects_schedule))")
+            .select("id, booking_code, client_name, session_date, status, location, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, google_calendar_sync_status, google_calendar_sync_error, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))")
             .eq("user_id", user.id)
             .neq("status", CANCELLED_BOOKING_STATUS);
 
@@ -448,6 +449,11 @@ export default function CalendarPage() {
                     extraFields: booking.extra_fields,
                     defaultLocation: booking.location,
                 });
+                const freelancerNames = resolveBookingFreelancerNames({
+                    bookingFreelance: booking.booking_freelance,
+                    legacyFreelance: booking.freelance,
+                });
+                const freelanceLabel = formatBookingFreelancerNames(freelancerNames);
 
                 return sessions.map((session) => {
                     const sessionDate = getSessionDateUTC(session.sessionDate);
@@ -464,6 +470,7 @@ export default function CalendarPage() {
                         event_type: booking.event_type || "-",
                         booking_code: booking.booking_code || "",
                         studio_name: studioName || "Client Desk",
+                        freelance: freelanceLabel,
                         location: session.location || booking.location || "-",
                         ...range.templateVars,
                     }, booking.extra_fields));
