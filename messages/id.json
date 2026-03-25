@@ -640,6 +640,7 @@
     "BookingsPage": {
         "addClient": "Tambah Klien Baru",
         "export": "Export",
+        "moreActions": "Aksi Lainnya",
         "allStatus": "Semua Status",
         "allPackages": "Semua Paket",
         "allFreelance": "Semua Freelance",

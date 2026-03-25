@@ -35,7 +35,7 @@ export function SuccessToast({
     >
       <div
         className={[
-          "pointer-events-auto flex w-full items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-lg sm:max-w-sm",
+          "pointer-events-auto flex w-full items-start gap-2.5 rounded-xl border border-emerald-300/80 bg-emerald-50 px-4 py-3.5 text-sm font-semibold text-emerald-800 shadow-[0_10px_28px_-14px_rgba(16,185,129,0.65)] sm:max-w-sm",
           closing
             ? "animate-out fade-out slide-out-to-right-8 duration-200"
             : "animate-in fade-in slide-in-from-right-8 duration-300",
@@ -43,8 +43,8 @@ export function SuccessToast({
         role="status"
         aria-live="polite"
       >
-        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-        <p className="min-w-0 flex-1 break-words leading-5">{message}</p>
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+        <p className="min-w-0 flex-1 break-words leading-5 font-semibold">{message}</p>
         <button
           type="button"
           className="shrink-0 rounded p-0.5 text-emerald-700/80 transition-colors hover:bg-emerald-100 hover:text-emerald-900"

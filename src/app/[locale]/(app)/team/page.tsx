@@ -10,7 +10,10 @@ import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
-import { PageHeader } from "@/components/ui/page-header";
+import {
+    PageHeader,
+    PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME,
+} from "@/components/ui/page-header";
 import {
     lockBoundaryColumns,
     mergeTableColumnPreferences,
@@ -480,11 +483,12 @@ export default function TeamPage() {
     return (
         <div className="space-y-6">
             <PageHeader
+                actionsClassName={PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME}
                 actions={(
                     <>
                         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                             <DialogTrigger asChild>
-                                <Button className="w-full lg:w-auto"><Plus className="w-4 h-4" /> {t("tambah")}</Button>
+                                <Button className="order-2 w-full lg:order-1 lg:w-auto"><Plus className="w-4 h-4" /> {t("tambah")}</Button>
                             </DialogTrigger>
                             <DialogContent className="sm:max-w-[500px]">
                                 <DialogHeader>
@@ -536,7 +540,7 @@ export default function TeamPage() {
                                 onChange={setColumns}
                                 onSave={() => saveColumnPreferences(columns)}
                                 saving={savingColumns}
-                                triggerClassName="w-full lg:w-auto"
+                                triggerClassName="order-1 w-full lg:order-2 lg:w-auto"
                             />
                         ) : null}
                     </>

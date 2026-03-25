@@ -640,6 +640,7 @@
     "BookingsPage": {
         "addClient": "Add New Client",
         "export": "Export",
+        "moreActions": "More Actions",
         "allStatus": "All Statuses",
         "allPackages": "All Packages",
         "allFreelance": "All Freelancers",

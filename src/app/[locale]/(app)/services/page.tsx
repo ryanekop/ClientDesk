@@ -41,7 +41,10 @@ import {
   MoveVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
+import {
+  PageHeader,
+  PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME,
+} from "@/components/ui/page-header";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import {
   Dialog,
@@ -1088,6 +1091,7 @@ export default function ServicesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        actionsClassName={PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME}
         actions={
           <>
             <Button

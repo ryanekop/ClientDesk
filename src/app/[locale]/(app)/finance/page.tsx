@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PageHeader } from "@/components/ui/page-header";
+import {
+    PageHeader,
+    PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME,
+} from "@/components/ui/page-header";
 import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -1359,12 +1362,12 @@ export default function FinancePage() {
             {successToastNode}
             <BookingWriteReadonlyBanner />
             <PageHeader
+                actionsClassName={PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME}
                 actions={(
                     <>
                         <Button
                             type="button"
-                            variant="outline"
-                            className="w-full lg:w-auto"
+                            className="order-2 w-full lg:order-1 lg:w-auto"
                             onClick={() => { void exportFinance(); }}
                         >
                             <Download className="w-4 h-4" /> Export Excel
@@ -1378,7 +1381,7 @@ export default function FinancePage() {
                             onChange={setColumns}
                             onSave={() => saveColumnPreferences(columns)}
                             saving={savingColumns}
-                            triggerClassName="w-full lg:w-auto"
+                            triggerClassName="order-1 w-full lg:order-2 lg:w-auto"
                         />
                     </>
                 )}

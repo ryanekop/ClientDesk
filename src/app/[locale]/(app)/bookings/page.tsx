@@ -21,7 +21,10 @@ import {
 import { getBookingWriteBlockedMessage } from "@/lib/booking-write-access";
 import { cn } from "@/lib/utils";
 import { BatchImportButton } from "@/components/batch-import";
-import { PageHeader } from "@/components/ui/page-header";
+import {
+    PageHeader,
+    PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME,
+} from "@/components/ui/page-header";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
 import { useSuccessToast } from "@/components/ui/success-toast";
@@ -326,6 +329,7 @@ export default function BookingsPage() {
     const [waTargetPopup, setWaTargetPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [copyTargetPopup, setCopyTargetPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
+    const [mobileHeaderActionsOpen, setMobileHeaderActionsOpen] = React.useState(false);
     const { showSuccessToast, successToastNode } = useSuccessToast();
     const { canWriteBookings } = useBookingWriteAccess();
     const bookingWriteBlockedMessage = React.useMemo(
@@ -1533,11 +1537,9 @@ export default function BookingsPage() {
             <BookingWriteReadonlyBanner />
             {/* Header */}
             <PageHeader
+                actionsClassName={PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME}
                 actions={(
                     <>
-                        <Button variant="outline" className="w-full lg:w-auto" onClick={() => { void exportBookings(); }}>
-                            <Download className="w-4 h-4" /> {tb("export")}
-                        </Button>
                         <TableColumnManager
                             title="Kelola Kolom Daftar Booking"
                             description="Atur kolom yang ditampilkan dan ubah urutannya. Kolom Nama dan Aksi selalu terkunci."
@@ -1547,29 +1549,95 @@ export default function BookingsPage() {
                             onChange={setColumns}
                             onSave={() => saveColumnPreferences(columns)}
                             saving={savingColumns}
-                            triggerClassName="w-full lg:w-auto"
-                        />
-                        <BatchImportButton
-                            onImported={() => fetchData("refresh")}
-                            canCommitBookings={canWriteBookings}
-                            bookingWriteBlockedMessage={bookingWriteBlockedMessage}
-                            buttonClassName="w-full lg:w-auto"
+                            triggerClassName="w-full lg:order-2 lg:w-auto"
                         />
                         {canWriteBookings ? (
-                            <Button asChild className="w-full bg-foreground text-background hover:bg-foreground/90 lg:w-auto">
+                            <Button asChild className="w-full bg-foreground text-background hover:bg-foreground/90 lg:order-4 lg:w-auto">
                                 <Link href="/bookings/new">
                                     <Plus className="w-4 h-4" /> {tb("addClient")}
                                 </Link>
                             </Button>
                         ) : (
                             <Button
-                                className="w-full bg-foreground text-background hover:bg-foreground/90 lg:w-auto"
+                                className="w-full bg-foreground text-background hover:bg-foreground/90 lg:order-4 lg:w-auto"
                                 disabled
                                 title={bookingWriteBlockedMessage}
                             >
                                 <Plus className="w-4 h-4" /> {tb("addClient")}
                             </Button>
                         )}
+                        <div className="col-span-2 max-[360px]:col-span-1 lg:hidden">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="h-9 w-full justify-between"
+                                onClick={() => setMobileHeaderActionsOpen((current) => !current)}
+                                aria-expanded={mobileHeaderActionsOpen}
+                                aria-controls="bookings-mobile-header-actions"
+                            >
+                                <span>{tb("moreActions")}</span>
+                                <ChevronDown
+                                    className={cn(
+                                        "w-4 h-4 transition-transform duration-200",
+                                        mobileHeaderActionsOpen ? "rotate-180" : "rotate-0",
+                                    )}
+                                />
+                            </Button>
+                            <div
+                                id="bookings-mobile-header-actions"
+                                className={cn(
+                                    "grid transition-all duration-200 ease-out",
+                                    mobileHeaderActionsOpen
+                                        ? "grid-rows-[1fr] opacity-100"
+                                        : "pointer-events-none grid-rows-[0fr] opacity-0",
+                                )}
+                            >
+                                <div className="overflow-hidden">
+                                    <div
+                                        className={cn(
+                                            "mt-2 rounded-lg border bg-card/90 p-2 shadow-sm transition-transform duration-200",
+                                            mobileHeaderActionsOpen ? "translate-y-0" : "-translate-y-1",
+                                        )}
+                                    >
+                                        <div className="space-y-2">
+                                            <Button
+                                                variant="outline"
+                                                className="w-full justify-start gap-2"
+                                                onClick={() => {
+                                                    setMobileHeaderActionsOpen(false);
+                                                    void exportBookings();
+                                                }}
+                                            >
+                                                <Download className="w-4 h-4" />
+                                                {tb("export")}
+                                            </Button>
+                                            <div onClick={() => setMobileHeaderActionsOpen(false)}>
+                                                <BatchImportButton
+                                                    onImported={() => fetchData("refresh")}
+                                                    canCommitBookings={canWriteBookings}
+                                                    bookingWriteBlockedMessage={bookingWriteBlockedMessage}
+                                                    buttonClassName="w-full justify-start"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="hidden h-9 w-full gap-2 lg:order-1 lg:inline-flex lg:w-auto"
+                            onClick={() => { void exportBookings(); }}
+                        >
+                            <Download className="w-4 h-4" /> {tb("export")}
+                        </Button>
+                        <BatchImportButton
+                            onImported={() => fetchData("refresh")}
+                            canCommitBookings={canWriteBookings}
+                            bookingWriteBlockedMessage={bookingWriteBlockedMessage}
+                            buttonClassName="hidden w-full lg:order-3 lg:inline-flex lg:w-auto"
+                        />
                     </>
                 )}
             >
