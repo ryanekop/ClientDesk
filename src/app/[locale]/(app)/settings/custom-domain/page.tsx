@@ -75,7 +75,7 @@ export default async function CustomDomainPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-8 pb-10">
       <Link
-        href="/settings"
+        href="/dashboard"
         className="inline-flex items-center text-sm text-muted-foreground transition-colors hover:text-primary"
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
