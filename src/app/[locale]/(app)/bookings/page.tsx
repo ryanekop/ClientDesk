@@ -329,7 +329,8 @@ export default function BookingsPage() {
     const [waTargetPopup, setWaTargetPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [copyTargetPopup, setCopyTargetPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
-    const [mobileHeaderActionsOpen, setMobileHeaderActionsOpen] = React.useState(false);
+    const [mobileHeaderActionMenuOpen, setMobileHeaderActionMenuOpen] = React.useState(false);
+    const [mobileHeaderActionMenuAnchorEl, setMobileHeaderActionMenuAnchorEl] = React.useState<HTMLElement | null>(null);
     const { showSuccessToast, successToastNode } = useSuccessToast();
     const { canWriteBookings } = useBookingWriteAccess();
     const bookingWriteBlockedMessage = React.useMemo(
@@ -347,6 +348,14 @@ export default function BookingsPage() {
         setWaMenuAnchorEl(null);
         setCopyMenuAnchorEl(null);
     }, []);
+    const closeMobileHeaderActionMenu = React.useCallback(() => {
+        setMobileHeaderActionMenuOpen(false);
+        setMobileHeaderActionMenuAnchorEl(null);
+    }, []);
+    const closeAllActionMenus = React.useCallback(() => {
+        closeDesktopMenus();
+        closeMobileHeaderActionMenu();
+    }, [closeDesktopMenus, closeMobileHeaderActionMenu]);
 
     const resetFilters = React.useCallback(() => {
         setStatusFilter("All");
@@ -601,17 +610,18 @@ export default function BookingsPage() {
     }, [fetchData, filtersHydrated, itemsPerPageHydrated]);
 
     React.useEffect(() => {
-        if (!waMenuBookingId && !copyMenuBookingId) return;
+        if (!waMenuBookingId && !copyMenuBookingId && !mobileHeaderActionMenuOpen) return;
         function handleOutsideClick(event: MouseEvent) {
             const target = event.target as HTMLElement | null;
             if (target?.closest("[data-wa-menu-root='true']")) return;
             if (target?.closest("[data-copy-menu-root='true']")) return;
+            if (target?.closest("[data-mobile-header-action-menu-trigger='true']")) return;
             if (target?.closest("[data-table-action-menu-root='true']")) return;
-            closeDesktopMenus();
+            closeAllActionMenus();
         }
         function handleEscape(event: KeyboardEvent) {
             if (event.key !== "Escape") return;
-            closeDesktopMenus();
+            closeAllActionMenus();
         }
         document.addEventListener("mousedown", handleOutsideClick);
         document.addEventListener("keydown", handleEscape);
@@ -619,7 +629,7 @@ export default function BookingsPage() {
             document.removeEventListener("mousedown", handleOutsideClick);
             document.removeEventListener("keydown", handleEscape);
         };
-    }, [closeDesktopMenus, copyMenuBookingId, waMenuBookingId]);
+    }, [closeAllActionMenus, copyMenuBookingId, mobileHeaderActionMenuOpen, waMenuBookingId]);
 
     async function handleUpdateStatus(options?: {
         skipCancelConfirmation?: boolean;
@@ -1551,79 +1561,95 @@ export default function BookingsPage() {
                             saving={savingColumns}
                             triggerClassName="w-full lg:order-2 lg:w-auto"
                         />
+                        <div className="lg:hidden">
+                            <div
+                                className="grid grid-cols-[minmax(0,1fr)_2.5rem] overflow-hidden rounded-md border border-foreground bg-foreground text-background shadow-sm"
+                                data-mobile-header-action-menu-trigger="true"
+                            >
+                                {canWriteBookings ? (
+                                    <Link
+                                        href="/bookings/new"
+                                        className="inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-medium"
+                                    >
+                                        <Plus className="w-4 h-4" /> {tb("addClient")}
+                                    </Link>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        disabled
+                                        title={bookingWriteBlockedMessage}
+                                        className="inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <Plus className="w-4 h-4" /> {tb("addClient")}
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    title={tb("moreActions")}
+                                    aria-label={tb("moreActions")}
+                                    aria-expanded={mobileHeaderActionMenuOpen}
+                                    className="inline-flex h-9 items-center justify-center border-l border-background/20 transition-colors hover:bg-foreground/90"
+                                    onClick={(event) => {
+                                        const anchorEl = event.currentTarget;
+                                        const shouldClose = mobileHeaderActionMenuOpen;
+                                        closeDesktopMenus();
+                                        if (shouldClose) {
+                                            closeMobileHeaderActionMenu();
+                                            return;
+                                        }
+                                        setMobileHeaderActionMenuAnchorEl(anchorEl);
+                                        setMobileHeaderActionMenuOpen(true);
+                                    }}
+                                >
+                                    <ChevronDown
+                                        className={cn(
+                                            "w-4 h-4 transition-transform duration-200",
+                                            mobileHeaderActionMenuOpen ? "rotate-180" : "rotate-0",
+                                        )}
+                                    />
+                                </button>
+                            </div>
+                            <TableActionMenuPortal
+                                open={mobileHeaderActionMenuOpen}
+                                anchorEl={mobileHeaderActionMenuAnchorEl}
+                                className="w-52"
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        closeMobileHeaderActionMenu();
+                                        void exportBookings();
+                                    }}
+                                    className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                                >
+                                    <Download className="w-4 h-4" />
+                                    {tb("export")}
+                                </button>
+                                <div onClick={closeMobileHeaderActionMenu}>
+                                    <BatchImportButton
+                                        onImported={() => fetchData("refresh")}
+                                        canCommitBookings={canWriteBookings}
+                                        bookingWriteBlockedMessage={bookingWriteBlockedMessage}
+                                        buttonClassName="h-8 w-full justify-start gap-2 rounded border-0 bg-transparent px-2.5 py-2 text-xs font-normal text-foreground shadow-none hover:bg-muted"
+                                    />
+                                </div>
+                            </TableActionMenuPortal>
+                        </div>
                         {canWriteBookings ? (
-                            <Button asChild className="w-full bg-foreground text-background hover:bg-foreground/90 lg:order-4 lg:w-auto">
+                            <Button asChild className="hidden w-full bg-foreground text-background hover:bg-foreground/90 lg:order-4 lg:inline-flex lg:w-auto">
                                 <Link href="/bookings/new">
                                     <Plus className="w-4 h-4" /> {tb("addClient")}
                                 </Link>
                             </Button>
                         ) : (
                             <Button
-                                className="w-full bg-foreground text-background hover:bg-foreground/90 lg:order-4 lg:w-auto"
+                                className="hidden w-full bg-foreground text-background hover:bg-foreground/90 lg:order-4 lg:inline-flex lg:w-auto"
                                 disabled
                                 title={bookingWriteBlockedMessage}
                             >
                                 <Plus className="w-4 h-4" /> {tb("addClient")}
                             </Button>
                         )}
-                        <div className="col-span-2 max-[360px]:col-span-1 lg:hidden">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="h-9 w-full justify-between"
-                                onClick={() => setMobileHeaderActionsOpen((current) => !current)}
-                                aria-expanded={mobileHeaderActionsOpen}
-                                aria-controls="bookings-mobile-header-actions"
-                            >
-                                <span>{tb("moreActions")}</span>
-                                <ChevronDown
-                                    className={cn(
-                                        "w-4 h-4 transition-transform duration-200",
-                                        mobileHeaderActionsOpen ? "rotate-180" : "rotate-0",
-                                    )}
-                                />
-                            </Button>
-                            <div
-                                id="bookings-mobile-header-actions"
-                                className={cn(
-                                    "grid transition-all duration-200 ease-out",
-                                    mobileHeaderActionsOpen
-                                        ? "grid-rows-[1fr] opacity-100"
-                                        : "pointer-events-none grid-rows-[0fr] opacity-0",
-                                )}
-                            >
-                                <div className="overflow-hidden">
-                                    <div
-                                        className={cn(
-                                            "mt-2 rounded-lg border bg-card/90 p-2 shadow-sm transition-transform duration-200",
-                                            mobileHeaderActionsOpen ? "translate-y-0" : "-translate-y-1",
-                                        )}
-                                    >
-                                        <div className="space-y-2">
-                                            <Button
-                                                variant="outline"
-                                                className="w-full justify-start gap-2"
-                                                onClick={() => {
-                                                    setMobileHeaderActionsOpen(false);
-                                                    void exportBookings();
-                                                }}
-                                            >
-                                                <Download className="w-4 h-4" />
-                                                {tb("export")}
-                                            </Button>
-                                            <div onClick={() => setMobileHeaderActionsOpen(false)}>
-                                                <BatchImportButton
-                                                    onImported={() => fetchData("refresh")}
-                                                    canCommitBookings={canWriteBookings}
-                                                    bookingWriteBlockedMessage={bookingWriteBlockedMessage}
-                                                    buttonClassName="w-full justify-start"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
                         <Button
                             type="button"
                             variant="outline"
@@ -1649,7 +1675,7 @@ export default function BookingsPage() {
 
             {/* Search + Controls */}
             <div className="space-y-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex items-center gap-2">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
@@ -1660,30 +1686,31 @@ export default function BookingsPage() {
                             className="h-9 w-full rounded-md border border-input bg-background/50 pl-9 pr-3 text-sm focus-visible:ring-1 focus-visible:ring-ring outline-none transition-all"
                         />
                     </div>
-                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-                        <Button
-                            variant="outline"
-                            className="h-9 w-full gap-2 sm:w-auto"
-                            onClick={() => setShowFilterPanel(prev => !prev)}
-                        >
-                            <ListOrdered className="w-4 h-4" />
-                            Filter
-                        </Button>
-                        <select value={sortOrder} onChange={e => setSortOrder(e.target.value as BookingSortOrder)} className={`${selectFilterClass} w-full sm:w-auto`}>
+                    <Button
+                        variant="outline"
+                        className="h-9 w-9 shrink-0 justify-center px-0 sm:h-9 sm:w-auto sm:gap-2 sm:px-3"
+                        onClick={() => setShowFilterPanel(prev => !prev)}
+                        aria-label="Filter"
+                    >
+                        <ListOrdered className="w-4 h-4" />
+                        <span className="hidden sm:inline">Filter</span>
+                    </Button>
+                </div>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                    <select value={sortOrder} onChange={e => setSortOrder(e.target.value as BookingSortOrder)} className={`${selectFilterClass} w-full sm:w-auto`}>
                             <option value="booking_newest">Urutkan: Booking Terbaru</option>
                             <option value="booking_oldest">Urutkan: Booking Terlama</option>
                             <option value="session_newest">Urutkan: Jadwal Sesi Terdekat</option>
                             <option value="session_oldest">Urutkan: Jadwal Sesi Terjauh</option>
-                        </select>
-                        {(statusFilter !== "All" || packageFilter !== "All" || freelanceFilter !== "All" || eventTypeFilter !== "All" || dateFromFilter || dateToFilter || Object.values(extraFieldFilters).some(Boolean) || searchQuery || sortOrder !== "booking_newest") && (
-                            <button
-                                onClick={resetFilters}
-                                className="h-9 w-full px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer sm:w-auto"
-                            >
-                                <X className="w-3.5 h-3.5" /> Reset
-                            </button>
-                        )}
-                    </div>
+                    </select>
+                    {(statusFilter !== "All" || packageFilter !== "All" || freelanceFilter !== "All" || eventTypeFilter !== "All" || dateFromFilter || dateToFilter || Object.values(extraFieldFilters).some(Boolean) || searchQuery || sortOrder !== "booking_newest") && (
+                        <button
+                            onClick={resetFilters}
+                            className="h-9 w-full px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer sm:w-auto"
+                        >
+                            <X className="w-3.5 h-3.5" /> Reset
+                        </button>
+                    )}
                 </div>
                 {showFilterPanel && (
                     <div className="rounded-xl border bg-card p-5 shadow-sm">

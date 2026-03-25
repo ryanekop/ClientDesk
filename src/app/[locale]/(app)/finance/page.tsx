@@ -1,15 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { Clock, CheckCircle2, FileText, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown, Copy, ClipboardCheck, Search, ListOrdered, X } from "lucide-react";
+import { Clock, CheckCircle2, FileText, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown, Copy, ClipboardCheck, Search, ListOrdered, Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-    PageHeader,
-    PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME,
-} from "@/components/ui/page-header";
+import { PageHeader } from "@/components/ui/page-header";
 import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -1362,12 +1359,11 @@ export default function FinancePage() {
             {successToastNode}
             <BookingWriteReadonlyBanner />
             <PageHeader
-                actionsClassName={PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME}
                 actions={(
                     <>
                         <Button
                             type="button"
-                            className="order-2 w-full lg:order-1 lg:w-auto"
+                            className="hidden w-full gap-2 md:inline-flex md:w-auto"
                             onClick={() => { void exportFinance(); }}
                         >
                             <Download className="w-4 h-4" /> Export Excel
@@ -1381,7 +1377,7 @@ export default function FinancePage() {
                             onChange={setColumns}
                             onSave={() => saveColumnPreferences(columns)}
                             saving={savingColumns}
-                            triggerClassName="order-1 w-full lg:order-2 lg:w-auto"
+                            triggerClassName="hidden w-full md:inline-flex md:w-auto"
                         />
                     </>
                 )}
@@ -1426,9 +1422,29 @@ export default function FinancePage() {
                 </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-2 max-[360px]:grid-cols-1 md:hidden">
+                <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={() => setColumnManagerOpen(true)}
+                >
+                    <Settings2 className="w-4 h-4" />
+                    Kelola Kolom
+                </Button>
+                <Button
+                    type="button"
+                    className="w-full gap-2"
+                    onClick={() => { void exportFinance(); }}
+                >
+                    <Download className="w-4 h-4" />
+                    Export Excel
+                </Button>
+            </div>
+
             {/* Filters */}
             <div className="space-y-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex items-center gap-2">
                     <div className="relative flex-1">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <input
@@ -1439,28 +1455,29 @@ export default function FinancePage() {
                             className="h-9 w-full rounded-md border border-input bg-background/50 pl-9 pr-3 text-sm outline-none transition-all focus-visible:ring-1 focus-visible:ring-ring"
                         />
                     </div>
-                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="h-9 w-full gap-2 justify-center sm:w-auto"
-                            onClick={() => setShowFilterPanel((previous) => !previous)}
-                        >
-                            <ListOrdered className="w-4 h-4" />
-                            {t("filterButton")}
-                        </Button>
-                        {hasActiveFilters && (
-                            <button
-                                type="button"
-                                onClick={resetFilters}
-                                className="h-9 w-full px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer sm:w-auto"
-                            >
-                                <X className="w-3.5 h-3.5" />
-                                {t("resetFilters")}
-                            </button>
-                        )}
-                    </div>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="h-9 w-9 shrink-0 justify-center px-0 sm:h-9 sm:w-auto sm:gap-2 sm:px-3"
+                        onClick={() => setShowFilterPanel((previous) => !previous)}
+                        aria-label={t("filterButton")}
+                    >
+                        <ListOrdered className="w-4 h-4" />
+                        <span className="hidden sm:inline">{t("filterButton")}</span>
+                    </Button>
                 </div>
+                {hasActiveFilters && (
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                        <button
+                            type="button"
+                            onClick={resetFilters}
+                            className="h-9 w-full px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer sm:w-auto"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                            {t("resetFilters")}
+                        </button>
+                    </div>
+                )}
 
                 {showFilterPanel && (
                     <div className="rounded-xl border bg-card p-4 shadow-sm sm:p-5">

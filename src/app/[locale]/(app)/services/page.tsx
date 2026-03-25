@@ -551,6 +551,37 @@ export default function ServicesPage() {
     }),
   );
 
+  const hydrateServiceOrderSnapshot = React.useCallback(
+    async (userId?: string | null) => {
+      const resolvedUserId =
+        userId ||
+        currentUserId ||
+        (await supabase.auth.getUser()).data.user?.id ||
+        null;
+
+      if (!resolvedUserId) {
+        setServices([]);
+        return [] as Service[];
+      }
+
+      const { data, error } = await supabase
+        .from("services")
+        .select("*")
+        .eq("user_id", resolvedUserId)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      const normalizedServices = ((data || []) as Service[]).sort(compareServices);
+      setServices(normalizedServices);
+      return normalizedServices;
+    },
+    [currentUserId, supabase],
+  );
+
   const fetchAllServices = React.useCallback(async () => {
     setLoading(true);
     setPageError("");
@@ -660,6 +691,7 @@ export default function ServicesPage() {
       setEventTypeOptions(metadata?.eventTypeOptions || EVENT_TYPES);
       setUsedEventTypeOptions(metadata?.usedEventTypes || []);
       setHasAnyServices(Boolean(metadata?.hasAnyServices));
+      await hydrateServiceOrderSnapshot();
     } catch (error) {
       setPageError(error instanceof Error ? error.message : "Failed to load services.");
       setMainServices([]);
@@ -670,7 +702,7 @@ export default function ServicesPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [addonPage, isReorderMode, itemsPerPage, itemsPerPageHydrated, mainPage, searchQuery, selectedEventFilter]);
+  }, [addonPage, hydrateServiceOrderSnapshot, isReorderMode, itemsPerPage, itemsPerPageHydrated, mainPage, searchQuery, selectedEventFilter]);
 
   React.useEffect(() => {
     async function hydrateCurrentUser() {
@@ -795,8 +827,9 @@ export default function ServicesPage() {
   async function persistNormalizedGroup(
     groupKey: ServiceGroupKey,
     nextGroup: Service[],
+    sourceServices: Service[] = services,
   ) {
-    const previousServices = services;
+    const previousServices = sourceServices;
     const normalizedGroup = normalizeServiceOrder(nextGroup);
     const optimisticServices = reorderGroup(previousServices, groupKey, normalizedGroup);
 
@@ -818,7 +851,7 @@ export default function ServicesPage() {
       setServices(previousServices);
       setPageError(failedResult.error.message);
     } else {
-      await fetchAllServices();
+      await refreshVisibleData();
     }
 
     setSavingOrderGroup(null);
@@ -980,14 +1013,32 @@ export default function ServicesPage() {
   }
 
   async function handleMove(service: Service, direction: "up" | "down") {
+    let orderedServices = services;
+    if (orderedServices.length === 0) {
+      try {
+        orderedServices = await hydrateServiceOrderSnapshot();
+      } catch (error) {
+        setPageError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load services order.",
+        );
+        return;
+      }
+    }
+
     const groupKey = getServiceGroupKey(service);
-    const group = splitServicesByGroup(services)[groupKey];
+    const group = splitServicesByGroup(orderedServices)[groupKey];
     const currentIndex = group.findIndex((item) => item.id === service.id);
     const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
 
     if (currentIndex < 0 || nextIndex < 0 || nextIndex >= group.length) return;
 
-    await persistNormalizedGroup(groupKey, arrayMove(group, currentIndex, nextIndex));
+    await persistNormalizedGroup(
+      groupKey,
+      arrayMove(group, currentIndex, nextIndex),
+      orderedServices,
+    );
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -1102,7 +1153,7 @@ export default function ServicesPage() {
                 setIsReorderMode((current) => !current);
                 setPageError("");
               }}
-              disabled={loading || services.length === 0 || reorderSaving}
+              disabled={loading || !hasAnyServices || reorderSaving}
             >
               {reorderSaving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

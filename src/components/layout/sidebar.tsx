@@ -101,7 +101,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
             {/* Mobile Drawer Overlay */}
             <div
                 className={cn(
-                    "fixed inset-x-0 bottom-0 top-[var(--global-announcement-height)] z-[70] bg-black/50 md:hidden transition-all duration-300 ease-in-out",
+                    "fixed inset-x-0 bottom-0 top-[var(--global-announcement-height)] z-[70] bg-black/50 md:hidden transition-opacity duration-300 ease-out",
                     isOpen ? "opacity-100 visible" : "opacity-0 invisible"
                 )}
                 onClick={() => setIsOpen(false)}
@@ -109,7 +109,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
 
             <aside
                 className={cn(
-                    "fixed bottom-0 left-0 top-[var(--global-announcement-height)] z-[80] h-[calc(100dvh-var(--global-announcement-height))] bg-background shadow-[1px_0_5px_rgba(0,0,0,0.02)] transition-all duration-300 ease-in-out md:static md:top-auto md:bottom-auto md:z-auto md:h-auto flex flex-col overflow-hidden whitespace-nowrap",
+                    "fixed bottom-0 left-0 top-[var(--global-announcement-height)] z-[80] h-[calc(100dvh-var(--global-announcement-height))] bg-background shadow-[1px_0_5px_rgba(0,0,0,0.02)] transition-[transform,width] duration-300 ease-out md:static md:top-auto md:bottom-auto md:z-auto md:h-auto flex flex-col overflow-hidden whitespace-nowrap",
                     isCollapsed ? "w-16" : "w-64",
                     isOpen ? "translate-x-0 w-64" : "-translate-x-full md:translate-x-0"
                 )}
@@ -126,7 +126,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                             <Menu className="w-5 h-5 shrink-0" />
                             <span className="sr-only">Toggle Sidebar</span>
                         </Button>
-                        <Link href="/dashboard" className={cn("flex items-center gap-2 transition-opacity duration-300", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
+                        <Link href="/dashboard" className={cn("flex items-center gap-2 transition-[opacity,width] duration-300", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
                             <img src="/icon-192.png" alt="Client Desk" className="w-7 h-7 rounded-lg" />
                             <span className="font-bold tracking-tight leading-none text-base">Client Desk</span>
                         </Link>
@@ -152,7 +152,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                             )}
                         >
                             <item.icon className={cn("w-5 h-5 shrink-0", isActive(item.href) ? "text-primary-foreground" : "text-muted-foreground")} />
-                            <span className={cn("transition-opacity duration-300", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
+                            <span className={cn("transition-[opacity,width] duration-300", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
                                 {t(item.titleKey)}
                             </span>
                         </Link>
@@ -175,7 +175,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                             )}
                         >
                             <Settings className={cn("w-5 h-5 shrink-0", isActive("/settings") ? "text-primary-foreground" : "text-muted-foreground")} />
-                            <span className={cn("transition-opacity duration-300", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
+                            <span className={cn("transition-[opacity,width] duration-300", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
                                 {t("settings")}
                             </span>
                         </Link>
@@ -197,7 +197,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                                         userName ? userName.charAt(0).toUpperCase() : "U"
                                     )}
                                 </div>
-                                <div className={cn("flex-1 transition-opacity duration-300 min-w-0", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
+                                <div className={cn("flex-1 transition-[opacity,width] duration-300 min-w-0", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
                                     <p className="text-sm font-medium leading-none mb-1 truncate">{userName}</p>
                                     <p className="text-xs text-muted-foreground">{t("profile")}</p>
                                 </div>

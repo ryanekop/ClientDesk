@@ -28,6 +28,13 @@ export function SuccessToast({
   closing: boolean;
   onClose: () => void;
 }) {
+  const [entered, setEntered] = React.useState(false);
+  React.useEffect(() => {
+    const rafId = window.requestAnimationFrame(() => setEntered(true));
+    return () => window.cancelAnimationFrame(rafId);
+  }, []);
+  const visible = entered && !closing;
+
   return (
     <div
       className="pointer-events-none fixed inset-x-4 z-50 sm:left-auto sm:right-4 sm:w-[24rem]"
@@ -35,10 +42,10 @@ export function SuccessToast({
     >
       <div
         className={[
-          "pointer-events-auto flex w-full items-start gap-2.5 rounded-xl border border-emerald-300/80 bg-emerald-50 px-4 py-3.5 text-sm font-semibold text-emerald-800 shadow-[0_10px_28px_-14px_rgba(16,185,129,0.65)] sm:max-w-sm",
-          closing
-            ? "animate-out fade-out slide-out-to-right-8 duration-200"
-            : "animate-in fade-in slide-in-from-right-8 duration-300",
+          "pointer-events-auto flex w-full items-start gap-2.5 rounded-xl border border-emerald-300/80 bg-emerald-50 px-4 py-3.5 text-sm font-semibold text-emerald-800 shadow-[0_10px_28px_-14px_rgba(16,185,129,0.65)] sm:max-w-sm transform-gpu transition-[opacity,transform] duration-200 ease-out will-change-[opacity,transform] motion-reduce:transition-none",
+          visible
+            ? "opacity-100 translate-x-0"
+            : "pointer-events-none opacity-0 translate-x-4",
         ].join(" ")}
         role="status"
         aria-live="polite"
