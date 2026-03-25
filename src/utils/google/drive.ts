@@ -193,6 +193,10 @@ export function buildDriveFilePublicUrl(
     return `https://drive.google.com/thumbnail?${params.toString()}`;
 }
 
+export function buildDriveFileHdUrl(fileId: string) {
+    return `https://lh3.googleusercontent.com/d/${encodeURIComponent(fileId)}=w2000`;
+}
+
 export async function getDriveFilePublicLinks(
     accessToken: string,
     refreshToken: string,
@@ -208,6 +212,7 @@ export async function getDriveFilePublicLinks(
     const thumbnailLink = res.data.thumbnailLink || null;
     const webViewLink = res.data.webViewLink || null;
     const resourceKey = res.data.resourceKey || null;
+    const hdImageUrl = buildDriveFileHdUrl(fileId);
     const thumbnailUrl = buildDriveFilePublicUrl(fileId, resourceKey);
     const preferredThumbnailUrl =
         (resourceKey ? thumbnailUrl : null) ||
@@ -220,8 +225,10 @@ export async function getDriveFilePublicLinks(
         webContentLink,
         thumbnailLink,
         webViewLink,
+        hdImageUrl,
         thumbnailUrl,
         preferredUrl:
+            hdImageUrl ||
             preferredThumbnailUrl ||
             buildDriveFilePublicUrl(fileId),
     };

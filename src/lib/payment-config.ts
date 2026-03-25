@@ -124,6 +124,13 @@ export function isLegacyDriveImageUrl(url: string | null | undefined) {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
     const path = parsed.pathname.toLowerCase();
+    const pathAndQuery = `${parsed.pathname}${parsed.search}`.toLowerCase();
+
+    if (host.endsWith("googleusercontent.com")) {
+      // Drive thumbnailLink API often returns low-res variants (=s220, =s400, etc).
+      // Treat these as legacy so we can refresh to the HD URL at runtime.
+      return /=s\d+/i.test(pathAndQuery);
+    }
 
     if (!host.endsWith("drive.google.com")) return false;
     if (path === "/uc") return true;
@@ -134,7 +141,9 @@ export function isLegacyDriveImageUrl(url: string | null | undefined) {
 
     return false;
   } catch {
-    return /https:\/\/drive\.google\.com\/(thumbnail\?|uc\?)/i.test(url);
+    return /https:\/\/(drive\.google\.com\/(thumbnail\?|uc\?)|lh3\.googleusercontent\.com\/.*=s\d+)/i.test(
+      url,
+    );
   }
 }
 

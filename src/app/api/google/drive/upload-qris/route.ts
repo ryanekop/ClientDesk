@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import {
-    buildDriveFilePublicUrl,
+    buildDriveFileHdUrl,
     deleteFileFromDrive,
     findOrCreateNestedPath,
     getDriveFilePublicLinks,
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        let qrisImageUrl = buildDriveFilePublicUrl(uploaded.fileId);
+        let qrisImageUrl = buildDriveFileHdUrl(uploaded.fileId);
         try {
             const publicLinks = await getDriveFilePublicLinks(
                 profile.google_drive_access_token,
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
             );
             qrisImageUrl = publicLinks.preferredUrl;
         } catch {
-            // Fall back to the upload response link when Drive metadata cannot be refreshed.
+            // Keep the precomputed HD URL when Drive metadata cannot be refreshed.
         }
 
         await supabase
