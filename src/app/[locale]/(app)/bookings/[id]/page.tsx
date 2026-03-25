@@ -12,7 +12,7 @@ import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-di
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
     BookingWriteReadonlyBanner,
     useBookingWriteAccess,
@@ -101,23 +101,23 @@ import {
 } from "@/lib/booking-special-offer";
 import { UNIVERSITY_REFERENCE_EXTRA_KEY } from "@/lib/university-references";
 
-const EXTRA_FIELD_LABELS: Record<string, string> = {
-    universitas: "Universitas",
-    fakultas: "Fakultas",
-    nama_pasangan: "Nama Pasangan",
-    instagram_pasangan: "Instagram Pasangan",
-    tempat_akad: "Lokasi Akad",
-    tempat_resepsi: "Lokasi Resepsi",
-    tanggal_akad: "Tanggal Akad",
-    tanggal_resepsi: "Tanggal Resepsi",
-    usia_kehamilan: "Usia Kehamilan",
-    gender_bayi: "Gender Bayi",
-    nama_bayi: "Nama Bayi",
-    tanggal_lahir: "Tanggal Lahir",
-    nama_brand: "Nama Brand",
-    tipe_konten: "Tipe Konten",
-    jumlah_anggota: "Jumlah Anggota",
-    jumlah_tamu: "Estimasi Tamu",
+const EXTRA_FIELD_LABEL_KEYS: Record<string, string> = {
+    universitas: "extraFieldLabels.university",
+    fakultas: "extraFieldLabels.faculty",
+    nama_pasangan: "extraFieldLabels.partnerName",
+    instagram_pasangan: "extraFieldLabels.partnerInstagram",
+    tempat_akad: "extraFieldLabels.akadVenue",
+    tempat_resepsi: "extraFieldLabels.receptionVenue",
+    tanggal_akad: "extraFieldLabels.akadDate",
+    tanggal_resepsi: "extraFieldLabels.receptionDate",
+    usia_kehamilan: "extraFieldLabels.pregnancyAge",
+    gender_bayi: "extraFieldLabels.babyGender",
+    nama_bayi: "extraFieldLabels.babyName",
+    tanggal_lahir: "extraFieldLabels.dateOfBirth",
+    nama_brand: "extraFieldLabels.brandName",
+    tipe_konten: "extraFieldLabels.contentType",
+    jumlah_anggota: "extraFieldLabels.memberCount",
+    jumlah_tamu: "extraFieldLabels.estimatedGuests",
 };
 
 const LOCATION_FIELDS = new Set(["tempat_akad", "tempat_resepsi"]);
@@ -432,6 +432,7 @@ function PaymentProofManager({
     onUpload: (file: File) => Promise<boolean>;
     onError: (message: string) => void;
 }) {
+    const tBookingDetail = useTranslations("BookingDetail");
     const [file, setFile] = React.useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
     const [resetKey, setResetKey] = React.useState(0);
@@ -458,7 +459,7 @@ function PaymentProofManager({
             setFile(null);
             setPreviewUrl(null);
             setResetKey((current) => current + 1);
-            onError("Ukuran file maksimal 5MB.");
+            onError(tBookingDetail("maxFileSize5mb"));
             return;
         }
 
@@ -493,9 +494,9 @@ function PaymentProofManager({
                 accept="image/*,.pdf"
                 label={uploadLabel}
                 helperText={helperText}
-                emptyText="Klik untuk upload bukti pembayaran"
-                emptySubtext="Atau drag & drop file di sini (JPG, PNG, PDF max 5MB)."
-                removeLabel="Hapus File"
+                emptyText={tBookingDetail("paymentProofUploadPrompt")}
+                emptySubtext={tBookingDetail("paymentProofUploadHint")}
+                removeLabel={tBookingDetail("removeFile")}
                 onFileSelect={handleFileSelect}
             />
             <div className="flex justify-end">
@@ -506,7 +507,7 @@ function PaymentProofManager({
                     className="gap-2"
                 >
                     {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                    {uploading ? "Mengupload..." : uploadLabel}
+                    {uploading ? tBookingDetail("uploading") : uploadLabel}
                 </Button>
             </div>
         </div>
@@ -590,6 +591,7 @@ export default function BookingDetailPage() {
     const id = params.id as string;
     const supabase = createClient();
     const locale = useLocale();
+    const tBookingDetail = useTranslations("BookingDetail");
     const bookingsPath = `/${locale}/bookings`;
     const [booking, setBooking] = React.useState<Booking | null>(null);
     const [loading, setLoading] = React.useState(true);
@@ -673,15 +675,15 @@ export default function BookingDetailPage() {
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
             open: true,
-            title: title || (locale === "en" ? "Information" : "Informasi"),
+            title: title || tBookingDetail("feedbackTitle"),
             message,
         });
-    }, [locale]);
+    }, [tBookingDetail]);
     const requireBookingWrite = useBookingWriteGuard(({ message, title }) => {
         showFeedback(message, title);
     });
     const { showSuccessToast, successToastNode } = useSuccessToast();
-    const warningTitle = locale === "en" ? "Warning" : "Peringatan";
+    const warningTitle = tBookingDetail("warningTitle");
     const copyTextWithSuccessToast = React.useCallback(
         async (text: string, successMessage: string, errorMessage: string) => {
             try {
@@ -704,14 +706,10 @@ export default function BookingDetailPage() {
         if (!projectId) return;
         void copyTextWithSuccessToast(
             projectId,
-            locale === "en"
-                ? "Fastpik project ID copied."
-                : "ID project Fastpik berhasil disalin.",
-            locale === "en"
-                ? "Failed to copy Fastpik project ID."
-                : "Gagal menyalin ID project Fastpik.",
+            tBookingDetail("fastpikProjectIdCopied"),
+            tBookingDetail("fastpikProjectIdCopyFailed"),
         );
-    }, [booking?.fastpik_project_id, copyTextWithSuccessToast, fastpikDashboardUrl, locale]);
+    }, [booking?.fastpik_project_id, copyTextWithSuccessToast, fastpikDashboardUrl, tBookingDetail]);
 
     const handleAdminPaymentProofUpload = React.useCallback(async (
         stage: BookingProofStage,
@@ -734,7 +732,7 @@ export default function BookingDetailPage() {
 
             if (!response.ok || payload?.success !== true) {
                 showFeedback(
-                    payload?.error || "Gagal upload bukti pembayaran.",
+                    payload?.error || tBookingDetail("failedUploadPaymentProof"),
                     warningTitle,
                 );
                 return false;
@@ -758,17 +756,17 @@ export default function BookingDetailPage() {
             });
             showSuccessToast(
                 stage === "final"
-                    ? "Bukti pelunasan final berhasil diupload."
-                    : "Bukti pembayaran awal berhasil diupload.",
+                    ? tBookingDetail("finalProofUploaded")
+                    : tBookingDetail("initialProofUploaded"),
             );
             return true;
         } catch {
-            showFeedback("Gagal upload bukti pembayaran.", warningTitle);
+            showFeedback(tBookingDetail("failedUploadPaymentProof"), warningTitle);
             return false;
         } finally {
             setUploadingProofStage(null);
         }
-    }, [booking, requireBookingWrite, showFeedback, showSuccessToast, warningTitle]);
+    }, [booking, requireBookingWrite, showFeedback, showSuccessToast, tBookingDetail, warningTitle]);
 
     const handleSyncFastpikManual = React.useCallback(async () => {
         if (!requireBookingWrite()) return;
@@ -788,8 +786,8 @@ export default function BookingDetailPage() {
             const message =
                 (typeof payload?.message === "string" && payload.message) ||
                 (response.ok
-                    ? "Sinkronisasi Fastpik selesai."
-                    : payload?.error || "Sinkronisasi Fastpik gagal.");
+                    ? tBookingDetail("fastpikSyncCompleted")
+                    : payload?.error || tBookingDetail("fastpikSyncFailed"));
 
             const hasSyncState =
                 typeof payload?.status === "string" && payload.status !== "idle";
@@ -854,15 +852,13 @@ export default function BookingDetailPage() {
         } catch {
             setFastpikDataSource("fallback");
             showFeedback(
-                locale === "en"
-                    ? "Fastpik sync failed."
-                    : "Sinkronisasi Fastpik gagal.",
-                locale === "en" ? "Warning" : "Peringatan",
+                tBookingDetail("fastpikSyncFailed"),
+                warningTitle,
             );
         } finally {
             setSyncingFastpik(false);
         }
-    }, [booking, locale, requireBookingWrite, showFeedback]);
+    }, [booking, locale, requireBookingWrite, showFeedback, tBookingDetail, warningTitle]);
 
     const hydrateFastpikLive = React.useCallback(async (bookingId: string) => {
         if (!canWriteBookings) return;
@@ -1130,7 +1126,7 @@ export default function BookingDetailPage() {
         setSavingStatus(false);
 
         if (error) {
-            showFeedback(locale === "en" ? "Failed to update status." : "Gagal menyimpan status.");
+            showFeedback(tBookingDetail("failedSaveStatus"));
             return;
         }
 
@@ -1198,7 +1194,7 @@ export default function BookingDetailPage() {
             .eq("id", booking.id);
 
         if (error) {
-            showFeedback("Gagal menyimpan DP.");
+            showFeedback(tBookingDetail("failedSaveDp"));
             setSavingDp(false);
             return;
         }
@@ -1282,7 +1278,7 @@ export default function BookingDetailPage() {
             .eq("id", booking.id);
 
         if (error) {
-            showFeedback("Gagal menyimpan komponen harga awal.");
+            showFeedback(tBookingDetail("failedSaveInitialPriceComponents"));
             return false;
         }
 
@@ -1344,7 +1340,7 @@ export default function BookingDetailPage() {
         setMarkingDpVerified(false);
 
         if (error) {
-            showFeedback("Gagal menandai DP sebagai terverifikasi.");
+            showFeedback(tBookingDetail("failedVerifyDp"));
             return;
         }
 
@@ -1369,7 +1365,7 @@ export default function BookingDetailPage() {
         setMarkingDpUnverified(false);
 
         if (error) {
-            showFeedback("Gagal membatalkan verifikasi DP.");
+            showFeedback(tBookingDetail("failedUnverifyDp"));
             return;
         }
 
@@ -1381,9 +1377,9 @@ export default function BookingDetailPage() {
         const url = `${window.location.origin}/${locale}/track/${booking.tracking_uuid}`;
         try {
             await navigator.clipboard.writeText(url);
-            showSuccessToast("Link tracking berhasil disalin.");
+            showSuccessToast(tBookingDetail("trackingLinkCopied"));
         } catch {
-            showFeedback("Gagal menyalin link tracking.", "Peringatan");
+            showFeedback(tBookingDetail("trackingLinkCopyFailed"), warningTitle);
         }
     }
 
@@ -1400,7 +1396,7 @@ export default function BookingDetailPage() {
                 .single();
             setDriveFolderPathHint(buildPathHint(profile as DrivePathProfile | null, booking));
         } catch {
-            showFeedback("Gagal refresh path folder Drive.");
+            showFeedback(tBookingDetail("failedRefreshDrivePath"));
         } finally {
             setRefreshingDrivePathHint(false);
         }
@@ -1445,7 +1441,7 @@ export default function BookingDetailPage() {
     }
 
     function sendWAFreelance(phone: string | null, fname: string) {
-        if (!phone || !booking) { showFeedback("Nomor WhatsApp freelancer tidak tersedia."); return; }
+        if (!phone || !booking) { showFeedback(tBookingDetail("freelancerPhoneUnavailable")); return; }
         const cleaned = normalizeWhatsAppNumber(phone);
         // Use freelancer template if available
         const content = getWhatsAppTemplateContent(
@@ -1464,7 +1460,14 @@ export default function BookingDetailPage() {
             });
             msg = fillWhatsAppTemplate(content, vars);
         } else {
-            msg = `Halo ${fname}, kamu dijadwalkan sesi foto bersama klien ${booking.client_name} (${booking.booking_code}) pada ${booking.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-"}. Mohon konfirmasi kehadiranmu. Terima kasih!`;
+            msg = tBookingDetail("freelancerFallbackMessage", {
+                freelancerName: fname,
+                clientName: booking.client_name,
+                bookingCode: booking.booking_code,
+                sessionDate: booking.session_date
+                    ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" })
+                    : "-",
+            });
         }
         openWhatsAppUrl(buildWhatsAppUrl(cleaned, msg));
     }
@@ -1483,7 +1486,7 @@ export default function BookingDetailPage() {
             window.open(result.folderUrl, "_blank");
             setBooking(prev => prev ? { ...prev, drive_folder_url: result.folderUrl } : prev);
         } else {
-            showFeedback(result.error || "Gagal membuat folder.");
+            showFeedback(result.error || tBookingDetail("failedCreateFolder"));
         }
         setCreatingFolder(false);
     }
@@ -1512,10 +1515,10 @@ export default function BookingDetailPage() {
                     setBooking(prev => prev ? { ...prev, drive_folder_url: result.folderUrl } : prev);
                 }
             } else {
-                showFeedback(result.error || "Gagal upload file.");
+                showFeedback(result.error || tBookingDetail("failedUploadFile"));
             }
         } catch {
-            showFeedback("Gagal upload file.");
+            showFeedback(tBookingDetail("failedUploadFile"));
         }
         setUploadingFile(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1536,10 +1539,10 @@ export default function BookingDetailPage() {
             if (result.success) {
                 setUploadedFiles(prev => prev.filter((_, i) => i !== idx));
             } else {
-                showFeedback(result.error || "Gagal hapus file.");
+                showFeedback(result.error || tBookingDetail("failedDeleteFile"));
             }
         } catch {
-            showFeedback("Gagal hapus file.");
+            showFeedback(tBookingDetail("failedDeleteFile"));
         }
         setDeletingFileIdx(null);
     }
@@ -1626,7 +1629,7 @@ export default function BookingDetailPage() {
         setSavingAdjustments(false);
 
         if (error) {
-            showFeedback("Gagal menyimpan add-on pelunasan.");
+            showFeedback(tBookingDetail("failedSaveFinalAddons"));
             return null;
         }
 
@@ -1653,7 +1656,7 @@ export default function BookingDetailPage() {
 
         const { data: auth } = await supabase.auth.getUser();
         if (!auth.user) {
-            showFeedback("Sesi login tidak ditemukan.");
+            showFeedback(tBookingDetail("sessionNotFound"));
             return;
         }
 
@@ -1676,7 +1679,7 @@ export default function BookingDetailPage() {
         setCreatingCustomAddon(false);
 
         if (error || !data) {
-            showFeedback("Gagal membuat add-on custom.");
+            showFeedback(tBookingDetail("failedCreateCustomAddon"));
             return;
         }
 
@@ -1692,7 +1695,7 @@ export default function BookingDetailPage() {
     async function handleSendFinalInvoice() {
         if (!requireBookingWrite()) return;
         if (!booking?.tracking_uuid || !booking.client_whatsapp) {
-            showFeedback("Booking ini belum punya tracking link atau nomor WhatsApp klien.");
+            showFeedback(tBookingDetail("trackingLinkOrWhatsappMissing"));
             return;
         }
 
@@ -1724,7 +1727,7 @@ export default function BookingDetailPage() {
         setSendingFinalInvoice(false);
 
         if (error) {
-            showFeedback("Gagal mengirim invoice final.");
+            showFeedback(tBookingDetail("failedSendFinalInvoice"));
             closePreopenedWindow(preOpenedWindow);
             return;
         }
@@ -1776,10 +1779,10 @@ export default function BookingDetailPage() {
                 `Add-on akhir: ${formatCurrency(getFinalAdjustmentsTotal(normalizedAdjustments))}\n` +
                 `Total final: ${formatCurrency(finalTotal)}\n` +
                 `DP terbayar: ${formatCurrency(booking.dp_paid)}\n` +
-                `Sisa pelunasan: ${formatCurrency(remainingFinal)}\n\n` +
+                `${tBookingDetail("waSettlementRemainingLabel")}: ${formatCurrency(remainingFinal)}\n\n` +
                 `Invoice final: ${invoiceUrl}\n` +
-                `Form pelunasan: ${settlementUrl}\n\n` +
-                `Silakan lakukan pelunasan dan upload bukti bayar melalui link di atas. Terima kasih.`;
+                `${tBookingDetail("waSettlementFormLabel")}: ${settlementUrl}\n\n` +
+                `${tBookingDetail("waSettlementInstruction")}`;
 
         setBooking((prev) =>
             prev
@@ -1834,7 +1837,7 @@ export default function BookingDetailPage() {
         setMarkingFinalPaid(false);
 
         if (error) {
-            showFeedback("Gagal menandai booking sebagai lunas.");
+            showFeedback(tBookingDetail("failedMarkBookingPaid"));
             return;
         }
 
@@ -1871,7 +1874,7 @@ export default function BookingDetailPage() {
         setMarkingFinalUnpaid(false);
 
         if (error) {
-            showFeedback("Gagal membatalkan status lunas.");
+            showFeedback(tBookingDetail("failedCancelBookingPaid"));
             return;
         }
 
@@ -1911,21 +1914,25 @@ export default function BookingDetailPage() {
                 warningDetails.push(
                     locale === "en"
                         ? `Google Calendar event deletion failed: ${calendarResult?.error || "Unknown error"}`
-                        : `Event Google Calendar gagal dihapus: ${calendarResult?.error || "Unknown error"}`,
+                        : tBookingDetail("googleCalendarDeleteFailed", {
+                            reason: calendarResult?.error || "Unknown error",
+                        }),
                 );
             } else if (calendarResult && calendarResult.success === false) {
                 const firstError = Array.isArray(calendarResult.errors) ? calendarResult.errors[0] : null;
                 warningDetails.push(
                     locale === "en"
                         ? `Some Google Calendar events failed to delete.${firstError ? ` ${firstError}` : ""}`
-                        : `Sebagian event Google Calendar gagal dihapus.${firstError ? ` ${firstError}` : ""}`,
+                        : tBookingDetail("googleCalendarDeletePartial", {
+                            firstError: firstError ? ` ${firstError}` : "",
+                        }),
                 );
             }
         } catch {
             warningDetails.push(
                 locale === "en"
                     ? "Failed to remove Google Calendar event."
-                    : "Event Google Calendar gagal dihapus.",
+                    : tBookingDetail("googleCalendarDeleteFailedGeneric"),
             );
         }
 
@@ -1960,14 +1967,14 @@ export default function BookingDetailPage() {
                     warningDetails.push(
                         locale === "en"
                             ? `Fastpik project deletion failed: ${reason}`
-                            : `Project Fastpik gagal dihapus: ${reason}`,
+                            : tBookingDetail("fastpikProjectDeleteFailed", { reason }),
                     );
                 }
             } catch {
                 warningDetails.push(
                     locale === "en"
                         ? "Failed to delete Fastpik project."
-                        : "Project Fastpik gagal dihapus.",
+                        : tBookingDetail("fastpikProjectDeleteFailedGeneric"),
                 );
             }
         }
@@ -1975,7 +1982,7 @@ export default function BookingDetailPage() {
         const { error } = await supabase.from("bookings").delete().eq("id", booking.id);
         if (error) {
             setDeletingBooking(false);
-            showFeedback(locale === "en" ? "Failed to delete booking." : "Gagal menghapus booking.");
+            showFeedback(locale === "en" ? "Failed to delete booking." : tBookingDetail("failedDeleteBooking"));
             return;
         }
 
@@ -1985,9 +1992,9 @@ export default function BookingDetailPage() {
         if (warningDetails.length > 0) {
             const warningMessage = locale === "en"
                 ? `Booking deleted with warning${warningDetails.length > 1 ? "s" : ""}: ${warningDetails.join(" ")}`
-                : `Booking berhasil dihapus dengan peringatan: ${warningDetails.join(" ")}`;
+                : tBookingDetail("bookingDeletedWithWarning", { warnings: warningDetails.join(" ") });
             setPendingRedirect(bookingsPath);
-            showFeedback(warningMessage, locale === "en" ? "Warning" : "Peringatan");
+            showFeedback(warningMessage, warningTitle);
             return;
         }
 
@@ -2032,7 +2039,7 @@ export default function BookingDetailPage() {
             ? "DP Terverifikasi"
             : booking.dp_paid > 0
                 ? "DP Menunggu Verifikasi"
-            : "Belum Dibayar";
+            : tBookingDetail("unpaid");
     const remaining = getRemainingFinalPayment({
         total_price: booking.total_price,
         dp_paid: booking.dp_paid,
@@ -2173,7 +2180,7 @@ export default function BookingDetailPage() {
             showFeedback(
                 locale === "en"
                     ? "Fastpik password is not available yet."
-                    : "Password Fastpik belum tersedia.",
+                    : tBookingDetail("fastpikPasswordUnavailable"),
             );
             return;
         }
@@ -2181,19 +2188,19 @@ export default function BookingDetailPage() {
             password,
             locale === "en"
                 ? "Fastpik password copied."
-                : "Password Fastpik berhasil disalin.",
+                : tBookingDetail("fastpikPasswordCopied"),
             locale === "en"
                 ? "Failed to copy Fastpik password."
-                : "Gagal menyalin password Fastpik.",
+                : tBookingDetail("fastpikPasswordCopyFailed"),
         );
     };
     const handleCopyGalleryLink = (url: string) => {
         void copyTextWithSuccessToast(
             url,
-            locale === "en" ? "Gallery link copied." : "Link galeri berhasil disalin.",
+            locale === "en" ? "Gallery link copied." : tBookingDetail("galleryLinkCopied"),
             locale === "en"
                 ? "Failed to copy gallery link."
-                : "Gagal menyalin link galeri.",
+                : tBookingDetail("galleryLinkCopyFailed"),
         );
     };
     const handleCopyPortfolioLink = (url: string) => {
@@ -2201,10 +2208,10 @@ export default function BookingDetailPage() {
             url,
             locale === "en"
                 ? "Portfolio link copied."
-                : "Link portofolio berhasil disalin.",
+                : tBookingDetail("portfolioLinkCopied"),
             locale === "en"
                 ? "Failed to copy portfolio link."
-                : "Gagal menyalin link portofolio.",
+                : tBookingDetail("portfolioLinkCopyFailed"),
         );
     };
     const renderGalleryLinkCard = (
@@ -2332,7 +2339,11 @@ export default function BookingDetailPage() {
                     <InfoRow label="Tipe Acara" value={booking.event_type} />
                 )}
                 {otherExtraEntries.map(([key, val]) => (
-                    <InfoRow key={key} label={EXTRA_FIELD_LABELS[key] || key} value={renderExtraFieldValue(key, val)} />
+                    <InfoRow
+                        key={key}
+                        label={EXTRA_FIELD_LABEL_KEYS[key] ? tBookingDetail(EXTRA_FIELD_LABEL_KEYS[key]) : key}
+                        value={renderExtraFieldValue(key, val)}
+                    />
                 ))}
                 {(customFieldsBySection.client_info || []).map((field) => (
                     <InfoRow key={field.id} label={field.label} value={field.value} />
@@ -2342,8 +2353,8 @@ export default function BookingDetailPage() {
             {/* Detail Sesi */}
             <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Detail Sesi</h3>
-                <InfoRow label="Tanggal Sesi" value={renderSessionDisplayValue(sessionDisplay.dateDisplay)} />
-                <InfoRow label="Jam Sesi" value={renderSessionDisplayValue(sessionDisplay.timeDisplay)} />
+                <InfoRow label={tBookingDetail("sessionDateLabel")} value={renderSessionDisplayValue(sessionDisplay.dateDisplay)} />
+                <InfoRow label={tBookingDetail("sessionTimeLabel")} value={renderSessionDisplayValue(sessionDisplay.timeDisplay)} />
                 {booking.location && (
                     <InfoRow
                         label="Lokasi"
@@ -2357,7 +2368,7 @@ export default function BookingDetailPage() {
                     />
                 )}
                 {booking.location_detail && (
-                    <InfoRow label="Detail Lokasi" value={booking.location_detail} />
+                    <InfoRow label={tBookingDetail("locationDetailLabel")} value={booking.location_detail} />
                 )}
                 <InfoRow label="Paket" value={booking.service_label || booking.services?.name || "-"} />
                 <InfoRow label="Add-on" value={addonLabel} />
@@ -2383,7 +2394,7 @@ export default function BookingDetailPage() {
                     </Link>
                 </div>
                 <InfoRow label="Status Pembayaran Awal" value={initialPaymentStatus} />
-                <InfoRow label="Status Pelunasan" value={getSettlementLabel(settlementStatus)} />
+                <InfoRow label={tBookingDetail("settlementStatusLabel")} value={getSettlementLabel(settlementStatus)} />
                 <div className="border-t pt-3 space-y-3">
                     <InfoRow label="Paket Awal" value={formatCurrency(initialPriceBreakdown.packageTotal)} />
                     <InfoRow label="Add-on Awal" value={formatCurrency(initialPriceBreakdown.addonTotal)} />
@@ -2559,7 +2570,7 @@ export default function BookingDetailPage() {
                     />
                 </div>
                 <div className="border-t pt-3 space-y-3">
-                    <InfoRow label="Pelunasan Terverifikasi" value={formatCurrency(verifiedFinalPayment)} />
+                    <InfoRow label={tBookingDetail("verifiedSettlementLabel")} value={formatCurrency(verifiedFinalPayment)} />
                     <InfoRow
                         label="Total Terverifikasi Bersih"
                         value={
@@ -2761,7 +2772,7 @@ export default function BookingDetailPage() {
                     driveFileId={booking.payment_proof_drive_file_id}
                     alt="Bukti Pembayaran Awal"
                     linkLabel="Buka bukti pembayaran awal"
-                    emptyLabel="Belum ada bukti pembayaran awal untuk booking ini."
+                    emptyLabel={tBookingDetail("initialPaymentProofEmpty")}
                     helperText="Upload atau ganti bukti pembayaran awal dari admin."
                     uploadLabel={booking.payment_proof_url ? "Ganti Bukti Awal" : "Upload Bukti Awal"}
                     uploading={uploadingProofStage === "initial"}
@@ -2773,13 +2784,13 @@ export default function BookingDetailPage() {
 
             {showFinalProofSection && (
                 <PaymentProofManager
-                    title="Bukti Pelunasan Final"
+                    title={tBookingDetail("finalPaymentProofTitle")}
                     url={booking.final_payment_proof_url}
                     driveFileId={booking.final_payment_proof_drive_file_id}
-                    alt="Bukti Pelunasan Final"
-                    linkLabel="Buka bukti pelunasan final"
-                    emptyLabel="Belum ada bukti pelunasan final untuk booking ini."
-                    helperText="Upload atau ganti bukti pelunasan final dari admin."
+                    alt={tBookingDetail("finalPaymentProofAlt")}
+                    linkLabel={tBookingDetail("finalPaymentProofLinkLabel")}
+                    emptyLabel={tBookingDetail("finalPaymentProofEmpty")}
+                    helperText={tBookingDetail("finalPaymentProofHelper")}
                     uploadLabel={booking.final_payment_proof_url ? "Ganti Bukti Final" : "Upload Bukti Final"}
                     uploading={uploadingProofStage === "final"}
                     canUpload={proofUploadsEnabled && canWriteBookings}
@@ -2913,7 +2924,7 @@ export default function BookingDetailPage() {
                                 }
                             />
                             <InfoRow
-                                label="Durasi Link Pilih"
+                                label={tBookingDetail("selectionLinkDurationLabel")}
                                 value={
                                     fastpikProjectInfo.selection_days !== null
                                         ? `${fastpikProjectInfo.selection_days} hari`
@@ -2929,7 +2940,7 @@ export default function BookingDetailPage() {
                                 }
                             />
                             <InfoRow
-                                label="Maksimal Jumlah Foto"
+                                label={tBookingDetail("maxPhotoCountLabel")}
                                 value={
                                     fastpikProjectInfo.max_photos !== null
                                         ? `${fastpikProjectInfo.max_photos} foto`
@@ -3038,7 +3049,7 @@ export default function BookingDetailPage() {
                                             onClick={() => setDeleteFileModal({ open: true, idx: i })}
                                             disabled={deletingFileIdx === i}
                                             className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 cursor-pointer disabled:opacity-50"
-                                            title="Hapus file"
+                                            title={tBookingDetail("deleteFileTitle")}
                                         >
                                             {deletingFileIdx === i ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                                         </button>
@@ -3132,7 +3143,7 @@ export default function BookingDetailPage() {
                         <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mb-2">
                             <AlertCircle className="w-6 h-6 text-red-600" />
                         </div>
-                        <DialogTitle className="text-xl">Hapus File</DialogTitle>
+                        <DialogTitle className="text-xl">{tBookingDetail("deleteFileTitle")}</DialogTitle>
                         <DialogDescription>
                             Yakin ingin menghapus file <strong>&quot;{deleteFileModal.idx != null ? uploadedFiles[deleteFileModal.idx!]?.name : ""}&quot;</strong> dari Google Drive? Tindakan ini tidak dapat dibatalkan.
                         </DialogDescription>
@@ -3141,7 +3152,7 @@ export default function BookingDetailPage() {
                         <Button variant="outline" className="flex-1" onClick={() => setDeleteFileModal({ open: false, idx: null })}>Batal</Button>
                         <Button variant="destructive" className="flex-1" onClick={() => { if (deleteFileModal.idx !== null) handleDeleteClientFile(deleteFileModal.idx); }}>
                             <Trash2 className="w-4 h-4 mr-2" />
-                            Ya, Hapus
+                            {tBookingDetail("deleteFileConfirm")}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -3191,7 +3202,7 @@ export default function BookingDetailPage() {
                             <input
                                 value={customAddonName}
                                 onChange={(e) => setCustomAddonName(e.target.value)}
-                                placeholder="Contoh: Extra Time 2 Jam"
+                                placeholder={tBookingDetail("customAddonNameExample")}
                                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                             />
                         </div>
@@ -3212,7 +3223,7 @@ export default function BookingDetailPage() {
                                 value={customAddonDescription}
                                 onChange={(e) => setCustomAddonDescription(e.target.value)}
                                 rows={3}
-                                placeholder="Contoh: Tambahan album mini atau transport"
+                                placeholder={tBookingDetail("customAddonDescriptionExample")}
                                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                             />
                         </div>
@@ -3260,12 +3271,12 @@ export default function BookingDetailPage() {
             <ActionConfirmDialog
                 open={deleteBookingModalOpen}
                 onOpenChange={setDeleteBookingModalOpen}
-                title={locale === "en" ? "Delete Booking" : "Hapus Booking"}
+                title={locale === "en" ? "Delete Booking" : tBookingDetail("deleteBookingTitle")}
                 message={locale === "en"
                     ? `Delete booking for ${booking.client_name}? Related Google Calendar event(s) and Fastpik project will also be deleted if available.`
                     : `Yakin ingin menghapus booking ${booking.client_name}? Event Google Calendar terkait dan project Fastpik (jika ada) juga akan ikut dihapus.`}
                 cancelLabel={locale === "en" ? "Cancel" : "Batal"}
-                confirmLabel={deletingBooking ? (locale === "en" ? "Deleting..." : "Menghapus...") : (locale === "en" ? "Yes, Delete" : "Ya, Hapus")}
+                confirmLabel={deletingBooking ? (locale === "en" ? "Deleting..." : "Menghapus...") : (locale === "en" ? "Yes, Delete" : tBookingDetail("deleteBookingConfirm"))}
                 onConfirm={() => { void handleDeleteBooking(); }}
                 confirmVariant="destructive"
                 loading={deletingBooking}

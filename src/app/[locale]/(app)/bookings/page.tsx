@@ -139,10 +139,10 @@ const STATUS_COLOR_PALETTE = [
 const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
     { id: "name", label: "Nama", visible: true, locked: true },
     { id: "invoice", label: "Invoice", visible: true },
-    { id: "booking_date", label: "Tanggal Booking", visible: true },
+    { id: "booking_date", label: "Booking Date", visible: true },
     { id: "package", label: "Paket", visible: true },
-    { id: "session_date_display", label: "Tanggal Sesi", visible: true },
-    { id: "session_time_display", label: "Jam Sesi", visible: true },
+    { id: "session_date_display", label: "Session Date", visible: true },
+    { id: "session_time_display", label: "Session Time", visible: true },
     { id: "location", label: "Lokasi", visible: true },
     { id: "status", label: "Status", visible: true },
     { id: "freelancer", label: "Freelance", visible: true },
@@ -779,21 +779,25 @@ export default function BookingsPage() {
                 warningDetails.push(
                     locale === "en"
                         ? `Google Calendar event deletion failed: ${calendarResult?.error || "Unknown error"}`
-                        : `Event Google Calendar gagal dihapus: ${calendarResult?.error || "Unknown error"}`,
+                        : tb("googleCalendarDeleteFailed", {
+                            reason: calendarResult?.error || "Unknown error",
+                        }),
                 );
             } else if (calendarResult && calendarResult.success === false) {
                 const firstError = Array.isArray(calendarResult.errors) ? calendarResult.errors[0] : null;
                 warningDetails.push(
                     locale === "en"
                         ? `Some Google Calendar events failed to delete.${firstError ? ` ${firstError}` : ""}`
-                        : `Sebagian event Google Calendar gagal dihapus.${firstError ? ` ${firstError}` : ""}`,
+                        : tb("googleCalendarDeletePartial", {
+                            firstError: firstError ? ` ${firstError}` : "",
+                        }),
                 );
             }
         } catch {
             warningDetails.push(
                 locale === "en"
                     ? "Failed to remove Google Calendar event."
-                    : "Event Google Calendar gagal dihapus.",
+                    : tb("googleCalendarDeleteFailedGeneric"),
             );
         }
 
@@ -829,14 +833,14 @@ export default function BookingsPage() {
                     warningDetails.push(
                         locale === "en"
                             ? `Fastpik project deletion failed: ${reason}`
-                            : `Project Fastpik gagal dihapus: ${reason}`,
+                            : tb("fastpikProjectDeleteFailed", { reason }),
                     );
                 }
             } catch {
                 warningDetails.push(
                     locale === "en"
                         ? "Failed to delete Fastpik project."
-                        : "Project Fastpik gagal dihapus.",
+                        : tb("fastpikProjectDeleteFailedGeneric"),
                 );
             }
         }
@@ -848,7 +852,7 @@ export default function BookingsPage() {
             if (warningDetails.length > 0) {
                 const warningMessage = locale === "en"
                     ? `Booking deleted with warning${warningDetails.length > 1 ? "s" : ""}: ${warningDetails.join(" ")}`
-                    : `Booking berhasil dihapus dengan peringatan: ${warningDetails.join(" ")}`;
+                    : tb("deleteWarningWithDetails", { warnings: warningDetails.join(" ") });
                 setFeedbackDialog({ open: true, message: warningMessage });
             }
         } else {
@@ -931,7 +935,7 @@ export default function BookingsPage() {
         const template = generateWATemplate(booking, locale, savedTemplates, studioName);
         try {
             await navigator.clipboard.writeText(template);
-            showSuccessToast("Template klien berhasil disalin.");
+            showSuccessToast(tb("copyClientTemplateSuccess"));
             setCopiedClientTemplateId(booking.id);
             setTimeout(() => {
                 setCopiedClientTemplateId((current) => current === booking.id ? null : current);
@@ -939,7 +943,7 @@ export default function BookingsPage() {
         } catch {
             setFeedbackDialog({
                 open: true,
-                message: locale === "en" ? "Failed to copy client template." : "Gagal menyalin template klien.",
+                message: locale === "en" ? "Failed to copy client template." : tb("failedCopyClientTemplate"),
             });
         }
     }
@@ -954,7 +958,7 @@ export default function BookingsPage() {
         );
         try {
             await navigator.clipboard.writeText(template);
-            showSuccessToast("Template freelance berhasil disalin.");
+            showSuccessToast(tb("copyFreelanceTemplateSuccess"));
             setCopiedFreelancerTemplateId(booking.id);
             setTimeout(() => {
                 setCopiedFreelancerTemplateId((current) => current === booking.id ? null : current);
@@ -965,7 +969,7 @@ export default function BookingsPage() {
                 message:
                     locale === "en"
                         ? "Failed to copy freelancer template."
-                        : "Gagal menyalin template freelance.",
+                        : tb("failedCopyFreelanceTemplate"),
             });
         }
     }
@@ -1027,11 +1031,11 @@ export default function BookingsPage() {
             case "package":
                 return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{t("paket")}</th>;
             case "booking_date":
-                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Tanggal Booking</th>;
+                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("columnBookingDate")}</th>;
             case "session_date_display":
-                return <th key={column.id} className="min-w-[170px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Tanggal Sesi</th>;
+                return <th key={column.id} className="min-w-[170px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("columnSessionDate")}</th>;
             case "session_time_display":
-                return <th key={column.id} className="min-w-[160px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">Jam Sesi</th>;
+                return <th key={column.id} className="min-w-[160px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("columnSessionTime")}</th>;
             case "location":
                 return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{tb("location")}</th>;
             case "status":
@@ -1551,8 +1555,8 @@ export default function BookingsPage() {
                 actions={(
                     <>
                         <TableColumnManager
-                            title="Kelola Kolom Daftar Booking"
-                            description="Atur kolom yang ditampilkan dan ubah urutannya. Kolom Nama dan Aksi selalu terkunci."
+                            title={tb("columnManagerTitle")}
+                            description={tb("columnManagerDescription")}
                             columns={columns}
                             open={columnManagerOpen}
                             onOpenChange={setColumnManagerOpen}

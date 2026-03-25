@@ -360,7 +360,7 @@ export default function ClientStatusPage() {
                     })
                     .eq("id", id);
                 if (error) {
-                    showFeedback(locale === "en" ? "Failed to update status." : "Gagal update status.");
+                    showFeedback(t("failedUpdateStatus"));
                     return;
                 }
             } else if (wasQueue && !isQueue) {
@@ -375,7 +375,7 @@ export default function ClientStatusPage() {
                     })
                     .eq("id", id);
                 if (error) {
-                    showFeedback(locale === "en" ? "Failed to update status." : "Gagal update status.");
+                    showFeedback(t("failedUpdateStatus"));
                     return;
                 }
 
@@ -401,7 +401,7 @@ export default function ClientStatusPage() {
                     })
                     .eq("id", id);
                 if (error) {
-                    showFeedback(locale === "en" ? "Failed to update status." : "Gagal update status.");
+                    showFeedback(t("failedUpdateStatus"));
                     return;
                 }
             }
@@ -435,15 +435,15 @@ export default function ClientStatusPage() {
         const url = `${window.location.origin}/${locale}/track/${uuid}`;
         try {
             await navigator.clipboard.writeText(url);
-            showSuccessToast("Link tracking berhasil disalin.");
+            showSuccessToast(t("trackingLinkCopied"));
             setCopiedId(id);
             setTimeout(() => setCopiedId(null), 2000);
         } catch {
             showFeedback(
                 locale === "en"
                     ? "Failed to copy tracking link."
-                    : "Gagal menyalin link tracking.",
-                locale === "en" ? "Warning" : "Peringatan",
+                    : t("trackingLinkCopyFailed"),
+                locale === "en" ? "Warning" : t("warningTitle"),
             );
         }
     }

@@ -566,7 +566,7 @@ export default function CalendarPage() {
             };
 
             if (!res.ok) {
-                showFeedback(`Gagal: ${result.error || t("gagalSinkron")}`);
+                showFeedback(t("syncFailedWithReason", { reason: result.error || t("gagalSinkron") }));
                 return;
             }
 
@@ -590,19 +590,23 @@ export default function CalendarPage() {
                 lines.push(
                     isEnglish
                         ? "Sync failed: no booking was successfully sent to Google Calendar."
-                        : "Sinkronisasi gagal: tidak ada booking yang berhasil dikirim ke Google Calendar.",
+                        : t("syncFailedNoSuccess"),
                 );
             } else {
                 lines.push(
                     isEnglish
                         ? `Sync completed: ${successCount} succeeded, ${failedCount} failed, ${skippedCount} skipped.`
-                        : `Sinkronisasi selesai: ${successCount} berhasil, ${failedCount} gagal, ${skippedCount} dilewati.`,
+                        : t("syncSummary", {
+                            successCount,
+                            failedCount,
+                            skippedCount,
+                        }),
                 );
             }
 
             if (failedItems.length > 0) {
                 lines.push("");
-                lines.push(isEnglish ? "Failed bookings:" : "Booking gagal:");
+                lines.push(isEnglish ? "Failed bookings:" : t("failedBookingsHeading"));
                 for (const item of failedItems) {
                     lines.push(`- ${item}`);
                 }
