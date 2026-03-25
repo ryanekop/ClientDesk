@@ -45,7 +45,7 @@ export function CustomDomainPromo() {
   const viewDetail = React.useCallback(() => {
     persistDismissPreference(dontShowAgain);
     setOpen(false);
-    router.push(`/${locale}/dashboard/custom-domain`);
+    router.push(`/${locale}/settings/custom-domain`);
   }, [dontShowAgain, locale, persistDismissPreference, router]);
 
   return (

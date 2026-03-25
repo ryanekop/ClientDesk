@@ -2605,7 +2605,7 @@ export default function SettingsPage() {
                     </span>
                   </div>
                   <a
-                    href={`/${locale}/dashboard/custom-domain`}
+                    href={`/${locale}/settings/custom-domain`}
                     className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
                   >
                     <Globe className="h-3.5 w-3.5" />
