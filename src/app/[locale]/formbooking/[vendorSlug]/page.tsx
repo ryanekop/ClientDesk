@@ -157,7 +157,11 @@ export default async function PublicBookingFormPage({
     form_terms_content: vendor.form_terms_content ?? null,
     form_sections: (vendor.form_sections as Vendor["form_sections"]) ?? [],
     form_payment_methods: normalizePaymentMethods(vendor.form_payment_methods),
-    qris_image_url: resolveDriveImageUrl(vendor.qris_image_url, vendor.qris_drive_file_id),
+    qris_image_url: resolveDriveImageUrl(
+      vendor.qris_image_url,
+      vendor.qris_drive_file_id,
+      { vendorSlug },
+    ),
     bank_accounts: normalizeBankAccounts(vendor.bank_accounts),
   };
 

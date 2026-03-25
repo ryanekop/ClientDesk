@@ -4,6 +4,7 @@ import {
     buildDriveFilePublicUrl,
     deleteFileFromDrive,
     findOrCreateNestedPath,
+    getDriveFilePublicLinks,
     uploadFileToDrive,
 } from "@/utils/google/drive";
 
@@ -90,7 +91,17 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const qrisImageUrl = buildDriveFilePublicUrl(uploaded.fileId);
+        let qrisImageUrl = uploaded.downloadUrl || buildDriveFilePublicUrl(uploaded.fileId);
+        try {
+            const publicLinks = await getDriveFilePublicLinks(
+                profile.google_drive_access_token,
+                profile.google_drive_refresh_token,
+                uploaded.fileId,
+            );
+            qrisImageUrl = publicLinks.preferredUrl;
+        } catch {
+            // Fall back to the upload response link when Drive metadata cannot be refreshed.
+        }
 
         await supabase
             .from("profiles")

@@ -27,6 +27,7 @@ export const dynamic = "force-dynamic";
 
 type RawVendor = {
   id: string;
+  vendor_slug: string | null;
   studio_name: string | null;
   whatsapp_number: string | null;
   min_dp_percent: number | null;
@@ -114,7 +115,7 @@ async function fetchVendorForTenant(tenantId: string, vendorSlug: string) {
   const { data: vendor } = (await supabaseAdmin
     .from("profiles")
     .select(
-      "id, studio_name, whatsapp_number, min_dp_percent, min_dp_map, " +
+      "id, vendor_slug, studio_name, whatsapp_number, min_dp_percent, min_dp_map, " +
         "avatar_url, invoice_logo_url, form_brand_color, form_greeting, " +
         "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_addons, form_show_proof, " +
         "form_terms_enabled, form_terms_agreement_text, form_terms_link_text, form_terms_suffix_text, form_terms_content, " +
@@ -176,6 +177,7 @@ function normalizeVendor(vendor: RawVendor): Vendor {
     qris_image_url: resolveDriveImageUrl(
       vendor.qris_image_url,
       vendor.qris_drive_file_id,
+      { vendorSlug: vendor.vendor_slug ?? null },
     ),
     bank_accounts: normalizeBankAccounts(vendor.bank_accounts),
   };

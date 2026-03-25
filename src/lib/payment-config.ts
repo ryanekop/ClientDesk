@@ -112,13 +112,57 @@ export function buildDriveImageUrl(fileId: string) {
   return `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`;
 }
 
+type PublicQrisImageOptions = {
+  vendorSlug?: string | null;
+  trackingUuid?: string | null;
+};
+
+export function isLegacyDriveImageUrl(url: string | null | undefined) {
+  if (!url) return false;
+  return /https:\/\/drive\.google\.com\/thumbnail\?/i.test(url);
+}
+
+export function buildPublicQrisImageUrl(options: PublicQrisImageOptions) {
+  const params = new URLSearchParams();
+
+  if (options.vendorSlug?.trim()) {
+    params.set("vendorSlug", options.vendorSlug.trim());
+  }
+
+  if (options.trackingUuid?.trim()) {
+    params.set("trackingUuid", options.trackingUuid.trim());
+  }
+
+  const query = params.toString();
+  return query ? `/api/public/qris?${query}` : null;
+}
+
 export function resolveDriveImageUrl(
   imageUrl: string | null | undefined,
   fileId: string | null | undefined,
+  options: PublicQrisImageOptions = {},
 ) {
-  if (fileId && fileId.trim()) {
-    return buildDriveImageUrl(fileId);
+  const normalizedImageUrl = imageUrl?.trim() || null;
+  const normalizedFileId = fileId?.trim() || null;
+  const redirectUrl = normalizedFileId
+    ? buildPublicQrisImageUrl(options)
+    : null;
+
+  if (normalizedImageUrl && !isLegacyDriveImageUrl(normalizedImageUrl)) {
+    return normalizedImageUrl;
   }
 
-  return imageUrl || null;
+  if (redirectUrl) {
+    return redirectUrl;
+  }
+
+  if (normalizedImageUrl) {
+    return normalizedImageUrl;
+  }
+
+  if (normalizedFileId) {
+    return buildDriveImageUrl(normalizedFileId);
+  }
+
+  return null;
 }

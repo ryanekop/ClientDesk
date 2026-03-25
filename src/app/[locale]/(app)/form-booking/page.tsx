@@ -45,12 +45,12 @@ import {
 } from "@/components/form-builder/booking-form-layout";
 import {
   createEmptyBankAccount,
-  buildDriveImageUrl,
   getEnabledBankAccounts,
   getPaymentMethodLabel,
   getValidBankAccounts,
   normalizeBankAccounts,
   normalizePaymentMethods,
+  resolveDriveImageUrl,
   type BankAccount,
   type PaymentMethod,
 } from "@/lib/payment-config";
@@ -529,12 +529,20 @@ export default function FormBookingPage() {
         const loadedPaymentMethods = normalizePaymentMethods(
           (p as Record<string, unknown>).form_payment_methods,
         );
-        const loadedQrisImageUrl =
+        const loadedQrisImageUrl = resolveDriveImageUrl(
+          typeof (p as Record<string, unknown>).qris_image_url === "string"
+            ? ((p as Record<string, unknown>).qris_image_url as string)
+            : null,
           typeof (p as Record<string, unknown>).qris_drive_file_id === "string"
-            ? buildDriveImageUrl((p as Record<string, unknown>).qris_drive_file_id as string)
-            : typeof (p as Record<string, unknown>).qris_image_url === "string"
-              ? ((p as Record<string, unknown>).qris_image_url as string)
-              : null;
+            ? ((p as Record<string, unknown>).qris_drive_file_id as string)
+            : null,
+          {
+            vendorSlug:
+              typeof (p as Record<string, unknown>).vendor_slug === "string"
+                ? ((p as Record<string, unknown>).vendor_slug as string)
+                : null,
+          },
+        );
         const loadedFormLang =
           ((p as Record<string, unknown>).form_lang as string) || "id";
         const loadedTermsEnabled =

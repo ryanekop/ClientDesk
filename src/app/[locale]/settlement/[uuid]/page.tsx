@@ -118,6 +118,7 @@ async function getSettlementData(uuid: string) {
       qrisImageUrl: resolveDriveImageUrl(
         profile?.qris_image_url || null,
         profile?.qris_drive_file_id || null,
+        { trackingUuid: booking.tracking_uuid },
       ),
       bankAccounts: normalizeBankAccounts(profile?.bank_accounts),
       settlementConfirmTemplate,

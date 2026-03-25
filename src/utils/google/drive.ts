@@ -181,6 +181,35 @@ export function buildDriveFilePublicUrl(fileId: string) {
     return `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`;
 }
 
+export async function getDriveFilePublicLinks(
+    accessToken: string,
+    refreshToken: string,
+    fileId: string
+) {
+    const { drive } = await getDriveClient(accessToken, refreshToken);
+    const res = await drive.files.get({
+        fileId,
+        fields: "id, resourceKey, webContentLink, webViewLink, thumbnailLink",
+    });
+
+    const webContentLink = res.data.webContentLink || null;
+    const thumbnailLink = res.data.thumbnailLink || null;
+    const webViewLink = res.data.webViewLink || null;
+    const resourceKey = res.data.resourceKey || null;
+
+    return {
+        fileId: res.data.id || fileId,
+        resourceKey,
+        webContentLink,
+        thumbnailLink,
+        webViewLink,
+        preferredUrl:
+            webContentLink ||
+            thumbnailLink ||
+            buildDriveFilePublicUrl(fileId),
+    };
+}
+
 /**
  * Creates a chain of nested folders.
  * e.g. pathParts = ["Data Booking Client Desk", "Client A", "File Client"]

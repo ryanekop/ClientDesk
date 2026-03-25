@@ -176,7 +176,8 @@ export function Topbar({ onMenuClick }: TopbarProps) {
 
   return (
     <>
-    <header className="announcement-aware-sticky sticky z-30 flex h-16 items-center justify-between shadow-[0_1px_5px_rgba(0,0,0,0.02)] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
+    {/* Topbar stays at top-0 here; announcement offset is already handled by DashboardLayout container. */}
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between shadow-[0_1px_5px_rgba(0,0,0,0.02)] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
