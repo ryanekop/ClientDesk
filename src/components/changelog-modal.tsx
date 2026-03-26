@@ -71,9 +71,9 @@ export function DashboardChangelogPopup({
         setOpen(nextOpen);
       }}
     >
-      <DialogContent className="max-w-[min(780px,calc(100vw-1.5rem))] border-0 bg-transparent p-0 shadow-none sm:max-h-[85vh] [&>button]:right-5 [&>button]:top-5 [&>button]:rounded-full [&>button]:bg-background [&>button]:p-2 [&>button]:opacity-100 [&>button]:shadow-sm">
-        <div className="rounded-[1.75rem] border border-border/70 bg-background/95 p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.45)] backdrop-blur sm:p-5">
-          <DialogHeader className="px-2 pb-4 pt-2 text-left">
+      <DialogContent className="top-[calc(var(--global-announcement-height,0px)+env(safe-area-inset-top,0px)+0.5rem)] w-[calc(100vw-1rem)] max-w-[min(780px,calc(100vw-1rem))] max-h-[calc(100dvh-var(--global-announcement-height,0px)-env(safe-area-inset-top,0px)-1rem)] translate-y-0 overflow-hidden border-0 bg-transparent p-0 shadow-none sm:top-[50%] sm:max-h-[85vh] sm:translate-y-[-50%] [&>button]:right-3 [&>button]:top-3 [&>button]:rounded-full [&>button]:bg-background [&>button]:p-2 [&>button]:opacity-100 [&>button]:shadow-sm sm:[&>button]:right-5 sm:[&>button]:top-5">
+        <div className="flex max-h-full flex-col rounded-[1.5rem] border border-border/70 bg-background/95 p-3 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.45)] backdrop-blur sm:rounded-[1.75rem] sm:p-5">
+          <DialogHeader className="px-1 pb-3 pt-1 text-left sm:px-2 sm:pb-4 sm:pt-2">
             <div className="flex items-center gap-3 text-primary">
               <BellRing className="h-5 w-5" />
               <DialogTitle>
@@ -82,7 +82,7 @@ export function DashboardChangelogPopup({
             </div>
           </DialogHeader>
 
-          <div className="max-h-[58vh] overflow-y-auto pr-1">
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             <ChangelogReleaseCard
               release={latestRelease}
               locale={locale}
@@ -91,8 +91,8 @@ export function DashboardChangelogPopup({
             />
           </div>
 
-          <div className="mt-4 flex flex-col gap-4 border-t border-border/70 px-2 pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3 text-sm text-muted-foreground">
+          <div className="mt-3 flex flex-col gap-3 border-t border-border/70 px-1 pt-3 sm:mt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-2 sm:pt-4">
+            <div className="flex items-start gap-3 text-xs text-muted-foreground sm:text-sm">
               <AppCheckbox
                 id={persistInBrowserId}
                 checked={persistInBrowser}
@@ -106,7 +106,7 @@ export function DashboardChangelogPopup({
               </label>
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" asChild>
                 <Link
                   href="/changelog"

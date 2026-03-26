@@ -919,6 +919,9 @@
             "oneTimeAppliesBoth": "sekali bayar, berlaku untuk Fastpik & Client Desk",
             "limitedBadge": "🔥 10 orang tercepat",
             "setupFee": "biaya setup (belum termasuk domain)",
+            "quotaOwnedLabel": "{count} Vendor sudah memiliki domain",
+            "quotaRemainingLabel": "Sisa Kuota: {count}",
+            "quotaProgressAria": "Progress kuota promo domain",
             "viewDetail": "Lihat Detail",
             "dontShowAgain": "Jangan tampilkan lagi",
             "closeButton": "Tutup"
