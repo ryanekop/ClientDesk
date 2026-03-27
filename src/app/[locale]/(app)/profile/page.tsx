@@ -9,6 +9,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import Link from "next/link";
 import { createImplicitClient } from "@/utils/supabase/implicit-client";
+import { optimizePngBlobForUpload } from "@/utils/optimize-png-blob";
 
 function extractMissingColumnFromSupabaseError(
     error: { message?: string; details?: string; hint?: string } | null,
@@ -201,11 +202,18 @@ export default function ProfilePage() {
         if (!userId) return;
 
         try {
-            const extension = blob.type === "image/png" ? "png" : "jpg";
+            const optimizedBlob = await optimizePngBlobForUpload(blob, {
+                maxBytes: 1024 * 1024,
+                maxDimension: 1600,
+                minDimension: 256,
+            }).catch(() => {
+                throw new Error(t("failedSavePhoto"));
+            });
+            const extension = optimizedBlob.type === "image/png" ? "png" : "jpg";
             const uploadFile = new File(
-                [blob],
+                [optimizedBlob],
                 `avatar-${Date.now()}.${extension}`,
-                { type: blob.type || "image/jpeg" },
+                { type: optimizedBlob.type || "image/png" },
             );
             const formData = new FormData();
             formData.append("assetType", "avatar");
@@ -224,8 +232,12 @@ export default function ProfilePage() {
             }
 
             setAvatarUrl(payload.url);
-        } catch {
-            showFeedback(t("failedSavePhoto"));
+        } catch (error) {
+            const errorMessage =
+                error instanceof Error && error.message
+                    ? error.message
+                    : t("failedSavePhoto");
+            showFeedback(errorMessage);
         }
     }
 

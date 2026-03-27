@@ -100,6 +100,7 @@ import {
   isMainClientDeskDomain,
   normalizeVendorSlug,
 } from "@/lib/booking-url-mode";
+import { optimizePngBlobForUpload } from "@/utils/optimize-png-blob";
 
 const COUNTRY_CODES = [
   { code: "+62", flag: "🇮🇩", name: "Indonesia" },
@@ -2040,16 +2041,23 @@ export default function SettingsPage() {
     if (!profile?.id) return;
     setLogoUploading(true);
     try {
+      const optimizedBlob = await optimizePngBlobForUpload(blob, {
+        maxBytes: 500 * 1024,
+        maxDimension: 1600,
+        minDimension: 256,
+      }).catch(() => {
+        throw new Error(tp("failedSaveLogo"));
+      });
       const extension =
-        blob.type === "image/png"
+        optimizedBlob.type === "image/png"
           ? "png"
-          : blob.type === "image/webp"
+          : optimizedBlob.type === "image/webp"
             ? "webp"
             : "jpg";
       const uploadFile = new File(
-        [blob],
+        [optimizedBlob],
         `invoice-logo-${Date.now()}.${extension}`,
-        { type: blob.type || "image/jpeg" },
+        { type: optimizedBlob.type || "image/png" },
       );
       const formData = new FormData();
       formData.append("assetType", "invoice_logo");
@@ -2068,8 +2076,12 @@ export default function SettingsPage() {
       }
 
       setLogoUrl(payload.url);
-    } catch {
-      showFeedback(tp("failedSaveLogo"));
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error && error.message
+          ? error.message
+          : tp("failedSaveLogo");
+      showFeedback(errorMessage);
     } finally {
       setLogoUploading(false);
     }

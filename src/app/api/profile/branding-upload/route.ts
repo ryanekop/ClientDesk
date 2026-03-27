@@ -100,138 +100,150 @@ async function ensureBrandingBucket() {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) {
-    return NextResponse.json(
-      { success: false, error: apiText(request, "unauthorized") },
-      { status: 401 },
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: apiText(request, "unauthorized") },
+        { status: 401 },
+      );
+    }
+
+    const formData = await request.formData();
+    const assetType = parseAssetType(formData.get("assetType"));
+    const file = formData.get("file");
+
+    if (!assetType) {
+      return NextResponse.json(
+        { success: false, error: apiText(request, "invalidAssetType") },
+        { status: 400 },
+      );
+    }
+
+    if (!(file instanceof File)) {
+      return NextResponse.json(
+        { success: false, error: apiText(request, "fileNotFound") },
+        { status: 400 },
+      );
+    }
+
+    if (!ALLOWED_MIME_TYPES.includes(file.type as (typeof ALLOWED_MIME_TYPES)[number])) {
+      return NextResponse.json(
+        { success: false, error: apiText(request, "invalidImageMimePngJpgWebp") },
+        { status: 400 },
+      );
+    }
+
+    if (assetType === "invoice_logo" && file.type === "image/webp") {
+      return NextResponse.json(
+        { success: false, error: apiText(request, "invoiceLogoPngJpgOnly") },
+        { status: 400 },
+      );
+    }
+
+    const maxSize = MAX_SIZE_BY_ASSET[assetType];
+    if (file.size > maxSize) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            assetType === "invoice_logo"
+              ? apiText(request, "invoiceLogoTooLarge")
+              : apiText(request, "avatarTooLarge"),
+        },
+        { status: 400 },
+      );
+    }
+
+    const service = createServiceClient();
+    const fallbackFullName = String(
+      user.user_metadata?.full_name || user.email?.split("@")[0] || "User",
     );
-  }
 
-  const formData = await request.formData();
-  const assetType = parseAssetType(formData.get("assetType"));
-  const file = formData.get("file");
-
-  if (!assetType) {
-    return NextResponse.json(
-      { success: false, error: apiText(request, "invalidAssetType") },
-      { status: 400 },
-    );
-  }
-
-  if (!(file instanceof File)) {
-    return NextResponse.json(
-      { success: false, error: apiText(request, "fileNotFound") },
-      { status: 400 },
-    );
-  }
-
-  if (!ALLOWED_MIME_TYPES.includes(file.type as (typeof ALLOWED_MIME_TYPES)[number])) {
-    return NextResponse.json(
-      { success: false, error: apiText(request, "invalidImageMimePngJpgWebp") },
-      { status: 400 },
-    );
-  }
-
-  if (assetType === "invoice_logo" && file.type === "image/webp") {
-    return NextResponse.json(
-      { success: false, error: apiText(request, "invoiceLogoPngJpgOnly") },
-      { status: 400 },
-    );
-  }
-
-  const maxSize = MAX_SIZE_BY_ASSET[assetType];
-  if (file.size > maxSize) {
-    return NextResponse.json(
+    await service.from("profiles").upsert(
       {
-        success: false,
-        error:
-          assetType === "invoice_logo"
-            ? apiText(request, "invoiceLogoTooLarge")
-            : apiText(request, "avatarTooLarge"),
+        id: user.id,
+        full_name: fallbackFullName,
       },
-      { status: 400 },
+      { onConflict: "id" },
     );
-  }
 
-  const service = createServiceClient();
-  const fallbackFullName = String(
-    user.user_metadata?.full_name || user.email?.split("@")[0] || "User",
-  );
+    const { data: profile } = await service
+      .from("profiles")
+      .select("id, vendor_slug, avatar_url, invoice_logo_url")
+      .eq("id", user.id)
+      .maybeSingle<ProfileRow>();
 
-  await service.from("profiles").upsert(
-    {
-      id: user.id,
-      full_name: fallbackFullName,
-    },
-    { onConflict: "id" },
-  );
+    await ensureBrandingBucket();
 
-  const { data: profile } = await service
-    .from("profiles")
-    .select("id, vendor_slug, avatar_url, invoice_logo_url")
-    .eq("id", user.id)
-    .maybeSingle<ProfileRow>();
+    const extension = normalizeExtension(file);
+    const objectPath = `${user.id}/${assetType}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+    const { error: uploadError } = await service.storage
+      .from(BRANDING_BUCKET)
+      .upload(objectPath, file, {
+        contentType: file.type,
+        upsert: false,
+        cacheControl: "31536000",
+      });
 
-  await ensureBrandingBucket();
+    if (uploadError) {
+      return NextResponse.json(
+        { success: false, error: uploadError.message || apiText(request, "uploadFailed") },
+        { status: 500 },
+      );
+    }
 
-  const extension = normalizeExtension(file);
-  const objectPath = `${user.id}/${assetType}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
-  const { error: uploadError } = await service.storage
-    .from(BRANDING_BUCKET)
-    .upload(objectPath, file, {
-      contentType: file.type,
-      upsert: false,
-      cacheControl: "31536000",
+    const { data: publicUrlData } = service.storage
+      .from(BRANDING_BUCKET)
+      .getPublicUrl(objectPath);
+    const publicUrl = publicUrlData.publicUrl;
+
+    const field = PROFILE_FIELD_BY_ASSET[assetType];
+    const oldUrl = profile?.[field] || null;
+
+    const { error: updateError } = await service
+      .from("profiles")
+      .update({ [field]: publicUrl })
+      .eq("id", user.id);
+
+    if (updateError) {
+      await service.storage.from(BRANDING_BUCKET).remove([objectPath]);
+      return NextResponse.json(
+        { success: false, error: updateError.message || apiText(request, "failedSaveProfile") },
+        { status: 500 },
+      );
+    }
+
+    const oldObjectPath = extractObjectPathFromPublicUrl(oldUrl);
+    if (oldObjectPath && oldObjectPath !== objectPath) {
+      await service.storage.from(BRANDING_BUCKET).remove([oldObjectPath]);
+    }
+
+    invalidatePublicCachesForProfile({
+      userId: user.id,
+      vendorSlug: profile?.vendor_slug || null,
     });
 
-  if (uploadError) {
+    return NextResponse.json({
+      success: true,
+      url: publicUrl,
+      field,
+      bucket: BRANDING_BUCKET,
+      objectPath,
+    });
+  } catch (error) {
+    console.error("branding upload failed:", error);
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : apiText(request, "uploadFailed");
     return NextResponse.json(
-      { success: false, error: uploadError.message || apiText(request, "uploadFailed") },
+      { success: false, error: message },
       { status: 500 },
     );
   }
-
-  const { data: publicUrlData } = service.storage
-    .from(BRANDING_BUCKET)
-    .getPublicUrl(objectPath);
-  const publicUrl = publicUrlData.publicUrl;
-
-  const field = PROFILE_FIELD_BY_ASSET[assetType];
-  const oldUrl = profile?.[field] || null;
-
-  const { error: updateError } = await service
-    .from("profiles")
-    .update({ [field]: publicUrl })
-    .eq("id", user.id);
-
-  if (updateError) {
-    await service.storage.from(BRANDING_BUCKET).remove([objectPath]);
-    return NextResponse.json(
-      { success: false, error: updateError.message || apiText(request, "failedSaveProfile") },
-      { status: 500 },
-    );
-  }
-
-  const oldObjectPath = extractObjectPathFromPublicUrl(oldUrl);
-  if (oldObjectPath && oldObjectPath !== objectPath) {
-    await service.storage.from(BRANDING_BUCKET).remove([oldObjectPath]);
-  }
-
-  invalidatePublicCachesForProfile({
-    userId: user.id,
-    vendorSlug: profile?.vendor_slug || null,
-  });
-
-  return NextResponse.json({
-    success: true,
-    url: publicUrl,
-    field,
-    bucket: BRANDING_BUCKET,
-    objectPath,
-  });
 }
