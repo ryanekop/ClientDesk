@@ -241,6 +241,7 @@
         "openGoogleSyncingOne": "Menyinkronkan booking...",
         "openGoogleSyncFailedTitle": "Sinkronisasi Gagal",
         "openGoogleSyncFailedMessage": "Booking gagal disinkronkan ke Google Calendar. Coba lagi setelah memastikan koneksi Google aktif.",
+        "openGooglePopupBlockedMessage": "Popup diblokir browser. Izinkan popup untuk membuka Google Calendar.",
         "openGoogleSyncNoEventTitle": "Event Belum Ditemukan",
         "openGoogleSyncNoEventMessage": "Sinkronisasi berhasil, tapi event ID belum ditemukan. Kami membuka pencarian Google Calendar untuk kode booking {bookingCode}.",
         "openGoogleSyncNoEventMessageNoCode": "Sinkronisasi berhasil, tapi event ID belum ditemukan. Silakan cek Google Calendar secara manual.",

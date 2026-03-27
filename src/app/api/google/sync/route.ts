@@ -4,16 +4,17 @@ import {
     BookingWriteAccessDeniedError,
 } from "@/lib/booking-write-access.server";
 import { createClient } from "@/utils/supabase/server";
-import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
-import { resolveBookingFreelancerNames } from "@/lib/booking-freelancers";
 import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
 import { resolveBookingFreelancerAttendeeEmails } from "@/lib/google-calendar-attendees";
 import {
     getGoogleCalendarSyncErrorMessage,
-    isNoScheduleSyncError,
     updateBookingCalendarSyncState,
 } from "@/lib/google-calendar-sync";
+import {
+    fetchGoogleCalendarSyncBookings,
+    syncSingleBookingCalendar,
+} from "@/lib/google-calendar-sync-booking";
 import { apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
 
@@ -99,12 +100,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: tokenErrorMessage }, { status: 400 });
         }
 
-        const { data: bookings } = await supabase
-            .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, session_date, location, location_lat, location_lng, location_detail, notes, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))")
-            .eq("user_id", user.id)
-            .in("id", bookingIds);
-        const bookingRows = bookings || [];
+        const bookingRows = await fetchGoogleCalendarSyncBookings({
+            supabase,
+            userId: user.id,
+            bookingIds,
+        });
 
         let attendeeEmailsByBooking: Record<string, string[]> = {};
         try {
@@ -140,97 +140,36 @@ export async function POST(request: NextRequest) {
         const skipped: string[] = [];
 
         for (const booking of bookingRows) {
-            try {
-                const syncedEvent = await syncBookingCalendarEvent({
-                    profile: {
-                        accessToken,
-                        refreshToken,
-                        studioName: profile?.studio_name ?? null,
-                        eventFormat: profile?.calendar_event_format ?? null,
-                        eventFormatMap: profile?.calendar_event_format_map ?? null,
-                        eventDescription: profile?.calendar_event_description ?? null,
-                        eventDescriptionMap: profile?.calendar_event_description_map ?? null,
-                    },
-                    booking: {
-                        id: booking.id,
-                        bookingCode: booking.booking_code,
-                        clientName: booking.client_name,
-                        clientWhatsapp: booking.client_whatsapp,
-                        sessionDate: booking.session_date,
-                        location: booking.location,
-                        locationLat: booking.location_lat,
-                        locationLng: booking.location_lng,
-                        locationDetail: booking.location_detail,
-                        eventType: booking.event_type,
-                        notes: booking.notes,
-                        extraFields: booking.extra_fields,
-                        freelancerNames: resolveBookingFreelancerNames({
-                            bookingFreelance: (booking as { booking_freelance?: unknown }).booking_freelance,
-                            legacyFreelance: (booking as { freelance?: unknown }).freelance,
-                        }),
-                        googleCalendarEventId: booking.google_calendar_event_id,
-                        googleCalendarEventIds:
-                            (booking as { google_calendar_event_ids?: unknown })
-                                .google_calendar_event_ids,
-                        services: booking.services,
-                        bookingServices: booking.booking_services,
-                    },
-                    attendeeEmails: attendeeEmailsByBooking[booking.id] || [],
-                });
+            const result = await syncSingleBookingCalendar({
+                supabase,
+                userId: user.id,
+                booking,
+                profile: {
+                    accessToken,
+                    refreshToken,
+                    studioName: profile?.studio_name ?? null,
+                    eventFormat: profile?.calendar_event_format ?? null,
+                    eventFormatMap: profile?.calendar_event_format_map ?? null,
+                    eventDescription: profile?.calendar_event_description ?? null,
+                    eventDescriptionMap: profile?.calendar_event_description_map ?? null,
+                },
+                attendeeEmails: attendeeEmailsByBooking[booking.id] || [],
+                fallbackErrorMessage: "Unknown error",
+            });
 
-                const updated = await updateBookingCalendarSyncState({
-                    supabase,
-                    bookingId: booking.id,
-                    userId: user.id,
-                    status: "success",
-                    eventId: syncedEvent.eventId,
-                    eventIds: syncedEvent.eventIds,
-                });
-                if (!updated.ok) {
-                    console.warn(
-                        "Failed to update booking calendar sync status (success):",
-                        updated.error,
-                    );
-                }
+            if (result.status === "success") {
                 successCount++;
-            } catch (error) {
-                const message = getGoogleCalendarSyncErrorMessage(error, "Unknown error");
-
-                if (isNoScheduleSyncError(error)) {
-                    skippedCount++;
-                    skipped.push(`${booking.booking_code}: ${message}`);
-                    const updated = await updateBookingCalendarSyncState({
-                        supabase,
-                        bookingId: booking.id,
-                        userId: user.id,
-                        status: "skipped",
-                        errorMessage: message,
-                    });
-                    if (!updated.ok) {
-                        console.warn(
-                            "Failed to update booking calendar sync status (skipped):",
-                            updated.error,
-                        );
-                    }
-                    continue;
-                }
-
-                failedCount++;
-                errors.push(`${booking.booking_code}: ${message}`);
-                const updated = await updateBookingCalendarSyncState({
-                    supabase,
-                    bookingId: booking.id,
-                    userId: user.id,
-                    status: "failed",
-                    errorMessage: message,
-                });
-                if (!updated.ok) {
-                    console.warn(
-                        "Failed to update booking calendar sync status (failed):",
-                        updated.error,
-                    );
-                }
+                continue;
             }
+
+            if (result.status === "skipped") {
+                skippedCount++;
+                skipped.push(`${result.bookingCode}: ${result.errorMessage || "Skipped"}`);
+                continue;
+            }
+
+            failedCount++;
+            errors.push(`${result.bookingCode}: ${result.errorMessage || "Unknown error"}`);
         }
 
         return NextResponse.json({

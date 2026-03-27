@@ -241,6 +241,7 @@
         "openGoogleSyncingOne": "Syncing booking...",
         "openGoogleSyncFailedTitle": "Sync Failed",
         "openGoogleSyncFailedMessage": "Failed to sync this booking to Google Calendar. Please try again after confirming the Google connection is active.",
+        "openGooglePopupBlockedMessage": "Your browser blocked the popup. Please allow popups to open Google Calendar.",
         "openGoogleSyncNoEventTitle": "Event Not Found Yet",
         "openGoogleSyncNoEventMessage": "Sync completed, but the event ID was not found yet. We opened Google Calendar search for booking code {bookingCode}.",
         "openGoogleSyncNoEventMessageNoCode": "Sync completed, but the event ID was not found yet. Please check Google Calendar manually.",
