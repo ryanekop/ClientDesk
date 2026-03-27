@@ -144,33 +144,43 @@ export function FilterMultiSelect({
   );
 
   const optionButtons = (
-    <div className={cn("max-h-64 overflow-y-auto p-1", menuClassName)}>
+    <div
+      className={cn(
+        isMobile ? "p-0.5" : "max-h-64 overflow-y-auto p-0.5",
+        menuClassName,
+      )}
+    >
       {allLabel ? (
         <button
           type="button"
           onClick={() => onChange([])}
           aria-pressed={values.length === 0}
           className={cn(
-            "mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             values.length === 0 ? "bg-muted font-medium" : "hover:bg-muted/70",
           )}
         >
           <span
             className={cn(
-              "grid h-7 w-7 shrink-0 place-items-center rounded-md border transition-colors",
+              "grid h-5 w-5 shrink-0 place-items-center rounded-[10px] border transition-colors",
               values.length === 0
                 ? "border-foreground bg-foreground text-background"
                 : "border-input bg-background text-foreground",
             )}
             aria-hidden
           >
-            <Check className={cn("h-4 w-4 transition-opacity", values.length === 0 ? "opacity-100" : "opacity-0")} />
+            <Check
+              className={cn(
+                "h-3.5 w-3.5 transition-opacity",
+                values.length === 0 ? "opacity-100" : "opacity-0",
+              )}
+            />
           </span>
           <span className="min-w-0 flex-1 truncate">{allLabel}</span>
         </button>
       ) : null}
       {options.length === 0 ? (
-        <p className="px-3 py-2 text-xs text-muted-foreground">-</p>
+        <p className="px-2.5 py-1.5 text-xs text-muted-foreground">-</p>
       ) : (
         options.map((option) => {
           const isSelected = selectedSet.has(option.value);
@@ -180,14 +190,14 @@ export function FilterMultiSelect({
               type="button"
               onClick={() => toggleValue(option.value)}
               className={cn(
-                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                 isSelected ? "bg-muted font-medium" : "hover:bg-muted/70",
               )}
               aria-pressed={isSelected}
             >
               <span
                 className={cn(
-                  "grid h-7 w-7 shrink-0 place-items-center rounded-md border transition-colors",
+                  "grid h-5 w-5 shrink-0 place-items-center rounded-[10px] border transition-colors",
                   isSelected
                     ? "border-foreground bg-foreground text-background"
                     : "border-input bg-background text-foreground",
@@ -196,7 +206,7 @@ export function FilterMultiSelect({
               >
                 <Check
                   className={cn(
-                    "h-4 w-4 transition-opacity",
+                    "h-3.5 w-3.5 transition-opacity",
                     isSelected ? "opacity-100" : "opacity-0",
                   )}
                 />
@@ -264,11 +274,11 @@ export function FilterMultiSelect({
 
               <div
                 className={cn(
-                  "absolute inset-x-0 bottom-0 rounded-t-2xl border border-border bg-card shadow-2xl transition-transform duration-200 ease-out",
+                  "absolute inset-x-0 bottom-0 flex max-h-[55dvh] flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl transition-transform duration-200 ease-out",
                   open ? "translate-y-0" : "translate-y-full",
                 )}
               >
-                <div className="flex items-center justify-between border-b px-4 py-3">
+                <div className="flex items-center justify-between border-b px-4 py-2.5">
                   <p className="text-sm font-semibold">{mobileTitle || placeholder}</p>
                   <button
                     type="button"
@@ -279,7 +289,7 @@ export function FilterMultiSelect({
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="max-h-[55dvh] overflow-y-auto py-2">{optionButtons}</div>
+                <div className="flex-1 overflow-y-auto py-1.5">{optionButtons}</div>
               </div>
             </div>,
             document.body,
