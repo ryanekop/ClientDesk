@@ -10,6 +10,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
+import { useStickyTableColumns } from "@/components/ui/use-sticky-table-columns";
 import { FilterMultiSelect } from "@/components/ui/filter-multi-select";
 import {
     PageHeader,
@@ -21,6 +22,7 @@ import {
     updateTableColumnPreferenceMap,
     type TableColumnPreference,
 } from "@/lib/table-column-prefs";
+import { cn } from "@/lib/utils";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
@@ -586,6 +588,21 @@ export default function TeamPage() {
         () => columns.filter((column) => column.visible),
         [columns],
     );
+    const {
+        tableRef,
+        getStickyColumnStyle,
+        getStickyColumnClassName,
+    } = useStickyTableColumns(orderedVisibleColumns);
+    const getDesktopHeaderClassName = React.useCallback(
+        (columnId: string, className: string) =>
+            cn(className, getStickyColumnClassName(columnId, { header: true })),
+        [getStickyColumnClassName],
+    );
+    const getDesktopCellClassName = React.useCallback(
+        (columnId: string, className: string) =>
+            cn(className, getStickyColumnClassName(columnId)),
+        [getStickyColumnClassName],
+    );
     const statusFilterOptions = React.useMemo(
         () =>
             availableStatuses.map((status) => ({
@@ -657,17 +674,17 @@ export default function TeamPage() {
     function renderDesktopHeader(column: TableColumnPreference) {
         switch (column.id) {
             case "name":
-                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("nama")}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("nama")}</th>;
             case "role":
-                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("peran")}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("peran")}</th>;
             case "tags":
-                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("tags")}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("tags")}</th>;
             case "whatsapp":
-                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("whatsapp")}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("whatsapp")}</th>;
             case "status":
-                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("status")}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("status")}</th>;
             case "actions":
-                return <th key={column.id} className="min-w-[120px] px-4 py-4 font-medium text-muted-foreground text-right">{t("aksi")}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "min-w-[120px] px-4 py-4 font-medium text-muted-foreground text-right")}>{t("aksi")}</th>;
             default:
                 return null;
         }
@@ -677,7 +694,7 @@ export default function TeamPage() {
         switch (column.id) {
             case "name":
                 return (
-                    <td key={column.id} className="px-4 py-3">
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
                         <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-sm shrink-0">
                                 {member.name.charAt(0).toUpperCase()}
@@ -688,7 +705,7 @@ export default function TeamPage() {
                 );
             case "role":
                 return (
-                    <td key={column.id} className="px-6 py-4 whitespace-nowrap">
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                             {member.role}
                         </span>
@@ -696,7 +713,7 @@ export default function TeamPage() {
                 );
             case "tags":
                 return (
-                    <td key={column.id} className="px-6 py-4">
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4")}>
                         {member.tags.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                                 {member.tags.map((tag, i) => (
@@ -709,10 +726,10 @@ export default function TeamPage() {
                     </td>
                 );
             case "whatsapp":
-                return <td key={column.id} className="px-6 py-4 whitespace-nowrap">{member.whatsapp_number || "-"}</td>;
+                return <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>{member.whatsapp_number || "-"}</td>;
             case "status":
                 return (
-                    <td key={column.id} className="px-6 py-4 whitespace-nowrap">
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
                         <button
                             onClick={() => handleToggleStatus(member)}
                             className={`text-xs font-medium px-2 py-0.5 rounded-full cursor-pointer transition-colors ${member.status === "active"
@@ -726,7 +743,7 @@ export default function TeamPage() {
                 );
             case "actions":
                 return (
-                    <td key={column.id} className="min-w-[120px] px-4 py-4 whitespace-nowrap text-right">
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[120px] px-4 py-4 whitespace-nowrap text-right")}>
                         <div className="flex items-center justify-end gap-2.5 pr-2">
                             <ActionIconButton tone="green" title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)}>
                                 <MessageCircle className="w-4 h-4" />
@@ -899,7 +916,7 @@ export default function TeamPage() {
                     </div>
                     <div className="hidden md:block rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
                         <div className="relative overflow-x-auto">
-                            <table className="min-w-[860px] w-full text-sm text-left">
+                            <table ref={tableRef} className="min-w-[860px] w-full text-sm text-left">
                                 <thead className="text-xs uppercase bg-card border-b">
                                     <tr>
                                         {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
@@ -989,7 +1006,7 @@ export default function TeamPage() {
                     {/* Desktop Table */}
                     <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">
                         <div className="relative overflow-x-auto">
-                            <table className="min-w-[860px] w-full text-sm text-left">
+                            <table ref={tableRef} className="min-w-[860px] w-full text-sm text-left">
                                 <thead className="text-xs uppercase bg-card border-b">
                                     <tr>
                                         {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}

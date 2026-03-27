@@ -106,6 +106,7 @@ export type Vendor = {
   form_show_location: boolean;
   form_show_notes: boolean;
   form_show_addons: boolean;
+  form_hide_service_prices: boolean;
   form_show_proof: boolean;
   form_terms_enabled: boolean;
   form_terms_agreement_text: string | null;
@@ -221,6 +222,7 @@ type PreviewVendorPayload = Partial<
     | "custom_event_types"
     | "form_show_notes"
     | "form_show_addons"
+    | "form_hide_service_prices"
     | "form_show_proof"
     | "form_terms_enabled"
     | "form_terms_agreement_text"
@@ -402,6 +404,8 @@ export function BookingFormClient({
   const eventTypeLocked = isSpecialOfferActive && specialOfferRule?.eventTypeLocked === true;
   const packageLocked = isSpecialOfferActive && specialOfferRule?.packageLocked === true;
   const addonLocked = isSpecialOfferActive && specialOfferRule?.addonLocked === true;
+  const shouldHideServicePrices =
+    effectiveVendor.form_hide_service_prices === true && !isSpecialOfferActive;
   const accommodationFee = isSpecialOfferActive ? specialOfferRule?.accommodationFee || 0 : 0;
   const discountAmount = isSpecialOfferActive ? specialOfferRule?.discountAmount || 0 : 0;
   const specialEventTypes = React.useMemo(
@@ -1059,7 +1063,7 @@ export function BookingFormClient({
     if (open) {
       setTermsViewedOnce(true);
     }
-  }, []);
+  }, [setTermsDialogOpen, setTermsViewedOnce]);
 
   React.useEffect(() => {
     if (!hasTerms) {
@@ -1689,12 +1693,14 @@ export function BookingFormClient({
                         <p className="text-xs text-muted-foreground">{service.description}</p>
                       ) : null}
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-lg font-bold text-primary">{formatCurrency(service.price)}</p>
-                      {service.original_price && service.original_price > service.price ? (
-                        <p className="text-[11px] text-muted-foreground line-through">{formatCurrency(service.original_price)}</p>
-                      ) : null}
-                    </div>
+                    {!shouldHideServicePrices ? (
+                      <div className="shrink-0 text-right">
+                        <p className="text-lg font-bold text-primary">{formatCurrency(service.price)}</p>
+                        {service.original_price && service.original_price > service.price ? (
+                          <p className="text-[11px] text-muted-foreground line-through">{formatCurrency(service.original_price)}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -1748,9 +1754,11 @@ export function BookingFormClient({
                         </p>
                       ) : null}
                     </div>
-                    <span className="font-semibold text-primary whitespace-nowrap">
-                      +{formatCurrency(addon.price)}
-                    </span>
+                    {!shouldHideServicePrices ? (
+                      <span className="font-semibold text-primary whitespace-nowrap">
+                        +{formatCurrency(addon.price)}
+                      </span>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -2143,17 +2151,19 @@ export function BookingFormClient({
                             ) : null}
                           </div>
                         </div>
-                        <div className="shrink-0 text-right">
-                          <p className="text-sm font-semibold text-primary">
-                            {formatCurrency(service.price)}
-                          </p>
-                          {service.original_price &&
-                          service.original_price > service.price ? (
-                            <p className="text-[11px] text-muted-foreground line-through">
-                              {formatCurrency(service.original_price)}
+                        {!shouldHideServicePrices ? (
+                          <div className="shrink-0 text-right">
+                            <p className="text-sm font-semibold text-primary">
+                              {formatCurrency(service.price)}
                             </p>
-                          ) : null}
-                        </div>
+                            {service.original_price &&
+                            service.original_price > service.price ? (
+                              <p className="text-[11px] text-muted-foreground line-through">
+                                {formatCurrency(service.original_price)}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </button>
                     );
                   })
@@ -2219,11 +2229,13 @@ export function BookingFormClient({
                             ) : null}
                           </div>
                         </div>
-                        <div className="shrink-0 text-right">
-                          <p className="text-sm font-semibold text-primary">
-                            +{formatCurrency(addon.price)}
-                          </p>
-                        </div>
+                        {!shouldHideServicePrices ? (
+                          <div className="shrink-0 text-right">
+                            <p className="text-sm font-semibold text-primary">
+                              +{formatCurrency(addon.price)}
+                            </p>
+                          </div>
+                        ) : null}
                       </button>
                     );
                   })

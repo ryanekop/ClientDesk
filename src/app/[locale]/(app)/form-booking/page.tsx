@@ -80,6 +80,7 @@ type PreviewPayload = {
   custom_event_types: string[];
   form_show_notes: boolean;
   form_show_addons: boolean;
+  form_hide_service_prices: boolean;
   form_show_proof: boolean;
   form_terms_enabled: boolean;
   form_terms_agreement_text: string;
@@ -101,6 +102,7 @@ type FormBookingSnapshot = {
   custom_event_types: string[];
   form_show_notes: boolean;
   form_show_addons: boolean;
+  form_hide_service_prices: boolean;
   form_show_proof: boolean;
   form_terms_enabled: boolean;
   form_terms_agreement_text: string;
@@ -119,6 +121,7 @@ const DEFAULTS = {
   eventTypes: ALL_EVENT_TYPES,
   showNotes: true,
   showAddons: true,
+  hideServicePrices: false,
   showProof: true,
   termsEnabled: false,
   termsAgreementText: "Saya telah membaca & setuju terhadap",
@@ -140,6 +143,7 @@ function createFormBookingSnapshot({
   customEventTypes,
   showNotes,
   showAddons,
+  hideServicePrices,
   showProof,
   termsEnabled,
   termsAgreementText,
@@ -159,6 +163,7 @@ function createFormBookingSnapshot({
   customEventTypes: string[];
   showNotes: boolean;
   showAddons: boolean;
+  hideServicePrices: boolean;
   showProof: boolean;
   termsEnabled: boolean;
   termsAgreementText: string;
@@ -179,6 +184,7 @@ function createFormBookingSnapshot({
     custom_event_types: customEventTypes,
     form_show_notes: showNotes,
     form_show_addons: showAddons,
+    form_hide_service_prices: hideServicePrices,
     form_show_proof: showProof,
     form_terms_enabled: termsEnabled,
     form_terms_agreement_text: termsAgreementText,
@@ -223,6 +229,9 @@ export default function FormBookingPage() {
   const [customEventTypes, setCustomEventTypes] = React.useState<string[]>([]);
   const [showNotes, setShowNotes] = React.useState(DEFAULTS.showNotes);
   const [showAddons, setShowAddons] = React.useState(DEFAULTS.showAddons);
+  const [hideServicePrices, setHideServicePrices] = React.useState(
+    DEFAULTS.hideServicePrices,
+  );
   const [showProof, setShowProof] = React.useState(DEFAULTS.showProof);
   const [formPaymentMethods, setFormPaymentMethods] = React.useState<PaymentMethod[]>(
     DEFAULTS.paymentMethods,
@@ -315,6 +324,7 @@ export default function FormBookingPage() {
       custom_event_types: customEventTypes,
       form_show_notes: showNotes,
       form_show_addons: showAddons,
+      form_hide_service_prices: hideServicePrices,
       form_show_proof: showProof,
       form_terms_enabled: termsEnabled,
       form_terms_agreement_text: termsAgreementText,
@@ -338,6 +348,7 @@ export default function FormBookingPage() {
       formPaymentMethods,
       showNotes,
       showAddons,
+      hideServicePrices,
       showProof,
       qrisImageUrl,
       termsAgreementText,
@@ -359,6 +370,7 @@ export default function FormBookingPage() {
         customEventTypes,
         showNotes,
         showAddons,
+        hideServicePrices,
         showProof,
         termsEnabled,
         termsAgreementText,
@@ -383,6 +395,7 @@ export default function FormBookingPage() {
       selectedEventTypes,
       showNotes,
       showAddons,
+      hideServicePrices,
       showProof,
       termsAgreementText,
       termsContent,
@@ -526,6 +539,9 @@ export default function FormBookingPage() {
         setFormSectionsByEventType(normalizedSections);
         const loadedShowNotes = p.form_show_notes ?? DEFAULTS.showNotes;
         const loadedShowAddons = (p as Record<string, unknown>).form_show_addons ?? DEFAULTS.showAddons;
+        const loadedHideServicePrices =
+          (p as Record<string, unknown>).form_hide_service_prices ??
+          DEFAULTS.hideServicePrices;
         const loadedBanks = normalizeBankAccounts(p.bank_accounts);
         const loadedPaymentMethods = normalizePaymentMethods(
           (p as Record<string, unknown>).form_payment_methods,
@@ -566,6 +582,7 @@ export default function FormBookingPage() {
             : DEFAULTS.termsContent;
         setShowNotes(loadedShowNotes);
         setShowAddons(Boolean(loadedShowAddons));
+        setHideServicePrices(Boolean(loadedHideServicePrices));
         setBankAccounts(loadedBanks);
         setFormPaymentMethods(loadedPaymentMethods);
         setQrisImageUrl(loadedQrisImageUrl);
@@ -596,6 +613,7 @@ export default function FormBookingPage() {
               customEventTypes: loadedCustomEventTypes,
               showNotes: loadedShowNotes,
               showAddons: Boolean(loadedShowAddons),
+              hideServicePrices: Boolean(loadedHideServicePrices),
               showProof: loadedShowProof,
               termsEnabled: loadedTermsEnabled,
               termsAgreementText: loadedTermsAgreementText,
@@ -741,6 +759,7 @@ export default function FormBookingPage() {
         form_sections: formSectionsByEventType,
         form_show_notes: showNotes,
         form_show_addons: showAddons,
+        form_hide_service_prices: hideServicePrices,
         form_show_proof: showProof,
         form_payment_methods: formPaymentMethods,
         form_terms_enabled: termsEnabled,
@@ -778,6 +797,7 @@ export default function FormBookingPage() {
           customEventTypes,
           showNotes,
           showAddons,
+          hideServicePrices,
           showProof,
           termsEnabled,
           termsAgreementText,
@@ -840,6 +860,7 @@ export default function FormBookingPage() {
         form_sections: resetFormSections,
         form_show_notes: DEFAULTS.showNotes,
         form_show_addons: DEFAULTS.showAddons,
+        form_hide_service_prices: DEFAULTS.hideServicePrices,
         form_show_proof: resetShowProof,
         form_payment_methods: resetPaymentMethods,
         form_terms_enabled: DEFAULTS.termsEnabled,
@@ -875,6 +896,7 @@ export default function FormBookingPage() {
     setSelectedDpEventType(resetSelectedEventTypes[0] || "Umum");
     setShowNotes(DEFAULTS.showNotes);
     setShowAddons(DEFAULTS.showAddons);
+    setHideServicePrices(DEFAULTS.hideServicePrices);
     setShowProof(resetShowProof);
     setFormPaymentMethods(resetPaymentMethods);
     setTermsEnabled(DEFAULTS.termsEnabled);
@@ -898,6 +920,7 @@ export default function FormBookingPage() {
         customEventTypes: resetCustomEventTypes,
         showNotes: DEFAULTS.showNotes,
         showAddons: DEFAULTS.showAddons,
+        hideServicePrices: DEFAULTS.hideServicePrices,
         showProof: resetShowProof,
         termsEnabled: DEFAULTS.termsEnabled,
         termsAgreementText: DEFAULTS.termsAgreementText,
@@ -1696,6 +1719,12 @@ export default function FormBookingPage() {
                       label: "Paket Add-on",
                       value: showAddons,
                       setter: setShowAddons,
+                      disabled: false,
+                    },
+                    {
+                      label: "Sembunyikan Harga",
+                      value: hideServicePrices,
+                      setter: setHideServicePrices,
                       disabled: false,
                     },
                     {

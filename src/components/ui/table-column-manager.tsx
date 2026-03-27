@@ -6,6 +6,8 @@ import {
   Eye,
   EyeOff,
   GripVertical,
+  Lock,
+  LockOpen,
   Loader2,
   Settings2,
 } from "lucide-react";
@@ -39,7 +41,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { TableColumnPreference } from "@/lib/table-column-prefs";
+import {
+  normalizePinnedColumnOrder,
+  type TableColumnPreference,
+} from "@/lib/table-column-prefs";
 
 type TableColumnManagerProps = {
   title: string;
@@ -57,10 +62,12 @@ type TableColumnManagerProps = {
 function SortableColumnItem({
   column,
   description,
+  onTogglePin,
   onToggleVisibility,
 }: {
   column: TableColumnPreference;
   description: string;
+  onTogglePin: (id: string) => void;
   onToggleVisibility: (id: string) => void;
 }) {
   /* eslint-disable react-hooks/refs */
@@ -103,6 +110,28 @@ function SortableColumnItem({
           <p className="text-sm font-medium">{column.label}</p>
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => onTogglePin(column.id)}
+          disabled={column.locked}
+          title={
+            column.locked
+              ? "Kolom selalu terkunci saat digeser"
+              : column.pin === "left" || column.pin === "right"
+                ? "Buka kunci kolom"
+                : "Kunci kolom saat digeser"
+          }
+        >
+          {column.pin === "left" || column.pin === "right" ? (
+            <Lock className="h-4 w-4" />
+          ) : (
+            <LockOpen className="h-4 w-4" />
+          )}
+        </Button>
 
         <Button
           type="button"
@@ -159,10 +188,24 @@ export function TableColumnManager({
 
   function toggleVisibility(id: string) {
     onChange(
-      columns.map((column) =>
-        column.id === id && !column.locked
-          ? { ...column, visible: !column.visible }
-          : column,
+      normalizePinnedColumnOrder(
+        columns.map((column) =>
+          column.id === id && !column.locked
+            ? { ...column, visible: !column.visible }
+            : column,
+        ),
+      ),
+    );
+  }
+
+  function togglePin(id: string) {
+    onChange(
+      normalizePinnedColumnOrder(
+        columns.map((column) =>
+          column.id === id && !column.locked
+            ? { ...column, pin: column.pin === "left" ? null : "left" }
+            : column,
+        ),
       ),
     );
   }
@@ -180,8 +223,9 @@ export function TableColumnManager({
     const targetIndex = columns.findIndex((column) => column.id === over.id);
     if (sourceIndex < 0 || targetIndex < 0) return;
     if (columns[sourceIndex]?.locked || columns[targetIndex]?.locked) return;
+    if (columns[sourceIndex]?.pin !== columns[targetIndex]?.pin) return;
 
-    onChange(arrayMove(columns, sourceIndex, targetIndex));
+    onChange(normalizePinnedColumnOrder(arrayMove(columns, sourceIndex, targetIndex)));
   }
 
   const activeColumn =
@@ -223,11 +267,16 @@ export function TableColumnManager({
                     column={column}
                     description={
                       column.locked
-                        ? "Kolom terkunci"
+                        ? "Kolom selalu terkunci"
+                        : column.pin === "left" || column.pin === "right"
+                          ? column.visible
+                            ? "Tampil di tabel dan terkunci saat digeser"
+                            : "Disembunyikan, tetap terkunci saat ditampilkan"
                         : column.visible
                           ? "Tampil di tabel"
                           : "Disembunyikan dari tabel"
                     }
+                    onTogglePin={togglePin}
                     onToggleVisibility={toggleVisibility}
                   />
                 ))}
@@ -246,9 +295,14 @@ export function TableColumnManager({
                           <div>
                             <p className="text-sm font-medium">{activeColumn.label}</p>
                             <p className="text-xs text-muted-foreground">
-                              {activeColumn.visible
-                                ? "Tampil di tabel"
-                                : "Disembunyikan dari tabel"}
+                              {activeColumn.pin === "left" ||
+                              activeColumn.pin === "right"
+                                ? activeColumn.visible
+                                  ? "Tampil di tabel dan terkunci saat digeser"
+                                  : "Disembunyikan, tetap terkunci saat ditampilkan"
+                                : activeColumn.visible
+                                  ? "Tampil di tabel"
+                                  : "Disembunyikan dari tabel"}
                             </p>
                           </div>
                         </div>

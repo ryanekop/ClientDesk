@@ -15,6 +15,7 @@ import {
 } from "@/lib/booking-write-access-context";
 import { getBookingWriteBlockedMessage } from "@/lib/booking-write-access";
 import { TablePagination } from "@/components/ui/table-pagination";
+import { useStickyTableColumns } from "@/components/ui/use-sticky-table-columns";
 import { useTranslations, useLocale } from "next-intl";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
 import { PageHeader } from "@/components/ui/page-header";
@@ -25,6 +26,7 @@ import {
     updateTableColumnPreferenceMap,
     type TableColumnPreference,
 } from "@/lib/table-column-prefs";
+import { cn } from "@/lib/utils";
 import {
     buildBookingMetadataColumns,
     getBookingMetadataValue,
@@ -521,6 +523,21 @@ export default function ClientStatusPage() {
         () => columns.filter((column) => column.visible),
         [columns],
     );
+    const {
+        tableRef,
+        getStickyColumnStyle,
+        getStickyColumnClassName,
+    } = useStickyTableColumns(orderedVisibleColumns);
+    const getDesktopHeaderClassName = React.useCallback(
+        (columnId: string, className: string) =>
+            cn(className, getStickyColumnClassName(columnId, { header: true })),
+        [getStickyColumnClassName],
+    );
+    const getDesktopCellClassName = React.useCallback(
+        (columnId: string, className: string) =>
+            cn(className, getStickyColumnClassName(columnId)),
+        [getStickyColumnClassName],
+    );
     const statusOptions = React.useMemo(
         () => getBookingStatusOptions(clientStatuses),
         [clientStatuses],
@@ -568,17 +585,17 @@ export default function ClientStatusPage() {
     function renderDesktopHeader(column: TableColumnPreference) {
         switch (column.id) {
             case "name":
-                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{locale === "en" ? "Client" : "Klien"}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{locale === "en" ? "Client" : "Klien"}</th>;
             case "package":
-                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap hidden sm:table-cell">{locale === "en" ? "Package" : "Paket"}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap hidden sm:table-cell")}>{locale === "en" ? "Package" : "Paket"}</th>;
             case "status":
-                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{locale === "en" ? "Status" : "Status"}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{locale === "en" ? "Status" : "Status"}</th>;
             case "queue":
-                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-center hidden sm:table-cell">{t("antrian")}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-center hidden sm:table-cell")}>{t("antrian")}</th>;
             case "actions":
-                return <th key={column.id} className="min-w-[96px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right">{t("aksi")}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "min-w-[96px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right")}>{t("aksi")}</th>;
             default:
-                return <th key={column.id} className="px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap">{column.label}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{column.label}</th>;
         }
     }
 
@@ -586,7 +603,7 @@ export default function ClientStatusPage() {
         switch (column.id) {
             case "name":
                 return (
-                    <td key={column.id} className="px-4 py-3">
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
                         <Link href={`/bookings/${booking.id}`} className="hover:underline">
                             <p className="text-sm font-medium leading-tight">{booking.client_name}</p>
                             <p className="text-[11px] text-muted-foreground">{booking.booking_code}</p>
@@ -594,10 +611,10 @@ export default function ClientStatusPage() {
                     </td>
                 );
             case "package":
-                return <td key={column.id} className="px-4 py-3 text-sm hidden sm:table-cell text-muted-foreground">{booking.service_label || booking.services?.name || "-"}</td>;
+                return <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 text-sm hidden sm:table-cell text-muted-foreground")}>{booking.service_label || booking.services?.name || "-"}</td>;
             case "status":
                 return (
-                    <td key={column.id} className="px-4 py-3">
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
                         <FilterSingleSelect
                             value={booking.client_status || ""}
                             onChange={(nextValue) => void updateStatus(booking.id, nextValue)}
@@ -618,7 +635,7 @@ export default function ClientStatusPage() {
                 );
             case "queue":
                 return (
-                    <td key={column.id} className="px-4 py-3 text-center hidden sm:table-cell">
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 text-center hidden sm:table-cell")}>
                         <input
                             type="number"
                             min={0}
@@ -636,7 +653,7 @@ export default function ClientStatusPage() {
                 );
             case "actions":
                 return (
-                    <td key={column.id} className="min-w-[96px] px-4 py-3 text-right">
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[96px] px-4 py-3 text-right")}>
                         <div className="flex items-center justify-end gap-1.5">
                             {booking.tracking_uuid && (
                                 <>
@@ -661,7 +678,7 @@ export default function ClientStatusPage() {
                 );
             default:
                 return (
-                    <td key={column.id} className="px-4 py-3 max-w-[180px] truncate text-muted-foreground" title={getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" })}>
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 max-w-[180px] truncate text-muted-foreground")} title={getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" })}>
                         {getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" })}
                     </td>
                 );
@@ -814,7 +831,7 @@ export default function ClientStatusPage() {
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card shadow-sm overflow-hidden hidden md:block">
                 <div className="relative overflow-x-auto">
-                    <table className="min-w-[900px] w-full text-sm text-left border-collapse">
+                    <table ref={tableRef} className="min-w-[900px] w-full text-sm text-left border-collapse">
                         <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
                                 {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}

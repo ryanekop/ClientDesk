@@ -1,10 +1,13 @@
 export type TableMenuKey = "bookings" | "client_status" | "finance" | "team";
 
+export type TableColumnPin = "left" | "right" | null;
+
 export type TableColumnPreference = {
   id: string;
   label: string;
   visible: boolean;
   locked?: boolean;
+  pin?: TableColumnPin;
 };
 
 export type TableColumnPreferenceMap = Record<TableMenuKey, TableColumnPreference[]>;
@@ -14,7 +17,13 @@ type RawTableColumnPreference = {
   label: string;
   visible?: boolean;
   locked?: boolean;
+  pin?: unknown;
 };
+
+function normalizeTableColumnPin(value: unknown): TableColumnPin {
+  if (value === "left" || value === "right") return value;
+  return null;
+}
 
 function normalizeTableColumnPreferenceItem(
   item: unknown,
@@ -28,7 +37,32 @@ function normalizeTableColumnPreferenceItem(
     label: raw.label,
     visible: raw.visible !== false,
     locked: raw.locked === true,
+    pin: normalizeTableColumnPin(raw.pin),
   };
+}
+
+export function normalizePinnedColumnOrder(
+  columns: TableColumnPreference[],
+): TableColumnPreference[] {
+  const leftPinned: TableColumnPreference[] = [];
+  const unpinned: TableColumnPreference[] = [];
+  const rightPinned: TableColumnPreference[] = [];
+
+  columns.forEach((column) => {
+    const pin = normalizeTableColumnPin(column.pin);
+    const normalized = { ...column, pin };
+    if (pin === "left") {
+      leftPinned.push(normalized);
+      return;
+    }
+    if (pin === "right") {
+      rightPinned.push(normalized);
+      return;
+    }
+    unpinned.push(normalized);
+  });
+
+  return [...leftPinned, ...unpinned, ...rightPinned];
 }
 
 export function normalizeTableColumnPreferences(
@@ -56,16 +90,18 @@ export function mergeTableColumnPreferences(
   defaults: TableColumnPreference[],
   saved: TableColumnPreference[] | undefined,
 ): TableColumnPreference[] {
-  if (!saved || saved.length === 0) return defaults;
+  if (!saved || saved.length === 0) return lockBoundaryColumns(defaults);
 
   const defaultMap = new Map(defaults.map((item) => [item.id, item]));
   const ordered = saved.reduce<TableColumnPreference[]>((acc, item) => {
       const fallback = defaultMap.get(item.id);
       if (!fallback) return acc;
+      const savedPin = normalizeTableColumnPin(item.pin);
       acc.push({
         ...fallback,
         visible: item.locked ? true : item.visible !== false,
         locked: fallback.locked === true,
+        pin: fallback.locked ? fallback.pin ?? null : savedPin ?? fallback.pin ?? null,
       });
       return acc;
     }, []);
@@ -112,11 +148,26 @@ export function lockBoundaryColumns(
     (column) => column.id !== first.id && column.id !== last.id,
   );
 
-  return [
-    { ...first, locked: true, visible: true },
-    ...middle.map((column) => ({ ...column, locked: column.locked === true })),
-    { ...last, locked: true, visible: true },
-  ];
+  if (first.id === last.id) {
+    return [
+      {
+        ...first,
+        locked: true,
+        visible: true,
+        pin: first.id === "actions" ? ("right" as const) : ("left" as const),
+      },
+    ];
+  }
+
+  return normalizePinnedColumnOrder([
+    { ...first, locked: true, visible: true, pin: "left" as const },
+    ...middle.map((column) => ({
+      ...column,
+      locked: column.locked === true,
+      pin: column.pin === "left" ? ("left" as const) : null,
+    })),
+    { ...last, locked: true, visible: true, pin: "right" as const },
+  ]);
 }
 
 export function updateTableColumnPreferenceMap(
