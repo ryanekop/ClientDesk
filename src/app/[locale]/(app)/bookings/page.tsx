@@ -30,6 +30,7 @@ import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal"
 import { useSuccessToast } from "@/components/ui/success-toast";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import { FilterSingleSelect } from "@/components/ui/filter-single-select";
+import { FilterMultiSelect } from "@/components/ui/filter-multi-select";
 import { BookingDateRangePicker } from "@/components/ui/booking-date-range-picker";
 import {
     getEventExtraFields,
@@ -239,7 +240,7 @@ function parseLegacyOrMultiFilterValue(value: unknown) {
             seen.add(trimmed);
             normalized.push(trimmed);
         });
-        return normalized.length > 0 ? [normalized[0]] : [];
+        return normalized;
     }
 
     if (typeof value === "string") {
@@ -249,11 +250,6 @@ function parseLegacyOrMultiFilterValue(value: unknown) {
     }
 
     return [] as string[];
-}
-
-function normalizeSingleSelectedFilterValues(values: string[], options: string[]) {
-    const normalized = normalizeSelectedFilterValues(values, options);
-    return normalized.length > 0 ? [normalized[0]] : [];
 }
 
 function arraysAreEqual(a: string[], b: string[]) {
@@ -517,10 +513,10 @@ export default function BookingsPage() {
         }
 
         try {
-            const singleStatusFilter = statusFilter.length === 1 ? statusFilter[0] : "All";
-            const singlePackageFilter = packageFilter.length === 1 ? packageFilter[0] : "All";
-            const singleFreelanceFilter = freelanceFilter.length === 1 ? freelanceFilter[0] : "All";
-            const singleEventTypeFilter = eventTypeFilter.length === 1 ? eventTypeFilter[0] : "All";
+            const singleStatusFilter = statusFilter[0] || "All";
+            const singlePackageFilter = packageFilter[0] || "All";
+            const singleFreelanceFilter = freelanceFilter[0] || "All";
+            const singleEventTypeFilter = eventTypeFilter[0] || "All";
             const params = new URLSearchParams({
                 page: String(currentPage),
                 perPage: String(itemsPerPage),
@@ -1507,19 +1503,19 @@ export default function BookingsPage() {
     React.useEffect(() => {
         if (!filtersHydrated || loading || refreshing) return;
 
-        const normalizedStatusFilter = normalizeSingleSelectedFilterValues(statusFilter, statusOpts);
+        const normalizedStatusFilter = normalizeSelectedFilterValues(statusFilter, statusOpts);
         if (!arraysAreEqual(normalizedStatusFilter, statusFilter)) {
             setStatusFilter(normalizedStatusFilter);
         }
-        const normalizedPackageFilter = normalizeSingleSelectedFilterValues(packageFilter, packages);
+        const normalizedPackageFilter = normalizeSelectedFilterValues(packageFilter, packages);
         if (!arraysAreEqual(normalizedPackageFilter, packageFilter)) {
             setPackageFilter(normalizedPackageFilter);
         }
-        const normalizedFreelanceFilter = normalizeSingleSelectedFilterValues(freelanceFilter, freelancerNames);
+        const normalizedFreelanceFilter = normalizeSelectedFilterValues(freelanceFilter, freelancerNames);
         if (!arraysAreEqual(normalizedFreelanceFilter, freelanceFilter)) {
             setFreelanceFilter(normalizedFreelanceFilter);
         }
-        const normalizedEventTypeFilter = normalizeSingleSelectedFilterValues(eventTypeFilter, availableEventTypes);
+        const normalizedEventTypeFilter = normalizeSelectedFilterValues(eventTypeFilter, availableEventTypes);
         if (!arraysAreEqual(normalizedEventTypeFilter, eventTypeFilter)) {
             setEventTypeFilter(normalizedEventTypeFilter);
         }
@@ -1655,10 +1651,10 @@ export default function BookingsPage() {
         sortOrder !== "booking_newest";
 
     async function exportBookings() {
-        const singleStatusFilter = statusFilter.length === 1 ? statusFilter[0] : "All";
-        const singlePackageFilter = packageFilter.length === 1 ? packageFilter[0] : "All";
-        const singleFreelanceFilter = freelanceFilter.length === 1 ? freelanceFilter[0] : "All";
-        const singleEventTypeFilter = eventTypeFilter.length === 1 ? eventTypeFilter[0] : "All";
+        const singleStatusFilter = statusFilter[0] || "All";
+        const singlePackageFilter = packageFilter[0] || "All";
+        const singleFreelanceFilter = freelanceFilter[0] || "All";
+        const singleEventTypeFilter = eventTypeFilter[0] || "All";
         const params = new URLSearchParams({
             page: "1",
             perPage: String(Math.max(totalItems, 1)),
@@ -1720,37 +1716,22 @@ export default function BookingsPage() {
         [tb],
     );
     const eventTypeFilterOptions = React.useMemo(
-        () => [
-            { value: "", label: "Semua Acara" },
-            ...availableEventTypes.map((eventType) => ({ value: eventType, label: eventType })),
-        ],
+        () => availableEventTypes.map((eventType) => ({ value: eventType, label: eventType })),
         [availableEventTypes],
     );
     const statusFilterOptions = React.useMemo(
-        () => [
-            { value: "", label: tb("allStatus") },
-            ...statusOpts.map((status) => ({ value: status, label: status })),
-        ],
+        () => statusOpts.map((status) => ({ value: status, label: status })),
         [statusOpts, tb],
     );
     const packageFilterOptions = React.useMemo(
-        () => [
-            { value: "", label: tb("allPackages") },
-            ...packages.map((packageName) => ({ value: packageName, label: packageName })),
-        ],
+        () => packages.map((packageName) => ({ value: packageName, label: packageName })),
         [packages, tb],
     );
     const freelanceFilterOptions = React.useMemo(
-        () => [
-            { value: "", label: tb("allFreelance") },
-            ...freelancerNames.map((freelanceName) => ({ value: freelanceName, label: freelanceName })),
-        ],
+        () => freelancerNames.map((freelanceName) => ({ value: freelanceName, label: freelanceName })),
         [freelancerNames, tb],
     );
-    const selectedEventTypeFilterValue = eventTypeFilter[0] || "";
-    const selectedStatusFilterValue = statusFilter[0] || "";
-    const selectedPackageFilterValue = packageFilter[0] || "";
-    const selectedFreelanceFilterValue = freelanceFilter[0] || "";
+    const multiCountSuffix = locale === "en" ? "selected" : "dipilih";
 
     return (
         <div className="space-y-6">
@@ -1986,44 +1967,52 @@ export default function BookingsPage() {
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Jenis acara</label>
-                                <FilterSingleSelect
-                                    value={selectedEventTypeFilterValue}
-                                    onChange={(nextValue) => setEventTypeFilter(nextValue ? [nextValue] : [])}
+                                <FilterMultiSelect
+                                    values={eventTypeFilter}
+                                    onChange={setEventTypeFilter}
                                     options={eventTypeFilterOptions}
                                     placeholder="Semua Acara"
+                                    allLabel="Semua Acara"
+                                    countSuffix={multiCountSuffix}
                                     className="w-full"
                                     mobileTitle="Jenis acara"
                                 />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Status</label>
-                                <FilterSingleSelect
-                                    value={selectedStatusFilterValue}
-                                    onChange={(nextValue) => setStatusFilter(nextValue ? [nextValue] : [])}
+                                <FilterMultiSelect
+                                    values={statusFilter}
+                                    onChange={setStatusFilter}
                                     options={statusFilterOptions}
                                     placeholder={tb("allStatus")}
+                                    allLabel={tb("allStatus")}
+                                    countSuffix={multiCountSuffix}
                                     className="w-full"
                                     mobileTitle="Status"
                                 />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Paket</label>
-                                <FilterSingleSelect
-                                    value={selectedPackageFilterValue}
-                                    onChange={(nextValue) => setPackageFilter(nextValue ? [nextValue] : [])}
+                                <FilterMultiSelect
+                                    values={packageFilter}
+                                    onChange={setPackageFilter}
                                     options={packageFilterOptions}
                                     placeholder={tb("allPackages")}
+                                    allLabel={tb("allPackages")}
+                                    countSuffix={multiCountSuffix}
                                     className="w-full"
                                     mobileTitle="Paket"
                                 />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Freelance</label>
-                                <FilterSingleSelect
-                                    value={selectedFreelanceFilterValue}
-                                    onChange={(nextValue) => setFreelanceFilter(nextValue ? [nextValue] : [])}
+                                <FilterMultiSelect
+                                    values={freelanceFilter}
+                                    onChange={setFreelanceFilter}
                                     options={freelanceFilterOptions}
                                     placeholder={tb("allFreelance")}
+                                    allLabel={tb("allFreelance")}
+                                    countSuffix={multiCountSuffix}
                                     className="w-full"
                                     mobileTitle="Freelance"
                                 />

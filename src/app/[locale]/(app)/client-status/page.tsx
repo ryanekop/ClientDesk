@@ -18,6 +18,7 @@ import { TablePagination } from "@/components/ui/table-pagination";
 import { useTranslations, useLocale } from "next-intl";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
 import { PageHeader } from "@/components/ui/page-header";
+import { FilterSingleSelect } from "@/components/ui/filter-single-select";
 import {
     lockBoundaryColumns,
     mergeTableColumnPreferences,
@@ -520,6 +521,18 @@ export default function ClientStatusPage() {
         () => columns.filter((column) => column.visible),
         [columns],
     );
+    const statusOptions = React.useMemo(
+        () => getBookingStatusOptions(clientStatuses),
+        [clientStatuses],
+    );
+    const topStatusFilterOptions = React.useMemo(
+        () => [{ value: "", label: "Semua" }, ...statusOptions.map((status) => ({ value: status, label: status }))],
+        [statusOptions],
+    );
+    const statusSelectOptions = React.useMemo(
+        () => [{ value: "", label: t("belumDiset") }, ...statusOptions.map((status) => ({ value: status, label: status }))],
+        [statusOptions, t],
+    );
     const hasActiveFilters = Boolean(filter) || search.trim().length > 0;
     const queryState = React.useMemo<PaginatedQueryState>(() => ({
         page: currentPage,
@@ -585,18 +598,17 @@ export default function ClientStatusPage() {
             case "status":
                 return (
                     <td key={column.id} className="px-4 py-3">
-                        <select
+                        <FilterSingleSelect
                             value={booking.client_status || ""}
-                            onChange={e => updateStatus(booking.id, e.target.value)}
+                            onChange={(nextValue) => void updateStatus(booking.id, nextValue)}
+                            options={statusSelectOptions}
+                            placeholder={t("belumDiset")}
                             disabled={savingId === booking.id || !canWriteBookings}
                             title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
-                            className={selectClass}
-                        >
-                            <option value="">{t("belumDiset")}</option>
-                            {getBookingStatusOptions(clientStatuses).map(s => (
-                                <option key={s} value={s}>{s}</option>
-                            ))}
-                        </select>
+                            className="inline-block w-[172px] align-middle"
+                            triggerClassName={inlineStatusTriggerClass}
+                            mobileTitle="Status"
+                        />
                         {booking.client_status && (
                             <span className={`ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusColors[booking.client_status] || "bg-muted text-muted-foreground"}`}>
                                 {booking.client_status}
@@ -669,7 +681,8 @@ export default function ClientStatusPage() {
         }
     }
 
-    const selectClass = "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] cursor-pointer";
+    const topFilterTriggerClass = "h-10 rounded-lg bg-background px-3 py-2 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
+    const inlineStatusTriggerClass = "h-8 rounded-md bg-background px-2 py-1 text-xs shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
     const inputClass = "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] w-16 text-center";
 
     return (
@@ -710,16 +723,15 @@ export default function ClientStatusPage() {
                         className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                     />
                 </div>
-                <select
+                <FilterSingleSelect
                     value={filter}
-                    onChange={e => setFilter(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer sm:w-auto"
-                >
-                    <option value="">Semua</option>
-                    {getBookingStatusOptions(clientStatuses).map(s => (
-                        <option key={s} value={s}>{s}</option>
-                    ))}
-                </select>
+                    onChange={setFilter}
+                    options={topStatusFilterOptions}
+                    placeholder="Semua"
+                    className="w-full sm:w-[220px]"
+                    triggerClassName={topFilterTriggerClass}
+                    mobileTitle="Status"
+                />
             </div>
 
             {/* Mobile Cards */}
@@ -754,10 +766,17 @@ export default function ClientStatusPage() {
                                 ))}
                             <div className="flex items-center gap-3">
                                 <label className="text-xs text-muted-foreground shrink-0 w-14">Status</label>
-                                <select value={b.client_status || ""} onChange={e => updateStatus(b.id, e.target.value)} disabled={savingId === b.id || !canWriteBookings} title={!canWriteBookings ? bookingWriteBlockedMessage : undefined} className={`${selectClass} flex-1`}>
-                                    <option value="">{t("belumDiset")}</option>
-                                    {getBookingStatusOptions(clientStatuses).map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
+                                <FilterSingleSelect
+                                    value={b.client_status || ""}
+                                    onChange={(nextValue) => void updateStatus(b.id, nextValue)}
+                                    options={statusSelectOptions}
+                                    placeholder={t("belumDiset")}
+                                    disabled={savingId === b.id || !canWriteBookings}
+                                    title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
+                                    className="flex-1"
+                                    triggerClassName={inlineStatusTriggerClass}
+                                    mobileTitle="Status"
+                                />
                             </div>
                             <div className="flex items-center gap-3">
                                 <label className="text-xs text-muted-foreground shrink-0 w-14">{t("antrian")}</label>

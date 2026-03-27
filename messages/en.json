@@ -1078,8 +1078,15 @@
         "namePlaceholder": "e.g.: John Doe",
         "googleEmailPlaceholder": "email@gmail.com (for calendar)",
         "hello": "Hello",
+        "allStatuses": "All Statuses",
+        "allRoles": "All Roles",
+        "allTags": "All Tags",
+        "filterStatusTitle": "Status Filter",
+        "filterRoleTitle": "Role Filter",
+        "filterTagsTitle": "Tag Filter",
+        "selectedCountSuffix": "selected",
         "noResults": "No results",
-        "noResultsDesc": "Try adjusting your search keyword or tag filter."
+        "noResultsDesc": "Try adjusting your search keyword or status/role/tag filters."
     },
     "SuccessToast": {
         "closeNotification": "Close notification"

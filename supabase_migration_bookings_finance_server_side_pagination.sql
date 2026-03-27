@@ -897,6 +897,8 @@ CREATE OR REPLACE FUNCTION public.cd_get_finance_page(
   p_search TEXT DEFAULT '',
   p_package_filter TEXT DEFAULT 'All',
   p_booking_status_filter TEXT DEFAULT 'All',
+  p_package_filters JSONB DEFAULT '[]'::jsonb,
+  p_booking_status_filters JSONB DEFAULT '[]'::jsonb,
   p_export_all BOOLEAN DEFAULT FALSE
 ) RETURNS JSONB
 LANGUAGE sql
@@ -910,8 +912,36 @@ AS $$
       GREATEST(COALESCE(p_per_page, 10), 1) AS per_page,
       lower(COALESCE(NULLIF(btrim(p_filter), ''), 'all')) AS finance_filter,
       btrim(COALESCE(p_search, '')) AS search_query,
-      COALESCE(NULLIF(btrim(p_package_filter), ''), 'All') AS package_filter,
-      COALESCE(NULLIF(btrim(p_booking_status_filter), ''), 'All') AS booking_status_filter,
+      CASE
+        WHEN COALESCE(jsonb_array_length(CASE WHEN jsonb_typeof(p_package_filters) = 'array' THEN p_package_filters ELSE '[]'::jsonb END), 0) > 0
+          THEN COALESCE((
+            SELECT array_agg(DISTINCT value)
+            FROM (
+              SELECT btrim(item.value) AS value
+              FROM jsonb_array_elements_text(p_package_filters) AS item(value)
+              WHERE btrim(item.value) <> ''
+                AND lower(btrim(item.value)) <> 'all'
+            ) prepared
+          ), ARRAY[]::TEXT[])
+        WHEN COALESCE(NULLIF(btrim(p_package_filter), ''), 'All') <> 'All'
+          THEN ARRAY[COALESCE(NULLIF(btrim(p_package_filter), ''), 'All')]
+        ELSE ARRAY[]::TEXT[]
+      END AS package_filters,
+      CASE
+        WHEN COALESCE(jsonb_array_length(CASE WHEN jsonb_typeof(p_booking_status_filters) = 'array' THEN p_booking_status_filters ELSE '[]'::jsonb END), 0) > 0
+          THEN COALESCE((
+            SELECT array_agg(DISTINCT value)
+            FROM (
+              SELECT btrim(item.value) AS value
+              FROM jsonb_array_elements_text(p_booking_status_filters) AS item(value)
+              WHERE btrim(item.value) <> ''
+                AND lower(btrim(item.value)) <> 'all'
+            ) prepared
+          ), ARRAY[]::TEXT[])
+        WHEN COALESCE(NULLIF(btrim(p_booking_status_filter), ''), 'All') <> 'All'
+          THEN ARRAY[COALESCE(NULLIF(btrim(p_booking_status_filter), ''), 'All')]
+        ELSE ARRAY[]::TEXT[]
+      END AS booking_status_filters,
       COALESCE(p_export_all, FALSE) AS export_all
   ),
   filtered AS (
@@ -945,12 +975,12 @@ AS $$
         )
       )
       AND (
-        params.package_filter = 'All'
-        OR params.package_filter = ANY(row_data.main_service_names)
+        cardinality(params.package_filters) = 0
+        OR COALESCE(row_data.main_service_names, ARRAY[]::TEXT[]) && params.package_filters
       )
       AND (
-        params.booking_status_filter = 'All'
-        OR row_data.unified_status = params.booking_status_filter
+        cardinality(params.booking_status_filters) = 0
+        OR row_data.unified_status = ANY(params.booking_status_filters)
       )
   ),
   ordered AS (

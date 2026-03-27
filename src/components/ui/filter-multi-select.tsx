@@ -6,16 +6,18 @@ import { Check, ChevronDown, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-export type FilterSingleSelectOption = {
+export type FilterMultiSelectOption = {
   value: string;
   label: string;
 };
 
-type FilterSingleSelectProps = {
-  value: string;
-  onChange: (nextValue: string) => void;
-  options: FilterSingleSelectOption[];
+type FilterMultiSelectProps = {
+  values: string[];
+  onChange: (nextValues: string[]) => void;
+  options: FilterMultiSelectOption[];
   placeholder: string;
+  allLabel?: string;
+  countSuffix?: string;
   title?: string;
   className?: string;
   triggerClassName?: string;
@@ -46,18 +48,20 @@ function useIsMobile() {
   return isMobile;
 }
 
-export function FilterSingleSelect({
-  value,
+export function FilterMultiSelect({
+  values,
   onChange,
   options,
   placeholder,
+  allLabel,
+  countSuffix = "selected",
   title,
   className,
   triggerClassName,
   menuClassName,
   mobileTitle,
   disabled,
-}: FilterSingleSelectProps) {
+}: FilterMultiSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [mounted, setMounted] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
@@ -108,32 +112,72 @@ export function FilterSingleSelect({
     };
   }, [open, isMobile]);
 
-  const selectedOption = React.useMemo(
-    () => options.find((option) => option.value === value) || null,
-    [options, value],
+  const selectedSet = React.useMemo(() => new Set(values), [values]);
+  const selectedOptions = React.useMemo(
+    () => options.filter((option) => selectedSet.has(option.value)),
+    [options, selectedSet],
   );
 
-  const triggerLabel = selectedOption?.label || placeholder;
+  const triggerLabel = React.useMemo(() => {
+    if (selectedOptions.length === 0) return placeholder;
+    if (selectedOptions.length === 1) return selectedOptions[0].label;
+    return `${selectedOptions.length} ${countSuffix}`;
+  }, [countSuffix, placeholder, selectedOptions]);
+
+  const normalizeSelectedValues = React.useCallback(
+    (nextSet: Set<string>) =>
+      options.filter((option) => nextSet.has(option.value)).map((option) => option.value),
+    [options],
+  );
+
+  const toggleValue = React.useCallback(
+    (value: string) => {
+      const nextSet = new Set(values);
+      if (nextSet.has(value)) {
+        nextSet.delete(value);
+      } else {
+        nextSet.add(value);
+      }
+      onChange(normalizeSelectedValues(nextSet));
+    },
+    [normalizeSelectedValues, onChange, values],
+  );
 
   const optionButtons = (
     <div className={cn("max-h-64 overflow-y-auto p-1", menuClassName)}>
+      {allLabel ? (
+        <button
+          type="button"
+          onClick={() => onChange([])}
+          className={cn(
+            "mb-1 flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors",
+            values.length === 0 ? "bg-muted font-medium" : "hover:bg-muted/70",
+          )}
+        >
+          <span className="min-w-0 flex-1 truncate">{allLabel}</span>
+          <Check
+            className={cn(
+              "h-4 w-4 shrink-0 text-foreground transition-opacity",
+              values.length === 0 ? "opacity-100" : "opacity-0",
+            )}
+          />
+        </button>
+      ) : null}
       {options.length === 0 ? (
         <p className="px-3 py-2 text-xs text-muted-foreground">-</p>
       ) : (
         options.map((option) => {
-          const isSelected = option.value === value;
+          const isSelected = selectedSet.has(option.value);
           return (
             <button
               key={`${option.value}:${option.label}`}
               type="button"
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
+              onClick={() => toggleValue(option.value)}
               className={cn(
                 "flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors",
                 isSelected ? "bg-muted font-medium" : "hover:bg-muted/70",
               )}
+              aria-pressed={isSelected}
             >
               <span className="min-w-0 flex-1 truncate">{option.label}</span>
               <Check

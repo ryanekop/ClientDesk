@@ -10,7 +10,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
-import { FilterSingleSelect } from "@/components/ui/filter-single-select";
+import { FilterMultiSelect } from "@/components/ui/filter-multi-select";
 import {
     PageHeader,
     PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME,
@@ -75,6 +75,8 @@ const TEAM_DEFAULT_ITEMS_PER_PAGE = 10;
 
 type TeamPageMetadata = {
     tags: string[];
+    roles: string[];
+    statuses: string[];
     tableColumnPreferences: TableColumnPreference[] | null;
 };
 
@@ -99,6 +101,25 @@ function normalizeTagList(values: string[]) {
     });
 
     return normalized;
+}
+
+function normalizeSelectedFilterValues(values: string[], options: string[]) {
+    const optionSet = new Set(options);
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+
+    for (const item of values) {
+        if (!optionSet.has(item) || seen.has(item)) continue;
+        seen.add(item);
+        normalized.push(item);
+    }
+
+    return normalized;
+}
+
+function arraysAreEqual(a: string[], b: string[]) {
+    if (a.length !== b.length) return false;
+    return a.every((value, index) => value === b[index]);
 }
 
 function splitTagInput(value: string) {
@@ -170,8 +191,12 @@ export default function TeamPage() {
     const [tagInput, setTagInput] = React.useState("");
     const [editTagInput, setEditTagInput] = React.useState("");
     const [searchQuery, setSearchQuery] = React.useState("");
-    const [tagFilter, setTagFilter] = React.useState("All");
+    const [statusFilters, setStatusFilters] = React.useState<string[]>([]);
+    const [roleFilters, setRoleFilters] = React.useState<string[]>([]);
+    const [tagFilters, setTagFilters] = React.useState<string[]>([]);
     const [availableTags, setAvailableTags] = React.useState<string[]>([]);
+    const [availableRoles, setAvailableRoles] = React.useState<string[]>([]);
+    const [availableStatuses, setAvailableStatuses] = React.useState<string[]>([]);
     const [totalItems, setTotalItems] = React.useState(0);
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(TEAM_COLUMN_DEFAULTS);
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
@@ -212,8 +237,17 @@ export default function TeamPage() {
                 params.set("search", searchQuery.trim());
             }
 
-            if (tagFilter !== "All") {
-                params.set("tag", tagFilter);
+            if (statusFilters.length > 0) {
+                params.set("statusFilters", JSON.stringify(statusFilters));
+            }
+
+            if (roleFilters.length > 0) {
+                params.set("roleFilters", JSON.stringify(roleFilters));
+            }
+
+            if (tagFilters.length > 0) {
+                params.set("tagFilters", JSON.stringify(tagFilters));
+                params.set("tag", tagFilters[0]);
             }
 
             const response = await fetchPaginatedJson<Freelancer, TeamPageMetadata>(
@@ -227,6 +261,8 @@ export default function TeamPage() {
             );
             setTotalItems(response.totalItems);
             setAvailableTags(response.metadata?.tags || []);
+            setAvailableRoles(response.metadata?.roles || []);
+            setAvailableStatuses(response.metadata?.statuses || []);
             setColumns(
                 mergeTableColumnPreferences(
                     TEAM_COLUMN_DEFAULTS,
@@ -237,7 +273,15 @@ export default function TeamPage() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [currentPage, itemsPerPage, itemsPerPageHydrated, searchQuery, tagFilter]);
+    }, [
+        currentPage,
+        itemsPerPage,
+        itemsPerPageHydrated,
+        roleFilters,
+        searchQuery,
+        statusFilters,
+        tagFilters,
+    ]);
 
     React.useEffect(() => {
         async function hydrateCurrentUser() {
@@ -378,7 +422,26 @@ export default function TeamPage() {
 
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, tagFilter, itemsPerPage]);
+    }, [itemsPerPage, roleFilters, searchQuery, statusFilters, tagFilters]);
+
+    React.useEffect(() => {
+        if (loading) return;
+
+        const normalizedStatusFilters = normalizeSelectedFilterValues(statusFilters, availableStatuses);
+        if (!arraysAreEqual(normalizedStatusFilters, statusFilters)) {
+            setStatusFilters(normalizedStatusFilters);
+        }
+
+        const normalizedRoleFilters = normalizeSelectedFilterValues(roleFilters, availableRoles);
+        if (!arraysAreEqual(normalizedRoleFilters, roleFilters)) {
+            setRoleFilters(normalizedRoleFilters);
+        }
+
+        const normalizedTagFilters = normalizeSelectedFilterValues(tagFilters, availableTags);
+        if (!arraysAreEqual(normalizedTagFilters, tagFilters)) {
+            setTagFilters(normalizedTagFilters);
+        }
+    }, [availableRoles, availableStatuses, availableTags, loading, roleFilters, statusFilters, tagFilters]);
 
     React.useEffect(() => {
         const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
@@ -391,17 +454,42 @@ export default function TeamPage() {
         () => columns.filter((column) => column.visible),
         [columns],
     );
-    const hasActiveListFilters = searchQuery.trim().length > 0 || tagFilter !== "All";
+    const statusFilterOptions = React.useMemo(
+        () =>
+            availableStatuses.map((status) => ({
+                value: status,
+                label:
+                    status === "active"
+                        ? t("aktif")
+                        : status === "inactive"
+                            ? t("nonaktif")
+                            : status,
+            })),
+        [availableStatuses, t],
+    );
+    const roleFilterOptions = React.useMemo(
+        () => availableRoles.map((role) => ({ value: role, label: role })),
+        [availableRoles],
+    );
     const tagFilterOptions = React.useMemo(
-        () => [
-            { value: "All", label: "Semua Tag" },
-            ...availableTags.map((tag) => ({ value: tag, label: tag })),
-        ],
+        () => availableTags.map((tag) => ({ value: tag, label: tag })),
         [availableTags],
     );
+    const hasActiveListFilters =
+        searchQuery.trim().length > 0 ||
+        statusFilters.length > 0 ||
+        roleFilters.length > 0 ||
+        tagFilters.length > 0;
+    const multiCountSuffix = tt("selectedCountSuffix");
     const showListControls =
         !loading &&
-        (totalItems > 0 || hasActiveListFilters || availableTags.length > 0);
+        (
+            totalItems > 0 ||
+            hasActiveListFilters ||
+            availableTags.length > 0 ||
+            availableRoles.length > 0 ||
+            availableStatuses.length > 0
+        );
     const queryState = React.useMemo<PaginatedQueryState>(() => ({
         page: currentPage,
         perPage: itemsPerPage,
@@ -621,7 +709,7 @@ export default function TeamPage() {
 
             {/* Search + Filter */}
             {showListControls && (
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
@@ -636,16 +724,39 @@ export default function TeamPage() {
                             </button>
                         )}
                     </div>
-                    {availableTags.length > 0 && (
-                        <FilterSingleSelect
-                            value={tagFilter}
-                            onChange={(nextValue) => setTagFilter(nextValue)}
-                            options={tagFilterOptions}
-                            placeholder="Semua Tag"
-                            className="w-full sm:w-[220px]"
-                            mobileTitle="Filter Tag"
-                        />
-                    )}
+                    <FilterMultiSelect
+                        values={statusFilters}
+                        onChange={setStatusFilters}
+                        options={statusFilterOptions}
+                        placeholder={tt("allStatuses")}
+                        allLabel={tt("allStatuses")}
+                        countSuffix={multiCountSuffix}
+                        className="w-full sm:w-[220px]"
+                        mobileTitle={tt("filterStatusTitle")}
+                        disabled={statusFilterOptions.length === 0}
+                    />
+                    <FilterMultiSelect
+                        values={roleFilters}
+                        onChange={setRoleFilters}
+                        options={roleFilterOptions}
+                        placeholder={tt("allRoles")}
+                        allLabel={tt("allRoles")}
+                        countSuffix={multiCountSuffix}
+                        className="w-full sm:w-[220px]"
+                        mobileTitle={tt("filterRoleTitle")}
+                        disabled={roleFilterOptions.length === 0}
+                    />
+                    <FilterMultiSelect
+                        values={tagFilters}
+                        onChange={setTagFilters}
+                        options={tagFilterOptions}
+                        placeholder={tt("allTags")}
+                        allLabel={tt("allTags")}
+                        countSuffix={multiCountSuffix}
+                        className="w-full sm:w-[220px]"
+                        mobileTitle={tt("filterTagsTitle")}
+                        disabled={tagFilterOptions.length === 0}
+                    />
                 </div>
             )}
 

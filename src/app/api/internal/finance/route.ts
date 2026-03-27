@@ -88,6 +88,52 @@ function parsePositiveInt(value: string | null, fallback: number) {
   return Math.floor(parsed);
 }
 
+function parseStringListValue(rawValue: string) {
+  const trimmed = rawValue.trim();
+  if (!trimmed) return [] as string[];
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is string => typeof item === "string");
+    }
+  } catch {
+    // Fallback to CSV parsing.
+  }
+
+  return trimmed.split(",");
+}
+
+function parseFilterList(
+  searchParams: URLSearchParams,
+  listKey: string,
+  singleKey: string,
+) {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  const listValues = searchParams.getAll(listKey);
+
+  listValues.forEach((rawValue) => {
+    parseStringListValue(rawValue).forEach((candidate) => {
+      const trimmed = candidate.trim();
+      if (!trimmed || trimmed.toLowerCase() === "all" || seen.has(trimmed)) return;
+      seen.add(trimmed);
+      normalized.push(trimmed);
+    });
+  });
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  const legacySingleValue = searchParams.get(singleKey)?.trim() || "";
+  if (!legacySingleValue || legacySingleValue.toLowerCase() === "all") {
+    return [] as string[];
+  }
+
+  return [legacySingleValue];
+}
+
 function readRpcObject<T>(value: unknown): T | null {
   if (Array.isArray(value)) {
     const firstItem = value[0];
@@ -152,22 +198,43 @@ export async function GET(request: NextRequest) {
   );
   const filter = searchParams.get("filter")?.trim() || "all";
   const searchQuery = searchParams.get("search")?.trim() || "";
-  const packageFilter = searchParams.get("package")?.trim() || "All";
-  const bookingStatusFilter = searchParams.get("bookingStatus")?.trim() || "All";
+  const packageFilters = parseFilterList(searchParams, "packageFilters", "package");
+  const bookingStatusFilters = parseFilterList(
+    searchParams,
+    "bookingStatusFilters",
+    "bookingStatus",
+  );
   const exportAll = searchParams.get("export") === "1";
+  const basePageRpcArgs = {
+    p_page: page,
+    p_per_page: perPage,
+    p_filter: filter,
+    p_search: searchQuery,
+    p_package_filter: packageFilters[0] || "All",
+    p_booking_status_filter: bookingStatusFilters[0] || "All",
+    p_export_all: exportAll,
+  };
 
-  const [pageResult, metadataResult] = await Promise.all([
+  const [initialPageResult, metadataResult] = await Promise.all([
     supabase.rpc("cd_get_finance_page", {
-      p_page: page,
-      p_per_page: perPage,
-      p_filter: filter,
-      p_search: searchQuery,
-      p_package_filter: packageFilter,
-      p_booking_status_filter: bookingStatusFilter,
-      p_export_all: exportAll,
+      ...basePageRpcArgs,
+      p_package_filters: packageFilters,
+      p_booking_status_filters: bookingStatusFilters,
     }),
     supabase.rpc("cd_get_finance_metadata"),
   ]);
+  let pageResult = initialPageResult;
+
+  if (pageResult.error) {
+    const message = (pageResult.error.message || "").toLowerCase();
+    const isLikelyOldRpcSignature =
+      message.includes("p_package_filters") ||
+      message.includes("p_booking_status_filters");
+
+    if (isLikelyOldRpcSignature) {
+      pageResult = await supabase.rpc("cd_get_finance_page", basePageRpcArgs);
+    }
+  }
 
   if (pageResult.error) {
     return NextResponse.json(

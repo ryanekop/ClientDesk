@@ -1078,8 +1078,15 @@
         "namePlaceholder": "Misal: Budi Santoso",
         "googleEmailPlaceholder": "email@gmail.com (untuk kalender)",
         "hello": "Halo",
+        "allStatuses": "Semua Status",
+        "allRoles": "Semua Peran",
+        "allTags": "Semua Tag",
+        "filterStatusTitle": "Filter Status",
+        "filterRoleTitle": "Filter Peran",
+        "filterTagsTitle": "Filter Tag",
+        "selectedCountSuffix": "dipilih",
         "noResults": "Tidak ada hasil",
-        "noResultsDesc": "Coba ubah kata kunci pencarian atau filter tag."
+        "noResultsDesc": "Coba ubah kata kunci pencarian atau filter status/peran/tag."
     },
     "SuccessToast": {
         "closeNotification": "Tutup notifikasi"

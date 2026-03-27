@@ -72,6 +72,7 @@ import {
 } from "@/utils/whatsapp-link";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import { FilterSingleSelect } from "@/components/ui/filter-single-select";
+import { FilterMultiSelect } from "@/components/ui/filter-multi-select";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
 
@@ -116,8 +117,8 @@ type FinanceFilterValue = "all" | "pending" | "paid";
 type FinanceFilterStoragePayload = {
     searchQuery: string;
     filter: FinanceFilterValue;
-    packageFilter: string;
-    bookingStatusFilter: string;
+    packageFilter: string[] | string;
+    bookingStatusFilter: string[] | string;
 };
 
 const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
@@ -177,6 +178,48 @@ function normalizeFinanceItemsPerPage(value: unknown) {
         : FINANCE_DEFAULT_ITEMS_PER_PAGE;
 }
 
+function normalizeSelectedFilterValues(values: string[], options: string[]) {
+    const optionSet = new Set(options);
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+
+    for (const item of values) {
+        if (!optionSet.has(item) || seen.has(item)) continue;
+        seen.add(item);
+        normalized.push(item);
+    }
+
+    return normalized;
+}
+
+function parseLegacyOrMultiFilterValue(value: unknown) {
+    if (Array.isArray(value)) {
+        const seen = new Set<string>();
+        const normalized: string[] = [];
+        value.forEach((item) => {
+            if (typeof item !== "string") return;
+            const trimmed = item.trim();
+            if (!trimmed || trimmed.toLowerCase() === "all" || seen.has(trimmed)) return;
+            seen.add(trimmed);
+            normalized.push(trimmed);
+        });
+        return normalized;
+    }
+
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed || trimmed.toLowerCase() === "all") return [];
+        return [trimmed];
+    }
+
+    return [] as string[];
+}
+
+function arraysAreEqual(a: string[], b: string[]) {
+    if (a.length !== b.length) return false;
+    return a.every((value, index) => value === b[index]);
+}
+
 export default function FinancePage() {
     const supabase = createClient();
     const t = useTranslations("Finance");
@@ -187,8 +230,8 @@ export default function FinancePage() {
     const [refreshing, setRefreshing] = React.useState(false);
     const [filter, setFilter] = React.useState<FinanceFilterValue>("all");
     const [searchQuery, setSearchQuery] = React.useState("");
-    const [packageFilter, setPackageFilter] = React.useState("All");
-    const [bookingStatusFilter, setBookingStatusFilter] = React.useState("All");
+    const [packageFilter, setPackageFilter] = React.useState<string[]>([]);
+    const [bookingStatusFilter, setBookingStatusFilter] = React.useState<string[]>([]);
     const [bookingStatusOptions, setBookingStatusOptions] = React.useState<string[]>(
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
     );
@@ -287,8 +330,8 @@ export default function FinancePage() {
     const resetFilters = React.useCallback(() => {
         setFilter("all");
         setSearchQuery("");
-        setPackageFilter("All");
-        setBookingStatusFilter("All");
+        setPackageFilter([]);
+        setBookingStatusFilter([]);
     }, []);
 
     const fetchTemplates = React.useCallback(async () => {
@@ -311,13 +354,17 @@ export default function FinancePage() {
         }
 
         try {
+            const singlePackageFilter = packageFilter[0] || "All";
+            const singleBookingStatusFilter = bookingStatusFilter[0] || "All";
             const params = new URLSearchParams({
                 page: String(currentPage),
                 perPage: String(itemsPerPage),
                 filter,
                 search: searchQuery,
-                package: packageFilter,
-                bookingStatus: bookingStatusFilter,
+                package: singlePackageFilter,
+                bookingStatus: singleBookingStatusFilter,
+                packageFilters: JSON.stringify(packageFilter),
+                bookingStatusFilters: JSON.stringify(bookingStatusFilter),
             });
             const response = await fetchPaginatedJson<BookingFinance, FinancePageMetadata>(
                 `/api/internal/finance?${params.toString()}`,
@@ -398,8 +445,8 @@ export default function FinancePage() {
 
             setSearchQuery(readString("searchQuery", ""));
             setFilter(normalizeFinanceFilterValue(parsed.filter));
-            setPackageFilter(readString("packageFilter", "All") || "All");
-            setBookingStatusFilter(readString("bookingStatusFilter", "All") || "All");
+            setPackageFilter(parseLegacyOrMultiFilterValue(parsed.packageFilter));
+            setBookingStatusFilter(parseLegacyOrMultiFilterValue(parsed.bookingStatusFilter));
         } catch {
             resetFilters();
         } finally {
@@ -1280,8 +1327,8 @@ export default function FinancePage() {
     const hasActiveFilters =
         searchQuery.trim().length > 0 ||
         filter !== "all" ||
-        packageFilter !== "All" ||
-        bookingStatusFilter !== "All";
+        packageFilter.length > 0 ||
+        bookingStatusFilter.length > 0;
     const financeStatusOptions = React.useMemo(
         () => [
             { value: "all", label: t("semua") },
@@ -1291,19 +1338,14 @@ export default function FinancePage() {
         [t],
     );
     const packageFilterOptions = React.useMemo(
-        () => [
-            { value: "All", label: t("allPackages") },
-            ...packageOptions.map((packageName) => ({ value: packageName, label: packageName })),
-        ],
+        () => packageOptions.map((packageName) => ({ value: packageName, label: packageName })),
         [packageOptions, t],
     );
     const bookingStatusFilterOptions = React.useMemo(
-        () => [
-            { value: "All", label: t("allBookingStatuses") },
-            ...bookingStatusOptions.map((statusOption) => ({ value: statusOption, label: statusOption })),
-        ],
+        () => bookingStatusOptions.map((statusOption) => ({ value: statusOption, label: statusOption })),
         [bookingStatusOptions, t],
     );
+    const multiCountSuffix = locale === "en" ? "selected" : "dipilih";
 
     const monthlyRevenueLabel = React.useMemo(
         () =>
@@ -1323,13 +1365,17 @@ export default function FinancePage() {
     }), [currentPage, itemsPerPage, totalItems, loading, refreshing]);
 
     async function exportFinance() {
+        const singlePackageFilter = packageFilter[0] || "All";
+        const singleBookingStatusFilter = bookingStatusFilter[0] || "All";
         const params = new URLSearchParams({
             page: "1",
             perPage: String(Math.max(totalItems, 1)),
             filter,
             search: searchQuery,
-            package: packageFilter,
-            bookingStatus: bookingStatusFilter,
+            package: singlePackageFilter,
+            bookingStatus: singleBookingStatusFilter,
+            packageFilters: JSON.stringify(packageFilter),
+            bookingStatusFilters: JSON.stringify(bookingStatusFilter),
             export: "1",
         });
         const response = await fetchPaginatedJson<BookingFinance, FinancePageMetadata>(
@@ -1412,17 +1458,17 @@ export default function FinancePage() {
 
     React.useEffect(() => {
         if (loading) return;
-        if (packageFilter !== "All" && !packageOptions.includes(packageFilter)) {
-            setPackageFilter("All");
-        }
-    }, [loading, packageFilter, packageOptions]);
 
-    React.useEffect(() => {
-        if (loading) return;
-        if (bookingStatusFilter !== "All" && !bookingStatusOptions.includes(bookingStatusFilter)) {
-            setBookingStatusFilter("All");
+        const normalizedPackageFilter = normalizeSelectedFilterValues(packageFilter, packageOptions);
+        if (!arraysAreEqual(normalizedPackageFilter, packageFilter)) {
+            setPackageFilter(normalizedPackageFilter);
         }
-    }, [bookingStatusFilter, bookingStatusOptions, loading]);
+
+        const normalizedBookingStatusFilter = normalizeSelectedFilterValues(bookingStatusFilter, bookingStatusOptions);
+        if (!arraysAreEqual(normalizedBookingStatusFilter, bookingStatusFilter)) {
+            setBookingStatusFilter(normalizedBookingStatusFilter);
+        }
+    }, [bookingStatusFilter, bookingStatusOptions, loading, packageFilter, packageOptions]);
 
     React.useEffect(() => {
         setCurrentPage(1);
@@ -1577,11 +1623,13 @@ export default function FinancePage() {
 
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-32 md:shrink-0 xl:w-36">{t("packageFilterLabel")}</label>
-                                <FilterSingleSelect
-                                    value={packageFilter}
-                                    onChange={(nextValue) => setPackageFilter(nextValue)}
+                                <FilterMultiSelect
+                                    values={packageFilter}
+                                    onChange={setPackageFilter}
                                     options={packageFilterOptions}
                                     placeholder={t("packageFilterLabel")}
+                                    allLabel={t("allPackages")}
+                                    countSuffix={multiCountSuffix}
                                     className="w-full"
                                     mobileTitle={t("packageFilterLabel")}
                                 />
@@ -1589,11 +1637,13 @@ export default function FinancePage() {
 
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-32 md:shrink-0 xl:w-36">{t("bookingStatusFilterLabel")}</label>
-                                <FilterSingleSelect
-                                    value={bookingStatusFilter}
-                                    onChange={(nextValue) => setBookingStatusFilter(nextValue)}
+                                <FilterMultiSelect
+                                    values={bookingStatusFilter}
+                                    onChange={setBookingStatusFilter}
                                     options={bookingStatusFilterOptions}
                                     placeholder={t("bookingStatusFilterLabel")}
+                                    allLabel={t("allBookingStatuses")}
+                                    countSuffix={multiCountSuffix}
                                     className="w-full"
                                     mobileTitle={t("bookingStatusFilterLabel")}
                                 />
