@@ -70,6 +70,7 @@ const TEAM_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
     { id: "actions", label: "Aksi", visible: true, locked: true },
 ]);
 const TEAM_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:team:items_per_page";
+const TEAM_FILTER_STORAGE_PREFIX = "clientdesk:team:filters";
 const TEAM_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const TEAM_DEFAULT_ITEMS_PER_PAGE = 10;
 
@@ -78,6 +79,14 @@ type TeamPageMetadata = {
     roles: string[];
     statuses: string[];
     tableColumnPreferences: TableColumnPreference[] | null;
+};
+
+type TeamFilterStoragePayload = {
+    searchQuery: string;
+    statusFilters: string[] | string;
+    roleFilters: string[] | string;
+    tagFilters: string[] | string;
+    tagFilter?: string;
 };
 
 function normalizeTeamItemsPerPage(value: unknown) {
@@ -103,6 +112,10 @@ function normalizeTagList(values: string[]) {
     return normalized;
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
 function normalizeSelectedFilterValues(values: string[], options: string[]) {
     const optionSet = new Set(options);
     const seen = new Set<string>();
@@ -115,6 +128,29 @@ function normalizeSelectedFilterValues(values: string[], options: string[]) {
     }
 
     return normalized;
+}
+
+function parseLegacyOrMultiFilterValue(value: unknown) {
+    if (Array.isArray(value)) {
+        const seen = new Set<string>();
+        const normalized: string[] = [];
+        value.forEach((item) => {
+            if (typeof item !== "string") return;
+            const trimmed = item.trim();
+            if (!trimmed || trimmed.toLowerCase() === "all" || seen.has(trimmed)) return;
+            seen.add(trimmed);
+            normalized.push(trimmed);
+        });
+        return normalized;
+    }
+
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed || trimmed.toLowerCase() === "all") return [];
+        return [trimmed];
+    }
+
+    return [] as string[];
 }
 
 function arraysAreEqual(a: string[], b: string[]) {
@@ -183,6 +219,7 @@ export default function TeamPage() {
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
+    const [filtersHydrated, setFiltersHydrated] = React.useState(false);
     const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
     const [addCountryCode, setAddCountryCode] = React.useState("+62");
     const [editCountryCode, setEditCountryCode] = React.useState("+62");
@@ -219,7 +256,7 @@ export default function TeamPage() {
     }, []);
 
     const fetchMembers = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
-        if (!itemsPerPageHydrated) return;
+        if (!itemsPerPageHydrated || !filtersHydrated) return;
 
         if (mode === "initial") {
             setLoading(true);
@@ -277,6 +314,7 @@ export default function TeamPage() {
         currentPage,
         itemsPerPage,
         itemsPerPageHydrated,
+        filtersHydrated,
         roleFilters,
         searchQuery,
         statusFilters,
@@ -293,11 +331,105 @@ export default function TeamPage() {
     }, [supabase]);
 
     React.useEffect(() => {
-        if (!itemsPerPageHydrated) return;
+        if (!currentUserId) {
+            setFiltersHydrated(false);
+            return;
+        }
+
+        setFiltersHydrated(false);
+        const storageKey = `${TEAM_FILTER_STORAGE_PREFIX}:${currentUserId}`;
+        try {
+            const raw = window.localStorage.getItem(storageKey);
+            if (!raw) {
+                setSearchQuery("");
+                setStatusFilters([]);
+                setRoleFilters([]);
+                setTagFilters([]);
+                return;
+            }
+
+            const parsed = JSON.parse(raw) as unknown;
+            if (!isObjectRecord(parsed)) {
+                setSearchQuery("");
+                setStatusFilters([]);
+                setRoleFilters([]);
+                setTagFilters([]);
+                return;
+            }
+
+            const readString = (key: keyof TeamFilterStoragePayload, fallback = "") => {
+                const value = parsed[key];
+                return typeof value === "string" ? value : fallback;
+            };
+
+            setSearchQuery(readString("searchQuery", ""));
+            setStatusFilters(parseLegacyOrMultiFilterValue(parsed.statusFilters));
+            setRoleFilters(parseLegacyOrMultiFilterValue(parsed.roleFilters));
+            setTagFilters(parseLegacyOrMultiFilterValue(parsed.tagFilters ?? parsed.tagFilter));
+        } catch {
+            setSearchQuery("");
+            setStatusFilters([]);
+            setRoleFilters([]);
+            setTagFilters([]);
+        } finally {
+            setFiltersHydrated(true);
+        }
+    }, [currentUserId]);
+
+    React.useEffect(() => {
+        if (!currentUserId || !filtersHydrated) return;
+        const storageKey = `${TEAM_FILTER_STORAGE_PREFIX}:${currentUserId}`;
+        const payload: TeamFilterStoragePayload = {
+            searchQuery,
+            statusFilters,
+            roleFilters,
+            tagFilters,
+        };
+        try {
+            window.localStorage.setItem(storageKey, JSON.stringify(payload));
+        } catch {
+            // Ignore storage write failures.
+        }
+    }, [currentUserId, filtersHydrated, roleFilters, searchQuery, statusFilters, tagFilters]);
+
+    React.useEffect(() => {
+        if (!currentUserId) return;
+        const storageKey = `${TEAM_FILTER_STORAGE_PREFIX}:${currentUserId}`;
+        function handleStorage(event: StorageEvent) {
+            if (event.storageArea !== window.localStorage) return;
+            if (event.key !== storageKey) return;
+
+            try {
+                const raw = event.newValue;
+                if (!raw) {
+                    setSearchQuery("");
+                    setStatusFilters([]);
+                    setRoleFilters([]);
+                    setTagFilters([]);
+                    return;
+                }
+
+                const parsed = JSON.parse(raw) as unknown;
+                if (!isObjectRecord(parsed)) return;
+                setSearchQuery(typeof parsed.searchQuery === "string" ? parsed.searchQuery : "");
+                setStatusFilters(parseLegacyOrMultiFilterValue(parsed.statusFilters));
+                setRoleFilters(parseLegacyOrMultiFilterValue(parsed.roleFilters));
+                setTagFilters(parseLegacyOrMultiFilterValue(parsed.tagFilters ?? parsed.tagFilter));
+            } catch {
+                // Ignore malformed storage updates.
+            }
+        }
+
+        window.addEventListener("storage", handleStorage);
+        return () => window.removeEventListener("storage", handleStorage);
+    }, [currentUserId]);
+
+    React.useEffect(() => {
+        if (!itemsPerPageHydrated || !filtersHydrated) return;
         const mode = hasLoadedMembersRef.current ? "refresh" : "initial";
         hasLoadedMembersRef.current = true;
         void fetchMembers(mode);
-    }, [fetchMembers, itemsPerPageHydrated]);
+    }, [fetchMembers, filtersHydrated, itemsPerPageHydrated]);
 
     React.useEffect(() => {
         if (!currentUserId) {
