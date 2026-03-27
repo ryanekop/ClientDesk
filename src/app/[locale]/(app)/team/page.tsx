@@ -38,6 +38,7 @@ type Freelancer = {
 };
 
 type TagInputProps = {
+    label: string;
     tags: string[];
     setTags: (tags: string[]) => void;
     input: string;
@@ -62,6 +63,7 @@ const COUNTRY_CODES = [
 const TEAM_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
     { id: "name", label: "Nama", visible: true, locked: true },
     { id: "role", label: "Peran", visible: true },
+    { id: "tags", label: "Tags", visible: true },
     { id: "whatsapp", label: "Whatsapp", visible: true },
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true },
@@ -84,31 +86,64 @@ function normalizeTeamItemsPerPage(value: unknown) {
         : TEAM_DEFAULT_ITEMS_PER_PAGE;
 }
 
-function TagInput({ tags, setTags, input, setInput, inputClass }: TagInputProps) {
+function normalizeTagList(values: string[]) {
+    const unique = new Set<string>();
+    const normalized: string[] = [];
+
+    values.forEach((value) => {
+        const nextValue = value.trim();
+        if (!nextValue || unique.has(nextValue)) return;
+        unique.add(nextValue);
+        normalized.push(nextValue);
+    });
+
+    return normalized;
+}
+
+function splitTagInput(value: string) {
+    return value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
+function mergeTagsWithPendingInput(tags: string[], pendingInput: string) {
+    return normalizeTagList([...tags, ...splitTagInput(pendingInput)]);
+}
+
+function TagInput({ label, tags, setTags, input, setInput, inputClass }: TagInputProps) {
     return (
         <div className="space-y-2">
-            <label className="text-sm font-medium">Tag</label>
-            <div className="flex flex-wrap gap-1.5 min-h-[28px]">
-                {tags.map((tag, i) => (
-                    <span key={i} className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                        {tag}
-                        <button type="button" onClick={() => setTags(tags.filter((_, j) => j !== i))} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
-                    </span>
-                ))}
-            </div>
+            <label className="text-sm font-medium">{label}</label>
             <input
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => {
                     if ((e.key === "Enter" || e.key === ",") && input.trim()) {
                         e.preventDefault();
-                        if (!tags.includes(input.trim())) setTags([...tags, input.trim()]);
+                        const nextTags = mergeTagsWithPendingInput(tags, input);
+                        if (nextTags.length !== tags.length) {
+                            setTags(nextTags);
+                        }
                         setInput("");
                     }
                 }}
                 placeholder="Ketik tag lalu Enter..."
                 className={inputClass}
             />
+            <p className="text-xs text-muted-foreground">
+                Pisahkan tag dengan koma atau tekan Enter.
+            </p>
+            {tags.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                    {tags.map((tag, i) => (
+                        <span key={i} className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                            {tag}
+                            <button type="button" onClick={() => setTags(tags.filter((_, j) => j !== i))} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                        </span>
+                    ))}
+                </div>
+            ) : null}
         </div>
     );
 }
@@ -263,6 +298,7 @@ export default function TeamPage() {
 
         const rawWa = formData.get("whatsapp_number") as string;
         const fullWa = rawWa ? `${addCountryCode}${rawWa}`.replace(/[^0-9+]/g, "") : null;
+        const normalizedTags = mergeTagsWithPendingInput(addTags, tagInput);
 
         const { error } = await supabase.from("freelance").insert({
             user_id: user.id,
@@ -271,7 +307,7 @@ export default function TeamPage() {
             whatsapp_number: fullWa || null,
             google_email: formData.get("google_email") as string || null,
             status: "active",
-            tags: addTags,
+            tags: normalizedTags,
         });
 
         if (!error) {
@@ -287,6 +323,7 @@ export default function TeamPage() {
 
         const rawWa = formData.get("whatsapp_number") as string;
         const fullWa = rawWa ? `${editCountryCode}${rawWa}`.replace(/[^0-9+]/g, "") : null;
+        const normalizedTags = mergeTagsWithPendingInput(editTags, editTagInput);
 
         const { error } = await supabase
             .from("freelance")
@@ -295,7 +332,7 @@ export default function TeamPage() {
                 role: formData.get("role") as string,
                 whatsapp_number: fullWa || null,
                 google_email: formData.get("google_email") as string || null,
-                tags: editTags,
+                tags: normalizedTags,
             })
             .eq("id", editingMember.id);
 
@@ -396,6 +433,8 @@ export default function TeamPage() {
                 return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("nama")}</th>;
             case "role":
                 return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("peran")}</th>;
+            case "tags":
+                return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("tags")}</th>;
             case "whatsapp":
                 return <th key={column.id} className="px-6 py-4 font-medium text-muted-foreground">{t("whatsapp")}</th>;
             case "status":
@@ -426,13 +465,20 @@ export default function TeamPage() {
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                             {member.role}
                         </span>
-                        {member.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
+                    </td>
+                );
+            case "tags":
+                return (
+                    <td key={column.id} className="px-6 py-4">
+                        {member.tags.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
                                 {member.tags.map((tag, i) => (
-                                    <span key={i} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{tag}</span>
+                                    <span key={i} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                                        {tag}
+                                    </span>
                                 ))}
                             </div>
-                        )}
+                        ) : "-"}
                     </td>
                 );
             case "whatsapp":
@@ -483,6 +529,8 @@ export default function TeamPage() {
         switch (column.id) {
             case "role":
                 return member.role;
+            case "tags":
+                return member.tags.length > 0 ? member.tags.join(", ") : "-";
             case "whatsapp":
                 return member.whatsapp_number || "-";
             case "status":
@@ -537,7 +585,7 @@ export default function TeamPage() {
                                         <label className="text-sm font-medium">Google Email</label>
                                         <input name="google_email" type="email" placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
                                     </div>
-                                    <TagInput tags={addTags} setTags={setAddTags} input={tagInput} setInput={setTagInput} inputClass={inputClass} />
+                                    <TagInput label={t("tags")} tags={addTags} setTags={setAddTags} input={tagInput} setInput={setTagInput} inputClass={inputClass} />
                                     <DialogFooter><Button type="submit">{t("simpan")}</Button></DialogFooter>
                                 </form>
                             </DialogContent>
@@ -640,13 +688,6 @@ export default function TeamPage() {
                                         {member.status === "active" ? t("aktif") : t("nonaktif")}
                                     </button>
                                 </div>
-                                {member.tags.length > 0 && (
-                                    <div className="flex flex-wrap gap-1">
-                                        {member.tags.map((tag, i) => (
-                                            <span key={i} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{tag}</span>
-                                        ))}
-                                    </div>
-                                )}
                                 <div className="space-y-1 text-sm">
                                     {orderedVisibleColumns
                                         .filter((column) => column.id !== "name" && column.id !== "actions")
@@ -756,7 +797,7 @@ export default function TeamPage() {
                                 <label className="text-sm font-medium">Google Email</label>
                                 <input name="google_email" type="email" defaultValue={editingMember.google_email || ""} placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
                             </div>
-                            <TagInput tags={editTags} setTags={setEditTags} input={editTagInput} setInput={setEditTagInput} inputClass={inputClass} />
+                            <TagInput label={t("tags")} tags={editTags} setTags={setEditTags} input={editTagInput} setInput={setEditTagInput} inputClass={inputClass} />
                             <DialogFooter><Button type="submit">{t("perbarui")}</Button></DialogFooter>
                         </form>
                     )}

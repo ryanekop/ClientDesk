@@ -277,6 +277,98 @@ export default function CalendarPage() {
         [],
     );
 
+    const escapeHtml = React.useCallback((value: string) => {
+        return value
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }, []);
+
+    const renderGoogleCalendarLoadingPopup = React.useCallback((popup: Window) => {
+        const title = escapeHtml(
+            isEnglish ? "Opening Google Calendar..." : "Membuka Google Calendar...",
+        );
+        const description = escapeHtml(
+            isEnglish
+                ? "Please wait while we prepare the calendar link."
+                : "Mohon tunggu, kami sedang menyiapkan link kalender.",
+        );
+
+        const html = `<!doctype html>
+<html lang="${locale}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #0b0f1a;
+        color: #e5e7eb;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .card {
+        width: min(92vw, 420px);
+        border-radius: 14px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        background: rgba(15, 23, 42, 0.82);
+        padding: 20px 18px;
+      }
+      .row { display: flex; align-items: center; gap: 12px; }
+      .spinner {
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        border: 2px solid rgba(148, 163, 184, 0.35);
+        border-top-color: #60a5fa;
+        animation: spin 0.9s linear infinite;
+        flex: 0 0 auto;
+      }
+      h1 {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.35;
+        font-weight: 650;
+      }
+      p {
+        margin: 10px 0 0;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #cbd5e1;
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="row">
+        <span class="spinner" aria-hidden="true"></span>
+        <h1>${title}</h1>
+      </div>
+      <p>${description}</p>
+    </main>
+  </body>
+</html>`;
+
+        try {
+            popup.document.open();
+            popup.document.write(html);
+            popup.document.close();
+        } catch {
+            // Ignore cross-window write failures.
+        }
+    }, [escapeHtml, isEnglish, locale]);
+
     const openGoogleCalendarForBooking = React.useCallback(
         async (args: {
             bookingId?: string;
@@ -304,6 +396,7 @@ export default function CalendarPage() {
             } catch {
                 // Ignore opener assignment failures.
             }
+            renderGoogleCalendarLoadingPopup(popup);
 
             setOpeningGoogleCalendar(true);
 
@@ -357,7 +450,7 @@ export default function CalendarPage() {
                 setOpeningGoogleCalendar(false);
             }
         },
-        [showFeedback, t],
+        [renderGoogleCalendarLoadingPopup, showFeedback, t],
     );
 
     const closeGoogleOpenGuard = React.useCallback(() => {
