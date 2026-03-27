@@ -1025,6 +1025,10 @@
         "trackingLabel": "Lihat Status",
         "invoiceTemplateCopied": "Template invoice berhasil disalin.",
         "failedCopyTemplate": "Gagal menyalin template.",
+        "failedLoadFinance": "Gagal memuat data keuangan.",
+        "failedLoadFinanceEmptyState": "Data keuangan belum bisa dimuat. Coba lagi dalam beberapa saat.",
+        "failedLoadFinanceWithLastData": "Menampilkan data terakhir yang berhasil dimuat.",
+        "retryLoadFinance": "Coba Lagi",
         "exportOutstandingUnpaidLabel": "Sisa Tagihan (Belum Lunas)",
         "exportUnpaidBookingCountLabel": "Jumlah Booking Belum Lunas",
         "exportClientNameLabel": "Nama Klien"

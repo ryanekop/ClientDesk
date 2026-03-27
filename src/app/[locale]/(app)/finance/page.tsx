@@ -251,6 +251,8 @@ export default function FinancePage() {
     const [metadataRows, setMetadataRows] = React.useState<Array<{ event_type?: string | null; extra_fields?: Record<string, unknown> | null }>>([]);
     const [packageOptions, setPackageOptions] = React.useState<string[]>([]);
     const [totalItems, setTotalItems] = React.useState(0);
+    const [financeLoadError, setFinanceLoadError] = React.useState<string | null>(null);
+    const [hasLoadedFinanceSuccessfully, setHasLoadedFinanceSuccessfully] = React.useState(false);
     const [summary, setSummary] = React.useState<FinancePageMetadata["summary"]>({
         totalRevenue: 0,
         totalPending: 0,
@@ -347,6 +349,7 @@ export default function FinancePage() {
     const fetchFinancePage = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
         if (!itemsPerPageHydrated || !filtersHydrated) return;
 
+        setFinanceLoadError(null);
         if (mode === "initial") {
             setLoading(true);
         } else {
@@ -401,11 +404,15 @@ export default function FinancePage() {
                     metadata?.tableColumnPreferences || undefined,
                 ),
             );
+            setHasLoadedFinanceSuccessfully(true);
+        } catch (error) {
+            console.error("[FinancePage] Failed to fetch finance page", error);
+            setFinanceLoadError(tf("failedLoadFinance"));
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [bookingStatusFilter, currentPage, filter, filtersHydrated, itemsPerPage, itemsPerPageHydrated, packageFilter, searchQuery]);
+    }, [bookingStatusFilter, currentPage, filter, filtersHydrated, itemsPerPage, itemsPerPageHydrated, packageFilter, searchQuery, tf]);
 
     React.useEffect(() => {
         async function hydrateCurrentUser() {
@@ -1355,6 +1362,15 @@ export default function FinancePage() {
             }).format(new Date()),
         [locale],
     );
+    const showInitialFinanceSkeleton = loading && !hasLoadedFinanceSuccessfully;
+    const showFinanceLoadError = Boolean(financeLoadError);
+    const showFinanceContent = hasLoadedFinanceSuccessfully || showInitialFinanceSkeleton;
+    const financeLoadErrorDescription = hasLoadedFinanceSuccessfully
+        ? tf("failedLoadFinanceWithLastData")
+        : tf("failedLoadFinanceEmptyState");
+    const handleRetryFinanceLoad = React.useCallback(() => {
+        void fetchFinancePage(hasLoadedFinanceSuccessfully ? "refresh" : "initial");
+    }, [fetchFinancePage, hasLoadedFinanceSuccessfully]);
 
     const queryState = React.useMemo<PaginatedQueryState>(() => ({
         page: currentPage,
@@ -1365,90 +1381,95 @@ export default function FinancePage() {
     }), [currentPage, itemsPerPage, totalItems, loading, refreshing]);
 
     async function exportFinance() {
-        const singlePackageFilter = packageFilter[0] || "All";
-        const singleBookingStatusFilter = bookingStatusFilter[0] || "All";
-        const params = new URLSearchParams({
-            page: "1",
-            perPage: String(Math.max(totalItems, 1)),
-            filter,
-            search: searchQuery,
-            package: singlePackageFilter,
-            bookingStatus: singleBookingStatusFilter,
-            packageFilters: JSON.stringify(packageFilter),
-            bookingStatusFilters: JSON.stringify(bookingStatusFilter),
-            export: "1",
-        });
-        const response = await fetchPaginatedJson<BookingFinance, FinancePageMetadata>(
-            `/api/internal/finance?${params.toString()}`,
-        );
-        const exportBookings = response.items;
-        const exportSummary = response.metadata?.summary || summary;
-        const wb = XLSX.utils.book_new();
+        try {
+            const singlePackageFilter = packageFilter[0] || "All";
+            const singleBookingStatusFilter = bookingStatusFilter[0] || "All";
+            const params = new URLSearchParams({
+                page: "1",
+                perPage: String(Math.max(totalItems, 1)),
+                filter,
+                search: searchQuery,
+                package: singlePackageFilter,
+                bookingStatus: singleBookingStatusFilter,
+                packageFilters: JSON.stringify(packageFilter),
+                bookingStatusFilters: JSON.stringify(bookingStatusFilter),
+                export: "1",
+            });
+            const response = await fetchPaginatedJson<BookingFinance, FinancePageMetadata>(
+                `/api/internal/finance?${params.toString()}`,
+            );
+            const exportBookings = response.items;
+            const exportSummary = response.metadata?.summary || summary;
+            const wb = XLSX.utils.book_new();
 
-        // Sheet 1: Summary
-        const summaryData: Array<Array<string | number>> = [
-            ["Ringkasan Keuangan", "", ""],
-            ["", "", ""],
-            ["Total Pemasukan", exportSummary.totalRevenue, ""],
-            [tf("exportOutstandingUnpaidLabel"), exportSummary.totalPending, ""],
-            ["Total DP Diterima", exportSummary.totalDP, ""],
-            ["Jumlah Booking Lunas", exportSummary.paidCount, ""],
-            [tf("exportUnpaidBookingCountLabel"), exportSummary.unpaidCount, ""],
-            ["", "", ""],
-            ["Ringkasan per Bulan", "", ""],
-            ["Bulan", "Total Harga", "Pemasukan Bersih"],
-        ];
-        // Group by month
-        const monthMap: Record<string, { total: number; dp: number }> = {};
-        exportBookings.forEach((b) => {
-            const d = b.session_date ? new Date(b.session_date) : new Date();
-            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-            if (!monthMap[key]) monthMap[key] = { total: 0, dp: 0 };
-            monthMap[key].total += getFinalInvoiceTotal(b.total_price, b.final_adjustments);
-            monthMap[key].dp += getNetVerifiedRevenue(b);
-        });
-        Object.keys(monthMap).sort().reverse().forEach((key) => {
-            const [y, m] = key.split("-");
-            const label = new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
-            summaryData.push([label, monthMap[key].total, monthMap[key].dp]);
-        });
-        const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-        wsSummary["!cols"] = [{ wch: 30 }, { wch: 20 }, { wch: 20 }];
-        XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
+            // Sheet 1: Summary
+            const summaryData: Array<Array<string | number>> = [
+                ["Ringkasan Keuangan", "", ""],
+                ["", "", ""],
+                ["Total Pemasukan", exportSummary.totalRevenue, ""],
+                [tf("exportOutstandingUnpaidLabel"), exportSummary.totalPending, ""],
+                ["Total DP Diterima", exportSummary.totalDP, ""],
+                ["Jumlah Booking Lunas", exportSummary.paidCount, ""],
+                [tf("exportUnpaidBookingCountLabel"), exportSummary.unpaidCount, ""],
+                ["", "", ""],
+                ["Ringkasan per Bulan", "", ""],
+                ["Bulan", "Total Harga", "Pemasukan Bersih"],
+            ];
+            // Group by month
+            const monthMap: Record<string, { total: number; dp: number }> = {};
+            exportBookings.forEach((b) => {
+                const d = b.session_date ? new Date(b.session_date) : new Date();
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                if (!monthMap[key]) monthMap[key] = { total: 0, dp: 0 };
+                monthMap[key].total += getFinalInvoiceTotal(b.total_price, b.final_adjustments);
+                monthMap[key].dp += getNetVerifiedRevenue(b);
+            });
+            Object.keys(monthMap).sort().reverse().forEach((key) => {
+                const [y, m] = key.split("-");
+                const label = new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+                summaryData.push([label, monthMap[key].total, monthMap[key].dp]);
+            });
+            const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+            wsSummary["!cols"] = [{ wch: 30 }, { wch: 20 }, { wch: 20 }];
+            XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
 
-        // Sheet 2: Detail
-        const detailData = exportBookings.map((b) => {
-            const initialBreakdown = getInitialPriceBreakdown(b);
-            return {
-                "Kode Booking": b.booking_code,
-                [tf("exportClientNameLabel")]: b.client_name,
-                "Paket": b.service_label || b.services?.name || "-",
-                "Jadwal": b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "-",
-                "Total Harga": getFinalInvoiceTotal(b.total_price, b.final_adjustments),
-                "Harga Paket": getPackagePrice(b, initialBreakdown),
-                "Total Add-on": getAddonTotal(b, initialBreakdown),
-                "DP Dibayar": b.dp_paid,
-                "Diskon": -getDiscountAmount(b, initialBreakdown),
-                "DP Terverifikasi": b.dp_verified_amount || 0,
-                "Refund DP": b.dp_refund_amount || 0,
-                "Pemasukan Bersih": getNetVerifiedRevenue(b),
-                "Sisa": isCancelledBooking(b) ? 0 : getRemainingFinalPayment({
-                    total_price: b.total_price,
-                    dp_paid: b.dp_paid,
-                    final_adjustments: b.final_adjustments,
-                    final_payment_amount: b.final_payment_amount,
-                    final_paid_at: b.final_paid_at,
-                    settlement_status: b.settlement_status,
-                    is_fully_paid: b.is_fully_paid,
-                }),
-                "Status": getFinanceStatusLabel(b),
-            };
-        });
-        const wsDetail = XLSX.utils.json_to_sheet(detailData);
-        wsDetail["!cols"] = [{ wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
-        XLSX.utils.book_append_sheet(wb, wsDetail, "Detail Booking");
+            // Sheet 2: Detail
+            const detailData = exportBookings.map((b) => {
+                const initialBreakdown = getInitialPriceBreakdown(b);
+                return {
+                    "Kode Booking": b.booking_code,
+                    [tf("exportClientNameLabel")]: b.client_name,
+                    "Paket": b.service_label || b.services?.name || "-",
+                    "Jadwal": b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "-",
+                    "Total Harga": getFinalInvoiceTotal(b.total_price, b.final_adjustments),
+                    "Harga Paket": getPackagePrice(b, initialBreakdown),
+                    "Total Add-on": getAddonTotal(b, initialBreakdown),
+                    "DP Dibayar": b.dp_paid,
+                    "Diskon": -getDiscountAmount(b, initialBreakdown),
+                    "DP Terverifikasi": b.dp_verified_amount || 0,
+                    "Refund DP": b.dp_refund_amount || 0,
+                    "Pemasukan Bersih": getNetVerifiedRevenue(b),
+                    "Sisa": isCancelledBooking(b) ? 0 : getRemainingFinalPayment({
+                        total_price: b.total_price,
+                        dp_paid: b.dp_paid,
+                        final_adjustments: b.final_adjustments,
+                        final_payment_amount: b.final_payment_amount,
+                        final_paid_at: b.final_paid_at,
+                        settlement_status: b.settlement_status,
+                        is_fully_paid: b.is_fully_paid,
+                    }),
+                    "Status": getFinanceStatusLabel(b),
+                };
+            });
+            const wsDetail = XLSX.utils.json_to_sheet(detailData);
+            wsDetail["!cols"] = [{ wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
+            XLSX.utils.book_append_sheet(wb, wsDetail, "Detail Booking");
 
-        XLSX.writeFile(wb, `keuangan_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            XLSX.writeFile(wb, `keuangan_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        } catch (error) {
+            console.error("[FinancePage] Failed to export finance data", error);
+            setFeedbackDialog({ open: true, message: tf("failedLoadFinance") });
+        }
     }
 
     function openProof(url: string | null) {
@@ -1491,6 +1512,7 @@ export default function FinancePage() {
                         <Button
                             type="button"
                             className="hidden w-full gap-2 md:inline-flex md:w-auto"
+                            disabled={loading || refreshing || (!hasLoadedFinanceSuccessfully && showFinanceLoadError)}
                             onClick={() => { void exportFinance(); }}
                         >
                             <Download className="w-4 h-4" /> Export Excel
@@ -1515,59 +1537,96 @@ export default function FinancePage() {
                 </div>
             </PageHeader>
 
-            {/* Summary Cards */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 rounded-lg bg-green-100 dark:bg-green-500/10">
-                            <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
+            {showFinanceLoadError ? (
+                <div className={`rounded-xl border px-4 py-4 shadow-sm ${hasLoadedFinanceSuccessfully ? "border-amber-200 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-500/10" : "border-red-200 bg-red-50/80 dark:border-red-500/30 dark:bg-red-500/10"}`}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="space-y-1">
+                            <p className="text-sm font-semibold text-foreground">{financeLoadError}</p>
+                            <p className="text-sm text-muted-foreground">{financeLoadErrorDescription}</p>
                         </div>
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("totalPemasukan")}</span>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full sm:w-auto"
+                            onClick={handleRetryFinanceLoad}
+                            disabled={loading || refreshing}
+                        >
+                            {tf("retryLoadFinance")}
+                        </Button>
                     </div>
-                    <div className="text-2xl font-bold">{formatCurrency(summary.totalRevenue)}</div>
-                    <p className="text-xs text-muted-foreground mt-1">{t("dariSemuaBooking", { count: summary.totalBookings })}</p>
                 </div>
-                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 rounded-lg bg-sky-100 dark:bg-sky-500/10">
-                            <Receipt className="w-5 h-5 text-sky-600 dark:text-sky-400" />
-                        </div>
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("monthlyRevenue")}</span>
-                    </div>
-                    <div className="text-2xl font-bold">{formatCurrency(summary.monthlyRevenueTotal)}</div>
-                    <p className="text-xs text-muted-foreground mt-1">{t("monthlyRevenueSubtitle", { month: monthlyRevenueLabel })}</p>
-                </div>
-                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-500/10">
-                            <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                        </div>
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("sisaTagihan")}</span>
-                    </div>
-                    <div className="text-2xl font-bold">{formatCurrency(summary.totalPending)}</div>
-                    <p className="text-xs text-muted-foreground mt-1">{t("dariBookingBelumLunas", { count: summary.unpaidCount })}</p>
-                </div>
-            </div>
+            ) : null}
 
-            <div className="grid grid-cols-2 gap-2 max-[360px]:grid-cols-1 md:hidden">
-                <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full gap-2"
-                    onClick={() => setColumnManagerOpen(true)}
-                >
-                    <Settings2 className="w-4 h-4" />
-                    Kelola Kolom
-                </Button>
-                <Button
-                    type="button"
-                    className="w-full gap-2"
-                    onClick={() => { void exportFinance(); }}
-                >
-                    <Download className="w-4 h-4" />
-                    Export Excel
-                </Button>
-            </div>
+            {showInitialFinanceSkeleton ? (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+                            <div className="mb-4 flex items-center gap-3">
+                                <div className="h-10 w-10 animate-pulse rounded-lg bg-muted" />
+                                <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+                            </div>
+                            <div className="h-8 w-28 animate-pulse rounded bg-muted" />
+                            <div className="mt-3 h-3 w-40 animate-pulse rounded bg-muted" />
+                        </div>
+                    ))}
+                </div>
+            ) : showFinanceContent ? (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 rounded-lg bg-green-100 dark:bg-green-500/10">
+                                <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
+                            </div>
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("totalPemasukan")}</span>
+                        </div>
+                        <div className="text-2xl font-bold">{formatCurrency(summary.totalRevenue)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">{t("dariSemuaBooking", { count: summary.totalBookings })}</p>
+                    </div>
+                    <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 rounded-lg bg-sky-100 dark:bg-sky-500/10">
+                                <Receipt className="w-5 h-5 text-sky-600 dark:text-sky-400" />
+                            </div>
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("monthlyRevenue")}</span>
+                        </div>
+                        <div className="text-2xl font-bold">{formatCurrency(summary.monthlyRevenueTotal)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">{t("monthlyRevenueSubtitle", { month: monthlyRevenueLabel })}</p>
+                    </div>
+                    <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-500/10">
+                                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                            </div>
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("sisaTagihan")}</span>
+                        </div>
+                        <div className="text-2xl font-bold">{formatCurrency(summary.totalPending)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">{t("dariBookingBelumLunas", { count: summary.unpaidCount })}</p>
+                    </div>
+                </div>
+            ) : null}
+
+            {showFinanceContent ? (
+                <div className="grid grid-cols-2 gap-2 max-[360px]:grid-cols-1 md:hidden">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full gap-2"
+                        onClick={() => setColumnManagerOpen(true)}
+                    >
+                        <Settings2 className="w-4 h-4" />
+                        Kelola Kolom
+                    </Button>
+                    <Button
+                        type="button"
+                        className="w-full gap-2"
+                        disabled={loading || refreshing || (!hasLoadedFinanceSuccessfully && showFinanceLoadError)}
+                        onClick={() => { void exportFinance(); }}
+                    >
+                        <Download className="w-4 h-4" />
+                        Export Excel
+                    </Button>
+                </div>
+            ) : null}
 
             {/* Filters */}
             <div className="space-y-3">
@@ -1655,7 +1714,7 @@ export default function FinancePage() {
 
             {/* Mobile Cards */}
             <div className="md:hidden space-y-3">
-                {queryState.isLoading || queryState.isRefreshing ? (
+                {!showFinanceContent ? null : queryState.isLoading || queryState.isRefreshing ? (
                     <CardListSkeleton count={Math.min(queryState.perPage, 4)} />
                 ) : queryState.totalItems === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">{t("tidakAdaData")}</div>
@@ -1752,7 +1811,7 @@ export default function FinancePage() {
                     );
                 })}
             </div>
-            {!queryState.isLoading && !queryState.isRefreshing && queryState.totalItems > 0 ? (
+            {showFinanceContent && !queryState.isLoading && !queryState.isRefreshing && queryState.totalItems > 0 ? (
                 <div className="md:hidden">
                     <TablePagination
                         totalItems={queryState.totalItems}
@@ -1850,52 +1909,54 @@ export default function FinancePage() {
             />
 
             {/* Desktop Table */}
-            <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-visible hidden md:block">
-                <div className="relative overflow-x-auto overflow-y-visible">
-                    <table className="min-w-[1420px] w-full text-sm text-left">
-                        <thead className="text-xs uppercase bg-card border-b">
-                            <tr>
-                                {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                            {queryState.isLoading || queryState.isRefreshing ? (
-                                <TableRowsSkeleton
-                                    rows={Math.min(queryState.perPage, 6)}
-                                    columns={orderedVisibleColumns.length}
-                                />
-                            ) : queryState.totalItems === 0 ? (
-                                <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground">
-                                    {t("tidakAdaData")}
-                                </td></tr>
-                            ) : bookings.map((b) => {
-                                const remaining = getRemainingAmount(b);
-                                const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
-                                const initialBreakdown = getInitialPriceBreakdown(b);
-                                const packagePrice = getPackagePrice(b, initialBreakdown);
-                                const addonTotal = getAddonTotal(b, initialBreakdown);
-                                const discountAmount = getDiscountAmount(b, initialBreakdown);
-                                return (
-                                    <tr key={b.id} className="group hover:bg-muted/50 transition-colors">
-                                        {orderedVisibleColumns.map((column) =>
-                                            renderDesktopCell(
-                                                b,
-                                                column,
-                                                remaining,
-                                                finalTotal,
-                                                addonTotal,
-                                                packagePrice,
-                                                discountAmount,
-                                            ),
-                                        )}
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+            {showFinanceContent ? (
+                <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-visible hidden md:block">
+                    <div className="relative overflow-x-auto overflow-y-visible">
+                        <table className="min-w-[1420px] w-full text-sm text-left">
+                            <thead className="text-xs uppercase bg-card border-b">
+                                <tr>
+                                    {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                                {queryState.isLoading || queryState.isRefreshing ? (
+                                    <TableRowsSkeleton
+                                        rows={Math.min(queryState.perPage, 6)}
+                                        columns={orderedVisibleColumns.length}
+                                    />
+                                ) : queryState.totalItems === 0 ? (
+                                    <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground">
+                                        {t("tidakAdaData")}
+                                    </td></tr>
+                                ) : bookings.map((b) => {
+                                    const remaining = getRemainingAmount(b);
+                                    const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
+                                    const initialBreakdown = getInitialPriceBreakdown(b);
+                                    const packagePrice = getPackagePrice(b, initialBreakdown);
+                                    const addonTotal = getAddonTotal(b, initialBreakdown);
+                                    const discountAmount = getDiscountAmount(b, initialBreakdown);
+                                    return (
+                                        <tr key={b.id} className="group hover:bg-muted/50 transition-colors">
+                                            {orderedVisibleColumns.map((column) =>
+                                                renderDesktopCell(
+                                                    b,
+                                                    column,
+                                                    remaining,
+                                                    finalTotal,
+                                                    addonTotal,
+                                                    packagePrice,
+                                                    discountAmount,
+                                                ),
+                                            )}
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                    <TablePagination totalItems={queryState.totalItems} currentPage={queryState.page} itemsPerPage={queryState.perPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...FINANCE_PER_PAGE_OPTIONS]} />
                 </div>
-                <TablePagination totalItems={queryState.totalItems} currentPage={queryState.page} itemsPerPage={queryState.perPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...FINANCE_PER_PAGE_OPTIONS]} />
-            </div>
+            ) : null}
         </div>
     );
 }

@@ -185,7 +185,7 @@ function readSummary(value: unknown) {
 }
 
 export async function GET(request: NextRequest) {
-  const { errorResponse, supabase } = await requireRouteUser();
+  const { errorResponse, supabase, user } = await requireRouteUser();
   if (errorResponse) {
     return errorResponse;
   }
@@ -205,47 +205,48 @@ export async function GET(request: NextRequest) {
     "bookingStatus",
   );
   const exportAll = searchParams.get("export") === "1";
-  const basePageRpcArgs = {
+  const pageRpcArgs = {
     p_page: page,
     p_per_page: perPage,
     p_filter: filter,
     p_search: searchQuery,
     p_package_filter: packageFilters[0] || "All",
     p_booking_status_filter: bookingStatusFilters[0] || "All",
+    p_package_filters: packageFilters,
+    p_booking_status_filters: bookingStatusFilters,
     p_export_all: exportAll,
   };
 
-  const [initialPageResult, metadataResult] = await Promise.all([
-    supabase.rpc("cd_get_finance_page", {
-      ...basePageRpcArgs,
-      p_package_filters: packageFilters,
-      p_booking_status_filters: bookingStatusFilters,
-    }),
+  const [pageResult, metadataResult] = await Promise.all([
+    supabase.rpc("cd_get_finance_page", pageRpcArgs),
     supabase.rpc("cd_get_finance_metadata"),
   ]);
-  let pageResult = initialPageResult;
 
   if (pageResult.error) {
-    const message = (pageResult.error.message || "").toLowerCase();
-    const isLikelyOldRpcSignature =
-      message.includes("p_package_filters") ||
-      message.includes("p_booking_status_filters");
-
-    if (isLikelyOldRpcSignature) {
-      pageResult = await supabase.rpc("cd_get_finance_page", basePageRpcArgs);
-    }
-  }
-
-  if (pageResult.error) {
+    console.error("[Finance API] Failed to load finance page", {
+      userId: user?.id || null,
+      page,
+      perPage,
+      filter,
+      hasSearchQuery: searchQuery.length > 0,
+      packageFilterCount: packageFilters.length,
+      bookingStatusFilterCount: bookingStatusFilters.length,
+      exportAll,
+      error: pageResult.error.message,
+    });
     return NextResponse.json(
-      { error: pageResult.error.message },
+      { error: "Failed to load finance data." },
       { status: 500 },
     );
   }
 
   if (metadataResult.error) {
+    console.error("[Finance API] Failed to load finance metadata", {
+      userId: user?.id || null,
+      error: metadataResult.error.message,
+    });
     return NextResponse.json(
-      { error: metadataResult.error.message },
+      { error: "Failed to load finance metadata." },
       { status: 500 },
     );
   }

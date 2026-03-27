@@ -31,6 +31,7 @@
 !supabase_migration_university_references.sql
 !supabase_migration_university_references_abbreviation.sql
 !supabase_migration_profiles_bookings_updated_at_triggers.sql
+!supabase_migration_drop_legacy_finance_rpc_overload.sql
 *.sh
 
 # debug

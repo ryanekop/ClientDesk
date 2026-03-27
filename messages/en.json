@@ -1025,6 +1025,10 @@
         "trackingLabel": "View Status",
         "invoiceTemplateCopied": "Invoice template copied.",
         "failedCopyTemplate": "Failed to copy template.",
+        "failedLoadFinance": "Failed to load finance data.",
+        "failedLoadFinanceEmptyState": "Finance data could not be loaded yet. Please try again shortly.",
+        "failedLoadFinanceWithLastData": "Showing the last successfully loaded data.",
+        "retryLoadFinance": "Retry",
         "exportOutstandingUnpaidLabel": "Outstanding Balance (Unpaid)",
         "exportUnpaidBookingCountLabel": "Number of Unpaid Bookings",
         "exportClientNameLabel": "Client Name"
