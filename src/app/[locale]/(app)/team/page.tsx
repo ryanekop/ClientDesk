@@ -916,7 +916,7 @@ export default function TeamPage() {
                     </div>
                     <div className="hidden md:block rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
                         <div className="relative overflow-x-auto">
-                            <table ref={tableRef} className="min-w-[860px] w-full text-sm text-left">
+                            <table ref={tableRef} className="min-w-[860px] w-full border-separate border-spacing-0 text-left text-sm">
                                 <thead className="text-xs uppercase bg-card border-b">
                                     <tr>
                                         {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
@@ -1006,7 +1006,7 @@ export default function TeamPage() {
                     {/* Desktop Table */}
                     <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">
                         <div className="relative overflow-x-auto">
-                            <table ref={tableRef} className="min-w-[860px] w-full text-sm text-left">
+                            <table ref={tableRef} className="min-w-[860px] w-full border-separate border-spacing-0 text-left text-sm">
                                 <thead className="text-xs uppercase bg-card border-b">
                                     <tr>
                                         {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}

@@ -2147,7 +2147,7 @@ export default function BookingsPage() {
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-visible hidden md:block">
                 <div className="relative overflow-x-auto overflow-y-visible">
-                    <table ref={tableRef} className="min-w-[1400px] w-full text-sm text-left border-collapse">
+                    <table ref={tableRef} className="min-w-[1400px] w-full border-separate border-spacing-0 text-left text-sm">
                         <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
                                 {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}

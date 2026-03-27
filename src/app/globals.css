@@ -112,6 +112,23 @@
     --ring: oklch(0.708 0 0);
 }
 
+@layer components {
+    .sticky-table-cell {
+        isolation: isolate;
+        background-color: var(--color-card);
+        background-image: none;
+        background-clip: padding-box;
+    }
+
+    .sticky-table-cell--header {
+        background-color: var(--color-card);
+    }
+
+    .group:hover .sticky-table-cell:not(.sticky-table-cell--header) {
+        background-color: color-mix(in oklab, var(--color-card) 72%, var(--color-muted) 28%);
+    }
+}
+
 @layer base {
     * {
         @apply border-border outline-ring/50;

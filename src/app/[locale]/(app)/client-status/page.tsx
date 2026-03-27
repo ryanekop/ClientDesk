@@ -831,7 +831,7 @@ export default function ClientStatusPage() {
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card shadow-sm overflow-hidden hidden md:block">
                 <div className="relative overflow-x-auto">
-                    <table ref={tableRef} className="min-w-[900px] w-full text-sm text-left border-collapse">
+                    <table ref={tableRef} className="min-w-[900px] w-full border-separate border-spacing-0 text-left text-sm">
                         <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
                                 {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}

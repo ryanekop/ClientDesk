@@ -107,11 +107,11 @@ export function useStickyTableColumns(columns: TableColumnPreference[]) {
       return {
         position: "sticky",
         [config.pin]: config.offset,
-        zIndex: options?.header ? 30 : 20,
+        zIndex: options?.header ? 40 : 30,
         boxShadow: config.isEdge
           ? config.pin === "left"
-            ? "2px 0 0 0 hsl(var(--border)), 10px 0 16px -14px hsl(var(--foreground) / 0.28)"
-            : "-2px 0 0 0 hsl(var(--border)), -10px 0 16px -14px hsl(var(--foreground) / 0.28)"
+            ? "2px 0 0 0 var(--color-border), 12px 0 18px -16px rgba(15, 23, 42, 0.14)"
+            : "-2px 0 0 0 var(--color-border), -12px 0 18px -16px rgba(15, 23, 42, 0.14)"
           : undefined,
       };
     },
@@ -123,9 +123,9 @@ export function useStickyTableColumns(columns: TableColumnPreference[]) {
       const config = stickyColumns[columnId];
       if (!config) return "";
       if (options?.header) {
-        return "bg-card";
+        return "sticky-table-cell sticky-table-cell--header";
       }
-      return "bg-card group-hover:bg-muted/30";
+      return "sticky-table-cell";
     },
     [stickyColumns],
   );

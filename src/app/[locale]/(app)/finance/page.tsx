@@ -1929,7 +1929,7 @@ export default function FinancePage() {
             {showFinanceContent ? (
                 <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-visible hidden md:block">
                     <div className="relative overflow-x-auto overflow-y-visible">
-                        <table ref={tableRef} className="min-w-[1420px] w-full text-sm text-left">
+                        <table ref={tableRef} className="min-w-[1420px] w-full border-separate border-spacing-0 text-left text-sm">
                             <thead className="text-xs uppercase bg-card border-b">
                                 <tr>
                                     {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
