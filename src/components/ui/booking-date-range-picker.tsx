@@ -325,7 +325,7 @@ export function BookingDateRangePicker({
                 type="button"
                 onClick={() => handleDayClick(day)}
                 className={cn(
-                  "relative z-10 h-9 w-9 rounded-md text-sm transition-colors",
+                  "relative z-10 h-9 w-9 rounded-md text-sm transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isStart || isEnd
                     ? "bg-primary text-primary-foreground"
                     : isInRange
