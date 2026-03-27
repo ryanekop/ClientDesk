@@ -47,7 +47,14 @@ type BookingRow = {
   location_lat: number | null;
   location_lng: number | null;
   notes: string | null;
-  services: { id?: string; name: string; price?: number; is_addon?: boolean | null } | null;
+  services: {
+    id?: string;
+    name: string;
+    price?: number;
+    duration_minutes?: number | null;
+    affects_schedule?: boolean | null;
+    is_addon?: boolean | null;
+  } | null;
   event_type: string | null;
   freelance?: FreelancerInfo | null;
   booking_freelance?: Array<{ freelance_id?: string | null; freelance: FreelancerInfo | null }>;
@@ -189,6 +196,85 @@ function readMetadataRows(value: unknown) {
     : [];
 }
 
+type ServiceScheduleMetadata = {
+  duration_minutes: number | null;
+  affects_schedule: boolean | null;
+};
+
+function hasMissingServiceScheduleMetadata(selection: BookingServiceSelection) {
+  return (
+    selection.service.duration_minutes === null ||
+    typeof selection.service.duration_minutes === "undefined" ||
+    selection.service.affects_schedule === null ||
+    typeof selection.service.affects_schedule === "undefined"
+  );
+}
+
+function mergeServiceScheduleMetadata(
+  selection: BookingServiceSelection,
+  serviceMetadataById: Map<string, ServiceScheduleMetadata>,
+) {
+  const serviceId = selection.service.id;
+  const metadata = serviceId ? serviceMetadataById.get(serviceId) : undefined;
+  if (!metadata) return selection;
+
+  const nextDuration =
+    typeof selection.service.duration_minutes === "number"
+      ? selection.service.duration_minutes
+      : metadata.duration_minutes;
+  const nextAffectsSchedule =
+    typeof selection.service.affects_schedule === "boolean"
+      ? selection.service.affects_schedule
+      : metadata.affects_schedule;
+
+  if (
+    nextDuration === selection.service.duration_minutes &&
+    nextAffectsSchedule === selection.service.affects_schedule
+  ) {
+    return selection;
+  }
+
+  return {
+    ...selection,
+    service: {
+      ...selection.service,
+      duration_minutes: nextDuration,
+      affects_schedule: nextAffectsSchedule,
+    },
+  };
+}
+
+function mergeLegacyServiceScheduleMetadata(
+  service: BookingRow["services"],
+  serviceMetadataById: Map<string, ServiceScheduleMetadata>,
+) {
+  if (!service || !service.id) return service;
+  const metadata = serviceMetadataById.get(service.id);
+  if (!metadata) return service;
+
+  const nextDuration =
+    typeof service.duration_minutes === "number"
+      ? service.duration_minutes
+      : metadata.duration_minutes;
+  const nextAffectsSchedule =
+    typeof service.affects_schedule === "boolean"
+      ? service.affects_schedule
+      : metadata.affects_schedule;
+
+  if (
+    nextDuration === service.duration_minutes &&
+    nextAffectsSchedule === service.affects_schedule
+  ) {
+    return service;
+  }
+
+  return {
+    ...service,
+    duration_minutes: nextDuration,
+    affects_schedule: nextAffectsSchedule,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const { errorResponse, supabase } = await requireRouteUser();
   if (errorResponse) {
@@ -283,7 +369,7 @@ export async function GET(request: NextRequest) {
       ? statusOptions
       : getBookingStatusOptions(DEFAULT_CLIENT_STATUSES);
 
-  const bookings = (Array.isArray(pageData?.items) ? pageData.items : []).map((booking) => {
+  const normalizedBookings = (Array.isArray(pageData?.items) ? pageData.items : []).map((booking) => {
     const junctionFreelancers = (booking.booking_freelance || [])
       .map((bookingFreelance) => bookingFreelance.freelance)
       .filter((item): item is FreelancerInfo => Boolean(item));
@@ -315,6 +401,57 @@ export async function GET(request: NextRequest) {
       }),
     };
   });
+
+  const serviceIdsMissingScheduleMetadata = new Set<string>();
+  normalizedBookings.forEach((booking) => {
+    (booking.service_selections || []).forEach((selection) => {
+      if (!selection.service.id) return;
+      if (!hasMissingServiceScheduleMetadata(selection)) return;
+      serviceIdsMissingScheduleMetadata.add(selection.service.id);
+    });
+  });
+
+  let bookings = normalizedBookings;
+
+  if (serviceIdsMissingScheduleMetadata.size > 0) {
+    const { data: serviceRows, error: serviceRowsError } = await supabase
+      .from("services")
+      .select("id, duration_minutes, affects_schedule")
+      .in("id", Array.from(serviceIdsMissingScheduleMetadata));
+
+    if (serviceRowsError) {
+      console.error(
+        "Failed to enrich booking service schedule metadata:",
+        serviceRowsError.message,
+      );
+    } else {
+      const serviceMetadataById = new Map<string, ServiceScheduleMetadata>();
+      (serviceRows || []).forEach((item) => {
+        if (!item || typeof item.id !== "string") return;
+        serviceMetadataById.set(item.id, {
+          duration_minutes:
+            typeof item.duration_minutes === "number"
+              ? item.duration_minutes
+              : null,
+          affects_schedule:
+            typeof item.affects_schedule === "boolean"
+              ? item.affects_schedule
+              : null,
+        });
+      });
+
+      bookings = normalizedBookings.map((booking) => ({
+        ...booking,
+        services: mergeLegacyServiceScheduleMetadata(
+          booking.services,
+          serviceMetadataById,
+        ),
+        service_selections: (booking.service_selections || []).map((selection) =>
+          mergeServiceScheduleMetadata(selection, serviceMetadataById),
+        ),
+      }));
+    }
+  }
 
   return NextResponse.json({
     items: bookings,

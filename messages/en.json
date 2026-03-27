@@ -684,6 +684,8 @@
         "dateRangeLabel": "Date Range",
         "dateRangePlaceholder": "All Dates",
         "dateRangePickerTitle": "Select Date Range",
+        "dateBasisBookingDate": "Booking Date",
+        "dateBasisSessionDate": "Session Date",
         "start": "Start",
         "end": "End",
         "apply": "Apply",

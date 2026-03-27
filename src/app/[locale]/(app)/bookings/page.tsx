@@ -1714,10 +1714,10 @@ export default function BookingsPage() {
     );
     const dateBasisOptions = React.useMemo(
         () => [
-            { value: "booking_date", label: "Booking Date" },
-            { value: "session_date", label: "Session Date" },
+            { value: "booking_date", label: tb("dateBasisBookingDate") },
+            { value: "session_date", label: tb("dateBasisSessionDate") },
         ],
-        [],
+        [tb],
     );
     const eventTypeFilterOptions = React.useMemo(
         () => [

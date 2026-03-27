@@ -154,6 +154,10 @@ function parseFormatted(s: string): number | "" {
   return isNaN(num) ? "" : num;
 }
 
+function sanitizeNumericCustomFieldValue(value: string): string {
+  return value.replace(/\D+/g, "");
+}
+
 function compareServicesByCatalogOrder(a: Service, b: Service) {
   const aSort = typeof a.sort_order === "number" ? a.sort_order : Number.MAX_SAFE_INTEGER;
   const bSort = typeof b.sort_order === "number" ? b.sort_order : Number.MAX_SAFE_INTEGER;
@@ -644,6 +648,51 @@ export function BookingFormClient({
       return;
     }
 
+    const normalizedCustomFields: Record<string, string> = { ...customFields };
+    let customNumberFieldErrorLabel = "";
+    let customFieldsNormalized = false;
+    normalizedActiveLayout.forEach((item) => {
+      if (
+        customNumberFieldErrorLabel ||
+        item.kind !== "custom_field" ||
+        item.type !== "number"
+      ) {
+        return;
+      }
+
+      const rawValue = customFields[item.id];
+      if (typeof rawValue !== "string" || rawValue.length === 0) {
+        return;
+      }
+
+      const sanitizedValue = sanitizeNumericCustomFieldValue(rawValue);
+      if (!sanitizedValue) {
+        customNumberFieldErrorLabel = item.label?.trim() || "";
+        return;
+      }
+
+      if (sanitizedValue !== rawValue) {
+        normalizedCustomFields[item.id] = sanitizedValue;
+        customFieldsNormalized = true;
+      }
+    });
+
+    if (customNumberFieldErrorLabel) {
+      const fallbackLabel =
+        localeCode === "en" ? "number field" : "field angka";
+      const label = customNumberFieldErrorLabel || fallbackLabel;
+      setError(
+        localeCode === "en"
+          ? `The "${label}" field must contain numbers only.`
+          : `Field "${label}" harus diisi angka saja.`,
+      );
+      return;
+    }
+
+    if (customFieldsNormalized) {
+      setCustomFields(normalizedCustomFields);
+    }
+
     const fullPhone = `${countryCode}${phone}`.replace(/[^0-9+]/g, "");
     const dpValue = parseFormatted(dpDisplay) || 0;
     const resolvedLocation = resolvePreferredLocation(
@@ -729,7 +778,7 @@ export function BookingFormClient({
       const customFieldSnapshots = buildCustomFieldSnapshots(
         normalizedActiveLayout,
         eventType || "Umum",
-        customFields,
+        normalizedCustomFields,
       );
 
       const formData = new FormData();
@@ -1207,11 +1256,16 @@ export function BookingFormClient({
           </div>
         ) : (
           <input
-            type={field.type === "number" ? "number" : "text"}
+            type="text"
+            inputMode={field.type === "number" ? "numeric" : undefined}
             value={customFields[field.id] || ""}
-            onChange={(e) =>
-              setCustomFields((prev) => ({ ...prev, [field.id]: e.target.value }))
-            }
+            onChange={(e) => {
+              const nextValue =
+                field.type === "number"
+                  ? sanitizeNumericCustomFieldValue(e.target.value)
+                  : e.target.value;
+              setCustomFields((prev) => ({ ...prev, [field.id]: nextValue }));
+            }}
             placeholder={field.placeholder}
             required={field.required}
             className={inputClass}

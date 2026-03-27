@@ -451,6 +451,8 @@ AS $$
           'id', legacy_service.id,
           'name', legacy_service.name,
           'price', legacy_service.price,
+          'duration_minutes', legacy_service.duration_minutes,
+          'affects_schedule', legacy_service.affects_schedule,
           'is_addon', legacy_service.is_addon
         )
       END AS legacy_service_json,
@@ -466,6 +468,8 @@ AS $$
                 'id', svc.id,
                 'name', svc.name,
                 'price', svc.price,
+                'duration_minutes', svc.duration_minutes,
+                'affects_schedule', svc.affects_schedule,
                 'is_addon', svc.is_addon
               )
             END

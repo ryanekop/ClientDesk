@@ -298,33 +298,45 @@ export function BookingDateRangePicker({
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-y-1">
         {calendarDays.map((day) => {
           const { start, end } = normalizedDraftRange;
           const isStart = Boolean(start && isSameDay(day, start));
           const isEnd = Boolean(end && isSameDay(day, end));
+          const isSingleDay = isStart && isEnd;
           const isInRange = Boolean(
             start && end && isAfter(day, start) && isBefore(day, end),
           );
           const isCurrentMonth = isSameMonth(day, viewMonth);
 
           return (
-            <button
-              key={day.toISOString()}
-              type="button"
-              onClick={() => handleDayClick(day)}
-              className={cn(
-                "h-9 w-9 rounded-md text-sm transition-colors",
-                isStart || isEnd
-                  ? "bg-primary text-primary-foreground"
-                  : isInRange
-                    ? "bg-primary/15 text-foreground"
-                    : "hover:bg-muted",
-                !isCurrentMonth && "text-muted-foreground/50",
-              )}
-            >
-              {format(day, "d", { locale: dateLocale })}
-            </button>
+            <div key={day.toISOString()} className="relative flex h-10 items-center justify-center">
+              {(isInRange || isStart || isEnd) && !isSingleDay ? (
+                <div
+                  className={cn(
+                    "absolute inset-y-1 bg-primary/15",
+                    isStart ? "left-1/2 right-0 rounded-r-sm" : "",
+                    isEnd ? "left-0 right-1/2 rounded-l-sm" : "",
+                    isInRange ? "inset-x-0" : "",
+                  )}
+                />
+              ) : null}
+              <button
+                type="button"
+                onClick={() => handleDayClick(day)}
+                className={cn(
+                  "relative z-10 h-9 w-9 rounded-md text-sm transition-colors",
+                  isStart || isEnd
+                    ? "bg-primary text-primary-foreground"
+                    : isInRange
+                      ? "text-foreground"
+                      : "hover:bg-muted",
+                  !isCurrentMonth && !(isStart || isEnd) && "text-muted-foreground/50",
+                )}
+              >
+                {format(day, "d", { locale: dateLocale })}
+              </button>
+            </div>
           );
         })}
       </div>

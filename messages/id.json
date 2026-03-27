@@ -684,6 +684,8 @@
         "dateRangeLabel": "Rentang Tanggal",
         "dateRangePlaceholder": "Semua Tanggal",
         "dateRangePickerTitle": "Pilih Rentang Tanggal",
+        "dateBasisBookingDate": "Tanggal Booking",
+        "dateBasisSessionDate": "Tanggal Sesi",
         "start": "Mulai",
         "end": "Selesai",
         "apply": "Terapkan",
