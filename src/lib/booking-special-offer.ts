@@ -20,6 +20,10 @@ export type BookingSpecialLinkRule = {
   consumedBookingId: string | null;
 };
 
+export type BookingSpecialOfferStatus = "none" | "active" | "expired";
+
+export const SPECIAL_LINK_EXPIRED_ERROR_CODE = "SPECIAL_LINK_EXPIRED";
+
 export type BookingSpecialOfferSnapshot = {
   link_id: string;
   link_name: string | null;

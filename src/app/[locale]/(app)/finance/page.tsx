@@ -124,7 +124,7 @@ type FinanceFilterStoragePayload = {
 };
 
 const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
-    { id: "name", label: "Nama", visible: true, locked: true },
+    { id: "name", label: "Nama", visible: true, locked: true, pin: "left" },
     { id: "total_price", label: "Harga Total", visible: true },
     { id: "package_price", label: "Harga Paket", visible: true },
     { id: "addon", label: "Add-on", visible: true },
@@ -132,7 +132,7 @@ const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
     { id: "dp_paid", label: "DP Dibayar", visible: true },
     { id: "remaining", label: "Sisa", visible: true },
     { id: "status", label: "Status", visible: true },
-    { id: "actions", label: "Aksi", visible: true, locked: true },
+    { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ];
 const FINANCE_FILTER_VALUES = ["all", "pending", "paid"] as const;
 const FINANCE_FILTER_STORAGE_PREFIX = "clientdesk:finance:filters";
@@ -1536,7 +1536,7 @@ export default function FinancePage() {
                         </Button>
                         <TableColumnManager
                             title="Kelola Kolom Keuangan"
-                            description="Atur kolom yang tampil di tabel keuangan. Kolom Nama dan Aksi selalu terkunci."
+                            description="Atur kolom yang tampil di tabel keuangan. Kolom Nama dan Aksi selalu tampil, serta lock-nya bisa diaktifkan atau dimatikan."
                             columns={columns}
                             open={columnManagerOpen}
                             onOpenChange={setColumnManagerOpen}

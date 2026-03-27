@@ -99,11 +99,11 @@ const STATUS_COLOR_PALETTE = [
 ];
 
 const BASE_CLIENT_STATUS_COLUMNS: TableColumnPreference[] = [
-    { id: "name", label: "Nama", visible: true, locked: true },
+    { id: "name", label: "Nama", visible: true, locked: true, pin: "left" },
     { id: "package", label: "Paket", visible: true },
     { id: "status", label: "Status", visible: true },
     { id: "queue", label: "Antrian", visible: true },
-    { id: "actions", label: "Aksi", visible: true, locked: true },
+    { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ];
 const CLIENT_STATUS_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:client_status:items_per_page";
 const CLIENT_STATUS_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
@@ -710,7 +710,7 @@ export default function ClientStatusPage() {
                 actions={(
                     <TableColumnManager
                         title="Kelola Kolom Status Booking"
-                        description="Atur kolom yang tampil di tabel status booking. Kolom Nama dan Aksi selalu terkunci."
+                        description="Atur kolom yang tampil di tabel status booking. Kolom Nama dan Aksi selalu tampil, serta lock-nya bisa diaktifkan atau dimatikan."
                         columns={columns}
                         open={columnManagerOpen}
                         onOpenChange={setColumnManagerOpen}

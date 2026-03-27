@@ -64,12 +64,12 @@ const COUNTRY_CODES = [
 ];
 
 const TEAM_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
-    { id: "name", label: "Nama", visible: true, locked: true },
+    { id: "name", label: "Nama", visible: true, locked: true, pin: "left" },
     { id: "role", label: "Peran", visible: true },
     { id: "tags", label: "Tags", visible: true },
     { id: "whatsapp", label: "Whatsapp", visible: true },
     { id: "status", label: "Status", visible: true },
-    { id: "actions", label: "Aksi", visible: true, locked: true },
+    { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ]);
 const TEAM_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:team:items_per_page";
 const TEAM_FILTER_STORAGE_PREFIX = "clientdesk:team:filters";
@@ -837,7 +837,7 @@ export default function TeamPage() {
                         {!loading && totalItems > 0 ? (
                             <TableColumnManager
                                 title="Kelola Kolom Tim/Freelance"
-                                description="Atur kolom yang tampil di tabel tim atau freelance. Kolom Nama dan Aksi selalu terkunci."
+                                description="Atur kolom yang tampil di tabel tim atau freelance. Kolom Nama dan Aksi selalu tampil, serta lock-nya bisa diaktifkan atau dimatikan."
                                 columns={columns}
                                 open={columnManagerOpen}
                                 onOpenChange={setColumnManagerOpen}

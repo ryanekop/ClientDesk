@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
   Loader2,
   CheckCircle2,
   MapPin,
@@ -63,6 +64,8 @@ import {
 } from "@/utils/location";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
 import {
+  SPECIAL_LINK_EXPIRED_ERROR_CODE,
+  type BookingSpecialOfferStatus,
   computeSpecialOfferTotal,
   normalizeSpecialOfferToken,
   normalizeUuidList,
@@ -196,6 +199,7 @@ interface BookingFormClientProps {
   services: Service[];
   vendorSlug?: string;
   specialOfferToken?: string | null;
+  specialOfferStatus?: BookingSpecialOfferStatus;
   specialOfferRule?: {
     id: string;
     name: string;
@@ -252,6 +256,7 @@ export function BookingFormClient({
   services,
   vendorSlug,
   specialOfferToken,
+  specialOfferStatus,
   specialOfferRule,
 }: BookingFormClientProps) {
   const params = useParams();
@@ -353,6 +358,11 @@ export function BookingFormClient({
   // ── Submission state ──
   const [submitting, setSubmitting] = React.useState(false);
   const [submitted, setSubmitted] = React.useState(false);
+  const [resolvedSpecialOfferStatus, setResolvedSpecialOfferStatus] =
+    React.useState<BookingSpecialOfferStatus>(() => {
+      if (specialOfferStatus) return specialOfferStatus;
+      return normalizedOfferToken && specialOfferRule ? "active" : "none";
+    });
   const [resultData, setResultData] = React.useState<{
     bookingCode?: string;
     vendorWhatsapp?: string;
@@ -400,7 +410,11 @@ export function BookingFormClient({
   const [error, setError] = React.useState("");
 
   const autoDpAmountRef = React.useRef<number | null>(null);
-  const isSpecialOfferActive = Boolean(normalizedOfferToken && specialOfferRule);
+  const isSpecialOfferActive = Boolean(
+    resolvedSpecialOfferStatus === "active" &&
+      normalizedOfferToken &&
+      specialOfferRule,
+  );
   const eventTypeLocked = isSpecialOfferActive && specialOfferRule?.eventTypeLocked === true;
   const packageLocked = isSpecialOfferActive && specialOfferRule?.packageLocked === true;
   const addonLocked = isSpecialOfferActive && specialOfferRule?.addonLocked === true;
@@ -432,6 +446,11 @@ export function BookingFormClient({
       addonIdSet.has(id),
     );
   }, [services, specialOfferRule]);
+
+  React.useEffect(() => {
+    if (!specialOfferStatus) return;
+    setResolvedSpecialOfferStatus(specialOfferStatus);
+  }, [specialOfferStatus]);
 
   React.useEffect(() => {
     if (
@@ -847,6 +866,9 @@ export function BookingFormClient({
       if (data.success) {
         setSubmitted(true);
         setResultData(data);
+      } else if (data.code === SPECIAL_LINK_EXPIRED_ERROR_CODE) {
+        setResolvedSpecialOfferStatus("expired");
+        setError("");
       } else {
         setError(data.error || "Gagal mengirim booking.");
       }
@@ -1939,6 +1961,35 @@ export function BookingFormClient({
   }
 
   // ── Success screen ──
+
+  if (resolvedSpecialOfferStatus === "expired") {
+    return (
+      <div
+        className="public-light-theme min-h-screen flex items-center justify-center px-4"
+        style={{
+          backgroundImage: `linear-gradient(135deg, ${brandColor}12 0%, #fff8f1 45%, #ffffff 100%)`,
+        }}
+      >
+        <div className="w-full max-w-md rounded-3xl border bg-background/95 p-8 text-center shadow-xl backdrop-blur-sm">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+            <AlertTriangle className="h-10 w-10" />
+          </div>
+          <div className="mt-6 space-y-2">
+            <h2 className="text-2xl font-bold tracking-tight">
+              {t("specialLinkExpiredTitle")}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {t("specialLinkExpiredMessage")}
+            </p>
+          </div>
+          <div
+            className="mx-auto mt-6 h-1.5 w-20 rounded-full"
+            style={{ backgroundColor: brandColor }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (submitted) {
     return (

@@ -187,6 +187,8 @@
         "termsLinkDefault": "Syarat & Ketentuan",
         "termsDialogDescription": "Silakan baca syarat dan ketentuan berikut sebelum melanjutkan booking.",
         "termsReadHint": "Buka & baca Syarat & Ketentuan dulu untuk membuka checklist persetujuan.",
+        "specialLinkExpiredTitle": "Link Expired",
+        "specialLinkExpiredMessage": "Silakan hubungi admin untuk informasi lebih lanjut.",
         "tutup": "Tutup"
     },
     "Bookings": {
@@ -749,7 +751,7 @@
         "columnSessionDate": "Tanggal Sesi",
         "columnSessionTime": "Jam Sesi",
         "columnManagerTitle": "Kelola Kolom Daftar Booking",
-        "columnManagerDescription": "Atur kolom yang ditampilkan dan ubah urutannya. Kolom Nama dan Aksi selalu terkunci.",
+        "columnManagerDescription": "Atur kolom yang ditampilkan dan ubah urutannya. Kolom Nama dan Aksi selalu tampil, serta lock-nya bisa diaktifkan atau dimatikan.",
         "googleCalendarDeleteFailed": "Event Google Calendar gagal dihapus: {reason}",
         "googleCalendarDeletePartial": "Sebagian event Google Calendar gagal dihapus.{firstError}",
         "googleCalendarDeleteFailedGeneric": "Event Google Calendar gagal dihapus.",

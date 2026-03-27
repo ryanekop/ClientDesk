@@ -187,6 +187,8 @@
         "termsLinkDefault": "Terms & Conditions",
         "termsDialogDescription": "Please read the following terms and conditions before continuing your booking.",
         "termsReadHint": "Open the Terms & Conditions link once to enable the consent checkbox.",
+        "specialLinkExpiredTitle": "Link Expired",
+        "specialLinkExpiredMessage": "Please contact the admin for more information.",
         "tutup": "Close"
     },
     "Bookings": {
@@ -749,7 +751,7 @@
         "columnSessionDate": "Session Date",
         "columnSessionTime": "Session Time",
         "columnManagerTitle": "Manage Booking List Columns",
-        "columnManagerDescription": "Configure visible columns and reorder them. Name and Actions columns are always locked.",
+        "columnManagerDescription": "Configure visible columns and reorder them. Name and Actions columns always stay visible, and their lock can be turned on or off.",
         "googleCalendarDeleteFailed": "Google Calendar event deletion failed: {reason}",
         "googleCalendarDeletePartial": "Some Google Calendar events failed to delete.{firstError}",
         "googleCalendarDeleteFailedGeneric": "Failed to remove Google Calendar event.",

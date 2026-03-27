@@ -141,7 +141,7 @@ const STATUS_COLOR_PALETTE = [
     "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400 border-none",
 ];
 const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
-    { id: "name", label: "Nama", visible: true, locked: true },
+    { id: "name", label: "Nama", visible: true, locked: true, pin: "left" },
     { id: "invoice", label: "Invoice", visible: true },
     { id: "booking_date", label: "Booking Date", visible: true },
     { id: "package", label: "Paket", visible: true },
@@ -151,7 +151,7 @@ const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
     { id: "status", label: "Status", visible: true },
     { id: "freelancer", label: "Freelance", visible: true },
     { id: "price", label: "Harga", visible: true },
-    { id: "actions", label: "Aksi", visible: true, locked: true },
+    { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ];
 const BOOKING_FILTER_STORAGE_PREFIX = "clientdesk:bookings:filters";
 const BOOKING_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:bookings:items_per_page";

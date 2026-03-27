@@ -6,6 +6,7 @@ import {
 } from "./booking-form-client";
 import type { Metadata } from "next";
 import {
+  type BookingSpecialOfferStatus,
   isBookingSpecialLinkAvailable,
   normalizeBookingSpecialLinkRule,
   normalizeSpecialOfferToken,
@@ -98,6 +99,9 @@ export default async function PublicBookingFormPage({
     accommodationFee: number;
     discountAmount: number;
   } | null = null;
+  let specialOfferStatus: BookingSpecialOfferStatus = offerToken
+    ? "expired"
+    : "none";
 
   if (offerToken) {
     const { data: specialOfferRow } = await supabaseAdmin
@@ -111,6 +115,7 @@ export default async function PublicBookingFormPage({
 
     const normalizedRule = normalizeBookingSpecialLinkRule(specialOfferRow);
     if (normalizedRule && isBookingSpecialLinkAvailable(normalizedRule)) {
+      specialOfferStatus = "active";
       specialOfferRule = {
         id: normalizedRule.id,
         name: normalizedRule.name,
@@ -133,6 +138,7 @@ export default async function PublicBookingFormPage({
       vendor={vendorData}
       services={(vendorPayload?.services || []) as Service[]}
       specialOfferToken={offerToken || null}
+      specialOfferStatus={specialOfferStatus}
       specialOfferRule={specialOfferRule}
     />
   );

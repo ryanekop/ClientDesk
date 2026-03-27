@@ -110,8 +110,8 @@ export function useStickyTableColumns(columns: TableColumnPreference[]) {
         zIndex: options?.header ? 30 : 20,
         boxShadow: config.isEdge
           ? config.pin === "left"
-            ? "2px 0 0 0 hsl(var(--border))"
-            : "-2px 0 0 0 hsl(var(--border))"
+            ? "2px 0 0 0 hsl(var(--border)), 10px 0 16px -14px hsl(var(--foreground) / 0.28)"
+            : "-2px 0 0 0 hsl(var(--border)), -10px 0 16px -14px hsl(var(--foreground) / 0.28)"
           : undefined,
       };
     },
@@ -125,7 +125,7 @@ export function useStickyTableColumns(columns: TableColumnPreference[]) {
       if (options?.header) {
         return "bg-card";
       }
-      return "bg-card group-hover:bg-inherit";
+      return "bg-card group-hover:bg-muted/30";
     },
     [stickyColumns],
   );

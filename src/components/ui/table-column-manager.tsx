@@ -42,7 +42,11 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
-  normalizePinnedColumnOrder,
+  canReorderTableColumn,
+  canToggleTableColumnPin,
+  canToggleTableColumnVisibility,
+  isAlwaysVisibleTableColumnId,
+  lockBoundaryColumns,
   type TableColumnPreference,
 } from "@/lib/table-column-prefs";
 
@@ -59,6 +63,28 @@ type TableColumnManagerProps = {
   triggerClassName?: string;
 };
 
+function getColumnDescription(column: TableColumnPreference) {
+  const isPinned = column.pin === "left" || column.pin === "right";
+
+  if (isAlwaysVisibleTableColumnId(column.id)) {
+    return isPinned
+      ? "Selalu tampil di tabel dan saat ini terkunci saat digeser"
+      : "Selalu tampil di tabel";
+  }
+
+  if (column.locked) {
+    return "Kolom selalu terkunci";
+  }
+
+  if (isPinned) {
+    return column.visible
+      ? "Tampil di tabel dan terkunci saat digeser"
+      : "Disembunyikan, tetap terkunci saat ditampilkan";
+  }
+
+  return column.visible ? "Tampil di tabel" : "Disembunyikan dari tabel";
+}
+
 function SortableColumnItem({
   column,
   description,
@@ -71,9 +97,12 @@ function SortableColumnItem({
   onToggleVisibility: (id: string) => void;
 }) {
   /* eslint-disable react-hooks/refs */
+  const canReorder = canReorderTableColumn(column);
+  const canTogglePinState = canToggleTableColumnPin(column);
+  const canToggleVisibilityState = canToggleTableColumnVisibility(column);
   const sortable = useSortable({
     id: column.id,
-    disabled: column.locked,
+    disabled: !canReorder,
   });
   const style = {
     transform: CSS.Transform.toString(sortable.transform),
@@ -93,13 +122,19 @@ function SortableColumnItem({
         <button
           type="button"
           ref={sortable.setActivatorNodeRef}
-          disabled={column.locked}
+          disabled={!canReorder}
           className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
-            column.locked
+            !canReorder
               ? "cursor-not-allowed border-muted bg-muted/40 text-muted-foreground"
               : "touch-none cursor-grab border-input bg-background text-muted-foreground hover:bg-muted/50 active:cursor-grabbing"
           }`}
-          title={column.locked ? "Kolom terkunci" : "Drag untuk ubah urutan"}
+          title={
+            !canReorder
+              ? isAlwaysVisibleTableColumnId(column.id)
+                ? "Kolom tetap di posisi ini"
+                : "Kolom terkunci"
+              : "Drag untuk ubah urutan"
+          }
           {...sortable.attributes}
           {...sortable.listeners}
         >
@@ -117,9 +152,9 @@ function SortableColumnItem({
           size="icon"
           className="h-8 w-8"
           onClick={() => onTogglePin(column.id)}
-          disabled={column.locked}
+          disabled={!canTogglePinState}
           title={
-            column.locked
+            !canTogglePinState
               ? "Kolom selalu terkunci saat digeser"
               : column.pin === "left" || column.pin === "right"
                 ? "Buka kunci kolom"
@@ -139,8 +174,14 @@ function SortableColumnItem({
           size="icon"
           className="h-8 w-8"
           onClick={() => onToggleVisibility(column.id)}
-          disabled={column.locked}
-          title={column.visible ? "Sembunyikan" : "Tampilkan"}
+          disabled={!canToggleVisibilityState}
+          title={
+            !canToggleVisibilityState
+              ? "Kolom ini selalu tampil"
+              : column.visible
+                ? "Sembunyikan"
+                : "Tampilkan"
+          }
         >
           {column.visible ? (
             <Eye className="h-4 w-4" />
@@ -188,9 +229,9 @@ export function TableColumnManager({
 
   function toggleVisibility(id: string) {
     onChange(
-      normalizePinnedColumnOrder(
+      lockBoundaryColumns(
         columns.map((column) =>
-          column.id === id && !column.locked
+          column.id === id && canToggleTableColumnVisibility(column)
             ? { ...column, visible: !column.visible }
             : column,
         ),
@@ -200,10 +241,20 @@ export function TableColumnManager({
 
   function togglePin(id: string) {
     onChange(
-      normalizePinnedColumnOrder(
+      lockBoundaryColumns(
         columns.map((column) =>
-          column.id === id && !column.locked
-            ? { ...column, pin: column.pin === "left" ? null : "left" }
+          column.id === id && canToggleTableColumnPin(column)
+            ? {
+                ...column,
+                pin:
+                  column.id === "actions"
+                    ? column.pin === "right"
+                      ? null
+                      : "right"
+                    : column.pin === "left"
+                      ? null
+                      : "left",
+              }
             : column,
         ),
       ),
@@ -222,10 +273,15 @@ export function TableColumnManager({
     const sourceIndex = columns.findIndex((column) => column.id === active.id);
     const targetIndex = columns.findIndex((column) => column.id === over.id);
     if (sourceIndex < 0 || targetIndex < 0) return;
-    if (columns[sourceIndex]?.locked || columns[targetIndex]?.locked) return;
+    if (
+      !canReorderTableColumn(columns[sourceIndex]) ||
+      !canReorderTableColumn(columns[targetIndex])
+    ) {
+      return;
+    }
     if (columns[sourceIndex]?.pin !== columns[targetIndex]?.pin) return;
 
-    onChange(normalizePinnedColumnOrder(arrayMove(columns, sourceIndex, targetIndex)));
+    onChange(lockBoundaryColumns(arrayMove(columns, sourceIndex, targetIndex)));
   }
 
   const activeColumn =
@@ -265,17 +321,7 @@ export function TableColumnManager({
                   <SortableColumnItem
                     key={column.id}
                     column={column}
-                    description={
-                      column.locked
-                        ? "Kolom selalu terkunci"
-                        : column.pin === "left" || column.pin === "right"
-                          ? column.visible
-                            ? "Tampil di tabel dan terkunci saat digeser"
-                            : "Disembunyikan, tetap terkunci saat ditampilkan"
-                        : column.visible
-                          ? "Tampil di tabel"
-                          : "Disembunyikan dari tabel"
-                    }
+                    description={getColumnDescription(column)}
                     onTogglePin={togglePin}
                     onToggleVisibility={toggleVisibility}
                   />
@@ -295,14 +341,7 @@ export function TableColumnManager({
                           <div>
                             <p className="text-sm font-medium">{activeColumn.label}</p>
                             <p className="text-xs text-muted-foreground">
-                              {activeColumn.pin === "left" ||
-                              activeColumn.pin === "right"
-                                ? activeColumn.visible
-                                  ? "Tampil di tabel dan terkunci saat digeser"
-                                  : "Disembunyikan, tetap terkunci saat ditampilkan"
-                                : activeColumn.visible
-                                  ? "Tampil di tabel"
-                                  : "Disembunyikan dari tabel"}
+                              {getColumnDescription(activeColumn)}
                             </p>
                           </div>
                         </div>

@@ -46,6 +46,7 @@ import {
     normalizeBookingSpecialLinkRule,
     normalizeSpecialOfferToken,
     normalizeUuidList,
+    SPECIAL_LINK_EXPIRED_ERROR_CODE,
     type BookingSpecialLinkRule,
 } from "@/lib/booking-special-offer";
 import {
@@ -553,6 +554,7 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json(
                     {
                         success: false,
+                        code: SPECIAL_LINK_EXPIRED_ERROR_CODE,
                         error: "Link booking khusus tidak valid atau sudah kedaluwarsa.",
                     },
                     { status: 400 },
@@ -564,6 +566,7 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json(
                     {
                         success: false,
+                        code: SPECIAL_LINK_EXPIRED_ERROR_CODE,
                         error: "Link booking khusus tidak aktif atau sudah digunakan.",
                     },
                     { status: 400 },
@@ -1052,6 +1055,7 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json(
                     {
                         success: false,
+                        code: SPECIAL_LINK_EXPIRED_ERROR_CODE,
                         error: "Link booking khusus sudah digunakan. Silakan minta link baru.",
                     },
                     { status: 409 },

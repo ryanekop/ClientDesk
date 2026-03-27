@@ -25,6 +25,26 @@ function normalizeTableColumnPin(value: unknown): TableColumnPin {
   return null;
 }
 
+export function isBoundaryTableColumnId(columnId: string) {
+  return columnId === "name" || columnId === "actions";
+}
+
+export function isAlwaysVisibleTableColumnId(columnId: string) {
+  return isBoundaryTableColumnId(columnId);
+}
+
+export function canToggleTableColumnPin(column: TableColumnPreference) {
+  return column.locked !== true;
+}
+
+export function canToggleTableColumnVisibility(column: TableColumnPreference) {
+  return column.locked !== true && !isAlwaysVisibleTableColumnId(column.id);
+}
+
+export function canReorderTableColumn(column: TableColumnPreference) {
+  return column.locked !== true && !isBoundaryTableColumnId(column.id);
+}
+
 function normalizeTableColumnPreferenceItem(
   item: unknown,
 ): TableColumnPreference | null {
@@ -101,7 +121,7 @@ export function mergeTableColumnPreferences(
         ...fallback,
         visible: item.locked ? true : item.visible !== false,
         locked: fallback.locked === true,
-        pin: fallback.locked ? fallback.pin ?? null : savedPin ?? fallback.pin ?? null,
+        pin: fallback.locked ? fallback.pin ?? null : savedPin,
       });
       return acc;
     }, []);
@@ -144,30 +164,52 @@ export function lockBoundaryColumns(
   const last =
     columns.find((column) => column.id === "actions") ||
     columns[columns.length - 1];
-  const middle = columns.filter(
-    (column) => column.id !== first.id && column.id !== last.id,
-  );
+  const middle = columns.filter((column) => {
+    if (first.id === last.id) return column.id !== first.id;
+    return column.id !== first.id && column.id !== last.id;
+  });
 
   if (first.id === last.id) {
     return [
       {
         ...first,
-        locked: true,
+        locked: false,
         visible: true,
-        pin: first.id === "actions" ? ("right" as const) : ("left" as const),
+        pin:
+          first.id === "actions"
+            ? first.pin === "right"
+              ? ("right" as const)
+              : null
+            : first.pin === "left"
+              ? ("left" as const)
+              : null,
       },
     ];
   }
 
-  return normalizePinnedColumnOrder([
-    { ...first, locked: true, visible: true, pin: "left" as const },
-    ...middle.map((column) => ({
+  const normalizedMiddle = normalizePinnedColumnOrder(
+    middle.map((column) => ({
       ...column,
       locked: column.locked === true,
       pin: column.pin === "left" ? ("left" as const) : null,
     })),
-    { ...last, locked: true, visible: true, pin: "right" as const },
-  ]);
+  );
+
+  return [
+    {
+      ...first,
+      locked: false,
+      visible: true,
+      pin: first.pin === "left" ? ("left" as const) : null,
+    },
+    ...normalizedMiddle,
+    {
+      ...last,
+      locked: false,
+      visible: true,
+      pin: last.pin === "right" ? ("right" as const) : null,
+    },
+  ];
 }
 
 export function updateTableColumnPreferenceMap(
