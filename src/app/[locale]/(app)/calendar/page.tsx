@@ -291,13 +291,18 @@ export default function CalendarPage() {
                 return;
             }
 
-            const popup = window.open("", "_blank", "noopener,noreferrer");
+            const popup = window.open("about:blank", "_blank");
             if (!popup) {
                 showFeedback(
                     t("openGooglePopupBlockedMessage"),
                     t("openGoogleSyncFailedTitle"),
                 );
                 return;
+            }
+            try {
+                popup.opener = null;
+            } catch {
+                // Ignore opener assignment failures.
             }
 
             setOpeningGoogleCalendar(true);

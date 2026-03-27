@@ -109,6 +109,62 @@ function parseExtraFilters(value: string | null) {
   }
 }
 
+function parseStringListValue(rawValue: string) {
+  const trimmed = rawValue.trim();
+  if (!trimmed) return [] as string[];
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is string => typeof item === "string");
+    }
+  } catch {
+    // Fallback to CSV parsing.
+  }
+
+  return trimmed.split(",");
+}
+
+function parseFilterList(
+  searchParams: URLSearchParams,
+  listKey: string,
+  singleKey: string,
+) {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  const listValues = searchParams.getAll(listKey);
+
+  listValues.forEach((rawValue) => {
+    parseStringListValue(rawValue).forEach((candidate) => {
+      const trimmed = candidate.trim();
+      if (!trimmed || trimmed.toLowerCase() === "all" || seen.has(trimmed)) return;
+      seen.add(trimmed);
+      normalized.push(trimmed);
+    });
+  });
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  const legacySingleValue = searchParams.get(singleKey)?.trim() || "";
+  if (!legacySingleValue || legacySingleValue.toLowerCase() === "all") {
+    return [] as string[];
+  }
+
+  return [legacySingleValue];
+}
+
+function parseDateBasis(value: string | null) {
+  return value?.trim() === "session_date" ? "session_date" : "booking_date";
+}
+
+function parseTimeZone(value: string | null) {
+  const trimmed = value?.trim() || "";
+  if (!trimmed || trimmed.length > 120) return "UTC";
+  return trimmed;
+}
+
 function readRpcObject<T>(value: unknown): T | null {
   if (Array.isArray(value)) {
     const firstItem = value[0];
@@ -146,35 +202,64 @@ export async function GET(request: NextRequest) {
     MAX_PER_PAGE,
   );
   const searchQuery = searchParams.get("search")?.trim() || "";
-  const statusFilter = searchParams.get("status")?.trim() || "All";
-  const packageFilter = searchParams.get("package")?.trim() || "All";
-  const freelanceFilter = searchParams.get("freelance")?.trim() || "All";
-  const eventTypeFilter = searchParams.get("eventType")?.trim() || "All";
+  const statusFilters = parseFilterList(searchParams, "statusFilters", "status");
+  const packageFilters = parseFilterList(searchParams, "packageFilters", "package");
+  const freelanceFilters = parseFilterList(searchParams, "freelanceFilters", "freelance");
+  const eventTypeFilters = parseFilterList(searchParams, "eventTypeFilters", "eventType");
   const dateFromFilter = searchParams.get("dateFrom")?.trim() || "";
   const dateToFilter = searchParams.get("dateTo")?.trim() || "";
+  const dateBasis = parseDateBasis(searchParams.get("dateBasis"));
+  const timeZone = parseTimeZone(searchParams.get("timeZone"));
   const sortOrder = searchParams.get("sortOrder")?.trim() || "booking_newest";
   const exportAll = searchParams.get("export") === "1";
   const extraFieldFilters = parseExtraFilters(searchParams.get("extraFilters"));
+  const singleEventTypeFilter = eventTypeFilters.length === 1 ? eventTypeFilters[0] : "All";
 
-  const [pageResult, metadataResult] = await Promise.all([
+  const basePageRpcArgs = {
+    p_page: page,
+    p_per_page: perPage,
+    p_search: searchQuery,
+    p_status_filter: statusFilters[0] || "All",
+    p_package_filter: packageFilters[0] || "All",
+    p_freelance_filter: freelanceFilters[0] || "All",
+    p_event_type_filter: singleEventTypeFilter,
+    p_date_from: dateFromFilter,
+    p_date_to: dateToFilter,
+    p_sort_order: sortOrder,
+    p_extra_filters: extraFieldFilters,
+    p_export_all: exportAll,
+  };
+
+  const [initialPageResult, metadataResult] = await Promise.all([
     supabase.rpc("cd_get_bookings_page", {
-      p_page: page,
-      p_per_page: perPage,
-      p_search: searchQuery,
-      p_status_filter: statusFilter,
-      p_package_filter: packageFilter,
-      p_freelance_filter: freelanceFilter,
-      p_event_type_filter: eventTypeFilter,
-      p_date_from: dateFromFilter,
-      p_date_to: dateToFilter,
-      p_sort_order: sortOrder,
-      p_extra_filters: extraFieldFilters,
-      p_export_all: exportAll,
+      ...basePageRpcArgs,
+      p_status_filters: statusFilters,
+      p_package_filters: packageFilters,
+      p_freelance_filters: freelanceFilters,
+      p_event_type_filters: eventTypeFilters,
+      p_date_basis: dateBasis,
+      p_time_zone: timeZone,
     }),
     supabase.rpc("cd_get_bookings_metadata", {
-      p_event_type_filter: eventTypeFilter,
+      p_event_type_filter: singleEventTypeFilter,
     }),
   ]);
+  let pageResult = initialPageResult;
+
+  if (pageResult.error) {
+    const message = (pageResult.error.message || "").toLowerCase();
+    const isLikelyOldRpcSignature =
+      message.includes("p_status_filters") ||
+      message.includes("p_package_filters") ||
+      message.includes("p_freelance_filters") ||
+      message.includes("p_event_type_filters") ||
+      message.includes("p_date_basis") ||
+      message.includes("p_time_zone");
+
+    if (isLikelyOldRpcSignature) {
+      pageResult = await supabase.rpc("cd_get_bookings_page", basePageRpcArgs);
+    }
+  }
 
   if (pageResult.error) {
     return NextResponse.json(

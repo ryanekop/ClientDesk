@@ -574,8 +574,14 @@ CREATE OR REPLACE FUNCTION public.cd_get_bookings_page(
   p_package_filter TEXT DEFAULT 'All',
   p_freelance_filter TEXT DEFAULT 'All',
   p_event_type_filter TEXT DEFAULT 'All',
+  p_status_filters JSONB DEFAULT '[]'::jsonb,
+  p_package_filters JSONB DEFAULT '[]'::jsonb,
+  p_freelance_filters JSONB DEFAULT '[]'::jsonb,
+  p_event_type_filters JSONB DEFAULT '[]'::jsonb,
   p_date_from TEXT DEFAULT '',
   p_date_to TEXT DEFAULT '',
+  p_date_basis TEXT DEFAULT 'booking_date',
+  p_time_zone TEXT DEFAULT 'UTC',
   p_sort_order TEXT DEFAULT 'booking_newest',
   p_extra_filters JSONB DEFAULT '{}'::jsonb,
   p_export_all BOOLEAN DEFAULT FALSE
@@ -590,12 +596,79 @@ AS $$
       GREATEST(COALESCE(p_page, 1), 1) AS page,
       GREATEST(COALESCE(p_per_page, 10), 1) AS per_page,
       btrim(COALESCE(p_search, '')) AS search_query,
-      COALESCE(NULLIF(btrim(p_status_filter), ''), 'All') AS status_filter,
-      COALESCE(NULLIF(btrim(p_package_filter), ''), 'All') AS package_filter,
-      COALESCE(NULLIF(btrim(p_freelance_filter), ''), 'All') AS freelance_filter,
-      COALESCE(NULLIF(btrim(p_event_type_filter), ''), 'All') AS event_type_filter,
+      CASE
+        WHEN COALESCE(jsonb_array_length(CASE WHEN jsonb_typeof(p_status_filters) = 'array' THEN p_status_filters ELSE '[]'::jsonb END), 0) > 0
+          THEN COALESCE((
+            SELECT array_agg(DISTINCT value)
+            FROM (
+              SELECT btrim(item.value) AS value
+              FROM jsonb_array_elements_text(p_status_filters) AS item(value)
+              WHERE btrim(item.value) <> ''
+                AND lower(btrim(item.value)) <> 'all'
+            ) prepared
+          ), ARRAY[]::TEXT[])
+        WHEN COALESCE(NULLIF(btrim(p_status_filter), ''), 'All') <> 'All'
+          THEN ARRAY[COALESCE(NULLIF(btrim(p_status_filter), ''), 'All')]
+        ELSE ARRAY[]::TEXT[]
+      END AS status_filters,
+      CASE
+        WHEN COALESCE(jsonb_array_length(CASE WHEN jsonb_typeof(p_package_filters) = 'array' THEN p_package_filters ELSE '[]'::jsonb END), 0) > 0
+          THEN COALESCE((
+            SELECT array_agg(DISTINCT value)
+            FROM (
+              SELECT btrim(item.value) AS value
+              FROM jsonb_array_elements_text(p_package_filters) AS item(value)
+              WHERE btrim(item.value) <> ''
+                AND lower(btrim(item.value)) <> 'all'
+            ) prepared
+          ), ARRAY[]::TEXT[])
+        WHEN COALESCE(NULLIF(btrim(p_package_filter), ''), 'All') <> 'All'
+          THEN ARRAY[COALESCE(NULLIF(btrim(p_package_filter), ''), 'All')]
+        ELSE ARRAY[]::TEXT[]
+      END AS package_filters,
+      CASE
+        WHEN COALESCE(jsonb_array_length(CASE WHEN jsonb_typeof(p_freelance_filters) = 'array' THEN p_freelance_filters ELSE '[]'::jsonb END), 0) > 0
+          THEN COALESCE((
+            SELECT array_agg(DISTINCT value)
+            FROM (
+              SELECT btrim(item.value) AS value
+              FROM jsonb_array_elements_text(p_freelance_filters) AS item(value)
+              WHERE btrim(item.value) <> ''
+                AND lower(btrim(item.value)) <> 'all'
+            ) prepared
+          ), ARRAY[]::TEXT[])
+        WHEN COALESCE(NULLIF(btrim(p_freelance_filter), ''), 'All') <> 'All'
+          THEN ARRAY[COALESCE(NULLIF(btrim(p_freelance_filter), ''), 'All')]
+        ELSE ARRAY[]::TEXT[]
+      END AS freelance_filters,
+      CASE
+        WHEN COALESCE(jsonb_array_length(CASE WHEN jsonb_typeof(p_event_type_filters) = 'array' THEN p_event_type_filters ELSE '[]'::jsonb END), 0) > 0
+          THEN COALESCE((
+            SELECT array_agg(DISTINCT value)
+            FROM (
+              SELECT btrim(item.value) AS value
+              FROM jsonb_array_elements_text(p_event_type_filters) AS item(value)
+              WHERE btrim(item.value) <> ''
+                AND lower(btrim(item.value)) <> 'all'
+            ) prepared
+          ), ARRAY[]::TEXT[])
+        WHEN COALESCE(NULLIF(btrim(p_event_type_filter), ''), 'All') <> 'All'
+          THEN ARRAY[COALESCE(NULLIF(btrim(p_event_type_filter), ''), 'All')]
+        ELSE ARRAY[]::TEXT[]
+      END AS event_type_filters,
       btrim(COALESCE(p_date_from, '')) AS date_from_filter,
       btrim(COALESCE(p_date_to, '')) AS date_to_filter,
+      CASE
+        WHEN lower(COALESCE(NULLIF(btrim(p_date_basis), ''), 'booking_date')) = 'session_date'
+          THEN 'session_date'
+        ELSE 'booking_date'
+      END AS date_basis,
+      COALESCE((
+        SELECT tz.name
+        FROM pg_timezone_names AS tz
+        WHERE tz.name = COALESCE(NULLIF(btrim(p_time_zone), ''), 'UTC')
+        LIMIT 1
+      ), 'UTC') AS time_zone,
       COALESCE(NULLIF(btrim(p_sort_order), ''), 'booking_newest') AS sort_order,
       COALESCE(p_extra_filters, '{}'::jsonb) AS extra_filters,
       COALESCE(p_export_all, FALSE) AS export_all
@@ -611,33 +684,45 @@ AS $$
       OR public.cd_text_contains(row_data.location, params.search_query)
     )
       AND (
-        params.status_filter = 'All'
-        OR row_data.unified_status = params.status_filter
+        cardinality(params.status_filters) = 0
+        OR row_data.unified_status = ANY(params.status_filters)
       )
       AND (
-        params.package_filter = 'All'
-        OR params.package_filter = ANY(row_data.main_service_names)
+        cardinality(params.package_filters) = 0
+        OR COALESCE(row_data.main_service_names, ARRAY[]::TEXT[]) && params.package_filters
       )
       AND (
-        params.freelance_filter = 'All'
-        OR params.freelance_filter = ANY(row_data.freelancer_names)
+        cardinality(params.freelance_filters) = 0
+        OR COALESCE(row_data.freelancer_names, ARRAY[]::TEXT[]) && params.freelance_filters
       )
       AND (
-        params.event_type_filter = 'All'
-        OR row_data.event_type = params.event_type_filter
+        cardinality(params.event_type_filters) = 0
+        OR row_data.event_type = ANY(params.event_type_filters)
       )
       AND (
         params.date_from_filter = ''
         OR (
-          row_data.session_date IS NOT NULL
-          AND (row_data.session_date AT TIME ZONE 'UTC')::date::text >= params.date_from_filter
+          CASE
+            WHEN params.date_basis = 'booking_date' THEN
+              row_data.booking_date IS NOT NULL
+              AND row_data.booking_date::text >= params.date_from_filter
+            ELSE
+              row_data.session_date IS NOT NULL
+              AND (row_data.session_date AT TIME ZONE params.time_zone)::date::text >= params.date_from_filter
+          END
         )
       )
       AND (
         params.date_to_filter = ''
         OR (
-          row_data.session_date IS NOT NULL
-          AND (row_data.session_date AT TIME ZONE 'UTC')::date::text <= params.date_to_filter
+          CASE
+            WHEN params.date_basis = 'booking_date' THEN
+              row_data.booking_date IS NOT NULL
+              AND row_data.booking_date::text <= params.date_to_filter
+            ELSE
+              row_data.session_date IS NOT NULL
+              AND (row_data.session_date AT TIME ZONE params.time_zone)::date::text <= params.date_to_filter
+          END
         )
       )
       AND NOT EXISTS (

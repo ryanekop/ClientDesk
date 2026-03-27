@@ -4,6 +4,7 @@ import * as React from "react";
 import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
@@ -160,15 +161,17 @@ const BOOKING_SORT_ORDERS = [
     "session_oldest",
 ] as const;
 type BookingSortOrder = (typeof BOOKING_SORT_ORDERS)[number];
+type BookingDateBasis = "booking_date" | "session_date";
 
 type BookingFilterStoragePayload = {
     searchQuery: string;
-    statusFilter: string;
-    packageFilter: string;
-    freelanceFilter: string;
-    eventTypeFilter: string;
+    statusFilter: string[] | string;
+    packageFilter: string[] | string;
+    freelanceFilter: string[] | string;
+    eventTypeFilter: string[] | string;
     dateFromFilter: string;
     dateToFilter: string;
+    dateBasis?: BookingDateBasis;
     extraFieldFilters: Record<string, string>;
     sortOrder: BookingSortOrder;
 };
@@ -205,6 +208,153 @@ function normalizeItemsPerPageValue(value: unknown) {
     )
         ? parsed
         : DEFAULT_ITEMS_PER_PAGE;
+}
+
+function normalizeSelectedFilterValues(
+    values: string[],
+    options: string[],
+) {
+    const optionSet = new Set(options);
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+
+    for (const item of values) {
+        if (!optionSet.has(item) || seen.has(item)) continue;
+        seen.add(item);
+        normalized.push(item);
+    }
+
+    return normalized;
+}
+
+function parseLegacyOrMultiFilterValue(value: unknown) {
+    if (Array.isArray(value)) {
+        const seen = new Set<string>();
+        const normalized: string[] = [];
+        value.forEach((item) => {
+            if (typeof item !== "string") return;
+            const trimmed = item.trim();
+            if (!trimmed || trimmed.toLowerCase() === "all" || seen.has(trimmed)) return;
+            seen.add(trimmed);
+            normalized.push(trimmed);
+        });
+        return normalized;
+    }
+
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed || trimmed.toLowerCase() === "all") return [];
+        return [trimmed];
+    }
+
+    return [] as string[];
+}
+
+function arraysAreEqual(a: string[], b: string[]) {
+    if (a.length !== b.length) return false;
+    return a.every((value, index) => value === b[index]);
+}
+
+function parseDateBasisValue(value: unknown): BookingDateBasis {
+    return value === "session_date" ? "session_date" : "booking_date";
+}
+
+type FilterMultiSelectProps = {
+    allLabel: string;
+    emptyOptionsLabel: string;
+    options: string[];
+    value: string[];
+    onChange: (next: string[]) => void;
+    className?: string;
+};
+
+function FilterMultiSelect({
+    allLabel,
+    emptyOptionsLabel,
+    options,
+    value,
+    onChange,
+    className,
+}: FilterMultiSelectProps) {
+    const [open, setOpen] = React.useState(false);
+    const rootRef = React.useRef<HTMLDivElement | null>(null);
+
+    React.useEffect(() => {
+        if (!open) return;
+        function handleOutsideClick(event: MouseEvent) {
+            const target = event.target as Node | null;
+            if (target && rootRef.current?.contains(target)) return;
+            setOpen(false);
+        }
+        function handleEscape(event: KeyboardEvent) {
+            if (event.key === "Escape") setOpen(false);
+        }
+        document.addEventListener("mousedown", handleOutsideClick);
+        document.addEventListener("keydown", handleEscape);
+        return () => {
+            document.removeEventListener("mousedown", handleOutsideClick);
+            document.removeEventListener("keydown", handleEscape);
+        };
+    }, [open]);
+
+    const selectedSet = React.useMemo(() => new Set(value), [value]);
+
+    const triggerLabel =
+        value.length === 0
+            ? allLabel
+            : value.length === 1
+                ? value[0]
+                : `${value.length} dipilih`;
+
+    return (
+        <div ref={rootRef} className={cn("relative", className)}>
+            <button
+                type="button"
+                onClick={() => setOpen((prev) => !prev)}
+                className="h-9 w-full rounded-md border border-input bg-background/50 px-3 text-sm outline-none transition-colors hover:bg-muted/30 focus-visible:ring-1 focus-visible:ring-ring"
+            >
+                <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-left">{triggerLabel}</span>
+                    <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+                </span>
+            </button>
+            {open && (
+                <div className="absolute left-0 top-[calc(100%+0.35rem)] z-50 w-full rounded-md border bg-popover p-2 shadow-lg">
+                    {options.length === 0 ? (
+                        <p className="px-2 py-1 text-xs text-muted-foreground">
+                            {emptyOptionsLabel}
+                        </p>
+                    ) : (
+                        <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
+                            {options.map((option) => {
+                                const checked = selectedSet.has(option);
+                                return (
+                                    <button
+                                        key={option}
+                                        type="button"
+                                        onClick={() => {
+                                            if (checked) {
+                                                onChange(value.filter((item) => item !== option));
+                                                return;
+                                            }
+                                            onChange([...value, option]);
+                                        }}
+                                        className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/60"
+                                    >
+                                        <AppCheckbox
+                                            checked={checked}
+                                            className="mt-0.5 pointer-events-none"
+                                        />
+                                        <span className="leading-5">{option}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
 }
 
 type SavedTemplate = {
@@ -278,12 +428,13 @@ export default function BookingsPage() {
 
     // Filters & Search
     const [searchQuery, setSearchQuery] = React.useState("");
-    const [statusFilter, setStatusFilter] = React.useState("All");
-    const [packageFilter, setPackageFilter] = React.useState("All");
-    const [freelanceFilter, setFreelanceFilter] = React.useState("All");
-    const [eventTypeFilter, setEventTypeFilter] = React.useState("All");
+    const [statusFilter, setStatusFilter] = React.useState<string[]>([]);
+    const [packageFilter, setPackageFilter] = React.useState<string[]>([]);
+    const [freelanceFilter, setFreelanceFilter] = React.useState<string[]>([]);
+    const [eventTypeFilter, setEventTypeFilter] = React.useState<string[]>([]);
     const [dateFromFilter, setDateFromFilter] = React.useState("");
     const [dateToFilter, setDateToFilter] = React.useState("");
+    const [dateBasis, setDateBasis] = React.useState<BookingDateBasis>("booking_date");
     const [extraFieldFilters, setExtraFieldFilters] = React.useState<Record<string, string>>({});
     const [sortOrder, setSortOrder] = React.useState<BookingSortOrder>("booking_newest");
     const [showFilterPanel, setShowFilterPanel] = React.useState(false);
@@ -294,6 +445,16 @@ export default function BookingsPage() {
     const [availableEventTypes, setAvailableEventTypes] = React.useState<string[]>([]);
     const [metadataRows, setMetadataRows] = React.useState<Array<{ event_type?: string | null; extra_fields?: Record<string, unknown> | null }>>([]);
     const [extraFieldRows, setExtraFieldRows] = React.useState<Array<{ event_type?: string | null; extra_fields?: Record<string, unknown> | null }>>([]);
+    const browserTimeZone = React.useMemo(() => {
+        try {
+            const resolved = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            return typeof resolved === "string" && resolved.trim().length > 0
+                ? resolved
+                : "UTC";
+        } catch {
+            return "UTC";
+        }
+    }, []);
 
     // Modals
     const [statusModal, setStatusModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
@@ -390,12 +551,13 @@ export default function BookingsPage() {
     }, [closeDesktopMenus, closeMobileHeaderActionMenu]);
 
     const resetFilters = React.useCallback(() => {
-        setStatusFilter("All");
-        setPackageFilter("All");
-        setFreelanceFilter("All");
-        setEventTypeFilter("All");
+        setStatusFilter([]);
+        setPackageFilter([]);
+        setFreelanceFilter([]);
+        setEventTypeFilter([]);
         setDateFromFilter("");
         setDateToFilter("");
+        setDateBasis("booking_date");
         setExtraFieldFilters({});
         setSearchQuery("");
         setSortOrder("booking_newest");
@@ -438,16 +600,26 @@ export default function BookingsPage() {
         }
 
         try {
+            const singleStatusFilter = statusFilter.length === 1 ? statusFilter[0] : "All";
+            const singlePackageFilter = packageFilter.length === 1 ? packageFilter[0] : "All";
+            const singleFreelanceFilter = freelanceFilter.length === 1 ? freelanceFilter[0] : "All";
+            const singleEventTypeFilter = eventTypeFilter.length === 1 ? eventTypeFilter[0] : "All";
             const params = new URLSearchParams({
                 page: String(currentPage),
                 perPage: String(itemsPerPage),
                 search: searchQuery,
-                status: statusFilter,
-                package: packageFilter,
-                freelance: freelanceFilter,
-                eventType: eventTypeFilter,
+                status: singleStatusFilter,
+                package: singlePackageFilter,
+                freelance: singleFreelanceFilter,
+                eventType: singleEventTypeFilter,
+                statusFilters: JSON.stringify(statusFilter),
+                packageFilters: JSON.stringify(packageFilter),
+                freelanceFilters: JSON.stringify(freelanceFilter),
+                eventTypeFilters: JSON.stringify(eventTypeFilter),
                 dateFrom: dateFromFilter,
                 dateTo: dateToFilter,
+                dateBasis,
+                timeZone: browserTimeZone,
                 sortOrder,
                 extraFilters: JSON.stringify(extraFieldFilters),
             });
@@ -492,6 +664,7 @@ export default function BookingsPage() {
         currentPage,
         dateFromFilter,
         dateToFilter,
+        dateBasis,
         eventTypeFilter,
         extraFieldFilters,
         filtersHydrated,
@@ -502,6 +675,7 @@ export default function BookingsPage() {
         searchQuery,
         sortOrder,
         statusFilter,
+        browserTimeZone,
     ]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
@@ -562,12 +736,13 @@ export default function BookingsPage() {
             };
 
             setSearchQuery(readString("searchQuery", ""));
-            setStatusFilter(readString("statusFilter", "All") || "All");
-            setPackageFilter(readString("packageFilter", "All") || "All");
-            setFreelanceFilter(readString("freelanceFilter", "All") || "All");
-            setEventTypeFilter(readString("eventTypeFilter", "All") || "All");
+            setStatusFilter(parseLegacyOrMultiFilterValue(parsed.statusFilter));
+            setPackageFilter(parseLegacyOrMultiFilterValue(parsed.packageFilter));
+            setFreelanceFilter(parseLegacyOrMultiFilterValue(parsed.freelanceFilter));
+            setEventTypeFilter(parseLegacyOrMultiFilterValue(parsed.eventTypeFilter));
             setDateFromFilter(readString("dateFromFilter", ""));
             setDateToFilter(readString("dateToFilter", ""));
+            setDateBasis(parseDateBasisValue(parsed.dateBasis));
 
             const rawExtraFieldFilters = parsed.extraFieldFilters;
             if (isObjectRecord(rawExtraFieldFilters)) {
@@ -1377,17 +1552,21 @@ export default function BookingsPage() {
         }
     }
 
-    const activeExtraFilterFields = React.useMemo<BookingFilterField[]>(() => {
-        if (eventTypeFilter === "All") return [];
+    const selectedSingleEventType = eventTypeFilter.length === 1
+        ? eventTypeFilter[0]
+        : null;
 
-        const builtInFields: BookingFilterField[] = getEventExtraFields(eventTypeFilter).map((field) => ({
+    const activeExtraFilterFields = React.useMemo<BookingFilterField[]>(() => {
+        if (!selectedSingleEventType) return [];
+
+        const builtInFields: BookingFilterField[] = getEventExtraFields(selectedSingleEventType).map((field) => ({
             key: field.key,
             label: field.label,
             mode: "contains",
         }));
         const customFields = getGroupedCustomLayoutSections(
-            formSectionsByEventType[eventTypeFilter] || formSectionsByEventType.Umum || [],
-            eventTypeFilter,
+            formSectionsByEventType[selectedSingleEventType] || formSectionsByEventType.Umum || [],
+            selectedSingleEventType,
         )
             .flatMap((section) => section.items)
             .filter((item): item is Extract<FormLayoutItem, { kind: "custom_field" }> => item.kind === "custom_field")
@@ -1412,25 +1591,32 @@ export default function BookingsPage() {
                 ))
                 : undefined,
         }));
-    }, [eventTypeFilter, extraFieldRows, formSectionsByEventType]);
+    }, [extraFieldRows, formSectionsByEventType, selectedSingleEventType]);
 
     React.useEffect(() => {
         if (!filtersHydrated || loading || refreshing) return;
 
-        if (statusFilter !== "All" && !statusOpts.includes(statusFilter)) {
-            setStatusFilter("All");
+        const normalizedStatusFilter = normalizeSelectedFilterValues(statusFilter, statusOpts);
+        if (!arraysAreEqual(normalizedStatusFilter, statusFilter)) {
+            setStatusFilter(normalizedStatusFilter);
         }
-        if (packageFilter !== "All" && !packages.includes(packageFilter)) {
-            setPackageFilter("All");
+        const normalizedPackageFilter = normalizeSelectedFilterValues(packageFilter, packages);
+        if (!arraysAreEqual(normalizedPackageFilter, packageFilter)) {
+            setPackageFilter(normalizedPackageFilter);
         }
-        if (freelanceFilter !== "All" && !freelancerNames.includes(freelanceFilter)) {
-            setFreelanceFilter("All");
+        const normalizedFreelanceFilter = normalizeSelectedFilterValues(freelanceFilter, freelancerNames);
+        if (!arraysAreEqual(normalizedFreelanceFilter, freelanceFilter)) {
+            setFreelanceFilter(normalizedFreelanceFilter);
         }
-        if (eventTypeFilter !== "All" && !availableEventTypes.includes(eventTypeFilter)) {
-            setEventTypeFilter("All");
+        const normalizedEventTypeFilter = normalizeSelectedFilterValues(eventTypeFilter, availableEventTypes);
+        if (!arraysAreEqual(normalizedEventTypeFilter, eventTypeFilter)) {
+            setEventTypeFilter(normalizedEventTypeFilter);
         }
 
         setExtraFieldFilters((prev) => {
+            if (!selectedSingleEventType) {
+                return Object.keys(prev).length > 0 ? {} : prev;
+            }
             const fieldMap = new Map(
                 activeExtraFilterFields.map((field) => [field.key, field]),
             );
@@ -1463,16 +1649,17 @@ export default function BookingsPage() {
     }, [
         activeExtraFilterFields,
         availableEventTypes,
-        eventTypeFilter,
         filtersHydrated,
-        freelanceFilter,
         freelancerNames,
         loading,
-        packageFilter,
         packages,
         refreshing,
+        selectedSingleEventType,
         statusFilter,
         statusOpts,
+        packageFilter,
+        freelanceFilter,
+        eventTypeFilter,
     ]);
 
     React.useEffect(() => {
@@ -1486,6 +1673,7 @@ export default function BookingsPage() {
             eventTypeFilter,
             dateFromFilter,
             dateToFilter,
+            dateBasis,
             extraFieldFilters,
             sortOrder,
         };
@@ -1499,6 +1687,7 @@ export default function BookingsPage() {
         currentUserId,
         dateFromFilter,
         dateToFilter,
+        dateBasis,
         eventTypeFilter,
         extraFieldFilters,
         filtersHydrated,
@@ -1511,7 +1700,7 @@ export default function BookingsPage() {
 
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, statusFilter, packageFilter, freelanceFilter, eventTypeFilter, dateFromFilter, dateToFilter, extraFieldFilters, sortOrder, itemsPerPage]);
+    }, [searchQuery, statusFilter, packageFilter, freelanceFilter, eventTypeFilter, dateFromFilter, dateToFilter, dateBasis, extraFieldFilters, sortOrder, itemsPerPage]);
 
     React.useEffect(() => {
         const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
@@ -1542,18 +1731,39 @@ export default function BookingsPage() {
         isLoading: loading,
         isRefreshing: refreshing,
     }), [currentPage, itemsPerPage, totalItems, loading, refreshing]);
+    const hasActiveFilters =
+        statusFilter.length > 0 ||
+        packageFilter.length > 0 ||
+        freelanceFilter.length > 0 ||
+        eventTypeFilter.length > 0 ||
+        Boolean(dateFromFilter) ||
+        Boolean(dateToFilter) ||
+        dateBasis !== "booking_date" ||
+        Object.values(extraFieldFilters).some(Boolean) ||
+        Boolean(searchQuery) ||
+        sortOrder !== "booking_newest";
 
     async function exportBookings() {
+        const singleStatusFilter = statusFilter.length === 1 ? statusFilter[0] : "All";
+        const singlePackageFilter = packageFilter.length === 1 ? packageFilter[0] : "All";
+        const singleFreelanceFilter = freelanceFilter.length === 1 ? freelanceFilter[0] : "All";
+        const singleEventTypeFilter = eventTypeFilter.length === 1 ? eventTypeFilter[0] : "All";
         const params = new URLSearchParams({
             page: "1",
             perPage: String(Math.max(totalItems, 1)),
             search: searchQuery,
-            status: statusFilter,
-            package: packageFilter,
-            freelance: freelanceFilter,
-            eventType: eventTypeFilter,
+            status: singleStatusFilter,
+            package: singlePackageFilter,
+            freelance: singleFreelanceFilter,
+            eventType: singleEventTypeFilter,
+            statusFilters: JSON.stringify(statusFilter),
+            packageFilters: JSON.stringify(packageFilter),
+            freelanceFilters: JSON.stringify(freelanceFilter),
+            eventTypeFilters: JSON.stringify(eventTypeFilter),
             dateFrom: dateFromFilter,
             dateTo: dateToFilter,
+            dateBasis,
+            timeZone: browserTimeZone,
             sortOrder,
             extraFilters: JSON.stringify(extraFieldFilters),
             export: "1",
@@ -1715,7 +1925,7 @@ export default function BookingsPage() {
             </PageHeader>
 
             {/* Search + Controls */}
-            <div className="space-y-3 sm:space-y-0">
+            <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center gap-2 sm:gap-3">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1743,7 +1953,7 @@ export default function BookingsPage() {
                                 <option value="session_newest">Urutkan: Jadwal Sesi Terdekat</option>
                                 <option value="session_oldest">Urutkan: Jadwal Sesi Terjauh</option>
                         </select>
-                        {(statusFilter !== "All" || packageFilter !== "All" || freelanceFilter !== "All" || eventTypeFilter !== "All" || dateFromFilter || dateToFilter || Object.values(extraFieldFilters).some(Boolean) || searchQuery || sortOrder !== "booking_newest") && (
+                        {hasActiveFilters && (
                             <button
                                 onClick={resetFilters}
                                 className="h-9 px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
@@ -1760,7 +1970,7 @@ export default function BookingsPage() {
                             <option value="session_newest">Urutkan: Jadwal Sesi Terdekat</option>
                             <option value="session_oldest">Urutkan: Jadwal Sesi Terjauh</option>
                     </select>
-                    {(statusFilter !== "All" || packageFilter !== "All" || freelanceFilter !== "All" || eventTypeFilter !== "All" || dateFromFilter || dateToFilter || Object.values(extraFieldFilters).some(Boolean) || searchQuery || sortOrder !== "booking_newest") && (
+                    {hasActiveFilters && (
                         <button
                             onClick={resetFilters}
                             className="h-9 w-full px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
@@ -1781,34 +1991,59 @@ export default function BookingsPage() {
                                 <input type="date" value={dateToFilter} onChange={e => setDateToFilter(e.target.value)} className={`${selectFilterClass} w-full`} />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Jenis acara</label>
-                                <select value={eventTypeFilter} onChange={e => setEventTypeFilter(e.target.value)} className={`${selectFilterClass} w-full`}>
-                                    <option value="All">Semua Acara</option>
-                                    {availableEventTypes.map(t => (
-                                        <option key={t} value={t!}>{t}</option>
-                                    ))}
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Basis Tanggal</label>
+                                <select
+                                    value={dateBasis}
+                                    onChange={e => setDateBasis(parseDateBasisValue(e.target.value))}
+                                    className={`${selectFilterClass} w-full`}
+                                >
+                                    <option value="booking_date">Booking Date</option>
+                                    <option value="session_date">Session Date</option>
                                 </select>
+                            </div>
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Jenis acara</label>
+                                <FilterMultiSelect
+                                    allLabel="Semua Acara"
+                                    emptyOptionsLabel="Belum ada jenis acara"
+                                    options={availableEventTypes}
+                                    value={eventTypeFilter}
+                                    onChange={setEventTypeFilter}
+                                    className="w-full"
+                                />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Status</label>
-                                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={`${selectFilterClass} w-full`}>
-                                    <option value="All">{tb("allStatus")}</option>
-                                    {statusOpts.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
+                                <FilterMultiSelect
+                                    allLabel={tb("allStatus")}
+                                    emptyOptionsLabel="Belum ada status"
+                                    options={statusOpts}
+                                    value={statusFilter}
+                                    onChange={setStatusFilter}
+                                    className="w-full"
+                                />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Paket</label>
-                                <select value={packageFilter} onChange={e => setPackageFilter(e.target.value)} className={`${selectFilterClass} w-full`}>
-                                    <option value="All">{tb("allPackages")}</option>
-                                    {packages.map(p => <option key={p} value={p}>{p}</option>)}
-                                </select>
+                                <FilterMultiSelect
+                                    allLabel={tb("allPackages")}
+                                    emptyOptionsLabel="Belum ada paket"
+                                    options={packages}
+                                    value={packageFilter}
+                                    onChange={setPackageFilter}
+                                    className="w-full"
+                                />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Freelance</label>
-                                <select value={freelanceFilter} onChange={e => setFreelanceFilter(e.target.value)} className={`${selectFilterClass} w-full`}>
-                                    <option value="All">{tb("allFreelance")}</option>
-                                    {freelancerNames.map(f => <option key={f} value={f}>{f}</option>)}
-                                </select>
+                                <FilterMultiSelect
+                                    allLabel={tb("allFreelance")}
+                                    emptyOptionsLabel="Belum ada freelance"
+                                    options={freelancerNames}
+                                    value={freelanceFilter}
+                                    onChange={setFreelanceFilter}
+                                    className="w-full"
+                                />
                             </div>
                             {activeExtraFilterFields.map((field) => (
                                 <div key={field.key} className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
