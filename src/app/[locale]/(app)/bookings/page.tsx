@@ -4,7 +4,6 @@ import * as React from "react";
 import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered, ChevronDown, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
@@ -30,6 +29,8 @@ import { TablePagination } from "@/components/ui/table-pagination";
 import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
 import { useSuccessToast } from "@/components/ui/success-toast";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
+import { FilterSingleSelect } from "@/components/ui/filter-single-select";
+import { BookingDateRangePicker } from "@/components/ui/booking-date-range-picker";
 import {
     getEventExtraFields,
 } from "@/utils/form-extra-fields";
@@ -238,7 +239,7 @@ function parseLegacyOrMultiFilterValue(value: unknown) {
             seen.add(trimmed);
             normalized.push(trimmed);
         });
-        return normalized;
+        return normalized.length > 0 ? [normalized[0]] : [];
     }
 
     if (typeof value === "string") {
@@ -250,6 +251,11 @@ function parseLegacyOrMultiFilterValue(value: unknown) {
     return [] as string[];
 }
 
+function normalizeSingleSelectedFilterValues(values: string[], options: string[]) {
+    const normalized = normalizeSelectedFilterValues(values, options);
+    return normalized.length > 0 ? [normalized[0]] : [];
+}
+
 function arraysAreEqual(a: string[], b: string[]) {
     if (a.length !== b.length) return false;
     return a.every((value, index) => value === b[index]);
@@ -259,102 +265,11 @@ function parseDateBasisValue(value: unknown): BookingDateBasis {
     return value === "session_date" ? "session_date" : "booking_date";
 }
 
-type FilterMultiSelectProps = {
-    allLabel: string;
-    emptyOptionsLabel: string;
-    options: string[];
-    value: string[];
-    onChange: (next: string[]) => void;
-    className?: string;
-};
-
-function FilterMultiSelect({
-    allLabel,
-    emptyOptionsLabel,
-    options,
-    value,
-    onChange,
-    className,
-}: FilterMultiSelectProps) {
-    const [open, setOpen] = React.useState(false);
-    const rootRef = React.useRef<HTMLDivElement | null>(null);
-
-    React.useEffect(() => {
-        if (!open) return;
-        function handleOutsideClick(event: MouseEvent) {
-            const target = event.target as Node | null;
-            if (target && rootRef.current?.contains(target)) return;
-            setOpen(false);
-        }
-        function handleEscape(event: KeyboardEvent) {
-            if (event.key === "Escape") setOpen(false);
-        }
-        document.addEventListener("mousedown", handleOutsideClick);
-        document.addEventListener("keydown", handleEscape);
-        return () => {
-            document.removeEventListener("mousedown", handleOutsideClick);
-            document.removeEventListener("keydown", handleEscape);
-        };
-    }, [open]);
-
-    const selectedSet = React.useMemo(() => new Set(value), [value]);
-
-    const triggerLabel =
-        value.length === 0
-            ? allLabel
-            : value.length === 1
-                ? value[0]
-                : `${value.length} dipilih`;
-
-    return (
-        <div ref={rootRef} className={cn("relative", className)}>
-            <button
-                type="button"
-                onClick={() => setOpen((prev) => !prev)}
-                className="h-9 w-full rounded-md border border-input bg-background/50 px-3 text-sm outline-none transition-colors hover:bg-muted/30 focus-visible:ring-1 focus-visible:ring-ring"
-            >
-                <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-left">{triggerLabel}</span>
-                    <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-                </span>
-            </button>
-            {open && (
-                <div className="absolute left-0 top-[calc(100%+0.35rem)] z-50 w-full rounded-md border bg-popover p-2 shadow-lg">
-                    {options.length === 0 ? (
-                        <p className="px-2 py-1 text-xs text-muted-foreground">
-                            {emptyOptionsLabel}
-                        </p>
-                    ) : (
-                        <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
-                            {options.map((option) => {
-                                const checked = selectedSet.has(option);
-                                return (
-                                    <button
-                                        key={option}
-                                        type="button"
-                                        onClick={() => {
-                                            if (checked) {
-                                                onChange(value.filter((item) => item !== option));
-                                                return;
-                                            }
-                                            onChange([...value, option]);
-                                        }}
-                                        className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted/60"
-                                    >
-                                        <AppCheckbox
-                                            checked={checked}
-                                            className="mt-0.5 pointer-events-none"
-                                        />
-                                        <span className="leading-5">{option}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
+function parseSortOrderValue(value: unknown): BookingSortOrder {
+    if (typeof value === "string" && BOOKING_SORT_ORDERS.includes(value as BookingSortOrder)) {
+        return value as BookingSortOrder;
+    }
+    return "booking_newest";
 }
 
 type SavedTemplate = {
@@ -758,13 +673,7 @@ export default function BookingsPage() {
                 setExtraFieldFilters({});
             }
 
-            const parsedSortOrder = parsed.sortOrder;
-            setSortOrder(
-                typeof parsedSortOrder === "string" &&
-                    BOOKING_SORT_ORDERS.includes(parsedSortOrder as BookingSortOrder)
-                    ? (parsedSortOrder as BookingSortOrder)
-                    : "booking_newest",
-            );
+            setSortOrder(parseSortOrderValue(parsed.sortOrder));
         } catch {
             resetFilters();
         } finally {
@@ -1598,19 +1507,19 @@ export default function BookingsPage() {
     React.useEffect(() => {
         if (!filtersHydrated || loading || refreshing) return;
 
-        const normalizedStatusFilter = normalizeSelectedFilterValues(statusFilter, statusOpts);
+        const normalizedStatusFilter = normalizeSingleSelectedFilterValues(statusFilter, statusOpts);
         if (!arraysAreEqual(normalizedStatusFilter, statusFilter)) {
             setStatusFilter(normalizedStatusFilter);
         }
-        const normalizedPackageFilter = normalizeSelectedFilterValues(packageFilter, packages);
+        const normalizedPackageFilter = normalizeSingleSelectedFilterValues(packageFilter, packages);
         if (!arraysAreEqual(normalizedPackageFilter, packageFilter)) {
             setPackageFilter(normalizedPackageFilter);
         }
-        const normalizedFreelanceFilter = normalizeSelectedFilterValues(freelanceFilter, freelancerNames);
+        const normalizedFreelanceFilter = normalizeSingleSelectedFilterValues(freelanceFilter, freelancerNames);
         if (!arraysAreEqual(normalizedFreelanceFilter, freelanceFilter)) {
             setFreelanceFilter(normalizedFreelanceFilter);
         }
-        const normalizedEventTypeFilter = normalizeSelectedFilterValues(eventTypeFilter, availableEventTypes);
+        const normalizedEventTypeFilter = normalizeSingleSelectedFilterValues(eventTypeFilter, availableEventTypes);
         if (!arraysAreEqual(normalizedEventTypeFilter, eventTypeFilter)) {
             setEventTypeFilter(normalizedEventTypeFilter);
         }
@@ -1794,6 +1703,55 @@ export default function BookingsPage() {
         XLSX.writeFile(wb, `bookings_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
     }
 
+    const sortOptions = React.useMemo(
+        () => [
+            { value: "booking_newest", label: "Urutkan: Booking Terbaru" },
+            { value: "booking_oldest", label: "Urutkan: Booking Terlama" },
+            { value: "session_newest", label: "Urutkan: Jadwal Sesi Terdekat" },
+            { value: "session_oldest", label: "Urutkan: Jadwal Sesi Terjauh" },
+        ],
+        [],
+    );
+    const dateBasisOptions = React.useMemo(
+        () => [
+            { value: "booking_date", label: "Booking Date" },
+            { value: "session_date", label: "Session Date" },
+        ],
+        [],
+    );
+    const eventTypeFilterOptions = React.useMemo(
+        () => [
+            { value: "", label: "Semua Acara" },
+            ...availableEventTypes.map((eventType) => ({ value: eventType, label: eventType })),
+        ],
+        [availableEventTypes],
+    );
+    const statusFilterOptions = React.useMemo(
+        () => [
+            { value: "", label: tb("allStatus") },
+            ...statusOpts.map((status) => ({ value: status, label: status })),
+        ],
+        [statusOpts, tb],
+    );
+    const packageFilterOptions = React.useMemo(
+        () => [
+            { value: "", label: tb("allPackages") },
+            ...packages.map((packageName) => ({ value: packageName, label: packageName })),
+        ],
+        [packages, tb],
+    );
+    const freelanceFilterOptions = React.useMemo(
+        () => [
+            { value: "", label: tb("allFreelance") },
+            ...freelancerNames.map((freelanceName) => ({ value: freelanceName, label: freelanceName })),
+        ],
+        [freelancerNames, tb],
+    );
+    const selectedEventTypeFilterValue = eventTypeFilter[0] || "";
+    const selectedStatusFilterValue = statusFilter[0] || "";
+    const selectedPackageFilterValue = packageFilter[0] || "";
+    const selectedFreelanceFilterValue = freelanceFilter[0] || "";
+
     return (
         <div className="space-y-6">
             {successToastNode}
@@ -1954,12 +1912,14 @@ export default function BookingsPage() {
                         <span className="hidden sm:inline">Filter</span>
                     </Button>
                     <div className="hidden sm:flex sm:flex-wrap sm:items-center sm:gap-3">
-                        <select value={sortOrder} onChange={e => setSortOrder(e.target.value as BookingSortOrder)} className={`${selectFilterClass} w-auto`}>
-                                <option value="booking_newest">Urutkan: Booking Terbaru</option>
-                                <option value="booking_oldest">Urutkan: Booking Terlama</option>
-                                <option value="session_newest">Urutkan: Jadwal Sesi Terdekat</option>
-                                <option value="session_oldest">Urutkan: Jadwal Sesi Terjauh</option>
-                        </select>
+                        <FilterSingleSelect
+                            value={sortOrder}
+                            onChange={(nextValue) => setSortOrder(parseSortOrderValue(nextValue))}
+                            options={sortOptions}
+                            placeholder={sortOptions[0]?.label || "Urutkan"}
+                            className="w-[260px]"
+                            mobileTitle={tb("sortMenuTitle")}
+                        />
                         {hasActiveFilters && (
                             <button
                                 onClick={resetFilters}
@@ -1971,12 +1931,14 @@ export default function BookingsPage() {
                     </div>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:hidden">
-                    <select value={sortOrder} onChange={e => setSortOrder(e.target.value as BookingSortOrder)} className={`${selectFilterClass} w-full`}>
-                            <option value="booking_newest">Urutkan: Booking Terbaru</option>
-                            <option value="booking_oldest">Urutkan: Booking Terlama</option>
-                            <option value="session_newest">Urutkan: Jadwal Sesi Terdekat</option>
-                            <option value="session_oldest">Urutkan: Jadwal Sesi Terjauh</option>
-                    </select>
+                    <FilterSingleSelect
+                        value={sortOrder}
+                        onChange={(nextValue) => setSortOrder(parseSortOrderValue(nextValue))}
+                        options={sortOptions}
+                        placeholder={sortOptions[0]?.label || "Urutkan"}
+                        className="w-full"
+                        mobileTitle={tb("sortMenuTitle")}
+                    />
                     {hasActiveFilters && (
                         <button
                             onClick={resetFilters}
@@ -1990,66 +1952,80 @@ export default function BookingsPage() {
                     <div className="rounded-xl border bg-card p-5 shadow-sm">
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Tanggal dari</label>
-                                <input type="date" value={dateFromFilter} onChange={e => setDateFromFilter(e.target.value)} className={`${selectFilterClass} w-full`} />
-                            </div>
-                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Tanggal sampai</label>
-                                <input type="date" value={dateToFilter} onChange={e => setDateToFilter(e.target.value)} className={`${selectFilterClass} w-full`} />
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{tb("dateRangeLabel")}</label>
+                                <BookingDateRangePicker
+                                    value={{ from: dateFromFilter, to: dateToFilter }}
+                                    onApply={({ from, to }) => {
+                                        setDateFromFilter(from);
+                                        setDateToFilter(to);
+                                    }}
+                                    onClear={() => {
+                                        setDateFromFilter("");
+                                        setDateToFilter("");
+                                    }}
+                                    locale={locale === "en" ? "en" : "id"}
+                                    placeholder={tb("dateRangePlaceholder")}
+                                    applyLabel={tb("apply")}
+                                    clearLabel={tb("clear")}
+                                    startLabel={tb("start")}
+                                    endLabel={tb("end")}
+                                    mobileTitle={tb("dateRangePickerTitle")}
+                                    className="w-full"
+                                />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Basis Tanggal</label>
-                                <select
+                                <FilterSingleSelect
                                     value={dateBasis}
-                                    onChange={e => setDateBasis(parseDateBasisValue(e.target.value))}
-                                    className={`${selectFilterClass} w-full`}
-                                >
-                                    <option value="booking_date">Booking Date</option>
-                                    <option value="session_date">Session Date</option>
-                                </select>
+                                    onChange={(nextValue) => setDateBasis(parseDateBasisValue(nextValue))}
+                                    options={dateBasisOptions}
+                                    placeholder={dateBasisOptions[0]?.label || "Booking Date"}
+                                    className="w-full"
+                                    mobileTitle="Basis Tanggal"
+                                />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Jenis acara</label>
-                                <FilterMultiSelect
-                                    allLabel="Semua Acara"
-                                    emptyOptionsLabel="Belum ada jenis acara"
-                                    options={availableEventTypes}
-                                    value={eventTypeFilter}
-                                    onChange={setEventTypeFilter}
+                                <FilterSingleSelect
+                                    value={selectedEventTypeFilterValue}
+                                    onChange={(nextValue) => setEventTypeFilter(nextValue ? [nextValue] : [])}
+                                    options={eventTypeFilterOptions}
+                                    placeholder="Semua Acara"
                                     className="w-full"
+                                    mobileTitle="Jenis acara"
                                 />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Status</label>
-                                <FilterMultiSelect
-                                    allLabel={tb("allStatus")}
-                                    emptyOptionsLabel="Belum ada status"
-                                    options={statusOpts}
-                                    value={statusFilter}
-                                    onChange={setStatusFilter}
+                                <FilterSingleSelect
+                                    value={selectedStatusFilterValue}
+                                    onChange={(nextValue) => setStatusFilter(nextValue ? [nextValue] : [])}
+                                    options={statusFilterOptions}
+                                    placeholder={tb("allStatus")}
                                     className="w-full"
+                                    mobileTitle="Status"
                                 />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Paket</label>
-                                <FilterMultiSelect
-                                    allLabel={tb("allPackages")}
-                                    emptyOptionsLabel="Belum ada paket"
-                                    options={packages}
-                                    value={packageFilter}
-                                    onChange={setPackageFilter}
+                                <FilterSingleSelect
+                                    value={selectedPackageFilterValue}
+                                    onChange={(nextValue) => setPackageFilter(nextValue ? [nextValue] : [])}
+                                    options={packageFilterOptions}
+                                    placeholder={tb("allPackages")}
                                     className="w-full"
+                                    mobileTitle="Paket"
                                 />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Freelance</label>
-                                <FilterMultiSelect
-                                    allLabel={tb("allFreelance")}
-                                    emptyOptionsLabel="Belum ada freelance"
-                                    options={freelancerNames}
-                                    value={freelanceFilter}
-                                    onChange={setFreelanceFilter}
+                                <FilterSingleSelect
+                                    value={selectedFreelanceFilterValue}
+                                    onChange={(nextValue) => setFreelanceFilter(nextValue ? [nextValue] : [])}
+                                    options={freelanceFilterOptions}
+                                    placeholder={tb("allFreelance")}
                                     className="w-full"
+                                    mobileTitle="Freelance"
                                 />
                             </div>
                             {activeExtraFilterFields.map((field) => (

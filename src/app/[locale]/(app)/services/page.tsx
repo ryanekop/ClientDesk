@@ -58,6 +58,7 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { TablePagination } from "@/components/ui/table-pagination";
+import { FilterSingleSelect } from "@/components/ui/filter-single-select";
 import {
   getActiveEventTypes,
   getBuiltInEventTypes,
@@ -1114,6 +1115,13 @@ export default function ServicesPage() {
         isShowAllPackagesEventType(eventType) || set.has(eventType),
     );
   }, [eventTypeOptions, usedEventTypeOptions]);
+  const eventFilterOptions = React.useMemo(
+    () => [
+      { value: "", label: ts("allCategories") },
+      ...usedEventTypes.map((eventType) => ({ value: eventType, label: eventType })),
+    ],
+    [ts, usedEventTypes],
+  );
 
   const groupedServices = React.useMemo(() => splitServicesByGroup(services), [services]);
   const displayedMainServices = isReorderMode
@@ -1366,18 +1374,15 @@ export default function ServicesPage() {
               </button>
             ) : null}
           </div>
-          <select
+          <FilterSingleSelect
             value={selectedEventFilter}
-            onChange={(event) => setSelectedEventFilter(event.target.value)}
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer sm:w-auto"
-          >
-            <option value="">{ts("allCategories")}</option>
-            {usedEventTypes.map((eventType) => (
-              <option key={eventType} value={eventType}>
-                {eventType}
-              </option>
-            ))}
-          </select>
+            onChange={(nextValue) => setSelectedEventFilter(nextValue)}
+            options={eventFilterOptions}
+            placeholder={ts("allCategories")}
+            className="w-full sm:w-[220px]"
+            triggerClassName="h-10 rounded-lg bg-background px-3 shadow-xs"
+            mobileTitle={ts("allCategories")}
+          />
         </div>
       ) : null}
 

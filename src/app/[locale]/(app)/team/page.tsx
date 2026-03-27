@@ -10,6 +10,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
+import { FilterSingleSelect } from "@/components/ui/filter-single-select";
 import {
     PageHeader,
     PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME,
@@ -373,7 +374,6 @@ export default function TeamPage() {
         openWhatsAppUrl(buildWhatsAppUrl(cleaned));
     }
 
-    const selectFilterClass = "h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring cursor-pointer";
     const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 
     React.useEffect(() => {
@@ -392,6 +392,13 @@ export default function TeamPage() {
         [columns],
     );
     const hasActiveListFilters = searchQuery.trim().length > 0 || tagFilter !== "All";
+    const tagFilterOptions = React.useMemo(
+        () => [
+            { value: "All", label: "Semua Tag" },
+            ...availableTags.map((tag) => ({ value: tag, label: tag })),
+        ],
+        [availableTags],
+    );
     const showListControls =
         !loading &&
         (totalItems > 0 || hasActiveListFilters || availableTags.length > 0);
@@ -630,10 +637,14 @@ export default function TeamPage() {
                         )}
                     </div>
                     {availableTags.length > 0 && (
-                        <select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className={`${selectFilterClass} w-full sm:w-auto`}>
-                            <option value="All">Semua Tag</option>
-                            {availableTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
-                        </select>
+                        <FilterSingleSelect
+                            value={tagFilter}
+                            onChange={(nextValue) => setTagFilter(nextValue)}
+                            options={tagFilterOptions}
+                            placeholder="Semua Tag"
+                            className="w-full sm:w-[220px]"
+                            mobileTitle="Filter Tag"
+                        />
                     )}
                 </div>
             )}

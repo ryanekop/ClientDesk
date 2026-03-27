@@ -71,6 +71,7 @@ import {
     preopenWindowForDeferredNavigation,
 } from "@/utils/whatsapp-link";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
+import { FilterSingleSelect } from "@/components/ui/filter-single-select";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
 
@@ -135,7 +136,6 @@ const FINANCE_FILTER_STORAGE_PREFIX = "clientdesk:finance:filters";
 const FINANCE_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:finance:items_per_page";
 const FINANCE_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const FINANCE_DEFAULT_ITEMS_PER_PAGE = 10;
-const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
 
 type FinancePageMetadata = {
     studioName: string;
@@ -1282,6 +1282,28 @@ export default function FinancePage() {
         filter !== "all" ||
         packageFilter !== "All" ||
         bookingStatusFilter !== "All";
+    const financeStatusOptions = React.useMemo(
+        () => [
+            { value: "all", label: t("semua") },
+            { value: "pending", label: t("belumLunas") },
+            { value: "paid", label: t("lunas") },
+        ],
+        [t],
+    );
+    const packageFilterOptions = React.useMemo(
+        () => [
+            { value: "All", label: t("allPackages") },
+            ...packageOptions.map((packageName) => ({ value: packageName, label: packageName })),
+        ],
+        [packageOptions, t],
+    );
+    const bookingStatusFilterOptions = React.useMemo(
+        () => [
+            { value: "All", label: t("allBookingStatuses") },
+            ...bookingStatusOptions.map((statusOption) => ({ value: statusOption, label: statusOption })),
+        ],
+        [bookingStatusOptions, t],
+    );
 
     const monthlyRevenueLabel = React.useMemo(
         () =>
@@ -1543,47 +1565,38 @@ export default function FinancePage() {
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-32 md:shrink-0 xl:w-36">{t("financeStatusFilterLabel")}</label>
-                                <select
+                                <FilterSingleSelect
                                     value={filter}
-                                    onChange={(event) => setFilter(normalizeFinanceFilterValue(event.target.value))}
-                                    className={`${selectFilterClass} w-full`}
-                                >
-                                    <option value="all">{t("semua")}</option>
-                                    <option value="pending">{t("belumLunas")}</option>
-                                    <option value="paid">{t("lunas")}</option>
-                                </select>
+                                    onChange={(nextValue) => setFilter(normalizeFinanceFilterValue(nextValue))}
+                                    options={financeStatusOptions}
+                                    placeholder={t("financeStatusFilterLabel")}
+                                    className="w-full"
+                                    mobileTitle={t("financeStatusFilterLabel")}
+                                />
                             </div>
 
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-32 md:shrink-0 xl:w-36">{t("packageFilterLabel")}</label>
-                                <select
+                                <FilterSingleSelect
                                     value={packageFilter}
-                                    onChange={(event) => setPackageFilter(event.target.value)}
-                                    className={`${selectFilterClass} w-full`}
-                                >
-                                    <option value="All">{t("allPackages")}</option>
-                                    {packageOptions.map((packageName) => (
-                                        <option key={packageName} value={packageName}>
-                                            {packageName}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={(nextValue) => setPackageFilter(nextValue)}
+                                    options={packageFilterOptions}
+                                    placeholder={t("packageFilterLabel")}
+                                    className="w-full"
+                                    mobileTitle={t("packageFilterLabel")}
+                                />
                             </div>
 
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
                                 <label className="text-xs font-medium text-muted-foreground md:w-32 md:shrink-0 xl:w-36">{t("bookingStatusFilterLabel")}</label>
-                                <select
+                                <FilterSingleSelect
                                     value={bookingStatusFilter}
-                                    onChange={(event) => setBookingStatusFilter(event.target.value)}
-                                    className={`${selectFilterClass} w-full`}
-                                >
-                                    <option value="All">{t("allBookingStatuses")}</option>
-                                    {bookingStatusOptions.map((statusOption) => (
-                                        <option key={statusOption} value={statusOption}>
-                                            {statusOption}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={(nextValue) => setBookingStatusFilter(nextValue)}
+                                    options={bookingStatusFilterOptions}
+                                    placeholder={t("bookingStatusFilterLabel")}
+                                    className="w-full"
+                                    mobileTitle={t("bookingStatusFilterLabel")}
+                                />
                             </div>
                         </div>
                     </div>
