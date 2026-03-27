@@ -85,6 +85,8 @@ type BatchImportButtonProps = {
   canCommitBookings?: boolean;
   bookingWriteBlockedMessage?: string;
   buttonClassName?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   strings?: Partial<BatchImportStrings>;
 };
 
@@ -206,6 +208,8 @@ export function BatchImportButton({
   canCommitBookings = true,
   bookingWriteBlockedMessage,
   buttonClassName,
+  open: controlledOpen,
+  onOpenChange,
   strings,
 }: BatchImportButtonProps) {
   const t = useTranslations("BatchImport");
@@ -218,7 +222,7 @@ export function BatchImportButton({
   );
   const blockedMessage =
     bookingWriteBlockedMessage || ui.blockedBookingWriteFallback;
-  const [open, setOpen] = React.useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const [step, setStep] = React.useState<Step>("upload");
   const [file, setFile] = React.useState<File | null>(null);
   const [validating, setValidating] = React.useState(false);
@@ -226,6 +230,17 @@ export function BatchImportButton({
   const [validation, setValidation] = React.useState<ValidationResponse | null>(null);
   const [commitResult, setCommitResult] = React.useState<CommitResponse | null>(null);
   const [fatalError, setFatalError] = React.useState<string | null>(null);
+  const isControlled = typeof controlledOpen === "boolean";
+  const open = isControlled ? Boolean(controlledOpen) : uncontrolledOpen;
+  const setOpen = React.useCallback(
+    (next: boolean) => {
+      if (!isControlled) {
+        setUncontrolledOpen(next);
+      }
+      onOpenChange?.(next);
+    },
+    [isControlled, onOpenChange],
+  );
 
   const currentStepIdx = React.useMemo(() => {
     const map: Record<Step, number> = {
@@ -383,7 +398,16 @@ export function BatchImportButton({
         {ui.triggerLabel}
       </Button>
 
-      <Dialog open={open} onOpenChange={(next) => !next && resetState()}>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          if (next) {
+            setOpen(true);
+            return;
+          }
+          resetState();
+        }}
+      >
         <DialogContent className="sm:max-w-[760px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered, ChevronDown } from "lucide-react";
+import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered, ChevronDown, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AppCheckbox } from "@/components/ui/app-checkbox";
@@ -405,6 +405,7 @@ export default function BookingsPage() {
     const supabase = createClient();
     const t = useTranslations("Bookings");
     const tb = useTranslations("BookingsPage");
+    const tBatchImport = useTranslations("BatchImport");
     const locale = useLocale();
     const [bookings, setBookings] = React.useState<Booking[]>([]);
     const [savedTemplates, setSavedTemplates] = React.useState<SavedTemplate[]>([]);
@@ -492,6 +493,7 @@ export default function BookingsPage() {
     const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
     const [mobileHeaderActionMenuOpen, setMobileHeaderActionMenuOpen] = React.useState(false);
     const [mobileHeaderActionMenuAnchorEl, setMobileHeaderActionMenuAnchorEl] = React.useState<HTMLElement | null>(null);
+    const [batchImportOpen, setBatchImportOpen] = React.useState(false);
     const { showSuccessToast, successToastNode } = useSuccessToast();
     const { canWriteBookings } = useBookingWriteAccess();
     const bookingWriteBlockedMessage = React.useMemo(
@@ -1876,14 +1878,17 @@ export default function BookingsPage() {
                                     <Download className="w-4 h-4" />
                                     {tb("export")}
                                 </button>
-                                <div onClick={closeMobileHeaderActionMenu}>
-                                    <BatchImportButton
-                                        onImported={() => fetchData("refresh")}
-                                        canCommitBookings={canWriteBookings}
-                                        bookingWriteBlockedMessage={bookingWriteBlockedMessage}
-                                        buttonClassName="h-8 w-full justify-start gap-2 rounded border-0 bg-transparent px-2.5 py-2 text-xs font-normal text-foreground shadow-none hover:bg-muted"
-                                    />
-                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        closeMobileHeaderActionMenu();
+                                        setBatchImportOpen(true);
+                                    }}
+                                    className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
+                                >
+                                    <Zap className="w-4 h-4" />
+                                    {tBatchImport("triggerLabel")}
+                                </button>
                             </TableActionMenuPortal>
                         </div>
                         {canWriteBookings ? (
@@ -1913,6 +1918,8 @@ export default function BookingsPage() {
                             onImported={() => fetchData("refresh")}
                             canCommitBookings={canWriteBookings}
                             bookingWriteBlockedMessage={bookingWriteBlockedMessage}
+                            open={batchImportOpen}
+                            onOpenChange={setBatchImportOpen}
                             buttonClassName="hidden w-full lg:order-3 lg:inline-flex lg:w-auto"
                         />
                     </>
