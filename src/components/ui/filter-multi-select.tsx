@@ -149,18 +149,24 @@ export function FilterMultiSelect({
         <button
           type="button"
           onClick={() => onChange([])}
+          aria-pressed={values.length === 0}
           className={cn(
-            "mb-1 flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors",
+            "mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             values.length === 0 ? "bg-muted font-medium" : "hover:bg-muted/70",
           )}
         >
-          <span className="min-w-0 flex-1 truncate">{allLabel}</span>
-          <Check
+          <span
             className={cn(
-              "h-4 w-4 shrink-0 text-foreground transition-opacity",
-              values.length === 0 ? "opacity-100" : "opacity-0",
+              "grid h-7 w-7 shrink-0 place-items-center rounded-md border transition-colors",
+              values.length === 0
+                ? "border-foreground bg-foreground text-background"
+                : "border-input bg-background text-foreground",
             )}
-          />
+            aria-hidden
+          >
+            <Check className={cn("h-4 w-4 transition-opacity", values.length === 0 ? "opacity-100" : "opacity-0")} />
+          </span>
+          <span className="min-w-0 flex-1 truncate">{allLabel}</span>
         </button>
       ) : null}
       {options.length === 0 ? (
@@ -174,18 +180,28 @@ export function FilterMultiSelect({
               type="button"
               onClick={() => toggleValue(option.value)}
               className={cn(
-                "flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors",
+                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                 isSelected ? "bg-muted font-medium" : "hover:bg-muted/70",
               )}
               aria-pressed={isSelected}
             >
-              <span className="min-w-0 flex-1 truncate">{option.label}</span>
-              <Check
+              <span
                 className={cn(
-                  "h-4 w-4 shrink-0 text-foreground transition-opacity",
-                  isSelected ? "opacity-100" : "opacity-0",
+                  "grid h-7 w-7 shrink-0 place-items-center rounded-md border transition-colors",
+                  isSelected
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-input bg-background text-foreground",
                 )}
-              />
+                aria-hidden
+              >
+                <Check
+                  className={cn(
+                    "h-4 w-4 transition-opacity",
+                    isSelected ? "opacity-100" : "opacity-0",
+                  )}
+                />
+              </span>
+              <span className="min-w-0 flex-1 truncate">{option.label}</span>
             </button>
           );
         })

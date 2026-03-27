@@ -325,12 +325,12 @@ export function BookingDateRangePicker({
                 type="button"
                 onClick={() => handleDayClick(day)}
                 className={cn(
-                  "relative z-10 h-9 w-9 rounded-md text-sm transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  "relative z-10 h-9 w-9 rounded-md text-sm transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2",
                   isStart || isEnd
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-primary text-primary-foreground focus-visible:ring-inset focus-visible:ring-primary-foreground/80"
                     : isInRange
-                      ? "text-foreground"
-                      : "hover:bg-muted",
+                      ? "text-foreground focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      : "hover:bg-muted focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   !isCurrentMonth && !(isStart || isEnd) && "text-muted-foreground/50",
                 )}
               >
