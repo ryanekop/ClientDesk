@@ -201,6 +201,78 @@ function extractMissingColumnFromSupabaseError(
     return null;
 }
 
+function extractNestedErrorMessage(value: unknown): string | null {
+    if (!value || typeof value !== "object") return null;
+
+    const record = value as Record<string, unknown>;
+    const directMessage = record.message;
+    if (typeof directMessage === "string" && directMessage.trim()) {
+        return directMessage.trim();
+    }
+
+    return (
+        extractNestedErrorMessage(record.error) ||
+        extractNestedErrorMessage(record.response) ||
+        extractNestedErrorMessage(record.data)
+    );
+}
+
+function getUnknownErrorMessage(error: unknown): string | null {
+    if (error instanceof Error && error.message.trim()) {
+        return error.message.trim();
+    }
+
+    return extractNestedErrorMessage(error);
+}
+
+function hasGoogleDriveErrorContext(error: unknown) {
+    const parts: string[] = [];
+    const rawMessage = getUnknownErrorMessage(error);
+    if (rawMessage) parts.push(rawMessage);
+
+    if (error && typeof error === "object") {
+        const record = error as Record<string, unknown>;
+        const config =
+            record.config && typeof record.config === "object"
+                ? (record.config as Record<string, unknown>)
+                : null;
+        const response =
+            record.response && typeof record.response === "object"
+                ? (record.response as Record<string, unknown>)
+                : null;
+        const responseConfig =
+            response?.config && typeof response.config === "object"
+                ? (response.config as Record<string, unknown>)
+                : null;
+        const urls = [
+            config?.url,
+            responseConfig?.url,
+        ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+        parts.push(...urls);
+    }
+
+    if (error instanceof Error && typeof error.stack === "string") {
+        parts.push(error.stack);
+    }
+
+    const combined = parts.join(" ").toLowerCase();
+    return (
+        combined.includes("googleapis.com/drive") ||
+        combined.includes("google drive") ||
+        combined.includes("google/drive")
+    );
+}
+
+function getPublicBookingProcessingErrorMessage(error: unknown) {
+    const rawMessage = getUnknownErrorMessage(error);
+
+    if (hasGoogleDriveErrorContext(error)) {
+        return "Terjadi kendala saat mengunggah bukti pembayaran. Silakan coba lagi beberapa saat atau hubungi admin.";
+    }
+
+    return rawMessage || "Terjadi kesalahan saat memproses booking.";
+}
+
 const VENDOR_SELECT_COLUMNS = [
     "id",
     "vendor_slug",
@@ -322,6 +394,16 @@ const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+class PublicBookingProcessingError extends Error {
+    alreadyLogged: boolean;
+
+    constructor(message: string, options?: { alreadyLogged?: boolean }) {
+        super(message);
+        this.name = "PublicBookingProcessingError";
+        this.alreadyLogged = options?.alreadyLogged ?? false;
+    }
+}
 
 export async function POST(request: NextRequest) {
     try {
@@ -935,8 +1017,17 @@ export async function POST(request: NextRequest) {
                     })
                     .eq("id", booking.id);
             } catch (uploadError) {
+                console.error("Public booking payment proof upload failed:", {
+                    vendorId: vendor.id,
+                    bookingId: booking.id,
+                    bookingCode: booking.booking_code,
+                    error: getUnknownErrorMessage(uploadError),
+                }, uploadError);
                 await supabaseAdmin.from("bookings").delete().eq("id", booking.id);
-                throw uploadError;
+                throw new PublicBookingProcessingError(
+                    "Terjadi kendala saat mengunggah bukti pembayaran. Silakan coba lagi beberapa saat atau hubungi admin.",
+                    { alreadyLogged: true },
+                );
             }
         }
 
@@ -1140,7 +1231,14 @@ export async function POST(request: NextRequest) {
                 { status: err.status },
             );
         }
-        const message = err instanceof Error ? err.message : "Terjadi kesalahan saat memproses booking.";
+
+        if (!(err instanceof PublicBookingProcessingError && err.alreadyLogged)) {
+            console.error("Public booking request failed:", err);
+        }
+
+        const message = err instanceof PublicBookingProcessingError
+            ? err.message
+            : getPublicBookingProcessingErrorMessage(err);
         return NextResponse.json({ success: false, error: message }, { status: 500 });
     }
 }

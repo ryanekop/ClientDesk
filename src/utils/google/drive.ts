@@ -2,6 +2,16 @@ import { google } from "googleapis";
 import { Readable } from "node:stream";
 import { applyDriveTemplate } from "@/utils/google/template";
 
+function escapeDriveQueryLiteral(value: string) {
+    return value
+        .replace(/\\/g, "\\\\")
+        .replace(/'/g, "\\'");
+}
+
+function quoteDriveQueryLiteral(value: string) {
+    return `'${escapeDriveQueryLiteral(value)}'`;
+}
+
 export function getDriveOAuth2Client() {
     return new google.auth.OAuth2(
         process.env.GOOGLE_CLIENT_ID,
@@ -56,7 +66,7 @@ export async function listDriveFolder(
 ) {
     const { drive } = await getDriveClient(accessToken, refreshToken);
     const res = await drive.files.list({
-        q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        q: `${quoteDriveQueryLiteral(parentId)} in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
         fields: "files(id, name, webViewLink, createdTime)",
         orderBy: "name",
         pageSize: 100,
@@ -110,10 +120,12 @@ export async function findOrCreateFolder(
     parentId: string = "root"
 ) {
     const { drive } = await getDriveClient(accessToken, refreshToken);
+    const folderNameLiteral = quoteDriveQueryLiteral(folderName);
+    const parentIdLiteral = quoteDriveQueryLiteral(parentId);
 
     // Search for existing folder
     const search = await drive.files.list({
-        q: `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        q: `name=${folderNameLiteral} and ${parentIdLiteral} in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
         fields: "files(id, webViewLink)",
         pageSize: 1,
     });
