@@ -80,6 +80,17 @@ export default function SettlementFormPage() {
   const [mobileTab, setMobileTab] = React.useState<"settings" | "preview">(
     "settings",
   );
+  const invalidateProfilePublicCache = React.useCallback(async () => {
+    try {
+      await fetch("/api/internal/cache/invalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "profile" }),
+      });
+    } catch {
+      // Best effort cache invalidation.
+    }
+  }, []);
 
   const [brandColor, setBrandColor] = React.useState(DEFAULTS.brandColor);
   const [greeting, setGreeting] = React.useState(DEFAULTS.greeting);
@@ -266,6 +277,7 @@ export default function SettlementFormPage() {
       setTimeout(() => setSavedMsg(""), 3000);
       return false;
     }
+    await invalidateProfilePublicCache();
 
     const next = JSON.stringify(createSnapshot(nextSettings));
     setLastSavedSnapshot(next);

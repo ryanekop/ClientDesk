@@ -4,6 +4,7 @@ import {
     BookingWriteAccessDeniedError,
 } from "@/lib/booking-write-access.server";
 import { apiText } from "@/lib/i18n/api-errors";
+import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 import { createClient } from "@/utils/supabase/server";
 import { findOrCreateNestedPath, uploadFileToDrive } from "@/utils/google/drive";
 import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
@@ -22,6 +23,7 @@ type BookingFolderSourceRow = {
     booking_code: string | null;
     event_type: string | null;
     session_date: string | null;
+    tracking_uuid: string | null;
     extra_fields: Record<string, unknown> | null;
 };
 
@@ -68,7 +70,7 @@ export async function POST(request: NextRequest) {
 
         const { data: bookingRecord } = await supabase
             .from("bookings")
-            .select("client_name, booking_code, event_type, session_date, extra_fields")
+            .select("client_name, booking_code, event_type, session_date, tracking_uuid, extra_fields")
             .eq("id", bookingId)
             .single<BookingFolderSourceRow>();
 
@@ -130,10 +132,17 @@ export async function POST(request: NextRequest) {
                 bookingFolderSegments
             );
             if (parentFolder.folderUrl) {
-                await supabase
+                const { error: saveFolderError } = await supabase
                     .from("bookings")
                     .update({ drive_folder_url: parentFolder.folderUrl })
                     .eq("id", bookingId);
+                if (!saveFolderError) {
+                    invalidatePublicCachesForBooking({
+                        bookingCode: bookingRecord?.booking_code || bookingCode || null,
+                        trackingUuid: bookingRecord?.tracking_uuid || null,
+                        userId: user.id,
+                    });
+                }
             }
         }
 

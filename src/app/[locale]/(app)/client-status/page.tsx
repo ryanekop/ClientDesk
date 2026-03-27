@@ -171,6 +171,28 @@ export default function ClientStatusPage() {
         });
     }, [locale]);
 
+    const invalidateBookingPublicCache = React.useCallback(
+        async (options: { bookingCode?: string | null; trackingUuid?: string | null }) => {
+            const bookingCode = options.bookingCode?.trim() || null;
+            const trackingUuid = options.trackingUuid?.trim() || null;
+            if (!bookingCode && !trackingUuid) return;
+            try {
+                await fetch("/api/internal/cache/invalidate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        scope: "booking",
+                        bookingCode,
+                        trackingUuid,
+                    }),
+                });
+            } catch {
+                // Best effort cache invalidation.
+            }
+        },
+        [],
+    );
+
     const statusColors = React.useMemo(() => {
         const map: Record<string, string> = {};
         clientStatuses.forEach((s, i) => { map[s] = STATUS_COLOR_PALETTE[i % STATUS_COLOR_PALETTE.length]; });
@@ -338,6 +360,20 @@ export default function ClientStatusPage() {
             dpPaid: oldBooking.dp_paid,
             dpVerifiedAt: oldBooking.dp_verified_at,
         });
+        const invalidationTargets = new Map<string, { bookingCode?: string | null; trackingUuid?: string | null }>();
+        const pushInvalidationTarget = (target: { bookingCode?: string | null; trackingUuid?: string | null }) => {
+            const bookingCode = target.bookingCode?.trim() || "";
+            const trackingUuid = target.trackingUuid?.trim() || "";
+            if (!bookingCode && !trackingUuid) return;
+            invalidationTargets.set(`${bookingCode}::${trackingUuid}`, {
+                bookingCode: bookingCode || null,
+                trackingUuid: trackingUuid || null,
+            });
+        };
+        pushInvalidationTarget({
+            bookingCode: oldBooking.booking_code,
+            trackingUuid: oldBooking.tracking_uuid,
+        });
 
         try {
             if (isQueue && !wasQueue) {
@@ -381,14 +417,23 @@ export default function ClientStatusPage() {
 
                 const { data: remainingRows } = await supabase
                     .from("bookings")
-                    .select("id, queue_position")
+                    .select("id, queue_position, booking_code, tracking_uuid")
                     .eq("client_status", queueTriggerStatus)
                     .neq("id", id)
                     .not("queue_position", "is", null)
                     .order("queue_position", { ascending: true });
-                const remaining = ((remainingRows || []) as Array<{ id: string; queue_position?: number | null }>);
+                const remaining = ((remainingRows || []) as Array<{
+                    id: string;
+                    queue_position?: number | null;
+                    booking_code?: string | null;
+                    tracking_uuid?: string | null;
+                }>);
                 for (let i = 0; i < remaining.length; i += 1) {
                     await supabase.from("bookings").update({ queue_position: i + 1 }).eq("id", remaining[i].id);
+                    pushInvalidationTarget({
+                        bookingCode: remaining[i].booking_code || null,
+                        trackingUuid: remaining[i].tracking_uuid || null,
+                    });
                 }
             } else {
                 const { error } = await supabase
@@ -405,6 +450,12 @@ export default function ClientStatusPage() {
                     return;
                 }
             }
+
+            await Promise.allSettled(
+                Array.from(invalidationTargets.values()).map((target) =>
+                    invalidateBookingPublicCache(target),
+                ),
+            );
 
             setCancelStatusConfirm({ open: false, booking: null, nextStatus: "" });
             const calendarWarning = await syncGoogleCalendarForStatusTransition({
@@ -429,6 +480,12 @@ export default function ClientStatusPage() {
         if (!requireBookingWrite()) return;
         await supabase.from("bookings").update({ queue_position: pos }).eq("id", id);
         setBookings(prev => prev.map(b => b.id === id ? { ...b, queue_position: pos } : b));
+        const booking = bookings.find((item) => item.id === id);
+        if (!booking) return;
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
     }
 
     async function copyTrackLink(uuid: string, id: string) {

@@ -7,6 +7,7 @@
     "build": "NODE_OPTIONS='--max-old-space-size=4096' next build",
     "start": "next start",
     "lint": "eslint",
+    "audit:cache-staleness": "node scripts/audit-cache-staleness.mjs",
     "audit:i18n-internal": "node scripts/i18n-audit-internal.mjs",
     "scrape:universities": "node scripts/scrape-universities-from-kip.mjs",
     "seed:universities": "node scripts/seed-universities-from-json.mjs",

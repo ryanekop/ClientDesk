@@ -8,6 +8,7 @@ import {
     getDriveFilePublicLinks,
     uploadFileToDrive,
 } from "@/utils/google/drive";
+import { invalidatePublicCachesForProfile } from "@/lib/public-cache-invalidation";
 
 export async function POST(request: NextRequest) {
     try {
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
 
         const { data: profile } = await supabase
             .from("profiles")
-            .select("google_drive_access_token, google_drive_refresh_token, qris_drive_file_id, studio_name")
+            .select("google_drive_access_token, google_drive_refresh_token, qris_drive_file_id, studio_name, vendor_slug")
             .eq("id", user.id)
             .single();
 
@@ -104,13 +105,24 @@ export async function POST(request: NextRequest) {
             // Keep the precomputed HD URL when Drive metadata cannot be refreshed.
         }
 
-        await supabase
+        const { error: updateError } = await supabase
             .from("profiles")
             .update({
                 qris_image_url: qrisImageUrl,
                 qris_drive_file_id: uploaded.fileId,
             })
             .eq("id", user.id);
+        if (updateError) {
+            return NextResponse.json(
+                { success: false, error: updateError.message || apiText(request, "failedSaveProfile") },
+                { status: 500 },
+            );
+        }
+
+        invalidatePublicCachesForProfile({
+            userId: user.id,
+            vendorSlug: profile?.vendor_slug || null,
+        });
 
         if (profile.qris_drive_file_id && profile.qris_drive_file_id !== uploaded.fileId) {
             try {

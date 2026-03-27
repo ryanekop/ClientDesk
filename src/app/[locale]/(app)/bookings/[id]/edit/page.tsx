@@ -299,6 +299,13 @@ export default function EditBookingPage() {
     const [adminNotes, setAdminNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
     const [portfolioUrl, setPortfolioUrl] = React.useState("");
+    const [cacheInvalidationBooking, setCacheInvalidationBooking] = React.useState<{
+        bookingCode: string | null;
+        trackingUuid: string | null;
+    }>({
+        bookingCode: null,
+        trackingUuid: null,
+    });
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
     const [extraLocationCoords, setExtraLocationCoords] = React.useState<Record<string, LocationCoords>>({});
     const [customFieldValues, setCustomFieldValues] = React.useState<Record<string, string>>({});
@@ -359,6 +366,34 @@ export default function EditBookingPage() {
         [locale],
     );
 
+    const invalidateBookingPublicCache = React.useCallback(
+        async (options?: { bookingCode?: string | null; trackingUuid?: string | null }) => {
+            const bookingCode =
+                options?.bookingCode?.trim() ||
+                cacheInvalidationBooking.bookingCode?.trim() ||
+                null;
+            const trackingUuid =
+                options?.trackingUuid?.trim() ||
+                cacheInvalidationBooking.trackingUuid?.trim() ||
+                null;
+            if (!bookingCode && !trackingUuid) return;
+            try {
+                await fetch("/api/internal/cache/invalidate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        scope: "booking",
+                        bookingCode,
+                        trackingUuid,
+                    }),
+                });
+            } catch {
+                // Best effort cache invalidation.
+            }
+        },
+        [cacheInvalidationBooking.bookingCode, cacheInvalidationBooking.trackingUuid],
+    );
+
     React.useEffect(() => {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
@@ -397,6 +432,16 @@ export default function EditBookingPage() {
                 );
             }
             if (booking) {
+                setCacheInvalidationBooking({
+                    bookingCode:
+                        typeof booking.booking_code === "string"
+                            ? booking.booking_code
+                            : null,
+                    trackingUuid:
+                        typeof booking.tracking_uuid === "string"
+                            ? booking.tracking_uuid
+                            : null,
+                });
                 setClientName(booking.client_name || "");
                 const parsed = parseExistingPhone(booking.client_whatsapp);
                 setCountryCode(parsed.code);
@@ -838,6 +883,7 @@ export default function EditBookingPage() {
             showFeedback(tBookingEditor("failedSaveChanges"));
             return;
         }
+        await invalidateBookingPublicCache();
 
         // Sync junction table
         await supabase.from("booking_freelance").delete().eq("booking_id", id);
@@ -973,6 +1019,7 @@ export default function EditBookingPage() {
             showFeedback(tBookingEditor("failedVerifyDp"));
             return;
         }
+        await invalidateBookingPublicCache();
 
         setDpVerifiedAmount(dpValue);
         setDpVerifiedAt(verifiedAt);
@@ -996,6 +1043,7 @@ export default function EditBookingPage() {
             showFeedback(tBookingEditor("failedUnverifyDp"));
             return;
         }
+        await invalidateBookingPublicCache();
 
         setDpVerifiedAmount(0);
         setDpVerifiedAt(null);

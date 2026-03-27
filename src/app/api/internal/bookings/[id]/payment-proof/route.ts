@@ -6,6 +6,7 @@ import {
 } from "@/lib/booking-write-access.server";
 import { apiText } from "@/lib/i18n/api-errors";
 import { uploadPaymentProofToDrive } from "@/lib/payment-proof-drive";
+import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 import { requireRouteUser } from "@/lib/pagination/route-user";
 import { deleteFileFromDrive } from "@/utils/google/drive";
 
@@ -17,6 +18,7 @@ type BookingProofStage = "initial" | "final";
 type BookingProofRow = {
   id: string;
   booking_code: string;
+  tracking_uuid: string | null;
   client_name: string;
   event_type: string | null;
   session_date: string | null;
@@ -100,7 +102,7 @@ export async function POST(
         supabase
           .from("bookings")
           .select(
-            "id, booking_code, client_name, event_type, session_date, extra_fields, payment_proof_drive_file_id, final_payment_proof_drive_file_id",
+            "id, booking_code, tracking_uuid, client_name, event_type, session_date, extra_fields, payment_proof_drive_file_id, final_payment_proof_drive_file_id",
           )
           .eq("id", id)
           .eq("user_id", user.id)
@@ -227,6 +229,12 @@ export async function POST(
         // Best effort cleanup for replaced file.
       }
     }
+
+    invalidatePublicCachesForBooking({
+      bookingCode: booking.booking_code,
+      trackingUuid: booking.tracking_uuid,
+      userId: user.id,
+    });
 
     return NextResponse.json({
       success: true,

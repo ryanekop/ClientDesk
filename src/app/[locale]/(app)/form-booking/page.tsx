@@ -674,6 +674,25 @@ export default function FormBookingPage() {
     [],
   );
 
+  async function invalidateProfilePublicCache(options?: {
+    vendorSlug?: string | null;
+    previousVendorSlug?: string | null;
+  }) {
+    try {
+      await fetch("/api/internal/cache/invalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scope: "profile",
+          vendorSlug: options?.vendorSlug || null,
+          previousVendorSlug: options?.previousVendorSlug || null,
+        }),
+      });
+    } catch {
+      // Best effort cache invalidation.
+    }
+  }
+
   async function handleSave() {
     if (!profileId) return false;
     setSaving(true);
@@ -741,6 +760,11 @@ export default function FormBookingPage() {
       setSaving(false);
       return false;
     }
+
+    await invalidateProfilePublicCache({
+      vendorSlug: slug || null,
+      previousVendorSlug: normalizeVendorSlug(vendorSlug) || null,
+    });
 
     setBankAccounts(validBanks);
     setLastSavedSnapshot(
@@ -836,6 +860,11 @@ export default function FormBookingPage() {
       setTimeout(() => setSavedMsg(""), 3000);
       return;
     }
+
+    await invalidateProfilePublicCache({
+      vendorSlug: slug || null,
+      previousVendorSlug: normalizeVendorSlug(vendorSlug) || null,
+    });
 
     setMinDpPercent(DEFAULTS.minDpPercent);
     setMinDpMap({});

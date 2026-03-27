@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { resolveTenant } from '@/lib/tenant-resolver'
 import { getSubscription, createTrialSubscription } from '@/utils/subscription-service'
 import { notifyNewSignup } from '@/utils/telegram'
+import { invalidatePublicCachesForProfile } from '@/lib/public-cache-invalidation'
 import {
     getRequestHostname,
     normalizeAuthLocale,
@@ -34,6 +35,7 @@ export async function GET(request: Request) {
             // =============================================
             const userId = sessionData?.user?.id
             if (userId) {
+                let shouldInvalidateProfileCache = false
                 const userEmail = sessionData?.user?.email || 'unknown'
                 const fullName = sessionData?.user?.user_metadata?.full_name || ''
 
@@ -63,6 +65,7 @@ export async function GET(request: Request) {
                         { id: userId, full_name: fullName },
                         { onConflict: 'id' }
                     )
+                    shouldInvalidateProfileCache = true
                 }
 
                 // =============================================
@@ -79,12 +82,19 @@ export async function GET(request: Request) {
                         .single()
 
                     if (existingProfile && !existingProfile.tenant_id) {
-                        await supabase
+                        const { error: tenantAssignError } = await supabase
                             .from('profiles')
                             .update({ tenant_id: tenant.id })
                             .eq('id', userId)
+                        if (!tenantAssignError) {
+                            shouldInvalidateProfileCache = true
+                        }
                     }
                     // If tenant_id already exists, do not override.
+                }
+
+                if (shouldInvalidateProfileCache) {
+                    invalidatePublicCachesForProfile({ userId })
                 }
             }
 
@@ -166,6 +176,7 @@ export async function POST(request: Request) {
                 { id: userId, full_name: fullName },
                 { onConflict: 'id' }
             )
+            invalidatePublicCachesForProfile({ userId })
         }
 
         return NextResponse.json({ success: true })

@@ -241,6 +241,38 @@ export default function FinancePage() {
     const requireBookingWrite = useBookingWriteGuard(({ message }) => {
         setFeedbackDialog({ open: true, message });
     });
+    const invalidateProfilePublicCache = React.useCallback(async () => {
+        try {
+            await fetch("/api/internal/cache/invalidate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ scope: "profile" }),
+            });
+        } catch {
+            // Best effort cache invalidation.
+        }
+    }, []);
+    const invalidateBookingPublicCache = React.useCallback(
+        async (options: { bookingCode?: string | null; trackingUuid?: string | null }) => {
+            const bookingCode = options.bookingCode?.trim() || null;
+            const trackingUuid = options.trackingUuid?.trim() || null;
+            if (!bookingCode && !trackingUuid) return;
+            try {
+                await fetch("/api/internal/cache/invalidate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        scope: "booking",
+                        bookingCode,
+                        trackingUuid,
+                    }),
+                });
+            } catch {
+                // Best effort cache invalidation.
+            }
+        },
+        [],
+    );
     const hasLoadedFinanceRef = React.useRef(false);
 
     const closeDesktopMenus = React.useCallback(() => {
@@ -489,6 +521,7 @@ export default function FinancePage() {
             .from("profiles")
             .update({ table_column_preferences: payload })
             .eq("id", user.id);
+        await invalidateProfilePublicCache();
         setColumns(nextColumns);
         setSavingColumns(false);
         setColumnManagerOpen(false);
@@ -513,6 +546,10 @@ export default function FinancePage() {
             final_payment_amount: remaining,
             final_paid_at: new Date().toISOString(),
         }).eq("id", id);
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
         void fetchFinancePage("refresh");
     }
 
@@ -525,6 +562,12 @@ export default function FinancePage() {
             final_payment_amount: 0,
             final_paid_at: null,
         }).eq("id", id);
+        if (booking) {
+            await invalidateBookingPublicCache({
+                bookingCode: booking.booking_code,
+                trackingUuid: booking.tracking_uuid,
+            });
+        }
         void fetchFinancePage("refresh");
     }
 
@@ -661,6 +704,10 @@ export default function FinancePage() {
             setFeedbackDialog({ open: true, message: tf("failedOpenSettlement") });
             return null;
         }
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
 
         const nextBooking: BookingFinance = {
             ...booking,

@@ -341,6 +341,38 @@ export default function BookingsPage() {
         setFeedbackDialog({ open: true, message });
     });
     const hasLoadedBookingsRef = React.useRef(false);
+    const invalidateProfilePublicCache = React.useCallback(async () => {
+        try {
+            await fetch("/api/internal/cache/invalidate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ scope: "profile" }),
+            });
+        } catch {
+            // Best effort cache invalidation.
+        }
+    }, []);
+    const invalidateBookingPublicCache = React.useCallback(
+        async (options: { bookingCode?: string | null; trackingUuid?: string | null }) => {
+            const bookingCode = options.bookingCode?.trim() || null;
+            const trackingUuid = options.trackingUuid?.trim() || null;
+            if (!bookingCode && !trackingUuid) return;
+            try {
+                await fetch("/api/internal/cache/invalidate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        scope: "booking",
+                        bookingCode,
+                        trackingUuid,
+                    }),
+                });
+            } catch {
+                // Best effort cache invalidation.
+            }
+        },
+        [],
+    );
 
     const closeDesktopMenus = React.useCallback(() => {
         setWaMenuBookingId(null);
@@ -490,6 +522,7 @@ export default function BookingsPage() {
             .from("profiles")
             .update({ table_column_preferences: payload })
             .eq("id", user.id);
+        await invalidateProfilePublicCache();
         setColumns(nextColumns);
         setSavingColumns(false);
         setColumnManagerOpen(false);
@@ -736,6 +769,10 @@ export default function BookingsPage() {
                     return;
                 }
             }
+            await invalidateBookingPublicCache({
+                bookingCode: activeBooking.booking_code,
+                trackingUuid: activeBooking.tracking_uuid,
+            });
 
             setCancelStatusConfirmOpen(false);
             setStatusModal({ open: false, booking: null });
@@ -2173,7 +2210,16 @@ export default function BookingsPage() {
                             if (!requireBookingWrite()) return;
                             if (!driveLinkPopup.booking || !driveLinkInput) return;
                             setSavingDriveLink(true);
-                            await supabase.from("bookings").update({ drive_folder_url: driveLinkInput }).eq("id", driveLinkPopup.booking.id);
+                            const { error } = await supabase
+                                .from("bookings")
+                                .update({ drive_folder_url: driveLinkInput })
+                                .eq("id", driveLinkPopup.booking.id);
+                            if (!error) {
+                                await invalidateBookingPublicCache({
+                                    bookingCode: driveLinkPopup.booking.booking_code,
+                                    trackingUuid: driveLinkPopup.booking.tracking_uuid,
+                                });
+                            }
                             void triggerFastpikAutoSync(driveLinkPopup.booking.id);
                             setSavingDriveLink(false);
                             setDriveLinkPopup({ open: false, booking: null });

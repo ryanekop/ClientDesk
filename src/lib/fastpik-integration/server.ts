@@ -4,6 +4,10 @@ import {
   resolveFastpikProjectInfoFromExtraFields,
   type FastpikProjectInfoSnapshot,
 } from "@/lib/fastpik-project-info";
+import {
+  invalidatePublicCachesForBooking,
+  invalidatePublicCachesForProfile,
+} from "@/lib/public-cache-invalidation";
 
 type FastpikSyncStatus = "idle" | "success" | "warning" | "failed" | "syncing";
 
@@ -95,7 +99,7 @@ async function patchProfileSyncLog(
     at?: string;
   },
 ) {
-  await supabase
+  const { error } = await supabase
     .from("profiles")
     .update({
       fastpik_last_sync_status: payload.status,
@@ -104,11 +108,15 @@ async function patchProfileSyncLog(
       updated_at: new Date().toISOString(),
     })
     .eq("id", userId);
+  if (!error) {
+    invalidatePublicCachesForProfile({ userId });
+  }
 }
 
 async function patchBookingSyncState(
   supabase: any,
   bookingId: string,
+  userId: string,
   payload: {
     status: FastpikSyncStatus;
     message: string;
@@ -119,7 +127,7 @@ async function patchBookingSyncState(
     at?: string;
   },
 ) {
-  await supabase
+  const { error } = await supabase
     .from("bookings")
     .update({
       fastpik_sync_status: payload.status,
@@ -138,6 +146,9 @@ async function patchBookingSyncState(
       updated_at: new Date().toISOString(),
     })
     .eq("id", bookingId);
+  if (!error) {
+    invalidatePublicCachesForBooking({ userId });
+  }
 }
 
 async function getProfileFastpikSettings(supabase: any, userId: string) {
@@ -426,7 +437,7 @@ export async function syncBookingToFastpik(params: {
     const warningMessage =
       "Link Google Drive kosong. Project Fastpik dipertahankan tanpa update.";
     const syncedAt = new Date().toISOString();
-    await patchBookingSyncState(supabase, booking.id, {
+    await patchBookingSyncState(supabase, booking.id, userId, {
       status: "warning",
       message: "missing_drive_link",
       at: syncedAt,
@@ -488,7 +499,7 @@ export async function syncBookingToFastpik(params: {
         },
         syncedAt,
       });
-      await patchBookingSyncState(supabase, booking.id, {
+      await patchBookingSyncState(supabase, booking.id, userId, {
         status: "success",
         message,
         projectId: projectId || null,
@@ -522,7 +533,7 @@ export async function syncBookingToFastpik(params: {
       body?.message ||
       `Fastpik sync gagal (HTTP ${response.status}).`;
     const status = response.status === 422 ? "warning" : "failed";
-    await patchBookingSyncState(supabase, booking.id, {
+    await patchBookingSyncState(supabase, booking.id, userId, {
       status,
       message,
       at: syncedAt,
@@ -543,7 +554,7 @@ export async function syncBookingToFastpik(params: {
     const message = error?.name === "AbortError"
       ? "Timeout saat menghubungi Fastpik."
       : error?.message || "Gagal sinkron ke Fastpik.";
-    await patchBookingSyncState(supabase, booking.id, {
+    await patchBookingSyncState(supabase, booking.id, userId, {
       status: "failed",
       message,
       at: syncedAt,

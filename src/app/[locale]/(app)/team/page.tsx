@@ -145,6 +145,17 @@ export default function TeamPage() {
         member: Freelancer | null;
     }>({ open: false, member: null });
     const hasLoadedMembersRef = React.useRef(false);
+    const invalidateProfilePublicCache = React.useCallback(async () => {
+        try {
+            await fetch("/api/internal/cache/invalidate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ scope: "profile" }),
+            });
+        } catch {
+            // Best effort cache invalidation.
+        }
+    }, []);
 
     const fetchMembers = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
         if (!itemsPerPageHydrated) return;
@@ -373,6 +384,7 @@ export default function TeamPage() {
             .from("profiles")
             .update({ table_column_preferences: payload })
             .eq("id", user.id);
+        await invalidateProfilePublicCache();
         setColumns(nextColumns);
         setSavingColumns(false);
         setColumnManagerOpen(false);

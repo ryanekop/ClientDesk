@@ -4,6 +4,7 @@ import {
     BookingWriteAccessDeniedError,
 } from "@/lib/booking-write-access.server";
 import { apiText } from "@/lib/i18n/api-errors";
+import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 import { createClient } from "@/utils/supabase/server";
 import { createBookingFolder, findOrCreateNestedPath } from "@/utils/google/drive";
 import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
@@ -43,13 +44,14 @@ export async function POST(request: NextRequest) {
             clientName: string;
             eventType: string | null;
             sessionDate: string | null;
+            trackingUuid: string | null;
             extraFields: unknown;
         } | null = null;
 
         if (bookingId) {
             const { data: booking } = await supabase
                 .from("bookings")
-                .select("booking_code, client_name, event_type, session_date, extra_fields")
+                .select("booking_code, client_name, event_type, session_date, tracking_uuid, extra_fields")
                 .eq("id", bookingId)
                 .single();
             if (booking) {
@@ -58,6 +60,7 @@ export async function POST(request: NextRequest) {
                     clientName: booking.client_name,
                     eventType: booking.event_type,
                     sessionDate: booking.session_date,
+                    trackingUuid: booking.tracking_uuid,
                     extraFields: booking.extra_fields,
                 };
             }
@@ -98,10 +101,17 @@ export async function POST(request: NextRequest) {
 
         // If bookingId provided, save folder URL to booking
         if (bookingId && result.folderUrl) {
-            await supabase
+            const { error: saveFolderError } = await supabase
                 .from("bookings")
                 .update({ drive_folder_url: result.folderUrl })
                 .eq("id", bookingId);
+            if (!saveFolderError) {
+                invalidatePublicCachesForBooking({
+                    bookingCode: bookingContext?.bookingCode || bookingCode,
+                    trackingUuid: bookingContext?.trackingUuid || null,
+                    userId: user.id,
+                });
+            }
         }
 
         return NextResponse.json({

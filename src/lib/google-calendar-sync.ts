@@ -1,3 +1,5 @@
+import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
+
 type SupabaseErrorLike = {
   message?: string;
   details?: string;
@@ -108,6 +110,9 @@ export async function updateBookingCalendarSyncState({
 
     const { error } = await query;
     if (!error) {
+      if (userId) {
+        invalidatePublicCachesForBooking({ userId });
+      }
       return { ok: true, droppedColumns };
     }
 

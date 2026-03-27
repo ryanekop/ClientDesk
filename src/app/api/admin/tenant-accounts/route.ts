@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { normalizeVendorSlug } from "@/lib/booking-url-mode";
+import { invalidatePublicCachesForProfile } from "@/lib/public-cache-invalidation";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -205,6 +206,11 @@ export async function PUT(request: NextRequest) {
     if (updateError) {
       return corsResponse({ error: updateError.message }, { status: 500 });
     }
+
+    invalidatePublicCachesForProfile({
+      userId: updatedProfile.id,
+      vendorSlug: updatedProfile.vendor_slug,
+    });
 
     const sluglessEnabled = targetTenant.disable_booking_slug === true;
     if (sluglessEnabled) {

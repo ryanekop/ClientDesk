@@ -679,6 +679,27 @@ export default function BookingDetailPage() {
             message,
         });
     }, [tBookingDetail]);
+    const invalidateBookingPublicCache = React.useCallback(
+        async (options: { bookingCode?: string | null; trackingUuid?: string | null }) => {
+            const bookingCode = options.bookingCode?.trim() || null;
+            const trackingUuid = options.trackingUuid?.trim() || null;
+            if (!bookingCode && !trackingUuid) return;
+            try {
+                await fetch("/api/internal/cache/invalidate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        scope: "booking",
+                        bookingCode,
+                        trackingUuid,
+                    }),
+                });
+            } catch {
+                // Best effort cache invalidation.
+            }
+        },
+        [],
+    );
     const requireBookingWrite = useBookingWriteGuard(({ message, title }) => {
         showFeedback(message, title);
     });
@@ -1054,12 +1075,20 @@ export default function BookingDetailPage() {
                 setQueuePos(rawBooking.queue_position || "");
                 if (canWriteBookings && (rawBooking.client_status !== syncedStatus || rawBooking.status !== syncedStatus)) {
                     await supabase.from("bookings").update({ status: syncedStatus, client_status: syncedStatus }).eq("id", id);
+                    await invalidateBookingPublicCache({
+                        bookingCode: rawBooking.booking_code,
+                        trackingUuid: rawBooking.tracking_uuid,
+                    });
                 }
                 // Generate tracking_uuid if not set
                 if (canWriteBookings && !rawBooking.tracking_uuid) {
                     const uuid = crypto.randomUUID();
                     await supabase.from("bookings").update({ tracking_uuid: uuid }).eq("id", id);
                     setBooking(prev => prev ? { ...prev, tracking_uuid: uuid } : prev);
+                    await invalidateBookingPublicCache({
+                        bookingCode: rawBooking.booking_code,
+                        trackingUuid: uuid,
+                    });
                 }
             }
             setIsDriveConnected(isGoogleDriveConnected(profile));
@@ -1078,7 +1107,14 @@ export default function BookingDetailPage() {
         }
         load();
         fetchTemplates();
-    }, [buildPathHint, canWriteBookings, hydrateFastpikLive, id, supabase]);
+    }, [
+        buildPathHint,
+        canWriteBookings,
+        hydrateFastpikLive,
+        id,
+        invalidateBookingPublicCache,
+        supabase,
+    ]);
 
     async function handleSaveClientStatus(options?: {
         skipCancelConfirmation?: boolean;
@@ -1129,6 +1165,10 @@ export default function BookingDetailPage() {
             showFeedback(tBookingDetail("failedSaveStatus"));
             return;
         }
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
 
         setCancelStatusConfirmOpen(false);
         setBooking((prev) =>
@@ -1198,6 +1238,10 @@ export default function BookingDetailPage() {
             setSavingDp(false);
             return;
         }
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
 
         setBooking((prev) => prev ? {
             ...prev,
@@ -1281,6 +1325,10 @@ export default function BookingDetailPage() {
             showFeedback(tBookingDetail("failedSaveInitialPriceComponents"));
             return false;
         }
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
 
         setBooking((prev) => (prev ? { ...prev, ...patch } : prev));
         return true;
@@ -1343,6 +1391,10 @@ export default function BookingDetailPage() {
             showFeedback(tBookingDetail("failedVerifyDp"));
             return;
         }
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
 
         setBooking((prev) => (prev ? { ...prev, ...patch } : prev));
     }
@@ -1368,6 +1420,10 @@ export default function BookingDetailPage() {
             showFeedback(tBookingDetail("failedUnverifyDp"));
             return;
         }
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
 
         setBooking((prev) => (prev ? { ...prev, ...patch } : prev));
     }
@@ -1632,6 +1688,10 @@ export default function BookingDetailPage() {
             showFeedback(tBookingDetail("failedSaveFinalAddons"));
             return null;
         }
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
 
         setBooking((prev) =>
             prev
@@ -1731,6 +1791,10 @@ export default function BookingDetailPage() {
             closePreopenedWindow(preOpenedWindow);
             return;
         }
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
 
         const finalTotal = getFinalInvoiceTotal(booking.total_price, normalizedAdjustments);
         const remainingFinal = getRemainingFinalPayment({
@@ -1840,6 +1904,10 @@ export default function BookingDetailPage() {
             showFeedback(tBookingDetail("failedMarkBookingPaid"));
             return;
         }
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
 
         setBooking((prev) =>
             prev
@@ -1877,6 +1945,10 @@ export default function BookingDetailPage() {
             showFeedback(tBookingDetail("failedCancelBookingPaid"));
             return;
         }
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
 
         setBooking((prev) =>
             prev

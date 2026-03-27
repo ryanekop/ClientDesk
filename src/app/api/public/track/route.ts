@@ -20,6 +20,14 @@ import {
 import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import { getTrackBasePayloadCached } from "@/lib/public-track-data";
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+    Pragma: "no-cache",
+    Expires: "0",
+} as const;
+
 const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -28,13 +36,19 @@ const supabaseAdmin = createClient(
 export async function GET(request: NextRequest) {
     const uuid = request.nextUrl.searchParams.get("uuid");
     if (!uuid) {
-        return NextResponse.json({ success: false, error: "uuid required" }, { status: 400 });
+        return NextResponse.json(
+            { success: false, error: "uuid required" },
+            { status: 400, headers: NO_STORE_HEADERS },
+        );
     }
 
     const locale = request.nextUrl.searchParams.get("locale") || "id";
     const basePayload = await getTrackBasePayloadCached(uuid, locale);
     if (!basePayload) {
-        return NextResponse.json({ success: false, error: "Booking not found" }, { status: 404 });
+        return NextResponse.json(
+            { success: false, error: "Booking not found" },
+            { status: 404, headers: NO_STORE_HEADERS },
+        );
     }
 
     const {
@@ -73,63 +87,66 @@ export async function GET(request: NextRequest) {
         defaultLocation: effectiveBooking.location,
     });
 
-    return NextResponse.json({
-        success: true,
-        booking: {
-            bookingCode: effectiveBooking.booking_code,
-            trackingUuid: effectiveBooking.tracking_uuid,
-            clientName: effectiveBooking.client_name,
-            sessionDate: effectiveBooking.session_date,
-            sessionRows,
-            eventType: effectiveBooking.event_type,
-            clientStatus: effectiveClientStatus,
-            queuePosition: effectiveBooking.queue_position,
-            status: effectiveBooking.status,
-            serviceName: (effectiveBooking.services as { name?: string } | null)?.name || null,
-            fastpikUrl: effectiveBooking.fastpik_project_link,
-            driveUrl: effectiveBooking.drive_folder_url,
-            fastpikLinkDisplayMode: profileLinkMode,
-            createdAt: effectiveBooking.created_at,
-            totalPrice: effectiveBooking.total_price || 0,
-            dpPaid: effectiveBooking.dp_paid || 0,
-            isFullyPaid: effectiveBooking.is_fully_paid || false,
-            settlementStatus: effectiveBooking.settlement_status || "draft",
-            finalAdjustmentsTotal: getFinalAdjustmentsTotal(finalAdjustments),
-            finalInvoiceTotal: getFinalInvoiceTotal(effectiveBooking.total_price || 0, finalAdjustments),
-            remainingFinalPayment: getRemainingFinalPayment({
-                total_price: effectiveBooking.total_price || 0,
-                dp_paid: effectiveBooking.dp_paid || 0,
-                final_adjustments: finalAdjustments,
-                final_payment_amount: effectiveBooking.final_payment_amount || 0,
-                final_paid_at: effectiveBooking.final_paid_at,
-                settlement_status: effectiveBooking.settlement_status,
-                is_fully_paid: effectiveBooking.is_fully_paid || false,
-            }),
-            finalInvoiceSentAt: effectiveBooking.final_invoice_sent_at || null,
-            location: effectiveBooking.location || null,
-            initialBreakdown: specialOffer
-                ? {
-                    packageTotal: specialOffer.package_total,
-                    addonTotal: specialOffer.addon_total,
-                    accommodationFee: specialOffer.accommodation_fee,
-                    discountAmount: specialOffer.discount_amount,
-                }
-                : null,
-            fastpikProjectInfo,
-            fastpikDataSource: liveFastpikResult.source,
-            fastpikDataSyncedAt: liveFastpikResult.syncedAt,
-            fastpikDataMessage: liveFastpikResult.message,
-            showFinalInvoice: shouldShowFinalInvoiceForClientStatus({
-                statuses: customClientStatuses,
-                currentStatus: effectiveClientStatus,
-                visibleFromStatus: finalInvoiceVisibleFromStatus,
-            }),
-            showFileResults: shouldShowTrackingFileLinksForClientStatus({
-                statuses: customClientStatuses,
-                currentStatus: effectiveClientStatus,
-                visibleFromStatus: trackingFileLinksVisibleFromStatus,
-            }),
+    return NextResponse.json(
+        {
+            success: true,
+            booking: {
+                bookingCode: effectiveBooking.booking_code,
+                trackingUuid: effectiveBooking.tracking_uuid,
+                clientName: effectiveBooking.client_name,
+                sessionDate: effectiveBooking.session_date,
+                sessionRows,
+                eventType: effectiveBooking.event_type,
+                clientStatus: effectiveClientStatus,
+                queuePosition: effectiveBooking.queue_position,
+                status: effectiveBooking.status,
+                serviceName: (effectiveBooking.services as { name?: string } | null)?.name || null,
+                fastpikUrl: effectiveBooking.fastpik_project_link,
+                driveUrl: effectiveBooking.drive_folder_url,
+                fastpikLinkDisplayMode: profileLinkMode,
+                createdAt: effectiveBooking.created_at,
+                totalPrice: effectiveBooking.total_price || 0,
+                dpPaid: effectiveBooking.dp_paid || 0,
+                isFullyPaid: effectiveBooking.is_fully_paid || false,
+                settlementStatus: effectiveBooking.settlement_status || "draft",
+                finalAdjustmentsTotal: getFinalAdjustmentsTotal(finalAdjustments),
+                finalInvoiceTotal: getFinalInvoiceTotal(effectiveBooking.total_price || 0, finalAdjustments),
+                remainingFinalPayment: getRemainingFinalPayment({
+                    total_price: effectiveBooking.total_price || 0,
+                    dp_paid: effectiveBooking.dp_paid || 0,
+                    final_adjustments: finalAdjustments,
+                    final_payment_amount: effectiveBooking.final_payment_amount || 0,
+                    final_paid_at: effectiveBooking.final_paid_at,
+                    settlement_status: effectiveBooking.settlement_status,
+                    is_fully_paid: effectiveBooking.is_fully_paid || false,
+                }),
+                finalInvoiceSentAt: effectiveBooking.final_invoice_sent_at || null,
+                location: effectiveBooking.location || null,
+                initialBreakdown: specialOffer
+                    ? {
+                        packageTotal: specialOffer.package_total,
+                        addonTotal: specialOffer.addon_total,
+                        accommodationFee: specialOffer.accommodation_fee,
+                        discountAmount: specialOffer.discount_amount,
+                    }
+                    : null,
+                fastpikProjectInfo,
+                fastpikDataSource: liveFastpikResult.source,
+                fastpikDataSyncedAt: liveFastpikResult.syncedAt,
+                fastpikDataMessage: liveFastpikResult.message,
+                showFinalInvoice: shouldShowFinalInvoiceForClientStatus({
+                    statuses: customClientStatuses,
+                    currentStatus: effectiveClientStatus,
+                    visibleFromStatus: finalInvoiceVisibleFromStatus,
+                }),
+                showFileResults: shouldShowTrackingFileLinksForClientStatus({
+                    statuses: customClientStatuses,
+                    currentStatus: effectiveClientStatus,
+                    visibleFromStatus: trackingFileLinksVisibleFromStatus,
+                }),
+            },
+            vendorName,
         },
-        vendorName,
-    });
+        { headers: NO_STORE_HEADERS },
+    );
 }

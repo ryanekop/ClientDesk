@@ -19,6 +19,14 @@ import {
   resolveSpecialOfferSnapshotFromExtraFields,
 } from "@/lib/booking-special-offer";
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+  Pragma: "no-cache",
+  Expires: "0",
+} as const;
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -205,12 +213,18 @@ export async function GET(request: NextRequest) {
   const t = labels[lang] || labels.id;
 
   if (!code) {
-    return NextResponse.json({ error: "Booking code required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Booking code required" },
+      { status: 400, headers: NO_STORE_HEADERS },
+    );
   }
 
   const cachedPayload = await getInvoicePayloadCached(code, stage, lang);
   if (!cachedPayload) {
-    return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Booking not found" },
+      { status: 404, headers: NO_STORE_HEADERS },
+    );
   }
   const { booking, profile } = cachedPayload;
 
@@ -963,6 +977,7 @@ export async function GET(request: NextRequest) {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="${filename}"`,
+      ...NO_STORE_HEADERS,
     },
   });
 }

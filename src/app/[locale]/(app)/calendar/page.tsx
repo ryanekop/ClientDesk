@@ -216,6 +216,17 @@ export default function CalendarPage() {
     const [googleOpenGuard, setGoogleOpenGuard] = React.useState<GoogleOpenGuardState | null>(null);
     const [googleOpenGuardLoading, setGoogleOpenGuardLoading] = React.useState(false);
     const [disconnectConfirmOpen, setDisconnectConfirmOpen] = React.useState(false);
+    const invalidateProfilePublicCache = React.useCallback(async () => {
+        try {
+            await fetch("/api/internal/cache/invalidate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ scope: "profile" }),
+            });
+        } catch {
+            // Best effort cache invalidation.
+        }
+    }, []);
 
     const { statusVisuals, statusVisualsLowercase } = React.useMemo(() => {
         const map: Record<string, StatusVisual> = {};
@@ -532,6 +543,7 @@ export default function CalendarPage() {
                 google_token_expiry: null,
             })
             .eq("id", user.id);
+        await invalidateProfilePublicCache();
 
         setIsGoogleConnected(false);
     }

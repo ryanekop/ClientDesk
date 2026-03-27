@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { invalidatePublicCachesForProfile } from "@/lib/public-cache-invalidation";
 import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { getCalendarClient } from "@/utils/google/calendar";
 import { getDriveClient } from "@/utils/google/drive";
@@ -172,6 +173,7 @@ export async function GET() {
       }
       if (Object.keys(patch).length > 0) {
         await supabase.from("profiles").update(patch).eq("id", user.id);
+        invalidatePublicCachesForProfile({ userId: user.id });
       }
     }
 
