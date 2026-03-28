@@ -4,6 +4,7 @@ import {
   EVENT_EXTRA_FIELDS,
   getExtraFieldDefinitionByKey,
 } from "@/utils/form-extra-fields";
+import { normalizeEventTypeName } from "@/lib/event-type-config";
 
 export type CustomFieldType =
   | "text"
@@ -624,6 +625,23 @@ export function normalizeStoredFormLayout(
   }
 
   return createDefaultFormLayout(eventType);
+}
+
+export function resolveNormalizedActiveFormLayout(
+  formSectionsByEventType: Record<string, FormLayoutItem[]>,
+  eventType: string | null | undefined,
+): FormLayoutItem[] {
+  const normalizedEventType = normalizeEventTypeName(eventType) || eventType || "";
+  const candidateLayout = normalizedEventType
+    ? formSectionsByEventType[normalizedEventType] ||
+      formSectionsByEventType.Umum ||
+      []
+    : formSectionsByEventType.Umum || [];
+
+  return normalizeStoredFormLayout(
+    candidateLayout,
+    normalizedEventType || "Umum",
+  );
 }
 
 export function groupFormLayoutBySection(

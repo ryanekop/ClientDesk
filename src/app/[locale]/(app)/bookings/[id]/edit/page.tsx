@@ -27,6 +27,7 @@ import {
     extractCustomFieldValueMap,
     getGroupedCustomLayoutSections,
     normalizeStoredFormLayout,
+    resolveNormalizedActiveFormLayout,
     type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
 import { getLayoutExtraFields } from "@/utils/form-extra-fields";
@@ -662,9 +663,18 @@ export default function EditBookingPage() {
         });
     };
 
+    const normalizedEventType = React.useMemo(
+        () => normalizeEventTypeName(eventType) || eventType,
+        [eventType],
+    );
+
     const activeFormLayout = React.useMemo(
-        () => formSectionsByEventType[eventType] || formSectionsByEventType.Umum || [],
-        [eventType, formSectionsByEventType],
+        () =>
+            resolveNormalizedActiveFormLayout(
+                formSectionsByEventType,
+                normalizedEventType,
+            ),
+        [formSectionsByEventType, normalizedEventType],
     );
 
     const currentExtraFields = React.useMemo(
@@ -676,8 +686,11 @@ export default function EditBookingPage() {
     );
 
     const activeCustomLayoutSections = React.useMemo(() => {
-        return getGroupedCustomLayoutSections(activeFormLayout, eventType);
-    }, [activeFormLayout, eventType]);
+        return getGroupedCustomLayoutSections(
+            activeFormLayout,
+            normalizedEventType || "Umum",
+        );
+    }, [activeFormLayout, normalizedEventType]);
 
     React.useEffect(() => {
         if (!hasUniversityExtraField) {
@@ -816,7 +829,7 @@ export default function EditBookingPage() {
 
         const customFieldSnapshots = buildCustomFieldSnapshots(
             activeFormLayout,
-            eventType,
+            normalizedEventType || "Umum",
             customFieldValues,
         );
         const existingSpecialOffer = resolveSpecialOfferSnapshotFromExtraFields(
