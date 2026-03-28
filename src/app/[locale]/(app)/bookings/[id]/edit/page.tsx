@@ -29,6 +29,7 @@ import {
     normalizeStoredFormLayout,
     type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
+import { getLayoutExtraFields } from "@/utils/form-extra-fields";
 import {
     getActiveEventTypes,
     getBuiltInEventTypes,
@@ -68,10 +69,12 @@ import {
     resolveSpecialOfferSnapshotFromExtraFields,
 } from "@/lib/booking-special-offer";
 import {
-    hasUniversityReferenceSelection,
-    isUniversityExtraField,
+    hasUniversityValue,
+    UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
+    UNIVERSITY_EXTRA_FIELD_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
+import { resolveUniversityExtraFieldsForClient } from "@/lib/university-reference-client";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -182,6 +185,23 @@ type ProfileRow = {
     form_event_types?: string[] | null;
     custom_event_types?: unknown;
 };
+
+const EXTRA_FIELD_LABEL_KEYS = {
+    universitas: "university",
+    fakultas: "faculty",
+    nama_pasangan: "partnerName",
+    instagram_pasangan: "partnerInstagram",
+    jumlah_tamu: "estimatedGuests",
+    tempat_akad: "akadVenue",
+    tempat_resepsi: "receptionVenue",
+    usia_kehamilan: "pregnancyAge",
+    gender_bayi: "babyGender",
+    nama_bayi: "babyName",
+    tanggal_lahir: "dateOfBirth",
+    nama_brand: "brandName",
+    tipe_konten: "contentType",
+    jumlah_anggota: "memberCount",
+} as const;
 
 function formatNumber(n: number | ""): string {
     if (n === "" || n === 0) return "";
@@ -307,6 +327,7 @@ export default function EditBookingPage() {
         trackingUuid: null,
     });
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
+    const [isUniversityManualEntryActive, setIsUniversityManualEntryActive] = React.useState(false);
     const [extraLocationCoords, setExtraLocationCoords] = React.useState<Record<string, LocationCoords>>({});
     const [customFieldValues, setCustomFieldValues] = React.useState<Record<string, string>>({});
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
@@ -527,6 +548,12 @@ export default function EditBookingPage() {
                         : null,
                 );
                 setExtraFields(nextExtraFields);
+                setIsUniversityManualEntryActive(
+                    Boolean(
+                        nextExtraFields[UNIVERSITY_EXTRA_FIELD_KEY] &&
+                        !nextExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY],
+                    ),
+                );
                 const seededExtraCoords: Record<string, LocationCoords> = {};
                 if (
                     booking.location &&
@@ -635,13 +662,28 @@ export default function EditBookingPage() {
         });
     };
 
+    const activeFormLayout = React.useMemo(
+        () => formSectionsByEventType[eventType] || formSectionsByEventType.Umum || [],
+        [eventType, formSectionsByEventType],
+    );
+
+    const currentExtraFields = React.useMemo(
+        () => getLayoutExtraFields(activeFormLayout),
+        [activeFormLayout],
+    );
+    const hasUniversityExtraField = currentExtraFields.some(
+        (field) => field.key === UNIVERSITY_EXTRA_FIELD_KEY,
+    );
+
     const activeCustomLayoutSections = React.useMemo(() => {
-        const rawLayout =
-            formSectionsByEventType[eventType] ||
-            formSectionsByEventType.Umum ||
-            [];
-        return getGroupedCustomLayoutSections(rawLayout, eventType);
-    }, [eventType, formSectionsByEventType]);
+        return getGroupedCustomLayoutSections(activeFormLayout, eventType);
+    }, [activeFormLayout, eventType]);
+
+    React.useEffect(() => {
+        if (!hasUniversityExtraField) {
+            setIsUniversityManualEntryActive(false);
+        }
+    }, [hasUniversityExtraField]);
 
     const clientCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "client_info")?.items || [];
     const sessionCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "session_details")?.items || [];
@@ -718,7 +760,7 @@ export default function EditBookingPage() {
             setSaving(false);
             return;
         }
-        if (!hasUniversityReferenceSelection(extraFields, eventType)) {
+        if (hasUniversityExtraField && !hasUniversityValue(extraFields)) {
             showFeedback(tBookingEditor("errorUniversitySuggestionRequired"));
             setSaving(false);
             return;
@@ -759,8 +801,21 @@ export default function EditBookingPage() {
             delete mergedExtra.tanggal_akad;
             delete mergedExtra.tanggal_resepsi;
         }
+
+        let resolvedExtraFields = { ...mergedExtra };
+        try {
+            resolvedExtraFields = await resolveUniversityExtraFieldsForClient(
+                mergedExtra,
+                { enabled: hasUniversityExtraField },
+            );
+        } catch {
+            showFeedback(tBookingEditor("failedResolveUniversity"));
+            setSaving(false);
+            return;
+        }
+
         const customFieldSnapshots = buildCustomFieldSnapshots(
-            formSectionsByEventType[eventType] || formSectionsByEventType.Umum || [],
+            activeFormLayout,
             eventType,
             customFieldValues,
         );
@@ -788,7 +843,7 @@ export default function EditBookingPage() {
         ) as Record<string, unknown>;
         const nextExtraFieldsPayload = mergeSpecialOfferSnapshotIntoExtraFields({
             ...preservedStructuredExtraFields,
-            ...mergedExtra,
+            ...resolvedExtraFields,
             ...(customFieldSnapshots.length > 0
                 ? { custom_fields: customFieldSnapshots }
                 : {}),
@@ -797,12 +852,12 @@ export default function EditBookingPage() {
             eventType === "Wedding"
                 ? [
                     {
-                        address: extraFields.tempat_akad,
+                        address: resolvedExtraFields.tempat_akad,
                         lat: extraLocationCoords.tempat_akad?.lat,
                         lng: extraLocationCoords.tempat_akad?.lng,
                     },
                     {
-                        address: extraFields.tempat_resepsi,
+                        address: resolvedExtraFields.tempat_resepsi,
                         lat: extraLocationCoords.tempat_resepsi?.lat,
                         lng: extraLocationCoords.tempat_resepsi?.lng,
                     },
@@ -1107,7 +1162,6 @@ export default function EditBookingPage() {
         discountAmount: discountAmountValue,
     };
 
-    const currentExtraFields = EXTRA_FIELDS_DEF[eventType] || [];
     const reqMark = <span className="text-red-500 ml-0.5">*</span>;
 
     if (loading) return (
@@ -1165,14 +1219,17 @@ export default function EditBookingPage() {
                     {currentExtraFields.length > 0 && (
                         <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 pt-3 border-t border-dashed">
                             {currentExtraFields.map(f => {
-                                const fieldLabel = tBookingEditor(`extraFieldLabels.${f.labelKey}`);
+                                const fieldLabelKey =
+                                    EXTRA_FIELD_LABEL_KEYS[
+                                        f.key as keyof typeof EXTRA_FIELD_LABEL_KEYS
+                                    ];
+                                const fieldLabel = fieldLabelKey
+                                    ? tBookingEditor(`extraFieldLabels.${fieldLabelKey}`)
+                                    : f.label;
                                 return (
                                 <div key={f.key} className={`space-y-1.5 ${f.isLocation || f.fullWidth || currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
                                     <label className="text-xs font-medium text-muted-foreground">{fieldLabel}{f.required && <span className="text-red-500 ml-0.5">*</span>}</label>
-                                    {isUniversityExtraField({
-                                        eventType,
-                                        fieldKey: f.key,
-                                    }) ? (
+                                    {f.key === UNIVERSITY_EXTRA_FIELD_KEY ? (
                                         <UniversityAutocomplete
                                             value={extraFields[f.key] || ""}
                                             selectedId={extraFields[UNIVERSITY_REFERENCE_EXTRA_KEY] || ""}
@@ -1185,6 +1242,7 @@ export default function EditBookingPage() {
                                                     if (item) {
                                                         next[f.key] = item.displayName || item.name;
                                                         next[UNIVERSITY_REFERENCE_EXTRA_KEY] = item.id;
+                                                        delete next[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY];
                                                     } else {
                                                         delete next[UNIVERSITY_REFERENCE_EXTRA_KEY];
                                                     }
@@ -1193,7 +1251,28 @@ export default function EditBookingPage() {
                                             }
                                             placeholder={tBookingEditor("searchUniversity")}
                                             required={f.required}
-                                            allowManualCreate
+                                            allowManualEntry
+                                            manualEntryActive={isUniversityManualEntryActive}
+                                            onManualEntryActiveChange={(value) => {
+                                                setIsUniversityManualEntryActive(value);
+                                                setExtraFields((prev) => {
+                                                    const next = { ...prev };
+                                                    delete next[UNIVERSITY_REFERENCE_EXTRA_KEY];
+                                                    if (!value) {
+                                                        delete next[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY];
+                                                    }
+                                                    return next;
+                                                });
+                                            }}
+                                            manualAbbreviationValue={
+                                                extraFields[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY] || ""
+                                            }
+                                            onManualAbbreviationChange={(value) =>
+                                                setExtraFields((prev) => ({
+                                                    ...prev,
+                                                    [UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY]: value,
+                                                }))
+                                            }
                                         />
                                     ) : f.isLocation ? (
                                         <LocationAutocomplete
@@ -1250,7 +1329,7 @@ export default function EditBookingPage() {
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
-                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setExtraLocationCoords({}); setCustomFieldValues({}); setPackageSearchQuery(""); setAddonSearchQuery(""); }} className={selectClass} required>
+                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setIsUniversityManualEntryActive(false); setExtraLocationCoords({}); setCustomFieldValues({}); setPackageSearchQuery(""); setAddonSearchQuery(""); }} className={selectClass} required>
                                 {eventTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>

@@ -1,7 +1,7 @@
 export const UNIVERSITY_EXTRA_FIELD_KEY = "universitas";
 export const UNIVERSITY_REFERENCE_EXTRA_KEY = "universitas_ref_id";
-const LEGACY_PUBLIC_CUSTOM_EVENT_TYPE = "Lainnya";
-const PUBLIC_CUSTOM_EVENT_TYPE = "Custom/Lainnya";
+export const UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY =
+  "universitas_abbreviation_draft";
 
 export type UniversityReferenceSource =
   | "kip_kuliah"
@@ -17,16 +17,6 @@ export type UniversityReferenceItem = {
   abbreviation?: string | null;
   displayName?: string;
 };
-
-function normalizeUniversityEventType(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim();
-  if (!normalized) return null;
-  if (normalized === LEGACY_PUBLIC_CUSTOM_EVENT_TYPE) {
-    return PUBLIC_CUSTOM_EVENT_TYPE;
-  }
-  return normalized;
-}
 
 export function cleanUniversityName(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -78,10 +68,8 @@ export function isUniversityExtraField(params: {
   eventType: string | null | undefined;
   fieldKey: string | null | undefined;
 }) {
-  return (
-    normalizeUniversityEventType(params.eventType) === "Wisuda" &&
-    params.fieldKey === UNIVERSITY_EXTRA_FIELD_KEY
-  );
+  void params.eventType;
+  return params.fieldKey === UNIVERSITY_EXTRA_FIELD_KEY;
 }
 
 export function getUniversityReferenceId(
@@ -92,20 +80,32 @@ export function getUniversityReferenceId(
   return value.trim();
 }
 
-export function hasUniversityReferenceSelection(
-  extraFields: Record<string, string> | null | undefined,
-  eventType: string | null | undefined,
+export function getUniversityDraftAbbreviation(
+  raw: Record<string, unknown> | null | undefined,
 ) {
-  if (normalizeUniversityEventType(eventType) !== "Wisuda") {
-    return true;
-  }
+  const value = raw?.[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY];
+  if (typeof value !== "string") return "";
+  return cleanUniversityAbbreviation(value);
+}
 
+export function hasUniversityValue(
+  extraFields: Record<string, string> | null | undefined,
+) {
   const universityName = cleanUniversityName(
     extraFields?.[UNIVERSITY_EXTRA_FIELD_KEY] || "",
   );
-  const universityRefId = (extraFields?.[UNIVERSITY_REFERENCE_EXTRA_KEY] || "").trim();
+  return universityName.length > 0;
+}
 
-  return universityName.length > 0 && universityRefId.length > 0;
+export function isUniversityReferenceItem(
+  value: unknown,
+): value is UniversityReferenceItem {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    typeof (value as UniversityReferenceItem).id === "string" &&
+    typeof (value as UniversityReferenceItem).name === "string"
+  );
 }
 
 export function isUniversityReferenceMetaKey(key: string) {

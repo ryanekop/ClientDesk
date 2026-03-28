@@ -1,6 +1,9 @@
 "use client";
 
-import { EVENT_EXTRA_FIELDS } from "@/utils/form-extra-fields";
+import {
+  EVENT_EXTRA_FIELDS,
+  getExtraFieldDefinitionByKey,
+} from "@/utils/form-extra-fields";
 
 export type CustomFieldType =
   | "text"
@@ -120,6 +123,10 @@ export type GroupedCustomLayoutSection = {
   sectionId: BuiltInSectionId;
   sectionTitle: string;
   items: Array<CustomFieldItem | CustomSectionItem>;
+};
+
+type BuiltInFieldDefinitionOptions = {
+  extraFieldKeys?: string[];
 };
 
 const BUILT_IN_SECTIONS: BuiltInSectionDefinition[] = [
@@ -419,13 +426,26 @@ export function getBuiltInSectionDefinition(
 
 export function getBuiltInFieldDefinitions(
   eventType: string,
+  options: BuiltInFieldDefinitionOptions = {},
 ): BuiltInFieldDefinition[] {
-  const extraFields = (EVENT_EXTRA_FIELDS[eventType] || []).map((field) => ({
-    builtinId: `extra:${field.key}` as BuiltInFieldId,
-    label: field.label,
-    category: "Sesi" as const,
-    sectionId: "session_details" as const,
-  }));
+  const extraFieldKeys = new Set<string>(
+    (EVENT_EXTRA_FIELDS[eventType] || []).map((field) => field.key),
+  );
+  (options.extraFieldKeys || []).forEach((key) => {
+    if (getExtraFieldDefinitionByKey(key)) {
+      extraFieldKeys.add(key);
+    }
+  });
+
+  const extraFields = Array.from(extraFieldKeys)
+    .map((key) => getExtraFieldDefinitionByKey(key))
+    .filter((field): field is NonNullable<typeof field> => Boolean(field))
+    .map((field) => ({
+      builtinId: `extra:${field.key}` as BuiltInFieldId,
+      label: field.label,
+      category: "Sesi" as const,
+      sectionId: "session_details" as const,
+    }));
   const locationFields =
     eventType === "Wedding"
       ? [
@@ -471,8 +491,9 @@ export function getBuiltInFieldDefinitions(
 export function getBuiltInFieldDefinition(
   builtinId: BuiltInFieldId,
   eventType: string,
+  options: BuiltInFieldDefinitionOptions = {},
 ): BuiltInFieldDefinition | undefined {
-  return getBuiltInFieldDefinitions(eventType).find(
+  return getBuiltInFieldDefinitions(eventType, options).find(
     (field) => field.builtinId === builtinId,
   );
 }
@@ -480,9 +501,10 @@ export function getBuiltInFieldDefinition(
 export function getSectionIdForBuiltInField(
   builtinId: BuiltInFieldId,
   eventType: string,
+  options: BuiltInFieldDefinitionOptions = {},
 ): BuiltInSectionId {
   return (
-    getBuiltInFieldDefinition(builtinId, eventType)?.sectionId ??
+    getBuiltInFieldDefinition(builtinId, eventType, options)?.sectionId ??
     "session_details"
   );
 }
@@ -532,8 +554,23 @@ function normalizeNewLayout(
   items: FormLayoutItem[],
   eventType: string,
 ): FormLayoutItem[] {
+  const explicitExtraFieldKeys = Array.from(
+    new Set(
+      items.flatMap((item) => {
+        if (item.kind !== "builtin_field") return [];
+        if (!item.builtinId.startsWith("extra:")) return [];
+        const extraFieldKey = item.builtinId.slice("extra:".length);
+        return getExtraFieldDefinitionByKey(extraFieldKey)
+          ? [extraFieldKey]
+          : [];
+      }),
+    ),
+  );
+  const builtInOptions = { extraFieldKeys: explicitExtraFieldKeys };
   const validBuiltInIds = new Set(
-    getBuiltInFieldDefinitions(eventType).map((field) => field.builtinId),
+    getBuiltInFieldDefinitions(eventType, builtInOptions).map(
+      (field) => field.builtinId,
+    ),
   );
   const seenBuiltIns = new Set<BuiltInFieldId>();
   const buckets = initializeBuckets();
@@ -550,7 +587,11 @@ function normalizeNewLayout(
         return;
       }
 
-      const sectionId = getSectionIdForBuiltInField(item.builtinId, eventType);
+      const sectionId = getSectionIdForBuiltInField(
+        item.builtinId,
+        eventType,
+        builtInOptions,
+      );
       seenBuiltIns.add(item.builtinId);
       currentSection = sectionId;
       buckets[sectionId].push(createBuiltInFieldItem(item.builtinId));
@@ -560,7 +601,7 @@ function normalizeNewLayout(
     buckets[currentSection].push(item);
   });
 
-  getBuiltInFieldDefinitions(eventType).forEach((field) => {
+  getBuiltInFieldDefinitions(eventType, builtInOptions).forEach((field) => {
     if (seenBuiltIns.has(field.builtinId)) return;
     buckets[field.sectionId].push(createBuiltInFieldItem(field.builtinId));
   });

@@ -3,7 +3,10 @@ import {
   formatTemplateSessionDate,
 } from "@/utils/format-date";
 import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
-import { UNIVERSITY_REFERENCE_EXTRA_KEY } from "@/lib/university-references";
+import {
+  UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
+  UNIVERSITY_REFERENCE_EXTRA_KEY,
+} from "@/lib/university-references";
 
 export type EventExtraField = {
   key: string;
@@ -142,9 +145,54 @@ const EXTRA_FIELD_PREVIEW_VALUES: Record<string, string> = {
   jumlah_anggota: "5 orang",
 };
 
+const EXTRA_FIELD_DEFINITION_BY_KEY = Object.values(EVENT_EXTRA_FIELDS).reduce(
+  (acc, fields) => {
+    fields.forEach((field) => {
+      if (!(field.key in acc)) {
+        acc[field.key] = field;
+      }
+    });
+    return acc;
+  },
+  {} as Record<string, EventExtraField>,
+);
+
 export function getEventExtraFields(eventType: string | null | undefined): EventExtraField[] {
   if (!eventType) return [];
   return EVENT_EXTRA_FIELDS[eventType] || [];
+}
+
+export function getExtraFieldDefinitionByKey(
+  key: string | null | undefined,
+): EventExtraField | null {
+  if (!key) return null;
+  return EXTRA_FIELD_DEFINITION_BY_KEY[key] || null;
+}
+
+export function getLayoutExtraFields(
+  layout: Array<{ kind?: string; builtinId?: string }> | null | undefined,
+): EventExtraField[] {
+  if (!Array.isArray(layout)) return [];
+
+  const seen = new Set<string>();
+  const result: EventExtraField[] = [];
+
+  layout.forEach((item) => {
+    if (item?.kind !== "builtin_field") return;
+    if (typeof item.builtinId !== "string") return;
+    if (!item.builtinId.startsWith("extra:")) return;
+
+    const key = item.builtinId.slice("extra:".length);
+    if (!key || seen.has(key)) return;
+
+    const definition = getExtraFieldDefinitionByKey(key);
+    if (!definition) return;
+
+    seen.add(key);
+    result.push(definition);
+  });
+
+  return result;
 }
 
 export function getEventExtraFieldTemplateTokens(
@@ -172,9 +220,10 @@ export function buildExtraFieldTemplateVars(raw: unknown): Record<string, string
 
   return Object.fromEntries(
     Object.entries(raw as Record<string, unknown>).filter(
-      ([key, value]) =>
+        ([key, value]) =>
         key !== "custom_fields" &&
         key !== UNIVERSITY_REFERENCE_EXTRA_KEY &&
+        key !== UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY &&
         typeof value === "string" &&
         value.trim().length > 0,
     ),

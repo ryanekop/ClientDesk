@@ -1,4 +1,7 @@
-import { UNIVERSITY_REFERENCE_EXTRA_KEY } from "@/lib/university-references";
+import {
+  UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
+  UNIVERSITY_REFERENCE_EXTRA_KEY,
+} from "@/lib/university-references";
 
 export type CustomFieldSnapshot = {
   id: string;
@@ -80,7 +83,9 @@ export function extractBuiltInExtraFieldValues(
     Object.entries(raw as Record<string, unknown>)
       .filter(
         ([key]) =>
-          key !== "custom_fields" && key !== UNIVERSITY_REFERENCE_EXTRA_KEY,
+          key !== "custom_fields" &&
+          key !== UNIVERSITY_REFERENCE_EXTRA_KEY &&
+          key !== UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
       )
       .map(([key, value]) => [key, stringifyFormFieldValue(value)] as const)
       .filter(([, value]) => value.length > 0),

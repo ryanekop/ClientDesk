@@ -17,6 +17,15 @@ type UniversitySearchRow = {
   normalized_abbreviation?: string | null;
 };
 
+function mapUniversityRow(item: UniversitySearchRow) {
+  return {
+    id: item.id,
+    name: item.name,
+    abbreviation: item.abbreviation || null,
+    displayName: buildUniversityDisplayName(item.name, item.abbreviation),
+  };
+}
+
 function parseLimit(value: string | null) {
   const parsed = Number.parseInt(value || "", 10);
   if (!Number.isFinite(parsed)) return 8;
@@ -26,6 +35,30 @@ function parseLimit(value: string | null) {
 export async function GET(request: NextRequest) {
   const rawQuery = request.nextUrl.searchParams.get("q");
   const query = cleanUniversityName(rawQuery || "");
+  const exact = request.nextUrl.searchParams.get("exact") === "1";
+
+  if (exact) {
+    if (query.length < 2) {
+      return NextResponse.json({ item: null });
+    }
+
+    const supabase = createServiceClient();
+    const normalizedQuery = normalizeUniversityName(query);
+    const { data, error } = await supabase
+      .from("university_references")
+      .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
+      .eq("normalized_name", normalizedQuery)
+      .maybeSingle<UniversitySearchRow>();
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message || "Gagal mencari universitas.", item: null },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({ item: data ? mapUniversityRow(data) : null });
+  }
 
   if (query.length < 2) {
     return NextResponse.json({ items: [] });
@@ -67,12 +100,7 @@ export async function GET(request: NextRequest) {
       ).localeCompare(buildUniversityDisplayName(right.name, right.abbreviation), "id");
     })
     .slice(0, limit)
-    .map((item) => ({
-      id: item.id,
-      name: item.name,
-      abbreviation: item.abbreviation || null,
-      displayName: buildUniversityDisplayName(item.name, item.abbreviation),
-    }));
+    .map(mapUniversityRow);
 
   return NextResponse.json({ items: ranked });
 }
