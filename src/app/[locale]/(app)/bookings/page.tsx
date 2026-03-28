@@ -1717,13 +1717,14 @@ export default function BookingsPage() {
 
     const sortOptions = React.useMemo(
         () => [
-            { value: "booking_newest", label: "Urutkan: Booking Terbaru" },
-            { value: "booking_oldest", label: "Urutkan: Booking Terlama" },
-            { value: "session_newest", label: "Urutkan: Jadwal Sesi Terdekat" },
-            { value: "session_oldest", label: "Urutkan: Jadwal Sesi Terjauh" },
+            { value: "booking_newest", label: tb("sortBookingDateNewest") },
+            { value: "booking_oldest", label: tb("sortBookingDateOldest") },
+            { value: "session_newest", label: tb("sortSessionDateNearest") },
+            { value: "session_oldest", label: tb("sortSessionDateFarthest") },
         ],
-        [],
+        [tb],
     );
+    const sortPlaceholder = sortOptions[0]?.label || tb("sortMenuTitle");
     const dateBasisOptions = React.useMemo(
         () => [
             { value: "booking_date", label: tb("dateBasisBookingDate") },
@@ -1737,15 +1738,15 @@ export default function BookingsPage() {
     );
     const statusFilterOptions = React.useMemo(
         () => statusOpts.map((status) => ({ value: status, label: status })),
-        [statusOpts, tb],
+        [statusOpts],
     );
     const packageFilterOptions = React.useMemo(
         () => packages.map((packageName) => ({ value: packageName, label: packageName })),
-        [packages, tb],
+        [packages],
     );
     const freelanceFilterOptions = React.useMemo(
         () => freelancerNames.map((freelanceName) => ({ value: freelanceName, label: freelanceName })),
-        [freelancerNames, tb],
+        [freelancerNames],
     );
     const multiCountSuffix = locale === "en" ? "selected" : "dipilih";
 
@@ -1913,7 +1914,7 @@ export default function BookingsPage() {
                             value={sortOrder}
                             onChange={(nextValue) => setSortOrder(parseSortOrderValue(nextValue))}
                             options={sortOptions}
-                            placeholder={sortOptions[0]?.label || "Urutkan"}
+                            placeholder={sortPlaceholder}
                             className="w-[260px]"
                             mobileTitle={tb("sortMenuTitle")}
                         />
@@ -1932,7 +1933,7 @@ export default function BookingsPage() {
                         value={sortOrder}
                         onChange={(nextValue) => setSortOrder(parseSortOrderValue(nextValue))}
                         options={sortOptions}
-                        placeholder={sortOptions[0]?.label || "Urutkan"}
+                        placeholder={sortPlaceholder}
                         className="w-full"
                         mobileTitle={tb("sortMenuTitle")}
                     />
@@ -1971,27 +1972,27 @@ export default function BookingsPage() {
                                 />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Basis Tanggal</label>
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{tb("dateBasisLabel")}</label>
                                 <FilterSingleSelect
                                     value={dateBasis}
                                     onChange={(nextValue) => setDateBasis(parseDateBasisValue(nextValue))}
                                     options={dateBasisOptions}
-                                    placeholder={dateBasisOptions[0]?.label || "Booking Date"}
+                                    placeholder={dateBasisOptions[0]?.label || tb("dateBasisBookingDate")}
                                     className="w-full"
-                                    mobileTitle="Basis Tanggal"
+                                    mobileTitle={tb("dateBasisLabel")}
                                 />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Jenis acara</label>
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{tb("eventTypeLabel")}</label>
                                 <FilterMultiSelect
                                     values={eventTypeFilter}
                                     onChange={setEventTypeFilter}
                                     options={eventTypeFilterOptions}
-                                    placeholder="Semua Acara"
-                                    allLabel="Semua Acara"
+                                    placeholder={tb("allEventTypes")}
+                                    allLabel={tb("allEventTypes")}
                                     countSuffix={multiCountSuffix}
                                     className="w-full"
-                                    mobileTitle="Jenis acara"
+                                    mobileTitle={tb("eventTypeLabel")}
                                 />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
