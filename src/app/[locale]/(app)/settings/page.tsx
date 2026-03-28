@@ -327,6 +327,7 @@ const variableHints: Record<string, string[]> = {
     "{{event_type}}",
     "{{location}}",
     "{{location_maps_url}}",
+    "{{drive_link}}",
     "{{detail_location}}",
     "{{notes}}",
     ...MULTI_SESSION_WHATSAPP_VARS,
@@ -2182,6 +2183,7 @@ export default function SettingsPage() {
       "https://maps.google.com/maps?q=Jakarta+Convention+Center",
     detail_location: "Gedung Utama, Lt. 3, Ruang Ballroom A",
     notes: "Mohon datang 30 menit lebih awal",
+    drive_link: "https://drive.google.com/drive/folders/abc123",
     tracking_link: "https://clientdesk.ryanekoapp.web.id/id/track/abc123",
     invoice_url:
       "https://clientdesk.ryanekoapp.web.id/api/public/invoice?code=INV-100120250001",

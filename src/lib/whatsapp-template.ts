@@ -104,7 +104,8 @@ const DEFAULT_WHATSAPP_TEMPLATES: Record<
       "Paket: {{service_name}}\n" +
       "Tanggal: {{session_date}}\n" +
       "Jam: {{session_time}}\n" +
-      "Lokasi: {{location}}\n\n" +
+      "Lokasi: {{location}}\n" +
+      "Link Drive: {{drive_link}}\n\n" +
       "Mohon konfirmasi kehadiran. Terima kasih, {{studio_name}}.",
     en:
       "Hello {{freelancer_name}}, you have a new assignment.\n\n" +
@@ -113,7 +114,8 @@ const DEFAULT_WHATSAPP_TEMPLATES: Record<
       "Package: {{service_name}}\n" +
       "Date: {{session_date}}\n" +
       "Time: {{session_time}}\n" +
-      "Location: {{location}}\n\n" +
+      "Location: {{location}}\n" +
+      "Drive Link: {{drive_link}}\n\n" +
       "Please confirm your availability. Thank you, {{studio_name}}.",
   },
 };

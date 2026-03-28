@@ -30,6 +30,7 @@ type BookingWhatsAppTemplateBooking = {
   session_date?: string | null;
   total_price?: number | null;
   dp_paid?: number | null;
+  drive_folder_url?: string | null;
   event_type?: string | null;
   location?: string | null;
   location_lat?: number | null;
@@ -143,6 +144,7 @@ export function buildBookingWhatsAppTemplateVars({
     ),
     detail_location: booking.location_detail || "-",
     notes: booking.notes || "-",
+    drive_link: booking.drive_folder_url?.trim() || "-",
     tracking_link: trackingLink?.trim() ? trackingLink : "-",
     invoice_url: invoiceUrl?.trim() ? invoiceUrl : "-",
     ...buildExtraFieldTemplateVars(booking.extra_fields),
