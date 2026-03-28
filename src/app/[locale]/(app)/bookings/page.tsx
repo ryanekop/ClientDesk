@@ -1890,7 +1890,7 @@ export default function BookingsPage() {
             {/* Search + Controls */}
             <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="relative flex-1">
+                    <div className="relative min-w-0 flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
                             type="text"
@@ -1915,7 +1915,7 @@ export default function BookingsPage() {
                             onChange={(nextValue) => setSortOrder(parseSortOrderValue(nextValue))}
                             options={sortOptions}
                             placeholder={sortPlaceholder}
-                            className="w-[260px]"
+                            className="w-[300px] md:w-[340px] lg:w-[360px]"
                             mobileTitle={tb("sortMenuTitle")}
                         />
                         {hasActiveFilters && (
