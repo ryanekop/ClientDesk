@@ -1541,6 +1541,8 @@
         "failedSaveInitialPriceComponents": "Gagal menyimpan komponen harga awal.",
         "failedVerifyDp": "Gagal menandai DP sebagai terverifikasi.",
         "failedUnverifyDp": "Gagal membatalkan verifikasi DP.",
+        "bookingCreatedSuccess": "Booking berhasil dibuat.",
+        "bookingUpdatedSuccess": "Perubahan booking berhasil disimpan.",
         "trackingLinkCopied": "Link tracking berhasil disalin.",
         "trackingLinkCopyFailed": "Gagal menyalin link tracking.",
         "failedRefreshDrivePath": "Gagal refresh path folder Drive.",

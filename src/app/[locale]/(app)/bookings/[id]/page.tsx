@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink, Upload, FileText, Trash2, AlertCircle, Image as ImageIcon, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FileDropzone } from "@/components/public/file-dropzone";
@@ -609,11 +609,14 @@ function isAddonAvailableForEvent(service: AddonService, eventType: string | nul
 export default function BookingDetailPage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const id = params.id as string;
     const supabase = createClient();
     const locale = useLocale();
     const tBookingDetail = useTranslations("BookingDetail");
     const bookingsPath = `/${locale}/bookings`;
+    const bookingDetailPath = `/${locale}/bookings/${id}`;
+    const postSaveState = searchParams.get("saved");
     const [booking, setBooking] = React.useState<Booking | null>(null);
     const [loading, setLoading] = React.useState(true);
     const [creatingFolder, setCreatingFolder] = React.useState(false);
@@ -765,6 +768,32 @@ export default function BookingDetailPage() {
     });
     const { showSuccessToast, successToastNode } = useSuccessToast();
     const warningTitle = tBookingDetail("warningTitle");
+    React.useEffect(() => {
+        if (postSaveState !== "create" && postSaveState !== "edit") return;
+
+        showSuccessToast(
+            postSaveState === "create"
+                ? tBookingDetail("bookingCreatedSuccess")
+                : tBookingDetail("bookingUpdatedSuccess"),
+        );
+
+        const nextSearchParams = new URLSearchParams(searchParams.toString());
+        nextSearchParams.delete("saved");
+        const nextQuery = nextSearchParams.toString();
+        router.replace(
+            nextQuery
+                ? `${bookingDetailPath}?${nextQuery}`
+                : bookingDetailPath,
+            { scroll: false },
+        );
+    }, [
+        bookingDetailPath,
+        postSaveState,
+        router,
+        searchParams,
+        showSuccessToast,
+        tBookingDetail,
+    ]);
     const copyTextWithSuccessToast = React.useCallback(
         async (text: string, successMessage: string, errorMessage: string) => {
             try {

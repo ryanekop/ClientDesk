@@ -1541,6 +1541,8 @@
         "failedSaveInitialPriceComponents": "Failed to save initial pricing components.",
         "failedVerifyDp": "Failed to mark DP as verified.",
         "failedUnverifyDp": "Failed to cancel DP verification.",
+        "bookingCreatedSuccess": "Booking created successfully.",
+        "bookingUpdatedSuccess": "Booking changes saved successfully.",
         "trackingLinkCopied": "Tracking link copied.",
         "trackingLinkCopyFailed": "Failed to copy tracking link.",
         "failedRefreshDrivePath": "Failed to refresh Drive folder path.",

@@ -762,300 +762,298 @@ export default function EditBookingPage() {
         }
 
         setSaving(true);
-
-        if (eventType === "Wedding" && (!extraFields.tempat_akad || !extraFields.tempat_resepsi)) {
-            showFeedback(tBookingEditor("errorWeddingLocationRequired"));
-            setSaving(false);
-            return;
-        }
-        if (selectedServiceIds.length === 0) {
-            showFeedback(tBookingEditor("errorSelectMainPackage"));
-            setSaving(false);
-            return;
-        }
-        if (hasUniversityExtraField && !hasUniversityValue(extraFields)) {
-            showFeedback(tBookingEditor("errorUniversitySuggestionRequired"));
-            setSaving(false);
-            return;
-        }
-
-        const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
-        const packageTotalValue = selectedMainServices.reduce(
-            (sum, service) => sum + (service.price || 0),
-            0,
-        );
-        const addonTotalValue = selectedAddonServices.reduce(
-            (sum, service) => sum + (service.price || 0),
-            0,
-        );
-        const accommodationFeeValue = typeof accommodationFee === "number" ? accommodationFee : 0;
-        const discountAmountValue = typeof discountAmount === "number" ? discountAmount : 0;
-        const tPrice = computeSpecialOfferTotal({
-            packageTotal: packageTotalValue,
-            addonTotal: addonTotalValue,
-            accommodationFee: accommodationFeeValue,
-            discountAmount: discountAmountValue,
-        });
-        const dPaid = parseFloat(dpPaid.toString()) || 0;
-
-        // Determine session_date: if split, use earliest; merge extra_fields with dates
-        let finalSessionDate = sessionDate || null;
-        const mergedExtra = { ...extraFields };
-        if (eventType === "Wedding" && splitDates) {
-            mergedExtra.tanggal_akad = akadDate || "";
-            mergedExtra.tanggal_resepsi = resepsiDate || "";
-            if (akadDate && resepsiDate) {
-                finalSessionDate = akadDate < resepsiDate ? akadDate : resepsiDate;
-            } else {
-                finalSessionDate = akadDate || resepsiDate || null;
-            }
-        } else if (eventType === "Wedding" && !splitDates) {
-            // Toggled off: remove split date fields
-            delete mergedExtra.tanggal_akad;
-            delete mergedExtra.tanggal_resepsi;
-        }
-
-        let resolvedExtraFields = { ...mergedExtra };
         try {
-            resolvedExtraFields = await resolveUniversityExtraFieldsForClient(
-                mergedExtra,
-                { enabled: hasUniversityExtraField },
-            );
-        } catch {
-            showFeedback(tBookingEditor("failedResolveUniversity"));
-            setSaving(false);
-            return;
-        }
-
-        const customFieldSnapshots = buildCustomFieldSnapshots(
-            activeFormLayout,
-            normalizedEventType || "Umum",
-            customFieldValues,
-        );
-        const existingSpecialOffer = resolveSpecialOfferSnapshotFromExtraFields(
-            baseExtraFieldsObject,
-        );
-        const nextSpecialOffer = buildEditableSpecialOfferSnapshot({
-            existingSnapshot: existingSpecialOffer,
-            selectedEventType: eventType,
-            selectedPackageServiceIds: selectedServiceIds,
-            selectedAddonServiceIds: selectedAddonIds,
-            packageTotal: packageTotalValue,
-            addonTotal: addonTotalValue,
-            accommodationFee: accommodationFeeValue,
-            discountAmount: discountAmountValue,
-            includeWhenZero: true,
-        });
-        const preservedStructuredExtraFields = Object.fromEntries(
-            Object.entries(baseExtraFieldsObject || {}).filter(
-                ([key, value]) =>
-                    key !== "custom_fields" &&
-                    key !== "special_offer" &&
-                    typeof value !== "string",
-            ),
-        ) as Record<string, unknown>;
-        const nextExtraFieldsPayload = mergeSpecialOfferSnapshotIntoExtraFields({
-            ...preservedStructuredExtraFields,
-            ...resolvedExtraFields,
-            ...(customFieldSnapshots.length > 0
-                ? { custom_fields: customFieldSnapshots }
-                : {}),
-        }, nextSpecialOffer);
-        const resolvedLocation = resolvePreferredLocation(
-            eventType === "Wedding"
-                ? [
-                    {
-                        address: resolvedExtraFields.tempat_akad,
-                        lat: extraLocationCoords.tempat_akad?.lat,
-                        lng: extraLocationCoords.tempat_akad?.lng,
-                    },
-                    {
-                        address: resolvedExtraFields.tempat_resepsi,
-                        lat: extraLocationCoords.tempat_resepsi?.lat,
-                        lng: extraLocationCoords.tempat_resepsi?.lng,
-                    },
-                    {
-                        address: location,
-                        lat: locationCoords.lat,
-                        lng: locationCoords.lng,
-                    },
-                ]
-                : [
-                    {
-                        address: location,
-                        lat: locationCoords.lat,
-                        lng: locationCoords.lng,
-                    },
-                ],
-        );
-
-        const previousStatus = initialStatus;
-        const nextStatus = status;
-        const dpChanged = dPaid !== initialDpPaid;
-        const shouldResetVerifiedDp = dpChanged && Boolean(dpVerifiedAt);
-        const verifiedDpResetPatch = shouldResetVerifiedDp
-            ? {
-                dp_verified_amount: 0,
-                dp_verified_at: null,
-                dp_refund_amount: 0,
-                dp_refunded_at: null,
+            if (eventType === "Wedding" && (!extraFields.tempat_akad || !extraFields.tempat_resepsi)) {
+                showFeedback(tBookingEditor("errorWeddingLocationRequired"));
+                return;
             }
-            : {};
-        const isCancelling = isTransitionToCancelled(previousStatus, nextStatus);
-        const cancelPatch = isCancelling
-            ? buildCancelPaymentPatch({
-                policy: options?.cancelPayment?.policy || "forfeit",
-                refundAmount: options?.cancelPayment?.refundAmount || 0,
-                verifiedAmount: dpVerifiedAmount,
-            })
-            : null;
-        const autoDpPatch = buildAutoDpVerificationPatch({
-            previousStatus,
-            nextStatus,
-            triggerStatus: dpVerifyTriggerStatus,
-            dpPaid: dPaid,
-            dpVerifiedAt,
-        });
+            if (selectedServiceIds.length === 0) {
+                showFeedback(tBookingEditor("errorSelectMainPackage"));
+                return;
+            }
+            if (hasUniversityExtraField && !hasUniversityValue(extraFields)) {
+                showFeedback(tBookingEditor("errorUniversitySuggestionRequired"));
+                return;
+            }
 
-        const { error } = await supabase.from("bookings").update({
-            client_name: clientName,
-            client_whatsapp: fullPhone,
-            instagram: instagram || null,
-            event_type: eventType,
-            booking_date: bookingDate || createdAtDateFallback || new Date().toISOString().slice(0, 10),
-            session_date: finalSessionDate,
-            location: resolvedLocation.location,
-            location_lat: resolvedLocation.locationLat,
-            location_lng: resolvedLocation.locationLng,
-            location_detail: locationDetail || null,
-            service_id: selectedServiceIds[0] || null,
-            freelance_id: freelancerIds[0] || null,
-            total_price: tPrice,
-            dp_paid: dPaid,
-            is_fully_paid: dPaid >= tPrice && tPrice > 0,
-            ...verifiedDpResetPatch,
-            status: nextStatus,
-            client_status: nextStatus,
-            ...(cancelPatch || {}),
-            ...(autoDpPatch || {}),
-            notes: notes || null,
-            admin_notes: adminNotes || null,
-            drive_folder_url: driveFolderUrl || null,
-            portfolio_url: portfolioUrl || null,
-            extra_fields: nextExtraFieldsPayload,
-            updated_at: new Date().toISOString(),
-        }).eq("id", id);
-        setSaving(false);
-
-        if (error) {
-            showFeedback(tBookingEditor("failedSaveChanges"));
-            return;
-        }
-        await invalidateBookingPublicCache();
-
-        // Sync junction table
-        await supabase.from("booking_freelance").delete().eq("booking_id", id);
-        await supabase.from("booking_services").delete().eq("booking_id", id);
-        const bookingServiceRows = [
-            ...selectedServiceIds.map((serviceId, index) => ({
-                booking_id: id,
-                service_id: serviceId,
-                kind: "main" as const,
-                sort_order: index,
-            })),
-            ...selectedAddonIds.map((serviceId, index) => ({
-                booking_id: id,
-                service_id: serviceId,
-                kind: "addon" as const,
-                sort_order: index,
-            })),
-        ];
-        if (bookingServiceRows.length > 0) {
-            await supabase.from("booking_services").insert(
-                bookingServiceRows,
+            const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
+            const packageTotalValue = selectedMainServices.reduce(
+                (sum, service) => sum + (service.price || 0),
+                0,
             );
-        }
-        if (freelancerIds.length > 0) {
-            await supabase.from("booking_freelance").insert(
-                freelancerIds.map((freelancerId) => ({ booking_id: id, freelance_id: freelancerId })),
+            const addonTotalValue = selectedAddonServices.reduce(
+                (sum, service) => sum + (service.price || 0),
+                0,
             );
-        }
+            const accommodationFeeValue = typeof accommodationFee === "number" ? accommodationFee : 0;
+            const discountAmountValue = typeof discountAmount === "number" ? discountAmount : 0;
+            const tPrice = computeSpecialOfferTotal({
+                packageTotal: packageTotalValue,
+                addonTotal: addonTotalValue,
+                accommodationFee: accommodationFeeValue,
+                discountAmount: discountAmountValue,
+            });
+            const dPaid = parseFloat(dpPaid.toString()) || 0;
 
-        const cancelledAfterSave = isCancelledBookingStatus(nextStatus);
-        const transitionFromCancelled =
-            isCancelledBookingStatus(previousStatus) &&
-            !isCancelledBookingStatus(nextStatus);
-
-        if (!cancelledAfterSave) {
-            const shouldInviteCalendar = Boolean(finalSessionDate) || transitionFromCancelled;
-            if (shouldInviteCalendar) {
-                try {
-                    const selectedFreelancerEmails = freelancers
-                        .filter((freelancer) => freelancerIds.includes(freelancer.id))
-                        .map((freelancer) => freelancer.google_email)
-                        .filter((email): email is string => Boolean(email));
-                    const noEmailNames = freelancers
-                        .filter((freelancer) => freelancerIds.includes(freelancer.id) && !freelancer.google_email)
-                        .map((freelancer) => freelancer.name);
-
-                    const res = await fetch("/api/google/calendar-invite", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            bookingId: id,
-                            attendeeEmails: selectedFreelancerEmails,
-                        }),
-                    });
-                    if (!res.ok) {
-                        const err = await res.json().catch(() => ({}));
-                        setCalendarWarning(
-                            tBookingEditor("calendarSyncFailed", {
-                                reason: err.error || tBookingEditor("googleCalendarNotConnected"),
-                            }),
-                        );
-                        setTimeout(() => setCalendarWarning(null), 5000);
-                    } else if (noEmailNames.length > 0) {
-                        setCalendarWarning(
-                            tBookingEditor("calendarInviteIncomplete", {
-                                names: noEmailNames.join(", "),
-                            }),
-                        );
-                        setTimeout(() => setCalendarWarning(null), 5000);
-                    }
-                } catch {
-                    setCalendarWarning(tBookingEditor("calendarSyncFailedRun"));
-                    setTimeout(() => setCalendarWarning(null), 5000);
+            // Determine session_date: if split, use earliest; merge extra_fields with dates
+            let finalSessionDate = sessionDate || null;
+            const mergedExtra = { ...extraFields };
+            if (eventType === "Wedding" && splitDates) {
+                mergedExtra.tanggal_akad = akadDate || "";
+                mergedExtra.tanggal_resepsi = resepsiDate || "";
+                if (akadDate && resepsiDate) {
+                    finalSessionDate = akadDate < resepsiDate ? akadDate : resepsiDate;
+                } else {
+                    finalSessionDate = akadDate || resepsiDate || null;
                 }
-            } else if (freelancerIds.length > 0) {
-                setCalendarWarning(tBookingEditor("calendarInviteSkippedNoSession"));
-                setTimeout(() => setCalendarWarning(null), 5000);
+            } else if (eventType === "Wedding" && !splitDates) {
+                // Toggled off: remove split date fields
+                delete mergedExtra.tanggal_akad;
+                delete mergedExtra.tanggal_resepsi;
             }
-        }
 
-        if (isTransitionToCancelled(previousStatus, nextStatus)) {
-            const calendarTransitionWarning = await syncGoogleCalendarForStatusTransition({
-                bookingId: id,
+            let resolvedExtraFields = { ...mergedExtra };
+            try {
+                resolvedExtraFields = await resolveUniversityExtraFieldsForClient(
+                    mergedExtra,
+                    { enabled: hasUniversityExtraField },
+                );
+            } catch {
+                showFeedback(tBookingEditor("failedResolveUniversity"));
+                return;
+            }
+
+            const customFieldSnapshots = buildCustomFieldSnapshots(
+                activeFormLayout,
+                normalizedEventType || "Umum",
+                customFieldValues,
+            );
+            const existingSpecialOffer = resolveSpecialOfferSnapshotFromExtraFields(
+                baseExtraFieldsObject,
+            );
+            const nextSpecialOffer = buildEditableSpecialOfferSnapshot({
+                existingSnapshot: existingSpecialOffer,
+                selectedEventType: eventType,
+                selectedPackageServiceIds: selectedServiceIds,
+                selectedAddonServiceIds: selectedAddonIds,
+                packageTotal: packageTotalValue,
+                addonTotal: addonTotalValue,
+                accommodationFee: accommodationFeeValue,
+                discountAmount: discountAmountValue,
+                includeWhenZero: true,
+            });
+            const preservedStructuredExtraFields = Object.fromEntries(
+                Object.entries(baseExtraFieldsObject || {}).filter(
+                    ([key, value]) =>
+                        key !== "custom_fields" &&
+                        key !== "special_offer" &&
+                        typeof value !== "string",
+                ),
+            ) as Record<string, unknown>;
+            const nextExtraFieldsPayload = mergeSpecialOfferSnapshotIntoExtraFields({
+                ...preservedStructuredExtraFields,
+                ...resolvedExtraFields,
+                ...(customFieldSnapshots.length > 0
+                    ? { custom_fields: customFieldSnapshots }
+                    : {}),
+            }, nextSpecialOffer);
+            const resolvedLocation = resolvePreferredLocation(
+                eventType === "Wedding"
+                    ? [
+                        {
+                            address: resolvedExtraFields.tempat_akad,
+                            lat: extraLocationCoords.tempat_akad?.lat,
+                            lng: extraLocationCoords.tempat_akad?.lng,
+                        },
+                        {
+                            address: resolvedExtraFields.tempat_resepsi,
+                            lat: extraLocationCoords.tempat_resepsi?.lat,
+                            lng: extraLocationCoords.tempat_resepsi?.lng,
+                        },
+                        {
+                            address: location,
+                            lat: locationCoords.lat,
+                            lng: locationCoords.lng,
+                        },
+                    ]
+                    : [
+                        {
+                            address: location,
+                            lat: locationCoords.lat,
+                            lng: locationCoords.lng,
+                        },
+                    ],
+            );
+
+            const previousStatus = initialStatus;
+            const nextStatus = status;
+            const dpChanged = dPaid !== initialDpPaid;
+            const shouldResetVerifiedDp = dpChanged && Boolean(dpVerifiedAt);
+            const verifiedDpResetPatch = shouldResetVerifiedDp
+                ? {
+                    dp_verified_amount: 0,
+                    dp_verified_at: null,
+                    dp_refund_amount: 0,
+                    dp_refunded_at: null,
+                }
+                : {};
+            const isCancelling = isTransitionToCancelled(previousStatus, nextStatus);
+            const cancelPatch = isCancelling
+                ? buildCancelPaymentPatch({
+                    policy: options?.cancelPayment?.policy || "forfeit",
+                    refundAmount: options?.cancelPayment?.refundAmount || 0,
+                    verifiedAmount: dpVerifiedAmount,
+                })
+                : null;
+            const autoDpPatch = buildAutoDpVerificationPatch({
                 previousStatus,
                 nextStatus,
-                locale,
+                triggerStatus: dpVerifyTriggerStatus,
+                dpPaid: dPaid,
+                dpVerifiedAt,
             });
-            if (calendarTransitionWarning) {
-                setCalendarWarning(`⚠️ ${calendarTransitionWarning}`);
-                setTimeout(() => setCalendarWarning(null), 5000);
-            }
-        }
 
-        setInitialStatus(nextStatus);
-        setInitialDpPaid(dPaid);
-        if (shouldResetVerifiedDp) {
-            setDpVerifiedAmount(0);
-            setDpVerifiedAt(null);
-            setDpRefundAmount(0);
-            setDpRefundedAt(null);
+            const { error } = await supabase.from("bookings").update({
+                client_name: clientName,
+                client_whatsapp: fullPhone,
+                instagram: instagram || null,
+                event_type: eventType,
+                booking_date: bookingDate || createdAtDateFallback || new Date().toISOString().slice(0, 10),
+                session_date: finalSessionDate,
+                location: resolvedLocation.location,
+                location_lat: resolvedLocation.locationLat,
+                location_lng: resolvedLocation.locationLng,
+                location_detail: locationDetail || null,
+                service_id: selectedServiceIds[0] || null,
+                freelance_id: freelancerIds[0] || null,
+                total_price: tPrice,
+                dp_paid: dPaid,
+                is_fully_paid: dPaid >= tPrice && tPrice > 0,
+                ...verifiedDpResetPatch,
+                status: nextStatus,
+                client_status: nextStatus,
+                ...(cancelPatch || {}),
+                ...(autoDpPatch || {}),
+                notes: notes || null,
+                admin_notes: adminNotes || null,
+                drive_folder_url: driveFolderUrl || null,
+                portfolio_url: portfolioUrl || null,
+                extra_fields: nextExtraFieldsPayload,
+                updated_at: new Date().toISOString(),
+            }).eq("id", id);
+
+            if (error) {
+                showFeedback(tBookingEditor("failedSaveChanges"));
+                return;
+            }
+            await invalidateBookingPublicCache();
+
+            // Sync junction table
+            await supabase.from("booking_freelance").delete().eq("booking_id", id);
+            await supabase.from("booking_services").delete().eq("booking_id", id);
+            const bookingServiceRows = [
+                ...selectedServiceIds.map((serviceId, index) => ({
+                    booking_id: id,
+                    service_id: serviceId,
+                    kind: "main" as const,
+                    sort_order: index,
+                })),
+                ...selectedAddonIds.map((serviceId, index) => ({
+                    booking_id: id,
+                    service_id: serviceId,
+                    kind: "addon" as const,
+                    sort_order: index,
+                })),
+            ];
+            if (bookingServiceRows.length > 0) {
+                await supabase.from("booking_services").insert(
+                    bookingServiceRows,
+                );
+            }
+            if (freelancerIds.length > 0) {
+                await supabase.from("booking_freelance").insert(
+                    freelancerIds.map((freelancerId) => ({ booking_id: id, freelance_id: freelancerId })),
+                );
+            }
+
+            const cancelledAfterSave = isCancelledBookingStatus(nextStatus);
+            const transitionFromCancelled =
+                isCancelledBookingStatus(previousStatus) &&
+                !isCancelledBookingStatus(nextStatus);
+
+            if (!cancelledAfterSave) {
+                const shouldInviteCalendar = Boolean(finalSessionDate) || transitionFromCancelled;
+                if (shouldInviteCalendar) {
+                    try {
+                        const selectedFreelancerEmails = freelancers
+                            .filter((freelancer) => freelancerIds.includes(freelancer.id))
+                            .map((freelancer) => freelancer.google_email)
+                            .filter((email): email is string => Boolean(email));
+                        const noEmailNames = freelancers
+                            .filter((freelancer) => freelancerIds.includes(freelancer.id) && !freelancer.google_email)
+                            .map((freelancer) => freelancer.name);
+
+                        const res = await fetch("/api/google/calendar-invite", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                bookingId: id,
+                                attendeeEmails: selectedFreelancerEmails,
+                            }),
+                        });
+                        if (!res.ok) {
+                            const err = await res.json().catch(() => ({}));
+                            setCalendarWarning(
+                                tBookingEditor("calendarSyncFailed", {
+                                    reason: err.error || tBookingEditor("googleCalendarNotConnected"),
+                                }),
+                            );
+                            setTimeout(() => setCalendarWarning(null), 5000);
+                        } else if (noEmailNames.length > 0) {
+                            setCalendarWarning(
+                                tBookingEditor("calendarInviteIncomplete", {
+                                    names: noEmailNames.join(", "),
+                                }),
+                            );
+                            setTimeout(() => setCalendarWarning(null), 5000);
+                        }
+                    } catch {
+                        setCalendarWarning(tBookingEditor("calendarSyncFailedRun"));
+                        setTimeout(() => setCalendarWarning(null), 5000);
+                    }
+                } else if (freelancerIds.length > 0) {
+                    setCalendarWarning(tBookingEditor("calendarInviteSkippedNoSession"));
+                    setTimeout(() => setCalendarWarning(null), 5000);
+                }
+            }
+
+            if (isTransitionToCancelled(previousStatus, nextStatus)) {
+                const calendarTransitionWarning = await syncGoogleCalendarForStatusTransition({
+                    bookingId: id,
+                    previousStatus,
+                    nextStatus,
+                    locale,
+                });
+                if (calendarTransitionWarning) {
+                    setCalendarWarning(`⚠️ ${calendarTransitionWarning}`);
+                    setTimeout(() => setCalendarWarning(null), 5000);
+                }
+            }
+
+            setInitialStatus(nextStatus);
+            setInitialDpPaid(dPaid);
+            if (shouldResetVerifiedDp) {
+                setDpVerifiedAmount(0);
+                setDpVerifiedAt(null);
+                setDpRefundAmount(0);
+                setDpRefundedAt(null);
+            }
+            setCancelStatusConfirmOpen(false);
+            void triggerFastpikAutoSync(id);
+            router.push(`/${locale}/bookings/${id}?saved=edit`);
+        } finally {
+            setSaving(false);
         }
-        setCancelStatusConfirmOpen(false);
-        void triggerFastpikAutoSync(id);
-        router.push(`/${locale}/bookings/${id}`);
     }
 
     async function handleSubmit(e: React.FormEvent) {

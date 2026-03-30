@@ -564,175 +564,175 @@ export default function NewBookingPage() {
         e.preventDefault();
         if (!requireBookingWrite()) return;
         setSaving(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { setSaving(false); return; }
-
-        if (eventType === "Wedding" && (!extraFields.tempat_akad || !extraFields.tempat_resepsi)) {
-            showFeedback(tBookingEditor("errorWeddingLocationRequired"));
-            setSaving(false);
-            return;
-        }
-        if (selectedServiceIds.length === 0) {
-            showFeedback(tBookingEditor("errorSelectMainPackage"));
-            setSaving(false);
-            return;
-        }
-        if (hasUniversityExtraField && !hasUniversityValue(extraFields)) {
-            showFeedback(tBookingEditor("errorUniversitySuggestionRequired"));
-            setSaving(false);
-            return;
-        }
-
-        const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
-
-        // Determine session_date: if split, use earliest; merge extra_fields with dates
-        let finalSessionDate = sessionDate || null;
-        const mergedExtra = { ...extraFields };
-        if (eventType === "Wedding" && splitDates) {
-            mergedExtra.tanggal_akad = akadDate || "";
-            mergedExtra.tanggal_resepsi = resepsiDate || "";
-            // session_date = earliest date for sorting/calendar
-            if (akadDate && resepsiDate) {
-                finalSessionDate = akadDate < resepsiDate ? akadDate : resepsiDate;
-            } else {
-                finalSessionDate = akadDate || resepsiDate || null;
-            }
-        }
-        let resolvedExtraFields = { ...mergedExtra };
         try {
-            resolvedExtraFields = await resolveUniversityExtraFieldsForClient(
-                mergedExtra,
-                { enabled: hasUniversityExtraField },
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            if (eventType === "Wedding" && (!extraFields.tempat_akad || !extraFields.tempat_resepsi)) {
+                showFeedback(tBookingEditor("errorWeddingLocationRequired"));
+                return;
+            }
+            if (selectedServiceIds.length === 0) {
+                showFeedback(tBookingEditor("errorSelectMainPackage"));
+                return;
+            }
+            if (hasUniversityExtraField && !hasUniversityValue(extraFields)) {
+                showFeedback(tBookingEditor("errorUniversitySuggestionRequired"));
+                return;
+            }
+
+            const fullPhone = phoneNumber ? `${countryCode}${sanitizePhone(phoneNumber)}` : null;
+
+            // Determine session_date: if split, use earliest; merge extra_fields with dates
+            let finalSessionDate = sessionDate || null;
+            const mergedExtra = { ...extraFields };
+            if (eventType === "Wedding" && splitDates) {
+                mergedExtra.tanggal_akad = akadDate || "";
+                mergedExtra.tanggal_resepsi = resepsiDate || "";
+                // session_date = earliest date for sorting/calendar
+                if (akadDate && resepsiDate) {
+                    finalSessionDate = akadDate < resepsiDate ? akadDate : resepsiDate;
+                } else {
+                    finalSessionDate = akadDate || resepsiDate || null;
+                }
+            }
+            let resolvedExtraFields = { ...mergedExtra };
+            try {
+                resolvedExtraFields = await resolveUniversityExtraFieldsForClient(
+                    mergedExtra,
+                    { enabled: hasUniversityExtraField },
+                );
+            } catch {
+                showFeedback(tBookingEditor("failedResolveUniversity"));
+                return;
+            }
+
+            const packageTotalValue = selectedMainServices.reduce(
+                (sum, service) => sum + service.price,
+                0,
             );
-        } catch {
-            showFeedback(tBookingEditor("failedResolveUniversity"));
-            setSaving(false);
-            return;
-        }
+            const addonTotalValue = selectedAddonServices.reduce(
+                (sum, service) => sum + service.price,
+                0,
+            );
+            const accommodationFeeValue =
+                typeof accommodationFee === "number" ? accommodationFee : 0;
+            const discountAmountValue =
+                typeof discountAmount === "number" ? discountAmount : 0;
+            const totalPriceValue = computeSpecialOfferTotal({
+                packageTotal: packageTotalValue,
+                addonTotal: addonTotalValue,
+                accommodationFee: accommodationFeeValue,
+                discountAmount: discountAmountValue,
+            });
+            const customFieldSnapshots = buildCustomFieldSnapshots(
+                activeFormLayout,
+                normalizedEventType || "Umum",
+                customFieldValues,
+            );
+            const nextSpecialOffer = buildEditableSpecialOfferSnapshot({
+                existingSnapshot: null,
+                selectedEventType: eventType,
+                selectedPackageServiceIds: selectedServiceIds,
+                selectedAddonServiceIds: selectedAddonIds,
+                packageTotal: packageTotalValue,
+                addonTotal: addonTotalValue,
+                accommodationFee: accommodationFeeValue,
+                discountAmount: discountAmountValue,
+                includeWhenZero: true,
+            });
+            const nextExtraFieldsPayload = mergeSpecialOfferSnapshotIntoExtraFields(
+                {
+                    ...resolvedExtraFields,
+                    ...(customFieldSnapshots.length > 0
+                        ? { custom_fields: customFieldSnapshots }
+                        : {}),
+                },
+                nextSpecialOffer,
+            );
+            const resolvedLocation = resolvePreferredLocation(
+                eventType === "Wedding"
+                    ? [
+                        {
+                            address: resolvedExtraFields.tempat_akad,
+                            lat: extraLocationCoords.tempat_akad?.lat,
+                            lng: extraLocationCoords.tempat_akad?.lng,
+                        },
+                        {
+                            address: resolvedExtraFields.tempat_resepsi,
+                            lat: extraLocationCoords.tempat_resepsi?.lat,
+                            lng: extraLocationCoords.tempat_resepsi?.lng,
+                        },
+                        {
+                            address: location,
+                            lat: locationCoords.lat,
+                            lng: locationCoords.lng,
+                        },
+                    ]
+                    : [
+                        {
+                            address: location,
+                            lat: locationCoords.lat,
+                            lng: locationCoords.lng,
+                        },
+                    ],
+            );
 
-        const packageTotalValue = selectedMainServices.reduce(
-            (sum, service) => sum + service.price,
-            0,
-        );
-        const addonTotalValue = selectedAddonServices.reduce(
-            (sum, service) => sum + service.price,
-            0,
-        );
-        const accommodationFeeValue =
-            typeof accommodationFee === "number" ? accommodationFee : 0;
-        const discountAmountValue =
-            typeof discountAmount === "number" ? discountAmount : 0;
-        const totalPriceValue = computeSpecialOfferTotal({
-            packageTotal: packageTotalValue,
-            addonTotal: addonTotalValue,
-            accommodationFee: accommodationFeeValue,
-            discountAmount: discountAmountValue,
-        });
-        const customFieldSnapshots = buildCustomFieldSnapshots(
-            activeFormLayout,
-            normalizedEventType || "Umum",
-            customFieldValues,
-        );
-        const nextSpecialOffer = buildEditableSpecialOfferSnapshot({
-            existingSnapshot: null,
-            selectedEventType: eventType,
-            selectedPackageServiceIds: selectedServiceIds,
-            selectedAddonServiceIds: selectedAddonIds,
-            packageTotal: packageTotalValue,
-            addonTotal: addonTotalValue,
-            accommodationFee: accommodationFeeValue,
-            discountAmount: discountAmountValue,
-            includeWhenZero: true,
-        });
-        const nextExtraFieldsPayload = mergeSpecialOfferSnapshotIntoExtraFields(
-            {
-                ...resolvedExtraFields,
-                ...(customFieldSnapshots.length > 0
-                    ? { custom_fields: customFieldSnapshots }
-                    : {}),
-            },
-            nextSpecialOffer,
-        );
-        const resolvedLocation = resolvePreferredLocation(
-            eventType === "Wedding"
-                ? [
-                    {
-                        address: resolvedExtraFields.tempat_akad,
-                        lat: extraLocationCoords.tempat_akad?.lat,
-                        lng: extraLocationCoords.tempat_akad?.lng,
-                    },
-                    {
-                        address: resolvedExtraFields.tempat_resepsi,
-                        lat: extraLocationCoords.tempat_resepsi?.lat,
-                        lng: extraLocationCoords.tempat_resepsi?.lng,
-                    },
-                    {
-                        address: location,
-                        lat: locationCoords.lat,
-                        lng: locationCoords.lng,
-                    },
-                ]
-                : [
-                    {
-                        address: location,
-                        lat: locationCoords.lat,
-                        lng: locationCoords.lng,
-                    },
-                ],
-        );
+            const bookingPayload = {
+                user_id: user.id,
+                client_name: clientName,
+                client_whatsapp: fullPhone,
+                session_date: finalSessionDate,
+                location: resolvedLocation.location,
+                location_lat: resolvedLocation.locationLat,
+                location_lng: resolvedLocation.locationLng,
+                location_detail: locationDetail || null,
+                instagram: instagram || null,
+                event_type: eventType,
+                service_id: selectedServiceIds[0] || null,
+                freelance_id: selectedFreelancerIds[0] || null,
+                total_price: totalPriceValue,
+                dp_paid: parseFloat(dpPaid.toString()) || 0,
+                status: initialBookingStatus,
+                client_status: initialBookingStatus,
+                notes: notes || null,
+                admin_notes: adminNotes || null,
+                drive_folder_url: driveFolderUrl || null,
+                portfolio_url: portfolioUrl || null,
+                extra_fields: nextExtraFieldsPayload,
+            };
 
-        const bookingPayload = {
-            user_id: user.id,
-            client_name: clientName,
-            client_whatsapp: fullPhone,
-            session_date: finalSessionDate,
-            location: resolvedLocation.location,
-            location_lat: resolvedLocation.locationLat,
-            location_lng: resolvedLocation.locationLng,
-            location_detail: locationDetail || null,
-            instagram: instagram || null,
-            event_type: eventType,
-            service_id: selectedServiceIds[0] || null,
-            freelance_id: selectedFreelancerIds[0] || null,
-            total_price: totalPriceValue,
-            dp_paid: parseFloat(dpPaid.toString()) || 0,
-            status: initialBookingStatus,
-            client_status: initialBookingStatus,
-            notes: notes || null,
-            admin_notes: adminNotes || null,
-            drive_folder_url: driveFolderUrl || null,
-            portfolio_url: portfolioUrl || null,
-            extra_fields: nextExtraFieldsPayload,
-        };
+            let booking: { id: string } | null = null;
+            let insertError: { code?: string | null; message?: string | null } | null = null;
 
-        let booking: { id: string } | null = null;
-        let insertError: { code?: string | null; message?: string | null } | null = null;
+            for (let attempt = 0; attempt < 5; attempt++) {
+                const { data, error } = await supabase
+                    .from("bookings")
+                    .insert({
+                        ...bookingPayload,
+                        booking_code: createBookingCode(),
+                    })
+                    .select("id")
+                    .single();
 
-        for (let attempt = 0; attempt < 5; attempt++) {
-            const { data, error } = await supabase
-                .from("bookings")
-                .insert({
-                    ...bookingPayload,
-                    booking_code: createBookingCode(),
-                })
-                .select("id")
-                .single();
+                if (!error && data) {
+                    booking = data;
+                    insertError = null;
+                    break;
+                }
 
-            if (!error && data) {
-                booking = data;
-                insertError = null;
+                insertError = error;
+                if (isDuplicateBookingCodeError(error)) {
+                    continue;
+                }
                 break;
             }
 
-            insertError = error;
-            if (isDuplicateBookingCodeError(error)) {
-                continue;
+            if (!booking) {
+                showFeedback(insertError?.message || tBookingEditor("failedSaveBooking"));
+                return;
             }
-            break;
-        }
 
-        setSaving(false);
-        if (booking) {
             // Insert into junction table
             const bookingServiceRows = [
                 ...selectedServiceIds.map((serviceId, index) => ({
@@ -805,9 +805,10 @@ export default function NewBookingPage() {
             }
 
             void triggerFastpikAutoSync(booking.id);
-            router.push(`/${locale}/bookings/${booking.id}`);
+            router.push(`/${locale}/bookings/${booking.id}?saved=create`);
+        } finally {
+            setSaving(false);
         }
-        else { showFeedback(insertError?.message || tBookingEditor("failedSaveBooking")); }
     }
 
     const reqMark = <span className="text-red-500 ml-0.5">*</span>;
