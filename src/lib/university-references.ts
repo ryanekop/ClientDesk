@@ -1,10 +1,22 @@
-import { normalizeEventTypeName } from "@/lib/event-type-config";
-
 export const UNIVERSITY_EXTRA_FIELD_KEY = "universitas";
 export const UNIVERSITY_REFERENCE_EXTRA_KEY = "universitas_ref_id";
 export const UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY =
   "universitas_abbreviation_draft";
 export const UNIVERSITY_EVENT_TYPE = "Wisuda";
+const LEGACY_CUSTOM_EVENT_TYPE = "Lainnya";
+const CANONICAL_CUSTOM_EVENT_TYPE = "Custom/Lainnya";
+
+// Keep event normalization local to avoid circular dependency:
+// google/template -> form-extra-fields -> university-references -> event-type-config -> google/template.
+function normalizeUniversityEventTypeName(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (normalized === LEGACY_CUSTOM_EVENT_TYPE) {
+    return CANONICAL_CUSTOM_EVENT_TYPE;
+  }
+  return normalized;
+}
 
 export type UniversityReferenceSource =
   | "kip_kuliah"
@@ -80,7 +92,9 @@ export function isUniversityExtraField(params: {
 export function isUniversityEventType(
   eventType: string | null | undefined,
 ) {
-  return (normalizeEventTypeName(eventType) || "") === UNIVERSITY_EVENT_TYPE;
+  return (
+    normalizeUniversityEventTypeName(eventType) === UNIVERSITY_EVENT_TYPE
+  );
 }
 
 export function getUniversityReferenceId(
