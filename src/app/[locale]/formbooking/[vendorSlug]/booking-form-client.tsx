@@ -27,7 +27,6 @@ import {
   buildCustomFieldTemplateVars,
   buildCustomFieldSnapshots,
   groupFormLayoutBySection,
-  normalizeStoredFormLayout,
   type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
 import { FileDropzone } from "@/components/public/file-dropzone";
@@ -78,6 +77,10 @@ import {
 } from "@/lib/university-references";
 import { useTenant } from "@/lib/tenant-context";
 import { shouldHideTenantBranding } from "@/lib/tenant-branding";
+import {
+  resolveNormalizedLayoutFromStoredSections,
+} from "@/lib/form-sections";
+import { compressImage } from "@/utils/compress-image";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,6 +140,14 @@ const COUNTRY_CODES = [
   { code: "+673", flag: "🇧🇳", name: "Brunei" },
 ];
 
+const PAYMENT_PROOF_MAX_BYTES = 5 * 1024 * 1024;
+const PAYMENT_PROOF_IMAGE_COMPRESSION_STEPS = [
+  { maxSize: 2200, quality: 0.88 },
+  { maxSize: 1800, quality: 0.82 },
+  { maxSize: 1440, quality: 0.76 },
+  { maxSize: 1200, quality: 0.68 },
+] as const;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatCurrency(n: number) {
@@ -190,6 +201,33 @@ function extractSlugFromPath(pathname: string) {
     return decodeURIComponent(match[1]).trim();
   }
   return "";
+}
+
+async function optimizePaymentProofImageForUpload(file: File) {
+  if (!file.type.startsWith("image/")) {
+    return file;
+  }
+
+  let candidateFile = file;
+  for (const step of PAYMENT_PROOF_IMAGE_COMPRESSION_STEPS) {
+    if (candidateFile.size <= PAYMENT_PROOF_MAX_BYTES) break;
+    const compressedBlob = await compressImage(
+      candidateFile,
+      step.maxSize,
+      step.quality,
+    );
+    const fileBaseName = file.name.replace(/\.[^/.]+$/, "") || "payment-proof";
+    candidateFile = new File(
+      [compressedBlob],
+      `${fileBaseName}.jpg`,
+      {
+        type: "image/jpeg",
+        lastModified: Date.now(),
+      },
+    );
+  }
+
+  return candidateFile;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -570,25 +608,47 @@ export function BookingFormClient({
     });
   }
 
-  function handleProofFile(file: File | null) {
-    setProofFile(file);
+  async function handleProofFile(file: File | null) {
+    setError("");
 
     if (!file) {
-      setProofPreview(null);
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setError(t("errorFileTooLarge"));
       setProofFile(null);
       setProofPreview(null);
       return;
     }
 
+    let nextFile = file;
     if (file.type.startsWith("image/")) {
+      try {
+        nextFile = await optimizePaymentProofImageForUpload(file);
+      } catch {
+        setError(
+          localeCode === "en"
+            ? "The selected image could not be processed. Please choose a different image."
+            : "Gambar yang dipilih tidak dapat diproses. Silakan pilih gambar lain.",
+        );
+        setProofFile(null);
+        setProofPreview(null);
+        return;
+      }
+    }
+
+    if (nextFile.size > PAYMENT_PROOF_MAX_BYTES) {
+      setError(
+        localeCode === "en"
+          ? "File is too large. Please upload an image under 5MB."
+          : "File terlalu besar. Silakan upload gambar di bawah 5MB.",
+      );
+      setProofFile(null);
+      setProofPreview(null);
+      return;
+    }
+
+    setProofFile(nextFile);
+    if (nextFile.type.startsWith("image/")) {
       const reader = new FileReader();
       reader.onload = () => setProofPreview(reader.result as string);
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(nextFile);
     } else {
       setProofPreview(null);
     }
@@ -861,21 +921,55 @@ export function BookingFormClient({
         body: formData,
       });
 
-      const data = await res.json();
-      if (data.success) {
+      const payload = (
+        res.headers.get("content-type")?.includes("application/json")
+          ? await res.json().catch(() => null)
+          : null
+      ) as
+        | {
+            success?: boolean;
+            bookingCode?: string;
+            vendorWhatsapp?: string;
+            vendorName?: string;
+            bookingConfirmTemplate?: string | null;
+            code?: string;
+            error?: string;
+          }
+        | null;
+
+      if (!res.ok) {
+        if (res.status === 413) {
+          setError(
+            localeCode === "en"
+              ? "Upload failed because the file is too large. Please upload a smaller image."
+              : "Upload gagal karena ukuran file terlalu besar. Silakan upload gambar yang lebih kecil.",
+          );
+          return;
+        }
+        if (payload?.code === SPECIAL_LINK_EXPIRED_ERROR_CODE) {
+          setResolvedSpecialOfferStatus("expired");
+          setError("");
+          return;
+        }
+        setError(payload?.error || "Gagal mengirim booking.");
+        return;
+      }
+
+      if (payload?.success) {
         setSubmitted(true);
-        setResultData(data);
-      } else if (data.code === SPECIAL_LINK_EXPIRED_ERROR_CODE) {
+        setResultData(payload);
+      } else if (payload?.code === SPECIAL_LINK_EXPIRED_ERROR_CODE) {
         setResolvedSpecialOfferStatus("expired");
         setError("");
       } else {
-        setError(data.error || "Gagal mengirim booking.");
+        setError(payload?.error || "Gagal mengirim booking.");
       }
     } catch {
       setError("Terjadi kesalahan. Silakan coba lagi.");
+    } finally {
+      setUploadingProof(false);
+      setSubmitting(false);
     }
-    setUploadingProof(false);
-    setSubmitting(false);
   }
 
   function openWhatsAppConfirmation() {
@@ -993,32 +1087,13 @@ export function BookingFormClient({
   const minDP = getMinDpForEvent();
   const normalizedEventType = normalizeEventTypeName(eventType) || eventType;
   const brandColor = effectiveVendor.form_brand_color || "#000000";
-  const formSectionsByEventType = React.useMemo(() => {
-    if (Array.isArray(effectiveVendor.form_sections)) {
-      return { Umum: normalizeStoredFormLayout(effectiveVendor.form_sections, "Umum") };
-    }
-    if (effectiveVendor.form_sections && typeof effectiveVendor.form_sections === "object") {
-      return Object.entries(effectiveVendor.form_sections).reduce(
-        (acc, [key, value]) => {
-          const normalizedKey = normalizeEventTypeName(key) || key;
-          if (!(normalizedKey in acc) || key === normalizedKey) {
-            acc[normalizedKey] = normalizeStoredFormLayout(value, normalizedKey);
-          }
-          return acc;
-        },
-        {} as Record<string, FormLayoutItem[]>,
-      );
-    }
-    return { Umum: normalizeStoredFormLayout([], "Umum") } as Record<string, FormLayoutItem[]>;
-  }, [effectiveVendor.form_sections]);
-  const activeLayout = !normalizedEventType
-    ? formSectionsByEventType.Umum || normalizeStoredFormLayout([], "Umum")
-    : formSectionsByEventType[normalizedEventType] ||
-      formSectionsByEventType.Umum ||
-      normalizeStoredFormLayout([], normalizedEventType);
-  const normalizedActiveLayout = normalizeStoredFormLayout(
-    activeLayout,
-    normalizedEventType || "Umum",
+  const normalizedActiveLayout = React.useMemo(
+    () =>
+      resolveNormalizedLayoutFromStoredSections(
+        effectiveVendor.form_sections,
+        normalizedEventType || "Umum",
+      ),
+    [effectiveVendor.form_sections, normalizedEventType],
   );
   const currentExtraFields = getLayoutExtraFields(normalizedActiveLayout);
   const activeSections = groupFormLayoutBySection(
@@ -1852,9 +1927,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {minDP.mode === "fixed"
-                ? `DP (Minimal ${formatCurrency(minDP.value)})`
-                : t("dpMinimal", { percent: String(minDP.value) })}{" "}
+              {eventType
+                ? (minDP.mode === "fixed"
+                  ? `DP (Minimal ${formatCurrency(minDP.value)})`
+                  : t("dpMinimal", { percent: String(minDP.value) }))
+                : "DP"}{" "}
               <span className="text-red-500">*</span>
             </label>
             <div className="flex items-center gap-2">

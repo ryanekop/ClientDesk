@@ -9,6 +9,7 @@ const supabaseAdmin = createAdminClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
+const REQUIRED_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
 function htmlResponse(html: string) {
   return new NextResponse(html, {
@@ -35,6 +36,39 @@ function decodeIdTokenEmail(idToken: string | null | undefined) {
   } catch {
     return null;
   }
+}
+
+function parseScopeList(value: unknown) {
+  if (typeof value !== "string") return [];
+  return value
+    .split(" ")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+async function resolveGrantedScopes(
+  oauth2Client: ReturnType<typeof getOAuth2Client>,
+  accessToken: string | null | undefined,
+  initialScopeValue: unknown,
+) {
+  const scopes = new Set(parseScopeList(initialScopeValue));
+  const normalizedAccessToken = normalizeEmail(accessToken);
+  if (!normalizedAccessToken) {
+    return Array.from(scopes);
+  }
+
+  try {
+    const tokenInfo = await oauth2Client.getTokenInfo(normalizedAccessToken);
+    (tokenInfo.scopes || []).forEach((scope) => {
+      if (typeof scope === "string" && scope.trim()) {
+        scopes.add(scope.trim());
+      }
+    });
+  } catch {
+    // Fallback to scopes returned in token exchange response.
+  }
+
+  return Array.from(scopes);
 }
 
 function hasMissingEmailColumnError(error: unknown) {
@@ -88,6 +122,20 @@ export async function GET(request: NextRequest) {
   try {
     const oauth2Client = getOAuth2Client();
     const { tokens } = await oauth2Client.getToken(code);
+    const grantedScopes = await resolveGrantedScopes(
+      oauth2Client,
+      tokens.access_token ?? null,
+      tokens.scope,
+    );
+    if (!grantedScopes.includes(REQUIRED_CALENDAR_SCOPE)) {
+      return htmlResponse(
+        `<!DOCTYPE html>
+                <html><body><script>
+                    window.opener?.postMessage({ type: "GOOGLE_AUTH_ERROR", error: "insufficient_scope" }, "*");
+                    window.close();
+                </script></body></html>`,
+      );
+    }
     const resolvedGoogleEmail = await resolveGoogleAccountEmail(
       oauth2Client,
       tokens.access_token ?? null,

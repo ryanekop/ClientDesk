@@ -1,6 +1,7 @@
 import { resolveBookingFreelancerNames } from "@/lib/booking-freelancers";
 import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
 import {
+  getGoogleCalendarSyncErrorCode,
   getGoogleCalendarSyncErrorMessage,
   isNoScheduleSyncError,
   updateBookingCalendarSyncState,
@@ -49,6 +50,7 @@ export type GoogleCalendarSyncSingleResult = {
   eventId?: string | null;
   eventIds?: Record<string, string>;
   errorMessage?: string;
+  errorCode?: string | null;
 };
 
 export async function fetchGoogleCalendarSyncBookings(args: {
@@ -147,6 +149,7 @@ export async function syncSingleBookingCalendar(args: {
       eventIds: syncedEvent.eventIds,
     };
   } catch (error) {
+    const errorCode = getGoogleCalendarSyncErrorCode(error);
     const message = getGoogleCalendarSyncErrorMessage(
       error,
       args.fallbackErrorMessage || "Unknown error",
@@ -174,6 +177,7 @@ export async function syncSingleBookingCalendar(args: {
       status,
       bookingCode: args.booking.booking_code,
       errorMessage: message,
+      errorCode,
     };
   }
 }

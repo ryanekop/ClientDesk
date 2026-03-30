@@ -712,7 +712,22 @@ export default function CalendarPage() {
                 errors?: string[];
                 skipped?: string[];
                 error?: string;
+                code?: string;
+                reconnectRequired?: boolean;
             };
+
+            const scopeMismatch =
+                result.code === "GOOGLE_SCOPE_MISMATCH" ||
+                result.reconnectRequired === true;
+
+            if (scopeMismatch) {
+                await checkGoogleConnection();
+                const reconnectMessage = isEnglish
+                    ? "Google Calendar permission has changed. Please reconnect Google Calendar from Settings."
+                    : "Izin Google Calendar sudah berubah. Silakan hubungkan ulang Google Calendar di Pengaturan.";
+                showFeedback(reconnectMessage);
+                return;
+            }
 
             if (!res.ok) {
                 showFeedback(t("syncFailedWithReason", { reason: result.error || t("gagalSinkron") }));

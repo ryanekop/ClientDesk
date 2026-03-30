@@ -1,7 +1,10 @@
+import { normalizeEventTypeName } from "@/lib/event-type-config";
+
 export const UNIVERSITY_EXTRA_FIELD_KEY = "universitas";
 export const UNIVERSITY_REFERENCE_EXTRA_KEY = "universitas_ref_id";
 export const UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY =
   "universitas_abbreviation_draft";
+export const UNIVERSITY_EVENT_TYPE = "Wisuda";
 
 export type UniversityReferenceSource =
   | "kip_kuliah"
@@ -68,8 +71,16 @@ export function isUniversityExtraField(params: {
   eventType: string | null | undefined;
   fieldKey: string | null | undefined;
 }) {
-  void params.eventType;
-  return params.fieldKey === UNIVERSITY_EXTRA_FIELD_KEY;
+  return (
+    params.fieldKey === UNIVERSITY_EXTRA_FIELD_KEY &&
+    isUniversityEventType(params.eventType)
+  );
+}
+
+export function isUniversityEventType(
+  eventType: string | null | undefined,
+) {
+  return (normalizeEventTypeName(eventType) || "") === UNIVERSITY_EVENT_TYPE;
 }
 
 export function getUniversityReferenceId(

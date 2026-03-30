@@ -10,12 +10,15 @@ import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
 import { resolveBookingFreelancerAttendeeEmails } from "@/lib/google-calendar-attendees";
 import {
+    GOOGLE_SCOPE_MISMATCH_CODE,
+    getGoogleCalendarSyncErrorCode,
     getGoogleCalendarSyncErrorMessage,
     isNoScheduleSyncError,
     updateBookingCalendarSyncState,
 } from "@/lib/google-calendar-sync";
 import { apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
+import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
 
 export async function POST(req: NextRequest) {
     try {
@@ -187,6 +190,7 @@ export async function POST(req: NextRequest) {
                 eventId: syncedEvent.eventId,
             });
         } catch (error) {
+            const errorCode = getGoogleCalendarSyncErrorCode(error);
             const message = getGoogleCalendarSyncErrorMessage(error, "Failed to send calendar invite");
             const syncStatus = isNoScheduleSyncError(error) ? "skipped" : "failed";
             const updated = await updateBookingCalendarSyncState({
@@ -200,6 +204,18 @@ export async function POST(req: NextRequest) {
                 console.warn(
                     `Failed to update booking calendar sync status (${syncStatus}):`,
                     updated.error,
+                );
+            }
+
+            if (errorCode === GOOGLE_SCOPE_MISMATCH_CODE) {
+                await clearGoogleCalendarConnection(supabase, user.id);
+                return NextResponse.json(
+                    {
+                        error: message,
+                        code: GOOGLE_SCOPE_MISMATCH_CODE,
+                        reconnectRequired: true,
+                    },
+                    { status: 403 },
                 );
             }
 

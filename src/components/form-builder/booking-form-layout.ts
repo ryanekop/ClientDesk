@@ -1,10 +1,12 @@
-"use client";
-
 import {
   EVENT_EXTRA_FIELDS,
   getExtraFieldDefinitionByKey,
 } from "@/utils/form-extra-fields";
 import { normalizeEventTypeName } from "@/lib/event-type-config";
+import {
+  isUniversityExtraField,
+  UNIVERSITY_EXTRA_FIELD_KEY,
+} from "@/lib/university-references";
 
 export type CustomFieldType =
   | "text"
@@ -433,6 +435,12 @@ export function getBuiltInFieldDefinitions(
     (EVENT_EXTRA_FIELDS[eventType] || []).map((field) => field.key),
   );
   (options.extraFieldKeys || []).forEach((key) => {
+    if (
+      key === UNIVERSITY_EXTRA_FIELD_KEY &&
+      !isUniversityExtraField({ eventType, fieldKey: key })
+    ) {
+      return;
+    }
     if (getExtraFieldDefinitionByKey(key)) {
       extraFieldKeys.add(key);
     }

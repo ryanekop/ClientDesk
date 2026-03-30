@@ -169,6 +169,8 @@ type ConnectedGoogleAccountResponse = {
   calendar?: {
     connected?: boolean;
     email?: string | null;
+    reconnectRequired?: boolean;
+    code?: string;
   };
   drive?: {
     connected?: boolean;
@@ -1271,6 +1273,12 @@ export default function SettingsPage() {
       })
       .then((payload) => {
         if (cancelled) return;
+        if (typeof payload?.calendar?.connected === "boolean") {
+          setIsCalendarConnected(payload.calendar.connected);
+        }
+        if (typeof payload?.drive?.connected === "boolean") {
+          setIsDriveConnected(payload.drive.connected);
+        }
         setCalendarConnectedEmail(payload?.calendar?.email || null);
         setDriveConnectedEmail(payload?.drive?.email || null);
       })

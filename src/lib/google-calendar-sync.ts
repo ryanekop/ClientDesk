@@ -21,6 +21,42 @@ export type GoogleCalendarSyncStatus =
   | "skipped";
 
 export const NO_SCHEDULE_SYNC_MESSAGE = "Booking belum punya jadwal sesi.";
+export const GOOGLE_SCOPE_MISMATCH_CODE = "GOOGLE_SCOPE_MISMATCH";
+
+const GOOGLE_SCOPE_MISMATCH_PATTERNS = [
+  "insufficient authentication scopes",
+  "request had insufficient authentication scopes",
+  "insufficientpermissions",
+];
+
+function getGoogleCalendarRawErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+  return "";
+}
+
+export function isGoogleScopeMismatchMessage(message: string) {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) return false;
+  return GOOGLE_SCOPE_MISMATCH_PATTERNS.some((pattern) =>
+    normalized.includes(pattern),
+  );
+}
+
+export function isGoogleScopeMismatchError(error: unknown) {
+  return isGoogleScopeMismatchMessage(getGoogleCalendarRawErrorMessage(error));
+}
+
+export function getGoogleCalendarSyncErrorCode(error: unknown) {
+  if (isGoogleScopeMismatchError(error)) {
+    return GOOGLE_SCOPE_MISMATCH_CODE;
+  }
+  return null;
+}
 
 function extractMissingColumnFromSupabaseError(error: SupabaseErrorLike) {
   const messages = [error?.message, error?.details, error?.hint].filter(
@@ -50,11 +86,12 @@ export function getGoogleCalendarSyncErrorMessage(
   error: unknown,
   fallback = "Terjadi kesalahan saat sinkronisasi kalender.",
 ) {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
+  const rawMessage = getGoogleCalendarRawErrorMessage(error);
+  if (isGoogleScopeMismatchMessage(rawMessage)) {
+    return "Izin Google Calendar sudah tidak sesuai. Silakan hubungkan ulang akun Google Calendar di Pengaturan.";
   }
-  if (typeof error === "string" && error.trim()) {
-    return error.trim();
+  if (rawMessage) {
+    return rawMessage;
   }
   return fallback;
 }

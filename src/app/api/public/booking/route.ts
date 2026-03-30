@@ -7,6 +7,7 @@ import {
 import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
 import { hasBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import {
+    getGoogleCalendarSyncErrorCode,
     getGoogleCalendarSyncErrorMessage,
     isNoScheduleSyncError,
     NO_SCHEDULE_SYNC_MESSAGE,
@@ -53,14 +54,16 @@ import {
     buildUniversityDisplayName,
     cleanUniversityAbbreviation,
     cleanUniversityName,
+    isUniversityEventType,
     matchesUniversityDisplayValue,
     normalizeUniversityName,
     UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
     UNIVERSITY_EXTRA_FIELD_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
-import { getEventExtraFields } from "@/utils/form-extra-fields";
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
+import { resolveNormalizedLayoutFromStoredSections } from "@/lib/form-sections";
+import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
 
 type VendorRecord = {
     id: string;
@@ -305,63 +308,17 @@ const VENDOR_SELECT_COLUMNS = [
     "form_sections",
 ] as const;
 
-type StoredLayoutItem = {
-    kind: string;
-    builtinId?: string;
-    sectionId?: string;
-};
-
-function isStoredLayoutItem(
-    value: unknown,
-): value is StoredLayoutItem {
-    return value !== null && typeof value === "object" && "kind" in value;
-}
-
-function findStoredEventLayout(
-    raw: VendorRecord["form_sections"],
-    eventType: string,
-): StoredLayoutItem[] | null {
-    if (Array.isArray(raw)) {
-        return raw.every(isStoredLayoutItem) ? raw : null;
-    }
-
-    if (!raw || typeof raw !== "object") {
-        return null;
-    }
-
-    const normalizedEventType = normalizeEventTypeName(eventType) || eventType;
-    const entries = Object.entries(raw);
-    const resolveEntry = (target: string) =>
-        entries.find(([key]) => (normalizeEventTypeName(key) || key) === target)?.[1];
-
-    const eventLayout = resolveEntry(normalizedEventType);
-    if (Array.isArray(eventLayout) && eventLayout.every(isStoredLayoutItem)) {
-        return eventLayout;
-    }
-
-    const umumLayout = resolveEntry("Umum");
-    if (Array.isArray(umumLayout) && umumLayout.every(isStoredLayoutItem)) {
-        return umumLayout;
-    }
-
-    return null;
-}
-
-function requiresUniversitySelection(
+function resolveBuiltInFieldIdsFromStoredSections(
     rawFormSections: VendorRecord["form_sections"],
     eventType: string | null | undefined,
 ) {
-    const normalizedEventType = normalizeEventTypeName(eventType) || eventType || "";
-    const layout = findStoredEventLayout(rawFormSections, normalizedEventType);
-    if (!layout) {
-        return getEventExtraFields(normalizedEventType).some(
-            (field) => field.key === UNIVERSITY_EXTRA_FIELD_KEY,
-        );
-    }
-
-    const builtinExtraId = `extra:${UNIVERSITY_EXTRA_FIELD_KEY}`;
-    return layout.some(
-        (item) => item.kind === "builtin_field" && item.builtinId === builtinExtraId,
+    return new Set(
+        resolveNormalizedLayoutFromStoredSections(
+            rawFormSections ?? null,
+            eventType || "Umum",
+        )
+            .filter((item) => item.kind === "builtin_field")
+            .map((item) => item.builtinId),
     );
 }
 
@@ -608,10 +565,35 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        const shouldRequireUniversitySelection = requiresUniversitySelection(
+        const normalizedLayoutBuiltInFieldIds = resolveBuiltInFieldIdsFromStoredSections(
             vendor.form_sections ?? null,
-            resolvedEventType,
+            resolvedEventType || "Umum",
         );
+        const shouldRequireEventType =
+            normalizedLayoutBuiltInFieldIds.has("event_type");
+        const shouldRequireSessionDate =
+            normalizedLayoutBuiltInFieldIds.has("session_date") ||
+            normalizedLayoutBuiltInFieldIds.has("akad_date") ||
+            normalizedLayoutBuiltInFieldIds.has("resepsi_date");
+        const shouldRequireUniversitySelection =
+            isUniversityEventType(resolvedEventType) &&
+            normalizedLayoutBuiltInFieldIds.has(
+                `extra:${UNIVERSITY_EXTRA_FIELD_KEY}`,
+            );
+
+        if (shouldRequireEventType && !resolvedEventType) {
+            return NextResponse.json(
+                { success: false, error: "Silakan pilih tipe acara terlebih dahulu." },
+                { status: 400 },
+            );
+        }
+
+        if (shouldRequireSessionDate && !resolvedSessionDate) {
+            return NextResponse.json(
+                { success: false, error: "Silakan isi tanggal sesi terlebih dahulu." },
+                { status: 400 },
+            );
+        }
 
         let resolvedUniversityReference: UniversityReferenceRow | null = null;
         if (shouldRequireUniversitySelection) {
@@ -1216,6 +1198,7 @@ export async function POST(request: NextRequest) {
                     );
                 }
             } catch (error) {
+                const errorCode = getGoogleCalendarSyncErrorCode(error);
                 const message = getGoogleCalendarSyncErrorMessage(error);
                 const syncStatus = isNoScheduleSyncError(error) ? "skipped" : "failed";
                 const updated = await updateBookingCalendarSyncState({
@@ -1230,6 +1213,9 @@ export async function POST(request: NextRequest) {
                         `Failed to update booking calendar sync status (${syncStatus}):`,
                         updated.error,
                     );
+                }
+                if (errorCode) {
+                    await clearGoogleCalendarConnection(supabaseAdmin, vendor.id);
                 }
             }
         }

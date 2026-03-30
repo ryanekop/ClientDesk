@@ -26,7 +26,6 @@ import {
     buildCustomFieldSnapshots,
     extractCustomFieldValueMap,
     getGroupedCustomLayoutSections,
-    normalizeStoredFormLayout,
     resolveNormalizedActiveFormLayout,
     type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
@@ -76,6 +75,7 @@ import {
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
 import { resolveUniversityExtraFieldsForClient } from "@/lib/university-reference-client";
+import { normalizeFormSectionsByEventType } from "@/lib/form-sections";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -276,7 +276,7 @@ export default function EditBookingPage() {
     const [countryCode, setCountryCode] = React.useState("+62");
     const [phoneNumber, setPhoneNumber] = React.useState("");
     const [instagram, setInstagram] = React.useState("");
-    const [eventType, setEventType] = React.useState("Umum");
+    const [eventType, setEventType] = React.useState("");
     const [bookingDate, setBookingDate] = React.useState("");
     const [createdAtDateFallback, setCreatedAtDateFallback] = React.useState("");
     const [sessionDate, setSessionDate] = React.useState("");
@@ -436,23 +436,11 @@ export default function EditBookingPage() {
                 customEventTypes: normalizeEventTypeList(profileRow?.custom_event_types),
                 activeEventTypes: profileRow?.form_event_types,
             }));
-            const rawSections = (prof as Record<string, unknown> | null)?.form_sections;
-            if (Array.isArray(rawSections)) {
-                setFormSectionsByEventType({ Umum: normalizeStoredFormLayout(rawSections, "Umum") });
-            } else if (rawSections && typeof rawSections === "object") {
-                setFormSectionsByEventType(
-                    Object.entries(rawSections as Record<string, unknown>).reduce(
-                        (acc, [key, value]) => {
-                            const normalizedKey = normalizeEventTypeName(key) || key;
-                            if (!(normalizedKey in acc) || key === normalizedKey) {
-                                acc[normalizedKey] = normalizeStoredFormLayout(value, normalizedKey);
-                            }
-                            return acc;
-                        },
-                        {} as Record<string, FormLayoutItem[]>,
-                    ),
-                );
-            }
+            setFormSectionsByEventType(
+                normalizeFormSectionsByEventType(
+                    (prof as Record<string, unknown> | null)?.form_sections,
+                ),
+            );
             if (booking) {
                 setCacheInvalidationBooking({
                     bookingCode:
@@ -469,7 +457,7 @@ export default function EditBookingPage() {
                 setCountryCode(parsed.code);
                 setPhoneNumber(parsed.number);
                 setInstagram(booking.instagram || "");
-                setEventType(normalizeEventTypeName(booking.event_type) || "Umum");
+                setEventType(normalizeEventTypeName(booking.event_type) || "");
                 const createdAtDate =
                     typeof (booking as Record<string, unknown>).created_at === "string" &&
                     String((booking as Record<string, unknown>).created_at).trim().length > 0
@@ -589,6 +577,18 @@ export default function EditBookingPage() {
         }
         load();
     }, [id, supabase]);
+
+    React.useEffect(() => {
+        if (eventTypeOptions.length === 0) {
+            setEventType("");
+            return;
+        }
+        setEventType((current) =>
+            current && eventTypeOptions.includes(current)
+                ? current
+                : eventTypeOptions[0],
+        );
+    }, [eventTypeOptions]);
 
     const sortedServices = React.useMemo(
         () => [...services].sort(compareServicesByCatalogOrder),

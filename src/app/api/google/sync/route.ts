@@ -8,6 +8,7 @@ import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
 import { resolveBookingFreelancerAttendeeEmails } from "@/lib/google-calendar-attendees";
 import {
+    GOOGLE_SCOPE_MISMATCH_CODE,
     getGoogleCalendarSyncErrorMessage,
     updateBookingCalendarSyncState,
 } from "@/lib/google-calendar-sync";
@@ -17,6 +18,7 @@ import {
 } from "@/lib/google-calendar-sync-booking";
 import { apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
+import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
 
 type SyncRequestBody = {
     bookingIds?: string[];
@@ -138,6 +140,7 @@ export async function POST(request: NextRequest) {
         let skippedCount = 0;
         const errors: string[] = [];
         const skipped: string[] = [];
+        let hasScopeMismatch = false;
 
         for (const booking of bookingRows) {
             const result = await syncSingleBookingCalendar({
@@ -170,6 +173,31 @@ export async function POST(request: NextRequest) {
 
             failedCount++;
             errors.push(`${result.bookingCode}: ${result.errorMessage || "Unknown error"}`);
+            if (result.errorCode === GOOGLE_SCOPE_MISMATCH_CODE) {
+                hasScopeMismatch = true;
+            }
+        }
+
+        if (hasScopeMismatch) {
+            await clearGoogleCalendarConnection(supabase, user.id);
+        }
+
+        if (hasScopeMismatch && successCount === 0) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    count: 0,
+                    successCount,
+                    failedCount,
+                    skippedCount,
+                    code: GOOGLE_SCOPE_MISMATCH_CODE,
+                    reconnectRequired: true,
+                    error: "Izin Google Calendar tidak cukup. Silakan hubungkan ulang akun Google Calendar di Pengaturan.",
+                    errors: errors.length > 0 ? errors : undefined,
+                    skipped: skipped.length > 0 ? skipped : undefined,
+                },
+                { status: 403 },
+            );
         }
 
         return NextResponse.json({
@@ -178,6 +206,8 @@ export async function POST(request: NextRequest) {
             successCount,
             failedCount,
             skippedCount,
+            code: hasScopeMismatch ? GOOGLE_SCOPE_MISMATCH_CODE : undefined,
+            reconnectRequired: hasScopeMismatch || undefined,
             errors: errors.length > 0 ? errors : undefined,
             skipped: skipped.length > 0 ? skipped : undefined,
         });

@@ -4,11 +4,18 @@ import { invalidatePublicCachesForProfile } from "@/lib/public-cache-invalidatio
 import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { getCalendarClient } from "@/utils/google/calendar";
 import { getDriveClient } from "@/utils/google/drive";
+import {
+  GOOGLE_SCOPE_MISMATCH_CODE,
+  isGoogleScopeMismatchError,
+} from "@/lib/google-calendar-sync";
+import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
 
 type ConnectedAccountResponse = {
   calendar: {
     connected: boolean;
     email: string | null;
+    reconnectRequired?: boolean;
+    code?: string;
   };
   drive: {
     connected: boolean;
@@ -22,25 +29,41 @@ function normalizeEmail(value: unknown) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-async function resolveCalendarEmail(
+async function resolveCalendarConnection(
   accessToken: string,
   refreshToken: string,
 ) {
   try {
     const calendar = await getCalendarClient(accessToken, refreshToken);
-    const primary = await calendar.calendarList.get({ calendarId: "primary" });
-    const primaryEmail = normalizeEmail(primary.data.id);
-    if (primaryEmail && primaryEmail.includes("@")) {
-      return primaryEmail;
-    }
+    // Validate using the same API surface used by sync (events API).
+    await calendar.events.list({
+      calendarId: "primary",
+      maxResults: 1,
+      singleEvents: true,
+      timeMin: new Date().toISOString(),
+    });
 
-    const list = await calendar.calendarList.list({ maxResults: 20 });
-    const selfCalendar = (list.data.items || []).find(
-      (item) => item.primary && normalizeEmail(item.id)?.includes("@"),
-    );
-    return normalizeEmail(selfCalendar?.id);
-  } catch {
-    return null;
+    try {
+      const primary = await calendar.calendarList.get({ calendarId: "primary" });
+      const primaryEmail = normalizeEmail(primary.data.id);
+      if (primaryEmail && primaryEmail.includes("@")) {
+        return { email: primaryEmail, scopeMismatch: false };
+      }
+
+      const list = await calendar.calendarList.list({ maxResults: 20 });
+      const selfCalendar = (list.data.items || []).find(
+        (item) => item.primary && normalizeEmail(item.id)?.includes("@"),
+      );
+      return { email: normalizeEmail(selfCalendar?.id), scopeMismatch: false };
+    } catch {
+      // calendar.events scope is enough for sync, even if calendar list/email lookup is not allowed.
+      return { email: null, scopeMismatch: false };
+    }
+  } catch (error) {
+    return {
+      email: null,
+      scopeMismatch: isGoogleScopeMismatchError(error),
+    };
   }
 }
 
@@ -141,13 +164,13 @@ export async function GET() {
       },
     };
 
-    const [calendarEmail, driveEmail] = await Promise.all([
+    const [calendarConnection, driveEmail] = await Promise.all([
       calendarConnected &&
       !responsePayload.calendar.email &&
       calendarAccessToken &&
       calendarRefreshToken
-        ? resolveCalendarEmail(calendarAccessToken, calendarRefreshToken)
-        : Promise.resolve(null),
+        ? resolveCalendarConnection(calendarAccessToken, calendarRefreshToken)
+        : Promise.resolve({ email: null, scopeMismatch: false }),
       driveConnected &&
       !responsePayload.drive.email &&
       driveAccessToken &&
@@ -156,8 +179,15 @@ export async function GET() {
         : Promise.resolve(null),
     ]);
 
-    if (calendarEmail) {
-      responsePayload.calendar.email = calendarEmail;
+    if (calendarConnection.scopeMismatch) {
+      responsePayload.calendar.connected = false;
+      responsePayload.calendar.email = null;
+      responsePayload.calendar.reconnectRequired = true;
+      responsePayload.calendar.code = GOOGLE_SCOPE_MISMATCH_CODE;
+      await clearGoogleCalendarConnection(supabase, user.id);
+      invalidatePublicCachesForProfile({ userId: user.id });
+    } else if (calendarConnection.email) {
+      responsePayload.calendar.email = calendarConnection.email;
     }
     if (driveEmail) {
       responsePayload.drive.email = driveEmail;
@@ -165,8 +195,8 @@ export async function GET() {
 
     if (supportsEmailColumns) {
       const patch: Record<string, string> = {};
-      if (calendarEmail) {
-        patch.google_calendar_account_email = calendarEmail;
+      if (calendarConnection.email && !calendarConnection.scopeMismatch) {
+        patch.google_calendar_account_email = calendarConnection.email;
       }
       if (driveEmail) {
         patch.google_drive_account_email = driveEmail;
