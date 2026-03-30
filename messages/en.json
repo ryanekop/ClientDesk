@@ -1014,6 +1014,8 @@
         "detailBooking": "Booking Detail",
         "openInitialProof": "Open Initial Payment Proof",
         "openFinalProof": "Open Final Payment Proof",
+        "initialProofUnavailable": "Initial payment proof is not available yet.",
+        "finalProofUnavailable": "Final payment proof is not available yet.",
         "waInvoiceTitle": "INVOICE",
         "waInvoiceHello": "Hello {name},",
         "waInvoiceDetail": "Here are your invoice details:",

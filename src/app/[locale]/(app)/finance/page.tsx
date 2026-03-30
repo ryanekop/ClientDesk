@@ -75,6 +75,7 @@ import {
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import { FilterSingleSelect } from "@/components/ui/filter-single-select";
 import { FilterMultiSelect } from "@/components/ui/filter-multi-select";
+import { BookingDateRangePicker } from "@/components/ui/booking-date-range-picker";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
 
@@ -121,6 +122,11 @@ type FinanceFilterStoragePayload = {
     filter: FinanceFilterValue;
     packageFilter: string[] | string;
     bookingStatusFilter: string[] | string;
+    eventTypeFilter: string[] | string;
+    dateFromFilter: string;
+    dateToFilter: string;
+    dateBasis: FinanceDateBasis;
+    sortOrder: FinanceSortOrder;
 };
 
 const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
@@ -135,15 +141,24 @@ const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
     { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ];
 const FINANCE_FILTER_VALUES = ["all", "pending", "paid"] as const;
+const FINANCE_SORT_ORDERS = [
+    "booking_newest",
+    "booking_oldest",
+    "session_newest",
+    "session_oldest",
+] as const;
 const FINANCE_FILTER_STORAGE_PREFIX = "clientdesk:finance:filters";
 const FINANCE_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:finance:items_per_page";
 const FINANCE_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const FINANCE_DEFAULT_ITEMS_PER_PAGE = 10;
+type FinanceSortOrder = (typeof FINANCE_SORT_ORDERS)[number];
+type FinanceDateBasis = "booking_date" | "session_date";
 
 type FinancePageMetadata = {
     studioName: string;
     bookingStatusOptions: string[];
     packageOptions: string[];
+    availableEventTypes: string[];
     tableColumnPreferences: TableColumnPreference[] | null;
     formSectionsByEventType: Record<string, FormLayoutItem[]>;
     metadataRows: Array<{
@@ -178,6 +193,16 @@ function normalizeFinanceItemsPerPage(value: unknown) {
     )
         ? parsed
         : FINANCE_DEFAULT_ITEMS_PER_PAGE;
+}
+
+function parseSortOrderValue(value: unknown): FinanceSortOrder {
+    return typeof value === "string" && FINANCE_SORT_ORDERS.includes(value as FinanceSortOrder)
+        ? (value as FinanceSortOrder)
+        : "booking_newest";
+}
+
+function parseDateBasisValue(value: unknown): FinanceDateBasis {
+    return value === "session_date" ? "session_date" : "booking_date";
 }
 
 function normalizeSelectedFilterValues(values: string[], options: string[]) {
@@ -225,6 +250,7 @@ function arraysAreEqual(a: string[], b: string[]) {
 export default function FinancePage() {
     const supabase = createClient();
     const t = useTranslations("Finance");
+    const tb = useTranslations("BookingsPage");
     const tf = useTranslations("FinancePage");
     const locale = useLocale();
     const [bookings, setBookings] = React.useState<BookingFinance[]>([]);
@@ -234,6 +260,12 @@ export default function FinancePage() {
     const [searchQuery, setSearchQuery] = React.useState("");
     const [packageFilter, setPackageFilter] = React.useState<string[]>([]);
     const [bookingStatusFilter, setBookingStatusFilter] = React.useState<string[]>([]);
+    const [eventTypeFilter, setEventTypeFilter] = React.useState<string[]>([]);
+    const [availableEventTypes, setAvailableEventTypes] = React.useState<string[]>([]);
+    const [dateFromFilter, setDateFromFilter] = React.useState("");
+    const [dateToFilter, setDateToFilter] = React.useState("");
+    const [dateBasis, setDateBasis] = React.useState<FinanceDateBasis>("booking_date");
+    const [sortOrder, setSortOrder] = React.useState<FinanceSortOrder>("booking_newest");
     const [bookingStatusOptions, setBookingStatusOptions] = React.useState<string[]>(
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
     );
@@ -279,6 +311,10 @@ export default function FinancePage() {
         kind: "invoice" | "copy" | "wa" | null;
     }>({ open: false, booking: null, kind: null });
     const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({ open: false, message: "" });
+    const browserTimeZone = React.useMemo(
+        () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        [],
+    );
     const { showSuccessToast, successToastNode } = useSuccessToast();
     const { canWriteBookings } = useBookingWriteAccess();
     const bookingWriteBlockedMessage = React.useMemo(
@@ -336,6 +372,11 @@ export default function FinancePage() {
         setSearchQuery("");
         setPackageFilter([]);
         setBookingStatusFilter([]);
+        setEventTypeFilter([]);
+        setDateFromFilter("");
+        setDateToFilter("");
+        setDateBasis("booking_date");
+        setSortOrder("booking_newest");
     }, []);
 
     const fetchTemplates = React.useCallback(async () => {
@@ -361,6 +402,7 @@ export default function FinancePage() {
         try {
             const singlePackageFilter = packageFilter[0] || "All";
             const singleBookingStatusFilter = bookingStatusFilter[0] || "All";
+            const singleEventTypeFilter = eventTypeFilter[0] || "All";
             const params = new URLSearchParams({
                 page: String(currentPage),
                 perPage: String(itemsPerPage),
@@ -370,6 +412,13 @@ export default function FinancePage() {
                 bookingStatus: singleBookingStatusFilter,
                 packageFilters: JSON.stringify(packageFilter),
                 bookingStatusFilters: JSON.stringify(bookingStatusFilter),
+                eventType: singleEventTypeFilter,
+                eventTypeFilters: JSON.stringify(eventTypeFilter),
+                dateFrom: dateFromFilter,
+                dateTo: dateToFilter,
+                dateBasis,
+                sortOrder,
+                timeZone: browserTimeZone,
             });
             const response = await fetchPaginatedJson<BookingFinance, FinancePageMetadata>(
                 `/api/internal/finance?${params.toString()}`,
@@ -388,6 +437,7 @@ export default function FinancePage() {
             setTotalItems(response.totalItems);
             setBookingStatusOptions(metadata?.bookingStatusOptions || getBookingStatusOptions(DEFAULT_CLIENT_STATUSES));
             setPackageOptions(metadata?.packageOptions || []);
+            setAvailableEventTypes(metadata?.availableEventTypes || []);
             setStudioName(metadata?.studioName || "");
             setFormSectionsByEventType(metadata?.formSectionsByEventType || {});
             setMetadataRows(metadata?.metadataRows || []);
@@ -414,7 +464,23 @@ export default function FinancePage() {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [bookingStatusFilter, currentPage, filter, filtersHydrated, itemsPerPage, itemsPerPageHydrated, packageFilter, searchQuery, tf]);
+    }, [
+        bookingStatusFilter,
+        browserTimeZone,
+        currentPage,
+        dateBasis,
+        dateFromFilter,
+        dateToFilter,
+        eventTypeFilter,
+        filter,
+        filtersHydrated,
+        itemsPerPage,
+        itemsPerPageHydrated,
+        packageFilter,
+        searchQuery,
+        sortOrder,
+        tf,
+    ]);
 
     React.useEffect(() => {
         async function hydrateCurrentUser() {
@@ -456,6 +522,11 @@ export default function FinancePage() {
             setFilter(normalizeFinanceFilterValue(parsed.filter));
             setPackageFilter(parseLegacyOrMultiFilterValue(parsed.packageFilter));
             setBookingStatusFilter(parseLegacyOrMultiFilterValue(parsed.bookingStatusFilter));
+            setEventTypeFilter(parseLegacyOrMultiFilterValue(parsed.eventTypeFilter));
+            setDateFromFilter(readString("dateFromFilter", ""));
+            setDateToFilter(readString("dateToFilter", ""));
+            setDateBasis(parseDateBasisValue(readString("dateBasis", "booking_date")));
+            setSortOrder(parseSortOrderValue(readString("sortOrder", "booking_newest")));
         } catch {
             resetFilters();
         } finally {
@@ -471,6 +542,11 @@ export default function FinancePage() {
             filter,
             packageFilter,
             bookingStatusFilter,
+            eventTypeFilter,
+            dateFromFilter,
+            dateToFilter,
+            dateBasis,
+            sortOrder,
         };
 
         try {
@@ -478,7 +554,19 @@ export default function FinancePage() {
         } catch {
             // Ignore storage write failures.
         }
-    }, [bookingStatusFilter, currentUserId, filter, filtersHydrated, packageFilter, searchQuery]);
+    }, [
+        bookingStatusFilter,
+        currentUserId,
+        dateBasis,
+        dateFromFilter,
+        dateToFilter,
+        eventTypeFilter,
+        filter,
+        filtersHydrated,
+        packageFilter,
+        searchQuery,
+        sortOrder,
+    ]);
 
     React.useEffect(() => {
         if (!currentUserId) {
@@ -1297,16 +1385,22 @@ export default function FinancePage() {
                                 onClick={() => window.open(getSettlementLink(booking), "_blank")}>
                                 <ExternalLink className="w-4 h-4" />
                             </ActionIconButton>
-                            {booking.payment_proof_url ? (
-                                <ActionIconButton tone="amber" title={tf("openInitialProof")} onClick={() => openProof(booking.payment_proof_url)}>
-                                    <Receipt className="w-4 h-4" />
-                                </ActionIconButton>
-                            ) : <span className="h-8 w-8" />}
-                            {booking.final_payment_proof_url ? (
-                                <ActionIconButton tone="cyan" title={tf("openFinalProof")} onClick={() => openProof(booking.final_payment_proof_url)}>
-                                    <Receipt className="w-4 h-4" />
-                                </ActionIconButton>
-                            ) : <span className="h-8 w-8" />}
+                            <ActionIconButton
+                                tone="amber"
+                                title={booking.payment_proof_url ? tf("openInitialProof") : tf("initialProofUnavailable")}
+                                disabled={!booking.payment_proof_url}
+                                onClick={() => openProof(booking.payment_proof_url)}
+                            >
+                                <Receipt className="w-4 h-4" />
+                            </ActionIconButton>
+                            <ActionIconButton
+                                tone="cyan"
+                                title={booking.final_payment_proof_url ? tf("openFinalProof") : tf("finalProofUnavailable")}
+                                disabled={!booking.final_payment_proof_url}
+                                onClick={() => openProof(booking.final_payment_proof_url)}
+                            >
+                                <Receipt className="w-4 h-4" />
+                            </ActionIconButton>
                         </div>
                     </td>
                 );
@@ -1352,7 +1446,12 @@ export default function FinancePage() {
         searchQuery.trim().length > 0 ||
         filter !== "all" ||
         packageFilter.length > 0 ||
-        bookingStatusFilter.length > 0;
+        bookingStatusFilter.length > 0 ||
+        eventTypeFilter.length > 0 ||
+        Boolean(dateFromFilter) ||
+        Boolean(dateToFilter) ||
+        dateBasis !== "booking_date" ||
+        sortOrder !== "booking_newest";
     const financeStatusOptions = React.useMemo(
         () => [
             { value: "all", label: t("semua") },
@@ -1361,6 +1460,23 @@ export default function FinancePage() {
         ],
         [t],
     );
+    const sortOptions = React.useMemo(
+        () => [
+            { value: "booking_newest", label: tb("sortBookingDateNewest") },
+            { value: "booking_oldest", label: tb("sortBookingDateOldest") },
+            { value: "session_newest", label: tb("sortSessionDateNearest") },
+            { value: "session_oldest", label: tb("sortSessionDateFarthest") },
+        ],
+        [tb],
+    );
+    const sortPlaceholder = sortOptions[0]?.label || tb("sortMenuTitle");
+    const dateBasisOptions = React.useMemo(
+        () => [
+            { value: "booking_date", label: tb("dateBasisBookingDate") },
+            { value: "session_date", label: tb("dateBasisSessionDate") },
+        ],
+        [tb],
+    );
     const packageFilterOptions = React.useMemo(
         () => packageOptions.map((packageName) => ({ value: packageName, label: packageName })),
         [packageOptions, t],
@@ -1368,6 +1484,10 @@ export default function FinancePage() {
     const bookingStatusFilterOptions = React.useMemo(
         () => bookingStatusOptions.map((statusOption) => ({ value: statusOption, label: statusOption })),
         [bookingStatusOptions, t],
+    );
+    const eventTypeFilterOptions = React.useMemo(
+        () => availableEventTypes.map((eventType) => ({ value: eventType, label: eventType })),
+        [availableEventTypes],
     );
     const multiCountSuffix = locale === "en" ? "selected" : "dipilih";
 
@@ -1401,6 +1521,7 @@ export default function FinancePage() {
         try {
             const singlePackageFilter = packageFilter[0] || "All";
             const singleBookingStatusFilter = bookingStatusFilter[0] || "All";
+            const singleEventTypeFilter = eventTypeFilter[0] || "All";
             const params = new URLSearchParams({
                 page: "1",
                 perPage: String(Math.max(totalItems, 1)),
@@ -1410,6 +1531,13 @@ export default function FinancePage() {
                 bookingStatus: singleBookingStatusFilter,
                 packageFilters: JSON.stringify(packageFilter),
                 bookingStatusFilters: JSON.stringify(bookingStatusFilter),
+                eventType: singleEventTypeFilter,
+                eventTypeFilters: JSON.stringify(eventTypeFilter),
+                dateFrom: dateFromFilter,
+                dateTo: dateToFilter,
+                dateBasis,
+                sortOrder,
+                timeZone: browserTimeZone,
                 export: "1",
             });
             const response = await fetchPaginatedJson<BookingFinance, FinancePageMetadata>(
@@ -1506,11 +1634,34 @@ export default function FinancePage() {
         if (!arraysAreEqual(normalizedBookingStatusFilter, bookingStatusFilter)) {
             setBookingStatusFilter(normalizedBookingStatusFilter);
         }
-    }, [bookingStatusFilter, bookingStatusOptions, loading, packageFilter, packageOptions]);
+        const normalizedEventTypeFilter = normalizeSelectedFilterValues(eventTypeFilter, availableEventTypes);
+        if (!arraysAreEqual(normalizedEventTypeFilter, eventTypeFilter)) {
+            setEventTypeFilter(normalizedEventTypeFilter);
+        }
+    }, [
+        availableEventTypes,
+        bookingStatusFilter,
+        bookingStatusOptions,
+        eventTypeFilter,
+        loading,
+        packageFilter,
+        packageOptions,
+    ]);
 
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [filter, searchQuery, packageFilter, bookingStatusFilter, itemsPerPage]);
+    }, [
+        bookingStatusFilter,
+        dateBasis,
+        dateFromFilter,
+        dateToFilter,
+        eventTypeFilter,
+        filter,
+        itemsPerPage,
+        packageFilter,
+        searchQuery,
+        sortOrder,
+    ]);
 
     React.useEffect(() => {
         const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
@@ -1646,9 +1797,9 @@ export default function FinancePage() {
             ) : null}
 
             {/* Filters */}
-            <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
+            <div className="space-y-3 sm:space-y-4">
+                <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="relative min-w-0 flex-1">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <input
                             type="text"
@@ -1668,25 +1819,99 @@ export default function FinancePage() {
                         <ListOrdered className="w-4 h-4" />
                         <span className="hidden sm:inline">{t("filterButton")}</span>
                     </Button>
+                    <div className="hidden sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+                        <FilterSingleSelect
+                            value={sortOrder}
+                            onChange={(nextValue) => setSortOrder(parseSortOrderValue(nextValue))}
+                            options={sortOptions}
+                            placeholder={sortPlaceholder}
+                            className="w-[300px] md:w-[340px] lg:w-[360px]"
+                            mobileTitle={tb("sortMenuTitle")}
+                        />
+                        {hasActiveFilters && (
+                            <button
+                                type="button"
+                                onClick={resetFilters}
+                                className="h-9 px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                                {t("resetFilters")}
+                            </button>
+                        )}
+                    </div>
                 </div>
-                {hasActiveFilters && (
-                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+                <div className="flex w-full flex-col gap-2 sm:hidden">
+                    <FilterSingleSelect
+                        value={sortOrder}
+                        onChange={(nextValue) => setSortOrder(parseSortOrderValue(nextValue))}
+                        options={sortOptions}
+                        placeholder={sortPlaceholder}
+                        className="w-full"
+                        mobileTitle={tb("sortMenuTitle")}
+                    />
+                    {hasActiveFilters && (
                         <button
                             type="button"
                             onClick={resetFilters}
-                            className="h-9 w-full px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer sm:w-auto"
+                            className="h-9 w-full px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                         >
                             <X className="w-3.5 h-3.5" />
                             {t("resetFilters")}
                         </button>
-                    </div>
-                )}
+                    )}
+                </div>
 
                 {showFilterPanel && (
                     <div className="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground md:w-32 md:shrink-0 xl:w-36">{t("financeStatusFilterLabel")}</label>
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{tb("dateRangeLabel")}</label>
+                                <BookingDateRangePicker
+                                    value={{ from: dateFromFilter, to: dateToFilter }}
+                                    onApply={({ from, to }) => {
+                                        setDateFromFilter(from);
+                                        setDateToFilter(to);
+                                    }}
+                                    onClear={() => {
+                                        setDateFromFilter("");
+                                        setDateToFilter("");
+                                    }}
+                                    locale={locale === "en" ? "en" : "id"}
+                                    placeholder={tb("dateRangePlaceholder")}
+                                    applyLabel={tb("apply")}
+                                    clearLabel={tb("clear")}
+                                    startLabel={tb("start")}
+                                    endLabel={tb("end")}
+                                    mobileTitle={tb("dateRangePickerTitle")}
+                                    className="w-full"
+                                />
+                            </div>
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{tb("dateBasisLabel")}</label>
+                                <FilterSingleSelect
+                                    value={dateBasis}
+                                    onChange={(nextValue) => setDateBasis(parseDateBasisValue(nextValue))}
+                                    options={dateBasisOptions}
+                                    placeholder={dateBasisOptions[0]?.label || tb("dateBasisBookingDate")}
+                                    className="w-full"
+                                    mobileTitle={tb("dateBasisLabel")}
+                                />
+                            </div>
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{tb("eventTypeLabel")}</label>
+                                <FilterMultiSelect
+                                    values={eventTypeFilter}
+                                    onChange={setEventTypeFilter}
+                                    options={eventTypeFilterOptions}
+                                    placeholder={tb("allEventTypes")}
+                                    allLabel={tb("allEventTypes")}
+                                    countSuffix={multiCountSuffix}
+                                    className="w-full"
+                                    mobileTitle={tb("eventTypeLabel")}
+                                />
+                            </div>
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{t("financeStatusFilterLabel")}</label>
                                 <FilterSingleSelect
                                     value={filter}
                                     onChange={(nextValue) => setFilter(normalizeFinanceFilterValue(nextValue))}
@@ -1696,9 +1921,8 @@ export default function FinancePage() {
                                     mobileTitle={t("financeStatusFilterLabel")}
                                 />
                             </div>
-
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground md:w-32 md:shrink-0 xl:w-36">{t("packageFilterLabel")}</label>
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{t("packageFilterLabel")}</label>
                                 <FilterMultiSelect
                                     values={packageFilter}
                                     onChange={setPackageFilter}
@@ -1710,9 +1934,8 @@ export default function FinancePage() {
                                     mobileTitle={t("packageFilterLabel")}
                                 />
                             </div>
-
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground md:w-32 md:shrink-0 xl:w-36">{t("bookingStatusFilterLabel")}</label>
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{t("bookingStatusFilterLabel")}</label>
                                 <FilterMultiSelect
                                     values={bookingStatusFilter}
                                     onChange={setBookingStatusFilter}
@@ -1813,16 +2036,22 @@ export default function FinancePage() {
                                 <ActionIconButton tone="sky" title={tf("openSettlementLink")} disabled={!b.tracking_uuid} onClick={() => window.open(getSettlementLink(b), "_blank")}>
                                     <ExternalLink className="w-4 h-4" />
                                 </ActionIconButton>
-                                {b.payment_proof_url && (
-                                    <ActionIconButton tone="amber" title={tf("openInitialProof")} onClick={() => openProof(b.payment_proof_url)}>
-                                        <Receipt className="w-4 h-4" />
-                                    </ActionIconButton>
-                                )}
-                                {b.final_payment_proof_url && (
-                                    <ActionIconButton tone="cyan" title={tf("openFinalProof")} onClick={() => openProof(b.final_payment_proof_url)}>
-                                        <Receipt className="w-4 h-4" />
-                                    </ActionIconButton>
-                                )}
+                                <ActionIconButton
+                                    tone="amber"
+                                    title={b.payment_proof_url ? tf("openInitialProof") : tf("initialProofUnavailable")}
+                                    disabled={!b.payment_proof_url}
+                                    onClick={() => openProof(b.payment_proof_url)}
+                                >
+                                    <Receipt className="w-4 h-4" />
+                                </ActionIconButton>
+                                <ActionIconButton
+                                    tone="cyan"
+                                    title={b.final_payment_proof_url ? tf("openFinalProof") : tf("finalProofUnavailable")}
+                                    disabled={!b.final_payment_proof_url}
+                                    onClick={() => openProof(b.final_payment_proof_url)}
+                                >
+                                    <Receipt className="w-4 h-4" />
+                                </ActionIconButton>
                             </div>
                         </div>
                     );
@@ -1935,7 +2164,7 @@ export default function FinancePage() {
                                     {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-border">
+                            <tbody className="divide-y divide-border/70 dark:divide-white/20">
                                 {queryState.isLoading || queryState.isRefreshing ? (
                                     <TableRowsSkeleton
                                         rows={Math.min(queryState.perPage, 6)}
@@ -1953,7 +2182,7 @@ export default function FinancePage() {
                                     const addonTotal = getAddonTotal(b, initialBreakdown);
                                     const discountAmount = getDiscountAmount(b, initialBreakdown);
                                     return (
-                                        <tr key={b.id} className="group hover:bg-muted/50 transition-colors">
+                                        <tr key={b.id} className="group hover:bg-muted/60 dark:hover:bg-white/12 transition-colors">
                                             {orderedVisibleColumns.map((column) =>
                                                 renderDesktopCell(
                                                     b,

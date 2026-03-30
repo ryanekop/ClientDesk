@@ -64,6 +64,9 @@ import {
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 import { resolveNormalizedLayoutFromStoredSections } from "@/lib/form-sections";
 import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
+import { resolveApiLocale } from "@/lib/i18n/api-locale";
+import { resolvePublicOrigin } from "@/lib/auth/public-origin";
+import { buildBookingDetailLink } from "@/lib/booking-detail-link";
 
 type VendorRecord = {
     id: string;
@@ -368,6 +371,8 @@ class PublicBookingProcessingError extends Error {
 
 export async function POST(request: NextRequest) {
     try {
+        const locale = resolveApiLocale(request);
+        const publicOrigin = resolvePublicOrigin(request);
         const contentType = request.headers.get("content-type") || "";
         let body: BookingRequestBody;
         let paymentProofFile: File | null = null;
@@ -1166,6 +1171,11 @@ export async function POST(request: NextRequest) {
                     booking: {
                         id: booking.id,
                         bookingCode: booking.booking_code,
+                        bookingDetailLink: buildBookingDetailLink({
+                            publicOrigin,
+                            locale,
+                            bookingId: booking.id,
+                        }),
                         clientName: normalizedClientName,
                         clientWhatsapp: normalizedClientWhatsapp || null,
                         sessionDate: resolvedSessionDate || null,

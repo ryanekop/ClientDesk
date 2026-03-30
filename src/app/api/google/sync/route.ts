@@ -19,6 +19,7 @@ import {
 import { apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
 import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
+import { resolvePublicOrigin } from "@/lib/auth/public-origin";
 
 type SyncRequestBody = {
     bookingIds?: string[];
@@ -28,6 +29,7 @@ type SyncRequestBody = {
 export async function POST(request: NextRequest) {
     try {
         const locale = resolveApiLocale(request);
+        const publicOrigin = resolvePublicOrigin(request);
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -157,6 +159,8 @@ export async function POST(request: NextRequest) {
                     eventDescriptionMap: profile?.calendar_event_description_map ?? null,
                 },
                 attendeeEmails: attendeeEmailsByBooking[booking.id] || [],
+                locale,
+                publicOrigin,
                 fallbackErrorMessage: "Unknown error",
             });
 

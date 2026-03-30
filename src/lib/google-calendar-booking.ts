@@ -33,6 +33,7 @@ type CalendarProfileConfig = {
 type CalendarBookingConfig = {
   id: string;
   bookingCode: string;
+  bookingDetailLink?: string | null;
   clientName: string;
   clientWhatsapp?: string | null;
   freelancerNames?: string[] | null;
@@ -128,6 +129,7 @@ export async function syncBookingCalendarEvent({
         service_name: serviceName,
         event_type: booking.eventType || "-",
         booking_code: booking.bookingCode,
+        booking_detail_link: booking.bookingDetailLink || "-",
         studio_name: profile.studioName || "Client Desk",
         location: sessionLocation,
         location_maps_url: buildGoogleMapsUrlOrFallback(

@@ -252,6 +252,8 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                             const bottomActive = idx < currentIdx;
                             const stepLabel = step.labelKey ? t(step.labelKey as never) : step.key;
                             const showQueuePosition = isCurrent && Boolean(booking.queuePosition && booking.queuePosition > 0);
+                            const showInProgress = isCurrent && !isLast;
+                            const showCompleted = isPast || (isCurrent && isLast);
 
                             return (
                                 <div key={step.key} className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-2 sm:gap-3">
@@ -288,12 +290,12 @@ export default function TrackingClient({ booking, vendorName, customStatuses }: 
                                                     </span>
                                                 )}
                                             </p>
-                                            {isCurrent && (
+                                            {showInProgress && (
                                                 <p className="mt-1 flex items-center gap-1.5 text-xs text-foreground/75">
                                                     <Clock className="h-3 w-3" /> {t("inProgress")}
                                                 </p>
                                             )}
-                                            {isPast && (
+                                            {showCompleted && (
                                                 <p className="mt-1 text-xs text-muted-foreground">✓ {t("completed")}</p>
                                             )}
                                         </div>

@@ -5,6 +5,7 @@ import {
 } from "@/lib/booking-write-access.server";
 import { apiT, apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale, type AppLocale } from "@/lib/i18n/api-locale";
+import { resolvePublicOrigin } from "@/lib/auth/public-origin";
 import { createClient } from "@/utils/supabase/server";
 import {
   buildCommitReportFile,
@@ -32,6 +33,7 @@ import {
   isNoScheduleSyncError,
   updateBookingCalendarSyncState,
 } from "@/lib/google-calendar-sync";
+import { buildBookingDetailLink } from "@/lib/booking-detail-link";
 
 export const runtime = "nodejs";
 
@@ -160,6 +162,7 @@ async function syncImportedBookings(
   userId: string,
   bookingIds: string[],
   locale: AppLocale,
+  publicOrigin: string,
 ): Promise<ImportSyncSummary> {
   const fallback: ImportSyncSummary = {
     successCount: 0,
@@ -306,6 +309,11 @@ async function syncImportedBookings(
         booking: {
           id: booking.id,
           bookingCode: booking.booking_code,
+          bookingDetailLink: buildBookingDetailLink({
+            publicOrigin,
+            locale,
+            bookingId: booking.id,
+          }),
           clientName: booking.client_name,
           clientWhatsapp: booking.client_whatsapp,
           sessionDate: booking.session_date,
@@ -376,6 +384,7 @@ async function syncImportedBookings(
 export async function POST(request: NextRequest) {
   try {
     const locale = resolveApiLocale(request);
+    const publicOrigin = resolvePublicOrigin(request);
     const supabase = await createClient();
     const {
       data: { user },
@@ -510,6 +519,7 @@ export async function POST(request: NextRequest) {
       user.id,
       inserted.map((item) => item.id),
       locale,
+      publicOrigin,
     );
 
     const report = buildCommitReportFile(

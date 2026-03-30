@@ -35,6 +35,7 @@
 !supabase_migration_profiles_bookings_updated_at_triggers.sql
 !supabase_migration_drop_legacy_finance_rpc_overload.sql
 !supabase_migration_form_hide_service_prices.sql
+!supabase_migration_finance_filter_sort_event_type.sql
 *.sh
 
 # debug

@@ -19,10 +19,13 @@ import {
 import { apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
 import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
+import { resolvePublicOrigin } from "@/lib/auth/public-origin";
+import { buildBookingDetailLink } from "@/lib/booking-detail-link";
 
 export async function POST(req: NextRequest) {
     try {
         const locale = resolveApiLocale(req);
+        const publicOrigin = resolvePublicOrigin(req);
         const payload = (await req.json()) as {
             bookingId?: string;
             attendeeEmails?: unknown;
@@ -148,6 +151,11 @@ export async function POST(req: NextRequest) {
                 booking: {
                     id: booking.id,
                     bookingCode: booking.booking_code,
+                    bookingDetailLink: buildBookingDetailLink({
+                        publicOrigin,
+                        locale,
+                        bookingId: booking.id,
+                    }),
                     clientName: booking.client_name,
                     clientWhatsapp: booking.client_whatsapp,
                     sessionDate: booking.session_date,

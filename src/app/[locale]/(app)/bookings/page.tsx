@@ -2154,7 +2154,7 @@ export default function BookingsPage() {
                                 {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-border/50">
+                        <tbody className="divide-y divide-border/70 dark:divide-white/20">
                             {queryState.isLoading || queryState.isRefreshing ? (
                                 <TableRowsSkeleton
                                     rows={Math.min(queryState.perPage, 6)}
@@ -2164,7 +2164,7 @@ export default function BookingsPage() {
                                 <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground text-xs italic">{tb("noDataFound")}</td></tr>
                             ) : (
                                 filteredBookings.map((booking) => (
-                                    <tr key={booking.id} className="hover:bg-muted/30 transition-colors group">
+                                    <tr key={booking.id} className="hover:bg-muted/55 dark:hover:bg-white/12 transition-colors group">
                                         {orderedVisibleColumns.map((column) => renderDesktopCell(booking, column))}
                                     </tr>
                                 ))

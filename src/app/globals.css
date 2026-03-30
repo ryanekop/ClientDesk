@@ -125,7 +125,11 @@
     }
 
     .group:hover .sticky-table-cell:not(.sticky-table-cell--header) {
-        background-color: color-mix(in oklab, var(--color-card) 72%, var(--color-muted) 28%);
+        background-color: color-mix(in oklab, var(--color-card) 58%, var(--color-muted) 42%);
+    }
+
+    .dark .group:hover .sticky-table-cell:not(.sticky-table-cell--header) {
+        background-color: color-mix(in oklab, var(--color-card) 62%, var(--color-foreground) 38%);
     }
 }
 

@@ -62,6 +62,7 @@ type FinanceMetadataResponse = {
   studioName?: string;
   bookingStatusOptions?: string[];
   packageOptions?: string[];
+  availableEventTypes?: string[];
   tableColumnPreferences?: unknown;
   formSectionsByEventType?: Record<string, unknown>;
   metadataRows?: Array<{
@@ -134,6 +135,16 @@ function parseFilterList(
   return [legacySingleValue];
 }
 
+function parseDateBasis(value: string | null) {
+  return value?.trim() === "session_date" ? "session_date" : "booking_date";
+}
+
+function parseTimeZone(value: string | null) {
+  const trimmed = value?.trim() || "";
+  if (!trimmed || trimmed.length > 120) return "UTC";
+  return trimmed;
+}
+
 function readRpcObject<T>(value: unknown): T | null {
   if (Array.isArray(value)) {
     const firstItem = value[0];
@@ -204,8 +215,14 @@ export async function GET(request: NextRequest) {
     "bookingStatusFilters",
     "bookingStatus",
   );
+  const eventTypeFilters = parseFilterList(searchParams, "eventTypeFilters", "eventType");
+  const dateFromFilter = searchParams.get("dateFrom")?.trim() || "";
+  const dateToFilter = searchParams.get("dateTo")?.trim() || "";
+  const dateBasis = parseDateBasis(searchParams.get("dateBasis"));
+  const timeZone = parseTimeZone(searchParams.get("timeZone"));
+  const sortOrder = searchParams.get("sortOrder")?.trim() || "booking_newest";
   const exportAll = searchParams.get("export") === "1";
-  const pageRpcArgs = {
+  const pageRpcArgsBase = {
     p_page: page,
     p_per_page: perPage,
     p_filter: filter,
@@ -216,11 +233,38 @@ export async function GET(request: NextRequest) {
     p_booking_status_filters: bookingStatusFilters,
     p_export_all: exportAll,
   };
+  const pageRpcArgs = {
+    ...pageRpcArgsBase,
+    p_event_type_filter: eventTypeFilters[0] || "All",
+    p_event_type_filters: eventTypeFilters,
+    p_date_from: dateFromFilter,
+    p_date_to: dateToFilter,
+    p_date_basis: dateBasis,
+    p_time_zone: timeZone,
+    p_sort_order: sortOrder,
+  };
 
-  const [pageResult, metadataResult] = await Promise.all([
+  const [initialPageResult, metadataResult] = await Promise.all([
     supabase.rpc("cd_get_finance_page", pageRpcArgs),
     supabase.rpc("cd_get_finance_metadata"),
   ]);
+  let pageResult = initialPageResult;
+
+  if (pageResult.error) {
+    const message = (pageResult.error.message || "").toLowerCase();
+    const isLikelyOldRpcSignature =
+      message.includes("p_event_type_filter") ||
+      message.includes("p_event_type_filters") ||
+      message.includes("p_date_from") ||
+      message.includes("p_date_to") ||
+      message.includes("p_date_basis") ||
+      message.includes("p_time_zone") ||
+      message.includes("p_sort_order");
+
+    if (isLikelyOldRpcSignature) {
+      pageResult = await supabase.rpc("cd_get_finance_page", pageRpcArgsBase);
+    }
+  }
 
   if (pageResult.error) {
     console.error("[Finance API] Failed to load finance page", {
@@ -231,6 +275,11 @@ export async function GET(request: NextRequest) {
       hasSearchQuery: searchQuery.length > 0,
       packageFilterCount: packageFilters.length,
       bookingStatusFilterCount: bookingStatusFilters.length,
+      eventTypeFilterCount: eventTypeFilters.length,
+      hasDateFromFilter: dateFromFilter.length > 0,
+      hasDateToFilter: dateToFilter.length > 0,
+      dateBasis,
+      sortOrder,
       exportAll,
       error: pageResult.error.message,
     });
@@ -291,6 +340,7 @@ export async function GET(request: NextRequest) {
         typeof metadataData?.studioName === "string" ? metadataData.studioName : "",
       bookingStatusOptions: resolvedBookingStatusOptions,
       packageOptions: readStringArray(metadataData?.packageOptions),
+      availableEventTypes: readStringArray(metadataData?.availableEventTypes),
       tableColumnPreferences: metadataData?.tableColumnPreferences ?? null,
       formSectionsByEventType:
         metadataData?.formSectionsByEventType &&

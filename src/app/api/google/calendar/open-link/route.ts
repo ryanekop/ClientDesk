@@ -19,6 +19,7 @@ import {
 } from "@/lib/google-calendar-sync-booking";
 import { apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
+import { resolvePublicOrigin } from "@/lib/auth/public-origin";
 
 function normalizeOptionalString(value: unknown) {
   if (typeof value !== "string") return null;
@@ -130,6 +131,7 @@ async function resolveCanonicalEventUrl(args: {
 export async function POST(request: NextRequest) {
   try {
     const locale = resolveApiLocale(request);
+    const publicOrigin = resolvePublicOrigin(request);
     const supabase = await createClient();
     const {
       data: { user },
@@ -297,6 +299,8 @@ export async function POST(request: NextRequest) {
           eventDescriptionMap: profile?.calendar_event_description_map ?? null,
         },
         attendeeEmails,
+        locale,
+        publicOrigin,
         fallbackErrorMessage: apiText(request, "failedSendCalendarInvite"),
       });
 

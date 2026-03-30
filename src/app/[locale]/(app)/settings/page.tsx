@@ -2178,6 +2178,7 @@ export default function SettingsPage() {
     freelance: "Andi, Bima",
     client_whatsapp: "+628123456789",
     event_type: selectedEventType,
+    booking_detail_link: "https://clientdesk.ryanekoapp.web.id/id/bookings/booking-id-123",
     day_name: "Rabu",
     location: "Jakarta Convention Center",
     akad_location: "Masjid Raya Jakarta",

@@ -1014,6 +1014,8 @@
         "detailBooking": "Detail Booking",
         "openInitialProof": "Buka Bukti Bayar Awal",
         "openFinalProof": "Buka Bukti Pelunasan",
+        "initialProofUnavailable": "Bukti bayar awal belum tersedia.",
+        "finalProofUnavailable": "Bukti pelunasan belum tersedia.",
         "waInvoiceTitle": "INVOICE",
         "waInvoiceHello": "Halo {name},",
         "waInvoiceDetail": "Berikut detail invoice Anda:",

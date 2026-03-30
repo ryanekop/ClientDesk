@@ -58,7 +58,7 @@ const DAYS_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"]
 
 export const DEFAULT_CALENDAR_EVENT_FORMAT = "📸 {{client_name}} — {{service_name}}";
 export const DEFAULT_CALENDAR_EVENT_DESCRIPTION =
-    "Klien: {{client_name}}\nWhatsApp: {{client_whatsapp}}\nBooking: {{booking_code}}\nPaket: {{service_name}}\nTanggal: {{session_date}}\nJam: {{session_time}} - {{end_time}}\nJenis Acara: {{event_type}}\nLokasi: {{location}}\nMaps: {{location_maps_url}}\nDetail Lokasi: {{detail_location}}\nCatatan: {{notes}}";
+    "Klien: {{client_name}}\nWhatsApp: {{client_whatsapp}}\nBooking: {{booking_code}}\nDetail Booking: {{booking_detail_link}}\nPaket: {{service_name}}\nTanggal: {{session_date}}\nJam: {{session_time}} - {{end_time}}\nJenis Acara: {{event_type}}\nLokasi: {{location}}\nMaps: {{location_maps_url}}\nDetail Lokasi: {{detail_location}}\nCatatan: {{notes}}";
 export const DEFAULT_DRIVE_FOLDER_FORMAT = "{client_name}";
 export const DEFAULT_DRIVE_FOLDER_STRUCTURE = [DEFAULT_DRIVE_FOLDER_FORMAT];
 
@@ -69,6 +69,7 @@ export const CALENDAR_TEMPLATE_VARIABLES = [
     "{{service_name}}",
     "{{event_type}}",
     "{{booking_code}}",
+    "{{booking_detail_link}}",
     "{{studio_name}}",
     "{{session_date}}",
     "{{session_time}}",

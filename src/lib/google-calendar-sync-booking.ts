@@ -1,4 +1,5 @@
 import { resolveBookingFreelancerNames } from "@/lib/booking-freelancers";
+import { buildBookingDetailLink } from "@/lib/booking-detail-link";
 import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
 import {
   getGoogleCalendarSyncErrorCode,
@@ -96,6 +97,8 @@ export async function syncSingleBookingCalendar(args: {
   booking: GoogleCalendarSyncBookingRow;
   profile: GoogleCalendarSyncProfile;
   attendeeEmails: string[];
+  locale?: string | null;
+  publicOrigin?: string | null;
   fallbackErrorMessage?: string;
 }): Promise<GoogleCalendarSyncSingleResult> {
   try {
@@ -104,6 +107,11 @@ export async function syncSingleBookingCalendar(args: {
       booking: {
         id: args.booking.id,
         bookingCode: args.booking.booking_code,
+        bookingDetailLink: buildBookingDetailLink({
+          publicOrigin: args.publicOrigin,
+          locale: args.locale,
+          bookingId: args.booking.id,
+        }),
         clientName: args.booking.client_name,
         clientWhatsapp: args.booking.client_whatsapp,
         sessionDate: args.booking.session_date,
