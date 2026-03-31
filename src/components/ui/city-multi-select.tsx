@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { createPortal } from "react-dom";
 import { Check, ChevronsUpDown, Search, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -23,30 +22,8 @@ type CityMultiSelectProps = {
   className?: string;
 };
 
-const MOBILE_BREAKPOINT = "(max-width: 767px)";
-
 function normalizeValues(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
-}
-
-function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState(false);
-
-  React.useEffect(() => {
-    const media = window.matchMedia(MOBILE_BREAKPOINT);
-    const update = () => setIsMobile(media.matches);
-    update();
-
-    if (typeof media.addEventListener === "function") {
-      media.addEventListener("change", update);
-      return () => media.removeEventListener("change", update);
-    }
-
-    media.addListener(update);
-    return () => media.removeListener(update);
-  }, []);
-
-  return isMobile;
 }
 
 export function CityMultiSelect({
@@ -62,21 +39,10 @@ export function CityMultiSelect({
   className,
 }: CityMultiSelectProps) {
   const rootRef = React.useRef<HTMLDivElement>(null);
-  const triggerRef = React.useRef<HTMLButtonElement>(null);
-  const panelRef = React.useRef<HTMLDivElement>(null);
 
   const [open, setOpen] = React.useState(false);
-  const [mounted, setMounted] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  const [desktopPanelStyle, setDesktopPanelStyle] = React.useState<React.CSSProperties>({});
-
-  const isMobile = useIsMobile();
   const selectedSet = React.useMemo(() => new Set(values), [values]);
-
-  React.useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
 
   const filteredOptions = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -92,61 +58,23 @@ export function CityMultiSelect({
     [options, selectedSet],
   );
 
-  const updateDesktopPanelPosition = React.useCallback(() => {
-    if (!triggerRef.current || typeof window === "undefined") return;
-
-    const rect = triggerRef.current.getBoundingClientRect();
-    const horizontalPadding = 12;
-    const minPanelWidth = Math.max(rect.width, 520);
-    const maxPanelWidth = Math.max(320, window.innerWidth - horizontalPadding * 2);
-    const panelWidth = Math.min(minPanelWidth, maxPanelWidth);
-
-    const left = Math.min(
-      Math.max(horizontalPadding, rect.left),
-      window.innerWidth - panelWidth - horizontalPadding,
-    );
-
-    setDesktopPanelStyle({
-      width: panelWidth,
-      top: rect.bottom + 6,
-      left,
-    });
-  }, []);
-
   React.useEffect(() => {
-    if (!open || isMobile) return;
+    if (!open) return;
 
-    updateDesktopPanelPosition();
-
-    function handleViewportChange() {
-      updateDesktopPanelPosition();
-    }
-
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange, true);
-
-    return () => {
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange, true);
-    };
-  }, [open, isMobile, updateDesktopPanelPosition]);
-
-  React.useEffect(() => {
-    if (!open || isMobile) return;
-
-    function handleOutsideClick(event: MouseEvent) {
+    function handleOutsidePointerDown(event: MouseEvent | TouchEvent) {
       const target = event.target as Node | null;
       if (!target) return;
       if (rootRef.current?.contains(target)) return;
-      if (panelRef.current?.contains(target)) return;
       setOpen(false);
     }
 
-    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("mousedown", handleOutsidePointerDown);
+    document.addEventListener("touchstart", handleOutsidePointerDown);
     return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("mousedown", handleOutsidePointerDown);
+      document.removeEventListener("touchstart", handleOutsidePointerDown);
     };
-  }, [open, isMobile]);
+  }, [open]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -162,16 +90,6 @@ export function CityMultiSelect({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [open]);
-
-  React.useEffect(() => {
-    if (!open || !isMobile) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [open, isMobile]);
 
   function toggleCity(cityCode: string) {
     if (selectedSet.has(cityCode)) {
@@ -246,7 +164,7 @@ export function CityMultiSelect({
   );
 
   return (
-    <div ref={rootRef} className={cn("space-y-2", className)}>
+    <div ref={rootRef} className={cn("relative space-y-2", className)}>
       {hiddenInputName
         ? values.map((code) => (
             <input key={code} type="hidden" name={hiddenInputName} value={code} />
@@ -254,8 +172,9 @@ export function CityMultiSelect({
         : null}
 
       <button
-        ref={triggerRef}
         type="button"
+        aria-expanded={open}
+        aria-haspopup="listbox"
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
         className="flex min-h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-left text-sm transition-colors hover:bg-muted/30 disabled:cursor-not-allowed disabled:opacity-60"
@@ -266,61 +185,22 @@ export function CityMultiSelect({
         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
       </button>
 
-      {open && mounted && !isMobile
-        ? createPortal(
-            <div
-              ref={panelRef}
-              className="fixed z-[160] rounded-lg border bg-popover shadow-lg"
-              style={desktopPanelStyle}
+      {open ? (
+        <div className="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-lg border bg-popover shadow-lg">
+          <div className="flex items-center justify-between border-b px-3 py-2">
+            <p className="text-xs font-semibold text-muted-foreground">{mobileTitle}</p>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+              aria-label="Close city selector"
             >
-              {optionsList}
-            </div>,
-            document.body,
-          )
-        : null}
-
-      {mounted && isMobile
-        ? createPortal(
-            <div
-              className={cn(
-                "fixed inset-0 z-[160] md:hidden transition-[visibility]",
-                open ? "visible" : "invisible",
-              )}
-              aria-hidden={!open}
-            >
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className={cn(
-                  "absolute inset-0 bg-black/45 transition-opacity",
-                  open ? "opacity-100" : "opacity-0",
-                )}
-                aria-label="Close"
-              />
-
-              <div
-                className={cn(
-                  "absolute inset-x-0 bottom-0 flex max-h-[70dvh] flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl transition-transform duration-200 ease-out",
-                  open ? "translate-y-0" : "translate-y-full",
-                )}
-              >
-                <div className="flex items-center justify-between border-b px-4 py-3">
-                  <p className="text-sm font-semibold">{mobileTitle}</p>
-                  <button
-                    type="button"
-                    onClick={() => setOpen(false)}
-                    className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    aria-label="Close"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto">{optionsList}</div>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {optionsList}
+        </div>
+      ) : null}
 
       {selectedItems.length > 0 ? (
         <div className="flex flex-wrap gap-2">

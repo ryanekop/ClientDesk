@@ -34,7 +34,6 @@ import { getLayoutExtraFields } from "@/utils/form-extra-fields";
 import {
     getActiveEventTypes,
     getBuiltInEventTypes,
-    isShowAllPackagesEventType,
     normalizeEventTypeName,
     normalizeEventTypeList,
 } from "@/lib/event-type-config";
@@ -90,6 +89,7 @@ import {
     normalizeCityCode,
     type CityReferenceItem,
 } from "@/lib/city-references";
+import { filterServicesForBookingSelection } from "@/lib/service-availability";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -262,30 +262,6 @@ function compareServicesByCatalogOrder(a: Service, b: Service) {
     const bSort = typeof b.sort_order === "number" ? b.sort_order : Number.MAX_SAFE_INTEGER;
     if (aSort !== bSort) return aSort - bSort;
     return a.name.localeCompare(b.name);
-}
-
-function isServiceAvailableForEvent(service: Service, eventType: string) {
-    if (!eventType) return false;
-    if (isShowAllPackagesEventType(eventType)) return true;
-    if (!service.event_types || service.event_types.length === 0) return true;
-    const normalizedEventType = normalizeEventTypeName(eventType);
-    if (!normalizedEventType) return false;
-    return service.event_types.some(
-        (serviceEventType) =>
-            normalizeEventTypeName(serviceEventType) === normalizedEventType,
-    );
-}
-
-function isServiceAvailableForCity(service: Service, cityCode: string) {
-    const normalizedSelectedCityCode = normalizeCityCode(cityCode);
-    if (!normalizedSelectedCityCode) return false;
-    const scopedCityCodes = Array.isArray(service.city_codes)
-        ? service.city_codes
-            .map((code) => normalizeCityCode(code))
-            .filter(Boolean)
-        : [];
-    if (scopedCityCodes.length === 0) return true;
-    return scopedCityCodes.includes(normalizedSelectedCityCode);
 }
 
 function parseExistingPhone(full: string | null): { code: string; number: string } {
@@ -747,26 +723,20 @@ export default function EditBookingPage() {
     );
     const mainServices = React.useMemo(
         () =>
-            !eventType || !normalizedSelectedCityCode
-                ? []
-                : sortedServices.filter(
-                    (service) =>
-                        !service.is_addon &&
-                        isServiceAvailableForEvent(service, eventType) &&
-                        isServiceAvailableForCity(service, normalizedSelectedCityCode),
-                ),
+            filterServicesForBookingSelection(sortedServices, {
+                eventType,
+                cityCode: normalizedSelectedCityCode,
+                group: "main",
+            }),
         [eventType, normalizedSelectedCityCode, sortedServices],
     );
     const addonServices = React.useMemo(
         () =>
-            !eventType || !normalizedSelectedCityCode
-                ? []
-                : sortedServices.filter(
-                    (service) =>
-                        service.is_addon &&
-                        isServiceAvailableForEvent(service, eventType) &&
-                        isServiceAvailableForCity(service, normalizedSelectedCityCode),
-                ),
+            filterServicesForBookingSelection(sortedServices, {
+                eventType,
+                cityCode: normalizedSelectedCityCode,
+                group: "addon",
+            }),
         [eventType, normalizedSelectedCityCode, sortedServices],
     );
     const searchedMainServices = React.useMemo(() => {

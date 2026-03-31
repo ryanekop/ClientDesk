@@ -1425,7 +1425,7 @@ export default function ServicesPage() {
                   <Plus className="h-4 w-4" /> {t("tambah")}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
+              <DialogContent className="sm:max-w-[680px]">
               <DialogHeader>
                 <DialogTitle>{t("tambahTitle")}</DialogTitle>
                 <DialogDescription>{t("tambahDesc")}</DialogDescription>
@@ -1901,7 +1901,7 @@ export default function ServicesPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[680px]">
           <DialogHeader>
             <DialogTitle>{t("editTitle")}</DialogTitle>
             <DialogDescription>{ts("editDesc")}</DialogDescription>
