@@ -49,5 +49,6 @@ export async function GET(request: NextRequest) {
       bank_accounts: payload.vendor.bank_accounts,
     },
     services: payload.services,
+    cities: payload.cities,
   });
 }

@@ -19,6 +19,7 @@ import {
     type LocationSelectionMeta,
 } from "@/components/ui/location-autocomplete";
 import { UniversityAutocomplete } from "@/components/ui/university-autocomplete";
+import { CitySingleSelect } from "@/components/ui/city-single-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { BookingAdminCustomFields } from "@/components/form-builder/booking-admin-custom-fields";
@@ -84,6 +85,11 @@ import {
     getWisudaSessionDurationExtraFieldKey,
     parseWisudaSessionDurationOverride,
 } from "@/lib/wisuda-session-duration";
+import {
+    buildCityDisplayName,
+    normalizeCityCode,
+    type CityReferenceItem,
+} from "@/lib/city-references";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -190,6 +196,7 @@ type Service = {
     is_public?: boolean | null;
     sort_order?: number | null;
     event_types?: string[] | null;
+    city_codes?: string[] | null;
 };
 type Freelance = { id: string; name: string; google_email?: string | null };
 type LocationCoords = { lat: number | null; lng: number | null };
@@ -268,6 +275,19 @@ function isServiceAvailableForEvent(service: Service, eventType: string) {
             normalizeEventTypeName(serviceEventType) === normalizedEventType,
     );
 }
+
+function isServiceAvailableForCity(service: Service, cityCode: string) {
+    const normalizedSelectedCityCode = normalizeCityCode(cityCode);
+    if (!normalizedSelectedCityCode) return false;
+    const scopedCityCodes = Array.isArray(service.city_codes)
+        ? service.city_codes
+            .map((code) => normalizeCityCode(code))
+            .filter(Boolean)
+        : [];
+    if (scopedCityCodes.length === 0) return true;
+    return scopedCityCodes.includes(normalizedSelectedCityCode);
+}
+
 function parseExistingPhone(full: string | null): { code: string; number: string } {
     if (!full) return { code: "+62", number: "" };
     const cleaned = full.replace(/[^0-9+]/g, "");
@@ -299,6 +319,7 @@ export default function EditBookingPage() {
     const [saving, setSaving] = React.useState(false);
     const [calendarWarning, setCalendarWarning] = React.useState<string | null>(null);
     const [services, setServices] = React.useState<Service[]>([]);
+    const [cityOptions, setCityOptions] = React.useState<CityReferenceItem[]>([]);
     const [freelancers, setFreelancers] = React.useState<Freelance[]>([]);
     const [eventTypeOptions, setEventTypeOptions] = React.useState<string[]>(EVENT_TYPES);
 
@@ -307,6 +328,7 @@ export default function EditBookingPage() {
     const [phoneNumber, setPhoneNumber] = React.useState("");
     const [instagram, setInstagram] = React.useState("");
     const [eventType, setEventType] = React.useState("");
+    const [selectedCityCode, setSelectedCityCode] = React.useState("");
     const [bookingDate, setBookingDate] = React.useState("");
     const [createdAtDateFallback, setCreatedAtDateFallback] = React.useState("");
     const [sessionDate, setSessionDate] = React.useState("");
@@ -454,14 +476,42 @@ export default function EditBookingPage() {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
-            const [{ data: booking }, { data: svcs }, { data: frees }, { data: bfRows }, { data: bsRows }, { data: prof }] = await Promise.all([
+            const [{ data: booking }, { data: svcs }, { data: frees }, { data: bfRows }, { data: bsRows }, { data: prof }, { data: cityRefs }] = await Promise.all([
                 supabase.from("bookings").select("*").eq("id", id).single(),
                 supabase.from("services").select("id, name, price, original_price, description, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
                 supabase.from("booking_services").select("service_id, kind, sort_order").eq("booking_id", id).order("sort_order", { ascending: true }),
                 supabase.from("profiles").select("custom_client_statuses, dp_verify_trigger_status, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
+                supabase
+                    .from("region_city_references")
+                    .select("city_code, city_name, province_code, province_name")
+                    .order("province_code", { ascending: true })
+                    .order("city_name", { ascending: true }),
             ]);
+            const serviceRows = (svcs || []) as Service[];
+            const serviceIds = serviceRows
+                .map((service) => service.id)
+                .filter((serviceId): serviceId is string => Boolean(serviceId));
+            let serviceScopeRows: Array<{ service_id: string; city_code: string }> = [];
+            if (serviceIds.length > 0) {
+                const { data: scopeData } = await supabase
+                    .from("service_city_scopes")
+                    .select("service_id, city_code")
+                    .eq("user_id", user.id)
+                    .in("service_id", serviceIds);
+                serviceScopeRows = (scopeData || []) as Array<{ service_id: string; city_code: string }>;
+            }
+            const serviceCityCodesMap = new Map<string, string[]>();
+            serviceScopeRows.forEach((row) => {
+                const cityCode = normalizeCityCode(row.city_code);
+                if (!row.service_id || !cityCode) return;
+                const current = serviceCityCodesMap.get(row.service_id) || [];
+                if (!current.includes(cityCode)) {
+                    current.push(cityCode);
+                }
+                serviceCityCodesMap.set(row.service_id, current);
+            });
             const profileRow = (prof ?? null) as ProfileRow | null;
             const nextStatusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
             setStatusOptions(nextStatusOptions);
@@ -492,6 +542,11 @@ export default function EditBookingPage() {
                 setPhoneNumber(parsed.number);
                 setInstagram(booking.instagram || "");
                 setEventType(normalizeEventTypeName(booking.event_type) || "");
+                setSelectedCityCode(
+                    normalizeCityCode(
+                        (booking as Record<string, unknown>).city_code,
+                    ),
+                );
                 const createdAtDate =
                     typeof (booking as Record<string, unknown>).created_at === "string" &&
                     String((booking as Record<string, unknown>).created_at).trim().length > 0
@@ -643,7 +698,24 @@ export default function EditBookingPage() {
                     setWisudaSession2DurationInput("");
                 }
             }
-            setServices(((svcs || []) as Service[]).sort(compareServicesByCatalogOrder));
+            setServices(
+                serviceRows
+                    .map((service) => ({
+                        ...service,
+                        city_codes: serviceCityCodesMap.get(service.id) || [],
+                    }))
+                    .sort(compareServicesByCatalogOrder),
+            );
+            setCityOptions(
+                ((cityRefs || []) as CityReferenceItem[])
+                    .map((city) => ({
+                        city_code: normalizeCityCode(city.city_code),
+                        city_name: city.city_name,
+                        province_code: city.province_code,
+                        province_name: city.province_name,
+                    }))
+                    .filter((city) => city.city_code),
+            );
             setFreelancers((frees || []) as Freelance[]);
             setLoading(false);
         }
@@ -666,13 +738,36 @@ export default function EditBookingPage() {
         () => [...services].sort(compareServicesByCatalogOrder),
         [services],
     );
+    const normalizedSelectedCityCode = normalizeCityCode(selectedCityCode);
+    const selectedCity = React.useMemo(
+        () =>
+            cityOptions.find((city) => city.city_code === normalizedSelectedCityCode) ||
+            null,
+        [cityOptions, normalizedSelectedCityCode],
+    );
     const mainServices = React.useMemo(
-        () => sortedServices.filter((service) => !service.is_addon && isServiceAvailableForEvent(service, eventType)),
-        [eventType, sortedServices],
+        () =>
+            !eventType || !normalizedSelectedCityCode
+                ? []
+                : sortedServices.filter(
+                    (service) =>
+                        !service.is_addon &&
+                        isServiceAvailableForEvent(service, eventType) &&
+                        isServiceAvailableForCity(service, normalizedSelectedCityCode),
+                ),
+        [eventType, normalizedSelectedCityCode, sortedServices],
     );
     const addonServices = React.useMemo(
-        () => sortedServices.filter((service) => service.is_addon && isServiceAvailableForEvent(service, eventType)),
-        [eventType, sortedServices],
+        () =>
+            !eventType || !normalizedSelectedCityCode
+                ? []
+                : sortedServices.filter(
+                    (service) =>
+                        service.is_addon &&
+                        isServiceAvailableForEvent(service, eventType) &&
+                        isServiceAvailableForCity(service, normalizedSelectedCityCode),
+                ),
+        [eventType, normalizedSelectedCityCode, sortedServices],
     );
     const searchedMainServices = React.useMemo(() => {
         const query = packageSearchQuery.trim().toLowerCase();
@@ -933,6 +1028,10 @@ export default function EditBookingPage() {
                 showFeedback("Lokasi Sesi 1 dan Lokasi Sesi 2 wajib diisi untuk Wisuda split.");
                 return;
             }
+            if (!normalizedSelectedCityCode || !selectedCity) {
+                showFeedback("Pilih kota/kabupaten terlebih dahulu sebelum memilih paket.");
+                return;
+            }
             if (selectedServiceIds.length === 0) {
                 showFeedback(tBookingEditor("errorSelectMainPackage"));
                 return;
@@ -1165,6 +1264,8 @@ export default function EditBookingPage() {
                 location_lng: resolvedLocation.locationLng,
                 location_detail: locationDetail || null,
                 service_id: selectedServiceIds[0] || null,
+                city_code: normalizedSelectedCityCode,
+                city_name: selectedCity.city_name,
                 freelance_id: freelancerIds[0] || null,
                 total_price: tPrice,
                 dp_paid: dPaid,
@@ -1858,17 +1959,43 @@ export default function EditBookingPage() {
                             <input value={locationDetail} onChange={e => setLocationDetail(e.target.value)} placeholder={tBookingEditor("locationDetailExample")} className={inputClass} />
                         </div>
                         <div className="col-span-full space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground">Kota / Kabupaten{reqMark}</label>
+                            <CitySingleSelect
+                                options={cityOptions}
+                                value={normalizedSelectedCityCode}
+                                onChange={setSelectedCityCode}
+                                placeholder="Pilih kota / kabupaten"
+                                searchPlaceholder="Cari kota / kabupaten..."
+                                emptyText="Data kota / kabupaten tidak ditemukan."
+                                className="w-full"
+                            />
+                            {selectedCity ? (
+                                <p className="text-[11px] text-muted-foreground">
+                                    Wilayah terpilih: {buildCityDisplayName(selectedCity)}
+                                </p>
+                            ) : (
+                                <p className="text-[11px] text-muted-foreground">
+                                    Pilih kota/kabupaten dulu untuk menampilkan paket.
+                                </p>
+                            )}
+                        </div>
+                        <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Paket / Layanan{reqMark}</label>
                             <div className="space-y-2">
                                 <button
                                     type="button"
                                     onClick={() => setPackageDialogOpen(true)}
-                                    className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all hover:bg-muted/30 cursor-pointer"
+                                    disabled={!normalizedSelectedCityCode || !eventType}
+                                    className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all hover:bg-muted/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     <span className="text-left">
                                         {selectedMainServices.length > 0
                                             ? `${selectedMainServices.length} paket dipilih`
-                                            : tBookingEditor("selectPackageService")}
+                                            : !normalizedSelectedCityCode
+                                                ? "Pilih kota / kabupaten dulu"
+                                                : !eventType
+                                                    ? "Pilih tipe acara dulu"
+                                                    : tBookingEditor("selectPackageService")}
                                     </span>
                                     <span className="text-xs font-medium text-primary">
                                         Buka Daftar
@@ -1908,7 +2035,7 @@ export default function EditBookingPage() {
                             <button
                                 type="button"
                                 onClick={() => setAddonDialogOpen(true)}
-                                disabled={addonServices.length === 0}
+                                disabled={addonServices.length === 0 || !normalizedSelectedCityCode || !eventType}
                                 className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all hover:bg-muted/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <span className="text-left">
@@ -2224,7 +2351,15 @@ export default function EditBookingPage() {
                             />
                         </div>
                         <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-                            {mainServices.length === 0 ? (
+                            {!normalizedSelectedCityCode ? (
+                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                    Pilih kota/kabupaten dulu untuk melihat paket.
+                                </div>
+                            ) : !eventType ? (
+                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                    Pilih tipe acara dulu untuk melihat paket.
+                                </div>
+                            ) : mainServices.length === 0 ? (
                                 <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
                                     Belum ada paket untuk tipe acara ini.
                                 </div>
@@ -2299,7 +2434,15 @@ export default function EditBookingPage() {
                             />
                         </div>
                         <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-                            {addonServices.length === 0 ? (
+                            {!normalizedSelectedCityCode ? (
+                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                    Pilih kota/kabupaten dulu untuk melihat add-on.
+                                </div>
+                            ) : !eventType ? (
+                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                    Pilih tipe acara dulu untuk melihat add-on.
+                                </div>
+                            ) : addonServices.length === 0 ? (
                                 <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
                                     Belum ada add-on untuk tipe acara ini.
                                 </div>

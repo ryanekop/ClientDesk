@@ -121,6 +121,7 @@ const resolveSluglessVendor = cache(async (locale: string) => {
     vendorSlug: defaultVendorSlug,
     vendor: vendorPayload.vendor as Vendor,
     services: vendorPayload.services as Service[],
+    cities: vendorPayload.cities || [],
   };
 });
 
@@ -231,6 +232,7 @@ export default async function SluglessBookingPage({
       vendorSlug={resolved.vendorSlug}
       vendor={resolved.vendor}
       services={resolved.services}
+      cities={resolved.cities}
       specialOfferToken={offerToken || null}
       specialOfferStatus={specialOfferStatus}
       specialOfferRule={specialOfferRule}

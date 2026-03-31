@@ -9,6 +9,7 @@ import {
   buildVendorUserCacheTag,
 } from "@/lib/public-cache-tags";
 import { createServiceClient } from "@/lib/supabase/service";
+import { normalizeCityCode, type CityReferenceItem } from "@/lib/city-references";
 
 type VendorStampRow = {
   id: string;
@@ -61,6 +62,19 @@ type VendorServiceRow = {
   affects_schedule: boolean | null;
   sort_order: number | null;
   created_at: string;
+  city_codes: string[];
+};
+
+type ServiceCityScopeRow = {
+  service_id: string;
+  city_code: string;
+};
+
+type CityReferenceRow = {
+  city_code: string;
+  city_name: string;
+  province_code: string;
+  province_name: string;
 };
 
 export type PublicVendorPayload = {
@@ -95,6 +109,7 @@ export type PublicVendorPayload = {
     bank_accounts: ReturnType<typeof normalizeBankAccounts>;
   };
   services: VendorServiceRow[];
+  cities: CityReferenceItem[];
 };
 
 function normalizeSlug(slug: string | null | undefined) {
@@ -161,6 +176,39 @@ async function fetchVendorPayloadById(args: {
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
+  const serviceIds = ((services || []) as Array<{ id: string }>).map((service) => service.id);
+  let serviceScopeRows: ServiceCityScopeRow[] = [];
+  if (serviceIds.length > 0) {
+    const { data: scopeData, error: scopeError } = await supabase
+      .from("service_city_scopes")
+      .select("service_id, city_code")
+      .eq("user_id", vendorRaw.id)
+      .in("service_id", serviceIds);
+    if (!scopeError) {
+      serviceScopeRows = (scopeData || []) as ServiceCityScopeRow[];
+    }
+  }
+
+  const { data: cityData, error: cityError } = await supabase
+    .from("region_city_references")
+    .select("city_code, city_name, province_code, province_name")
+    .order("province_code", { ascending: true })
+    .order("city_name", { ascending: true });
+  const cityRows: CityReferenceRow[] = cityError
+    ? []
+    : ((cityData || []) as CityReferenceRow[]);
+
+  const cityCodesByService = new Map<string, string[]>();
+  serviceScopeRows.forEach((row) => {
+    const cityCode = normalizeCityCode(row.city_code);
+    if (!cityCode) return;
+    const current = cityCodesByService.get(row.service_id) || [];
+    if (!current.includes(cityCode)) {
+      current.push(cityCode);
+    }
+    cityCodesByService.set(row.service_id, current);
+  });
+
   const payload: PublicVendorPayload = {
     vendor: {
       id: vendorRaw.id,
@@ -196,7 +244,20 @@ async function fetchVendorPayloadById(args: {
       ),
       bank_accounts: normalizeBankAccounts(vendorRaw.bank_accounts),
     },
-    services: (services || []) as VendorServiceRow[],
+    services: ((services || []) as Omit<VendorServiceRow, "city_codes">[]).map(
+      (service) => ({
+        ...service,
+        city_codes: cityCodesByService.get(service.id) || [],
+      }),
+    ),
+    cities: cityRows
+      .map((city) => ({
+        city_code: normalizeCityCode(city.city_code),
+        city_name: city.city_name,
+        province_code: city.province_code,
+        province_name: city.province_name,
+      }))
+      .filter((city) => city.city_code),
   };
 
   return payload;

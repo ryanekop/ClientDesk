@@ -15,6 +15,7 @@ import {
   type LocationSelectionMeta,
 } from "@/components/ui/location-autocomplete";
 import { UniversityAutocomplete } from "@/components/ui/university-autocomplete";
+import { CitySingleSelect } from "@/components/ui/city-single-select";
 import {
   Dialog,
   DialogContent,
@@ -87,6 +88,11 @@ import {
   resolveNormalizedLayoutFromStoredSections,
 } from "@/lib/form-sections";
 import { compressImage } from "@/utils/compress-image";
+import {
+  buildCityDisplayName,
+  normalizeCityCode,
+  type CityReferenceItem,
+} from "@/lib/city-references";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,6 +109,7 @@ export type Service = {
   duration_minutes?: number | null;
   affects_schedule?: boolean | null;
   created_at?: string;
+  city_codes?: string[] | null;
 };
 
 export type Vendor = {
@@ -205,6 +212,18 @@ function isServiceAvailableForEventType(service: Service, eventType: string): bo
   );
 }
 
+function isServiceAvailableForCity(service: Service, cityCode: string): boolean {
+  const normalizedSelectedCityCode = normalizeCityCode(cityCode);
+  if (!normalizedSelectedCityCode) return false;
+  const scopedCityCodes = Array.isArray(service.city_codes)
+    ? service.city_codes.map((code) => normalizeCityCode(code)).filter(Boolean)
+    : [];
+  if (scopedCityCodes.length === 0) {
+    return true;
+  }
+  return scopedCityCodes.includes(normalizedSelectedCityCode);
+}
+
 function extractSlugFromPath(pathname: string) {
   const match = pathname.match(/\/formbooking\/([^/?#]+)/i);
   if (match && match[1]) {
@@ -245,6 +264,7 @@ async function optimizePaymentProofImageForUpload(file: File) {
 interface BookingFormClientProps {
   vendor: Vendor;
   services: Service[];
+  cities: CityReferenceItem[];
   vendorSlug?: string;
   specialOfferToken?: string | null;
   specialOfferStatus?: BookingSpecialOfferStatus;
@@ -304,6 +324,7 @@ function toStringArray(value: unknown): string[] {
 export function BookingFormClient({
   vendor,
   services,
+  cities,
   vendorSlug,
   specialOfferToken,
   specialOfferStatus,
@@ -426,6 +447,7 @@ export function BookingFormClient({
   const [phone, setPhone] = React.useState("");
   const [eventType, setEventType] = React.useState("");
   const [sessionDate, setSessionDate] = React.useState("");
+  const [selectedCityCode, setSelectedCityCode] = React.useState("");
   const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
   const [selectedAddons, setSelectedAddons] = React.useState<Set<string>>(new Set());
   const [dpDisplay, setDpDisplay] = React.useState("");
@@ -703,6 +725,7 @@ export function BookingFormClient({
     const requiresClientWhatsapp = hasBuiltInField("client_whatsapp");
     const requiresEventType = hasBuiltInField("event_type");
     const requiresServicePackage = hasBuiltInField("service_package");
+    const requiresCitySelection = requiresServicePackage;
     const requiresSessionDate =
       hasBuiltInField("session_date") &&
       !isSplitSessionEnabled;
@@ -718,6 +741,15 @@ export function BookingFormClient({
       hasBuiltInField("wisuda_session2_date") &&
       isWisudaEvent &&
       isSplitSessionEnabled;
+
+    if (requiresCitySelection && !normalizedSelectedCityCode) {
+      setError(
+        localeCode === "en"
+          ? "Please select your city/regency before choosing a package."
+          : "Pilih kota/kabupaten terlebih dahulu sebelum memilih paket.",
+      );
+      return;
+    }
 
     if (
       (requiresClientName && !clientName.trim()) ||
@@ -837,6 +869,14 @@ export function BookingFormClient({
 
     const fullPhone = `${countryCode}${phone}`.replace(/[^0-9+]/g, "");
     const dpValue = parseFormatted(dpDisplay) || 0;
+    if (!selectedCity) {
+      setError(
+        localeCode === "en"
+          ? "Selected city/regency is invalid."
+          : "Kota/kabupaten yang dipilih tidak valid.",
+      );
+      return;
+    }
     const resolvedLocation = resolvePreferredLocation(
       isWeddingEvent
         ? [
@@ -979,6 +1019,8 @@ export function BookingFormClient({
       formData.append("sessionDate", finalSessionDate);
       formData.append("serviceId", selectedServiceIds[0] || "");
       formData.append("serviceIds", JSON.stringify(selectedServiceIds));
+      formData.append("cityCode", normalizedSelectedCityCode);
+      formData.append("cityName", selectedCity.city_name);
       if (normalizedOfferToken) {
         formData.append("offerToken", normalizedOfferToken);
       }
@@ -1341,6 +1383,22 @@ export function BookingFormClient({
     () => [...services].sort(compareServicesByCatalogOrder),
     [services],
   );
+  const cityOptions = React.useMemo(
+    () =>
+      [...cities].sort((left, right) => {
+        if (left.province_code !== right.province_code) {
+          return left.province_code.localeCompare(right.province_code);
+        }
+        return left.city_name.localeCompare(right.city_name);
+      }),
+    [cities],
+  );
+  const normalizedSelectedCityCode = normalizeCityCode(selectedCityCode);
+  const selectedCity = React.useMemo(
+    () =>
+      cityOptions.find((item) => item.city_code === normalizedSelectedCityCode) || null,
+    [cityOptions, normalizedSelectedCityCode],
+  );
 
   const handleTermsDialogOpenChange = React.useCallback((open: boolean) => {
     setTermsDialogOpen(open);
@@ -1360,21 +1418,33 @@ export function BookingFormClient({
     setTermsAccepted(false);
     setTermsViewedOnce(false);
   }, [hasTerms]);
-  const filteredServices = !eventType
+  const filteredServices = !eventType || !normalizedSelectedCityCode
     ? []
     : showAllActivePackages
-      ? sortedServices.filter((service) => !service.is_addon)
+      ? sortedServices.filter(
+          (service) =>
+            !service.is_addon &&
+            isServiceAvailableForCity(service, normalizedSelectedCityCode),
+        )
       : sortedServices.filter(
           (service) =>
-            !service.is_addon && isServiceAvailableForEventType(service, eventType),
+            !service.is_addon &&
+            isServiceAvailableForEventType(service, eventType) &&
+            isServiceAvailableForCity(service, normalizedSelectedCityCode),
         );
-  const addonServices = !eventType
+  const addonServices = !eventType || !normalizedSelectedCityCode
     ? []
     : showAllActivePackages
-      ? sortedServices.filter((service) => service.is_addon)
+      ? sortedServices.filter(
+          (service) =>
+            service.is_addon &&
+            isServiceAvailableForCity(service, normalizedSelectedCityCode),
+        )
       : sortedServices.filter(
           (service) =>
-            service.is_addon && isServiceAvailableForEventType(service, eventType),
+            service.is_addon &&
+            isServiceAvailableForEventType(service, eventType) &&
+            isServiceAvailableForCity(service, normalizedSelectedCityCode),
         );
   const searchedMainServices = React.useMemo(() => {
     const query = packageSearchQuery.trim().toLowerCase();
@@ -1399,6 +1469,32 @@ export function BookingFormClient({
   const selectedAddonServices = sortedServices.filter(
     (service) => service.is_addon && selectedAddons.has(service.id),
   );
+
+  React.useEffect(() => {
+    if (!normalizedSelectedCityCode) {
+      setPackageDialogOpen(false);
+      setAddonDialogOpen(false);
+    }
+  }, [normalizedSelectedCityCode]);
+
+  React.useEffect(() => {
+    const availableMainIds = new Set(filteredServices.map((service) => service.id));
+    setSelectedServiceIds((prev) =>
+      prev.filter((serviceId) => availableMainIds.has(serviceId)),
+    );
+  }, [filteredServices]);
+
+  React.useEffect(() => {
+    const availableAddonIds = new Set(addonServices.map((service) => service.id));
+    setSelectedAddons((prev) => {
+      const next = new Set(
+        Array.from(prev).filter((serviceId) => availableAddonIds.has(serviceId)),
+      );
+      if (next.size === prev.size) return prev;
+      return next;
+    });
+  }, [addonServices]);
+
   const selectedAddonTotal = selectedAddonServices.reduce(
     (sum, service) => sum + service.price,
     0,
@@ -2044,9 +2140,31 @@ export function BookingFormClient({
           <div key={item.id} className="space-y-3">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">
+                Kota / Kabupaten <span className="text-red-500">*</span>
+              </label>
+              <CitySingleSelect
+                options={cityOptions}
+                value={normalizedSelectedCityCode}
+                onChange={setSelectedCityCode}
+                placeholder="Pilih kota / kabupaten"
+                searchPlaceholder="Cari kota / kabupaten..."
+                emptyText="Data kota / kabupaten tidak ditemukan."
+              />
+              {selectedCity ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Wilayah terpilih: {buildCityDisplayName(selectedCity)}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">
                 {t("paketLayanan")} <span className="text-red-500">*</span>
               </label>
-              {!eventType ? (
+              {!normalizedSelectedCityCode ? (
+                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                  Pilih kota/kabupaten dulu untuk menampilkan paket yang tersedia.
+                </div>
+              ) : !eventType ? (
                 <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
                   Pilih tipe acara dulu untuk menampilkan paket yang tersedia.
                 </div>

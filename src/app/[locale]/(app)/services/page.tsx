@@ -41,6 +41,7 @@ import {
   MoveVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CityMultiSelect } from "@/components/ui/city-multi-select";
 import {
   PageHeader,
   PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME,
@@ -69,6 +70,7 @@ import {
 import { CardListSkeleton } from "@/components/ui/data-skeletons";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
+import { normalizeCityCode, type CityReferenceItem } from "@/lib/city-references";
 
 type Service = {
   id: string;
@@ -107,6 +109,17 @@ function normalizeServiceItemsPerPage(value: unknown) {
   )
     ? parsed
     : SERVICE_DEFAULT_ITEMS_PER_PAGE;
+}
+
+function getCityCodesFromFormData(formData: FormData) {
+  return Array.from(
+    new Set(
+      formData
+        .getAll("city_codes")
+        .map((value) => normalizeCityCode(String(value)))
+        .filter(Boolean),
+    ),
+  );
 }
 
 function getServiceGroupKey(service: Pick<Service, "is_addon">): ServiceGroupKey {
@@ -531,6 +544,12 @@ export default function ServicesPage() {
   const [pageError, setPageError] = React.useState("");
   const [eventTypeOptions, setEventTypeOptions] = React.useState<string[]>(EVENT_TYPES);
   const [usedEventTypeOptions, setUsedEventTypeOptions] = React.useState<string[]>(EVENT_TYPES);
+  const [cityOptions, setCityOptions] = React.useState<CityReferenceItem[]>([]);
+  const [serviceCityCodesByServiceId, setServiceCityCodesByServiceId] = React.useState<
+    Record<string, string[]>
+  >({});
+  const [addCityCodes, setAddCityCodes] = React.useState<string[]>([]);
+  const [editCityCodes, setEditCityCodes] = React.useState<string[]>([]);
   const [mainTotalItems, setMainTotalItems] = React.useState(0);
   const [addonTotalItems, setAddonTotalItems] = React.useState(0);
   const [hasAnyServices, setHasAnyServices] = React.useState(false);
@@ -550,6 +569,83 @@ export default function ServicesPage() {
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
+  );
+
+  const fetchCityOptions = React.useCallback(async () => {
+    const { data, error } = await supabase
+      .from("region_city_references")
+      .select("city_code, city_name, province_code, province_name")
+      .order("province_code", { ascending: true })
+      .order("city_name", { ascending: true });
+    if (error) return;
+    const nextCities = ((data || []) as CityReferenceItem[]).map((item) => ({
+      city_code: normalizeCityCode(item.city_code),
+      city_name: item.city_name,
+      province_code: item.province_code,
+      province_name: item.province_name,
+    })).filter((item) => item.city_code);
+    setCityOptions(nextCities);
+  }, [supabase]);
+
+  const fetchServiceCityScopeMap = React.useCallback(
+    async (userId: string) => {
+      const { data, error } = await supabase
+        .from("service_city_scopes")
+        .select("service_id, city_code")
+        .eq("user_id", userId);
+      if (error) {
+        setServiceCityCodesByServiceId({});
+        return;
+      }
+      const nextMap: Record<string, string[]> = {};
+      ((data || []) as Array<{ service_id: string; city_code: string }>).forEach(
+        (row) => {
+          const serviceId = row.service_id;
+          const cityCode = normalizeCityCode(row.city_code);
+          if (!serviceId || !cityCode) return;
+          if (!nextMap[serviceId]) {
+            nextMap[serviceId] = [];
+          }
+          if (!nextMap[serviceId].includes(cityCode)) {
+            nextMap[serviceId].push(cityCode);
+          }
+        },
+      );
+      setServiceCityCodesByServiceId(nextMap);
+    },
+    [supabase],
+  );
+
+  const syncServiceCityScopes = React.useCallback(
+    async (args: { userId: string; serviceId: string; cityCodes: string[] }) => {
+      const normalizedCityCodes = Array.from(
+        new Set(args.cityCodes.map((code) => normalizeCityCode(code)).filter(Boolean)),
+      );
+      const { error: deleteError } = await supabase
+        .from("service_city_scopes")
+        .delete()
+        .eq("user_id", args.userId)
+        .eq("service_id", args.serviceId);
+      if (deleteError) {
+        throw deleteError;
+      }
+      if (normalizedCityCodes.length === 0) {
+        return;
+      }
+      const { error: insertError } = await supabase
+        .from("service_city_scopes")
+        .insert(
+          normalizedCityCodes.map((cityCode) => ({
+            user_id: args.userId,
+            service_id: args.serviceId,
+            city_code: cityCode,
+          })),
+        );
+      if (insertError) {
+        throw insertError;
+      }
+    },
+    [supabase],
   );
 
   const hydrateServiceOrderSnapshot = React.useCallback(
@@ -578,9 +674,10 @@ export default function ServicesPage() {
 
       const normalizedServices = ((data || []) as Service[]).sort(compareServices);
       setServices(normalizedServices);
+      await fetchServiceCityScopeMap(resolvedUserId);
       return normalizedServices;
     },
-    [currentUserId, supabase],
+    [currentUserId, fetchServiceCityScopeMap, supabase],
   );
 
   const fetchAllServices = React.useCallback(async () => {
@@ -594,6 +691,7 @@ export default function ServicesPage() {
     if (!user) {
       setCurrentUserId(null);
       setServices([]);
+      setServiceCityCodesByServiceId({});
       setLoading(false);
       return;
     }
@@ -626,6 +724,7 @@ export default function ServicesPage() {
       setPageError(error.message);
       setServices([]);
       setHasAnyServices(false);
+      setServiceCityCodesByServiceId({});
     } else {
       const normalizedServices = ((data || []) as Service[]).sort(compareServices);
       const nextUsedEventTypes = Array.from(
@@ -640,10 +739,11 @@ export default function ServicesPage() {
       setServices(normalizedServices);
       setUsedEventTypeOptions(nextUsedEventTypes);
       setHasAnyServices(normalizedServices.length > 0);
+      await fetchServiceCityScopeMap(user.id);
     }
 
     setLoading(false);
-  }, [supabase]);
+  }, [fetchServiceCityScopeMap, supabase]);
 
   const fetchPagedServices = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
     if (!itemsPerPageHydrated || isReorderMode) return;
@@ -715,6 +815,10 @@ export default function ServicesPage() {
 
     void hydrateCurrentUser();
   }, [supabase]);
+
+  React.useEffect(() => {
+    void fetchCityOptions();
+  }, [fetchCityOptions]);
 
   React.useEffect(() => {
     if (!currentUserId) {
@@ -822,6 +926,7 @@ export default function ServicesPage() {
     if (!isAddOpen) {
       setAddIsAddon(false);
       setAddAffectsSchedule(true);
+      setAddCityCodes([]);
     }
   }, [isAddOpen]);
 
@@ -864,6 +969,7 @@ export default function ServicesPage() {
     const isAddon = formData.get("is_addon") === "on";
     const isPublic = formData.get("is_public") === "on";
     const affectsSchedule = !isAddon || formData.get("affects_schedule") === "on";
+    const cityCodes = getCityCodesFromFormData(formData);
     const { count } = await supabase
       .from("services")
       .select("id", { count: "exact", head: true })
@@ -871,41 +977,61 @@ export default function ServicesPage() {
       .eq("is_addon", isAddon);
     const nextSortOrder = count || 0;
 
-    const { error } = await supabase.from("services").insert({
-      user_id: userId,
-      name: formData.get("name") as string,
-      description: (formData.get("description") as string) || null,
-      price: parseFloat(formData.get("price") as string) || 0,
-      original_price: parseFloat(formData.get("original_price") as string) || null,
-      duration_minutes:
-        parseInt((formData.get("duration_hours") as string) || "0", 10) * 60 +
-        parseInt((formData.get("duration_mins") as string) || "0", 10),
-      is_active: true,
-      is_addon: isAddon,
-      is_public: isPublic,
-      affects_schedule: affectsSchedule,
-      sort_order: nextSortOrder,
-      event_types:
-        formData.getAll("event_types").length > 0
-          ? (formData.getAll("event_types") as string[])
-          : null,
-    });
+    const { data, error } = await supabase
+      .from("services")
+      .insert({
+        user_id: userId,
+        name: formData.get("name") as string,
+        description: (formData.get("description") as string) || null,
+        price: parseFloat(formData.get("price") as string) || 0,
+        original_price: parseFloat(formData.get("original_price") as string) || null,
+        duration_minutes:
+          parseInt((formData.get("duration_hours") as string) || "0", 10) * 60 +
+          parseInt((formData.get("duration_mins") as string) || "0", 10),
+        is_active: true,
+        is_addon: isAddon,
+        is_public: isPublic,
+        affects_schedule: affectsSchedule,
+        sort_order: nextSortOrder,
+        event_types:
+          formData.getAll("event_types").length > 0
+            ? (formData.getAll("event_types") as string[])
+            : null,
+      })
+      .select("id")
+      .single();
 
-    if (!error) {
+    if (error || !data?.id) {
+      setPageError(error?.message || "Gagal menambahkan paket.");
+      return;
+    }
+
+    try {
+      await syncServiceCityScopes({
+        userId,
+        serviceId: data.id,
+        cityCodes,
+      });
       setIsAddOpen(false);
       await refreshVisibleData();
-    } else {
-      setPageError(error.message);
+    } catch (scopeError) {
+      setPageError(
+        scopeError instanceof Error
+          ? scopeError.message
+          : "Gagal menyimpan scope kota/kabupaten paket.",
+      );
     }
   }
 
   async function handleEdit(formData: FormData) {
     if (!editingService) return;
 
+    const userId = await getRequiredUserId();
     const nextIsAddon = formData.get("is_addon") === "on";
     const nextIsPublic = formData.get("is_public") === "on";
     const nextAffectsSchedule =
       !nextIsAddon || formData.get("affects_schedule") === "on";
+    const cityCodes = getCityCodesFromFormData(formData);
     const previousGroupKey = getServiceGroupKey(editingService);
     const nextGroupKey: ServiceGroupKey = nextIsAddon ? "addon" : "main";
     const nextSortOrder =
@@ -915,7 +1041,7 @@ export default function ServicesPage() {
             await supabase
               .from("services")
               .select("id", { count: "exact", head: true })
-              .eq("user_id", await getRequiredUserId())
+              .eq("user_id", userId)
               .eq("is_addon", nextIsAddon)
           ).count || 0;
 
@@ -942,6 +1068,21 @@ export default function ServicesPage() {
 
     if (error) {
       setPageError(error.message);
+      return;
+    }
+
+    try {
+      await syncServiceCityScopes({
+        userId,
+        serviceId: editingService.id,
+        cityCodes,
+      });
+    } catch (scopeError) {
+      setPageError(
+        scopeError instanceof Error
+          ? scopeError.message
+          : "Gagal menyimpan scope kota/kabupaten paket.",
+      );
       return;
     }
 
@@ -986,8 +1127,14 @@ export default function ServicesPage() {
     setEditingService(service);
     setEditIsAddon(service.is_addon);
     setEditAffectsSchedule(service.affects_schedule !== false);
+    setEditCityCodes(serviceCityCodesByServiceId[service.id] || []);
     setIsEditOpen(true);
   }
+
+  React.useEffect(() => {
+    if (!editingService || !isEditOpen) return;
+    setEditCityCodes(serviceCityCodesByServiceId[editingService.id] || []);
+  }, [editingService, isEditOpen, serviceCityCodesByServiceId]);
 
   function handleDelete(id: string) {
     const currentService = services.find((service) => service.id === id);
@@ -1333,6 +1480,21 @@ export default function ServicesPage() {
                     ))}
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Kota / Kabupaten</label>
+                  <p className="-mt-1 text-[11px] text-muted-foreground">
+                    Bisa pilih lebih dari satu. Kosongkan jika paket berlaku untuk semua kota/kabupaten.
+                  </p>
+                  <CityMultiSelect
+                    options={cityOptions}
+                    values={addCityCodes}
+                    onChange={setAddCityCodes}
+                    hiddenInputName="city_codes"
+                    placeholder="Bebas semua kota / kabupaten"
+                    searchPlaceholder="Cari kota / kabupaten..."
+                    emptyText="Data kota / kabupaten tidak ditemukan."
+                  />
+                </div>
                 <DialogFooter>
                   <Button type="submit">{t("simpan")}</Button>
                 </DialogFooter>
@@ -1616,6 +1778,7 @@ export default function ServicesPage() {
             setEditingService(null);
             setEditIsAddon(false);
             setEditAffectsSchedule(true);
+            setEditCityCodes([]);
           }
         }}
       >
@@ -1775,6 +1938,21 @@ export default function ServicesPage() {
                     </label>
                   ))}
                 </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Kota / Kabupaten</label>
+                <p className="-mt-1 text-[11px] text-muted-foreground">
+                  Bisa pilih lebih dari satu. Kosongkan jika paket berlaku untuk semua kota/kabupaten.
+                </p>
+                <CityMultiSelect
+                  options={cityOptions}
+                  values={editCityCodes}
+                  onChange={setEditCityCodes}
+                  hiddenInputName="city_codes"
+                  placeholder="Bebas semua kota / kabupaten"
+                  searchPlaceholder="Cari kota / kabupaten..."
+                  emptyText="Data kota / kabupaten tidak ditemukan."
+                />
               </div>
               <DialogFooter>
                 <Button type="submit">{t("perbarui")}</Button>

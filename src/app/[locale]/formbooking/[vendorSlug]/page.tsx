@@ -137,6 +137,7 @@ export default async function PublicBookingFormPage({
       vendorSlug={vendorSlug}
       vendor={vendorData}
       services={(vendorPayload?.services || []) as Service[]}
+      cities={vendorPayload?.cities || []}
       specialOfferToken={offerToken || null}
       specialOfferStatus={specialOfferStatus}
       specialOfferRule={specialOfferRule}

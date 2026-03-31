@@ -11,6 +11,7 @@
     "audit:i18n-internal": "node scripts/i18n-audit-internal.mjs",
     "scrape:universities": "node scripts/scrape-universities-from-kip.mjs",
     "seed:universities": "node scripts/seed-universities-from-json.mjs",
+    "seed:cities": "node scripts/seed-cities-from-wilayah-sql.mjs",
     "backfill:universities": "node scripts/backfill-university-reference-ids.mjs",
     "backfill:branding": "node scripts/backfill-branding-base64-to-storage.mjs"
   },

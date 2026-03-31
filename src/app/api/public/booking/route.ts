@@ -68,6 +68,7 @@ import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
 import { resolvePublicOrigin } from "@/lib/auth/public-origin";
 import { buildBookingDetailLink } from "@/lib/booking-detail-link";
+import { normalizeCityCode } from "@/lib/city-references";
 
 type VendorRecord = {
     id: string;
@@ -118,6 +119,8 @@ type BookingRequestBody = {
     sessionDate: string;
     serviceIds?: string[] | null;
     serviceId: string;
+    cityCode?: string | null;
+    cityName?: string | null;
     dpPaid: number;
     location: string | null;
     locationLat?: number | string | null;
@@ -396,6 +399,12 @@ export async function POST(request: NextRequest) {
                     ? JSON.parse(String(formData.get("serviceIds")))
                     : null,
                 serviceId: String(formData.get("serviceId") || ""),
+                cityCode: formData.get("cityCode")
+                    ? String(formData.get("cityCode"))
+                    : null,
+                cityName: formData.get("cityName")
+                    ? String(formData.get("cityName"))
+                    : null,
                 dpPaid: Number(formData.get("dpPaid") || 0),
                 location: formData.get("location") ? String(formData.get("location")) : null,
                 locationLat: formData.get("locationLat")
@@ -439,6 +448,8 @@ export async function POST(request: NextRequest) {
             sessionDate,
             serviceIds,
             serviceId,
+            cityCode,
+            cityName,
             dpPaid,
             location,
             locationLat,
@@ -456,6 +467,7 @@ export async function POST(request: NextRequest) {
         const normalizedClientName = (clientName || "").trim() || "Klien";
         const normalizedClientWhatsapp = (clientWhatsapp || "").trim();
         const normalizedEventType = normalizeEventTypeName(eventType);
+        const normalizedCityCode = normalizeCityCode(cityCode);
         let resolvedEventType = normalizedEventType;
         const normalizedLocationLat = normalizeStoredCoordinate(locationLat);
         const normalizedLocationLng = normalizeStoredCoordinate(locationLng);
@@ -529,6 +541,32 @@ export async function POST(request: NextRequest) {
         }
 
         await assertBookingWriteAccessForUser(vendor.id, { publicFacing: true });
+
+        if (!normalizedCityCode) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Kota/kabupaten wajib dipilih sebelum memilih paket.",
+                },
+                { status: 400 },
+            );
+        }
+
+        const { data: cityReference, error: cityReferenceError } = await supabaseAdmin
+            .from("region_city_references")
+            .select("city_code, city_name")
+            .eq("city_code", normalizedCityCode)
+            .maybeSingle();
+        if (cityReferenceError || !cityReference) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Kota/kabupaten tidak valid. Silakan pilih ulang.",
+                },
+                { status: 400 },
+            );
+        }
+        const resolvedCityName = (cityName || "").trim() || cityReference.city_name;
 
         const normalizedOfferToken = normalizeSpecialOfferToken(offerToken);
         let specialOfferRule: BookingSpecialLinkRule | null = null;
@@ -842,10 +880,47 @@ export async function POST(request: NextRequest) {
                 .order("sort_order", { ascending: true })
                 .order("created_at", { ascending: true });
 
+            const availableMainServiceRows = (availableMainServices || []) as Array<{
+                id: string;
+                event_types?: string[] | null;
+            }>;
+            const availableMainServiceIds = availableMainServiceRows
+                .map((service) => service.id)
+                .filter((serviceIdValue): serviceIdValue is string => Boolean(serviceIdValue));
+            let cityFilteredAvailableMainServices = availableMainServiceRows;
+            if (availableMainServiceIds.length > 0) {
+                const { data: availableScopeRows } = await supabaseAdmin
+                    .from("service_city_scopes")
+                    .select("service_id, city_code")
+                    .eq("user_id", vendor.id)
+                    .in("service_id", availableMainServiceIds);
+                const cityScopedByServiceId = new Map<string, string[]>();
+                (availableScopeRows || []).forEach((row) => {
+                    const serviceIdValue =
+                        typeof row.service_id === "string" ? row.service_id : "";
+                    const cityCodeValue = normalizeCityCode(row.city_code);
+                    if (!serviceIdValue || !cityCodeValue) return;
+                    const current = cityScopedByServiceId.get(serviceIdValue) || [];
+                    if (!current.includes(cityCodeValue)) {
+                        current.push(cityCodeValue);
+                    }
+                    cityScopedByServiceId.set(serviceIdValue, current);
+                });
+                cityFilteredAvailableMainServices = availableMainServiceRows.filter(
+                    (service) => {
+                        const scopedCityCodes = cityScopedByServiceId.get(service.id) || [];
+                        if (scopedCityCodes.length === 0) {
+                            return true;
+                        }
+                        return scopedCityCodes.includes(normalizedCityCode);
+                    },
+                );
+            }
+
             const preferredService = resolvedEventType
                 ? isShowAllPackagesEventType(resolvedEventType)
-                    ? (availableMainServices || [])[0]
-                    : (availableMainServices || []).find((service) => {
+                    ? cityFilteredAvailableMainServices[0]
+                    : cityFilteredAvailableMainServices.find((service) => {
                     const typedService = service as AvailableServiceRow;
                     const eventTypes = Array.isArray(typedService.event_types)
                         ? typedService.event_types
@@ -853,8 +928,8 @@ export async function POST(request: NextRequest) {
                     return eventTypes.length === 0 || eventTypes.some(
                         (type) => normalizeEventTypeName(type) === resolvedEventType,
                     );
-                }) || (availableMainServices || [])[0]
-                : (availableMainServices || [])[0];
+                }) || cityFilteredAvailableMainServices[0]
+                : cityFilteredAvailableMainServices[0];
 
             if (preferredService?.id) {
                 normalizedMainServiceIds = [preferredService.id];
@@ -891,6 +966,41 @@ export async function POST(request: NextRequest) {
             .eq("is_active", true)
             .eq("is_public", true)
             .in("id", requestedServiceIds);
+
+        const { data: serviceScopeRows } = await supabaseAdmin
+            .from("service_city_scopes")
+            .select("service_id, city_code")
+            .eq("user_id", vendor.id)
+            .in("service_id", requestedServiceIds);
+        const scopedCityCodesByServiceId = new Map<string, string[]>();
+        (serviceScopeRows || []).forEach((row) => {
+            const serviceIdValue =
+                typeof row.service_id === "string" ? row.service_id : "";
+            const cityCodeValue = normalizeCityCode(row.city_code);
+            if (!serviceIdValue || !cityCodeValue) return;
+            const current = scopedCityCodesByServiceId.get(serviceIdValue) || [];
+            if (!current.includes(cityCodeValue)) {
+                current.push(cityCodeValue);
+            }
+            scopedCityCodesByServiceId.set(serviceIdValue, current);
+        });
+
+        const hasDisallowedService = requestedServiceIds.some((serviceIdValue) => {
+            const scopedCityCodes = scopedCityCodesByServiceId.get(serviceIdValue) || [];
+            if (scopedCityCodes.length === 0) {
+                return false;
+            }
+            return !scopedCityCodes.includes(normalizedCityCode);
+        });
+        if (hasDisallowedService) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Ada paket/add-on yang tidak tersedia untuk kota/kabupaten terpilih.",
+                },
+                { status: 400 },
+            );
+        }
 
         const mainServices = normalizedMainServiceIds
             .map((id) => selectedServices?.find((service) => service.id === id && !service.is_addon) ?? null)
@@ -993,6 +1103,8 @@ export async function POST(request: NextRequest) {
             event_type: resolvedEventType || null,
             session_date: resolvedSessionDate || null,
             service_id: mainServices[0]?.id || null,
+            city_code: normalizedCityCode,
+            city_name: resolvedCityName || null,
             total_price: computedTotalPrice,
             dp_paid: dpPaid,
             location: location || null,
