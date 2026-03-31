@@ -1493,6 +1493,7 @@ export default function ServicesPage() {
                     placeholder="Bebas semua kota / kabupaten"
                     searchPlaceholder="Cari kota / kabupaten..."
                     emptyText="Data kota / kabupaten tidak ditemukan."
+                    mobileTitle="Kota / Kabupaten"
                   />
                 </div>
                 <DialogFooter>
@@ -1952,6 +1953,7 @@ export default function ServicesPage() {
                   placeholder="Bebas semua kota / kabupaten"
                   searchPlaceholder="Cari kota / kabupaten..."
                   emptyText="Data kota / kabupaten tidak ditemukan."
+                  mobileTitle="Kota / Kabupaten"
                 />
               </div>
               <DialogFooter>
