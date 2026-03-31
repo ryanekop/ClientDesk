@@ -1090,7 +1090,9 @@
         "emptyMainTitle": "No main packages yet",
         "emptyMainDesc": "Add a main service so clients have a core package option in the booking form.",
         "emptyAddonTitle": "No add-on packages yet",
-        "emptyAddonDesc": "Add add-ons if you want to offer separate extra packages."
+        "emptyAddonDesc": "Add add-ons if you want to offer separate extra packages.",
+        "serviceCreatedSuccess": "Service saved successfully.",
+        "serviceUpdatedSuccess": "Service updated successfully."
     },
     "TeamPage": {
         "editDesc": "Changes will be saved immediately.",

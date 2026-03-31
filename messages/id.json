@@ -1090,7 +1090,9 @@
         "emptyMainTitle": "Belum ada paket utama",
         "emptyMainDesc": "Tambahkan layanan utama agar klien punya pilihan paket inti di form booking.",
         "emptyAddonTitle": "Belum ada paket add-on",
-        "emptyAddonDesc": "Tambahkan add-on jika Anda ingin menawarkan paket tambahan terpisah."
+        "emptyAddonDesc": "Tambahkan add-on jika Anda ingin menawarkan paket tambahan terpisah.",
+        "serviceCreatedSuccess": "Layanan berhasil disimpan.",
+        "serviceUpdatedSuccess": "Layanan berhasil diperbarui."
     },
     "TeamPage": {
         "editDesc": "Perubahan akan langsung tersimpan.",

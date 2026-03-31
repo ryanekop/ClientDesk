@@ -26,6 +26,7 @@ import {
   Edit2,
   Trash2,
   Package,
+  Save,
   ToggleLeft,
   ToggleRight,
   Loader2,
@@ -42,6 +43,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CityMultiSelect } from "@/components/ui/city-multi-select";
+import { useSuccessToast } from "@/components/ui/success-toast";
 import {
   PageHeader,
   PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME,
@@ -635,6 +637,7 @@ export default function ServicesPage() {
   const [editingService, setEditingService] = React.useState<Service | null>(null);
   const [isAddOpen, setIsAddOpen] = React.useState(false);
   const [isEditOpen, setIsEditOpen] = React.useState(false);
+  const [isUpdatingService, setIsUpdatingService] = React.useState(false);
   const [addIsAddon, setAddIsAddon] = React.useState(false);
   const [addAffectsSchedule, setAddAffectsSchedule] = React.useState(true);
   const [addColorInput, setAddColorInput] = React.useState("#000000");
@@ -672,6 +675,7 @@ export default function ServicesPage() {
     service: Service | null;
   }>({ open: false, service: null });
   const hasLoadedPagedServicesRef = React.useRef(false);
+  const { showSuccessToast, successToastNode } = useSuccessToast();
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1139,6 +1143,7 @@ export default function ServicesPage() {
       });
       setIsAddOpen(false);
       await refreshVisibleData();
+      showSuccessToast(ts("serviceCreatedSuccess"));
     } catch (scopeError) {
       setPageError(
         scopeError instanceof Error
@@ -1149,80 +1154,86 @@ export default function ServicesPage() {
   }
 
   async function handleEdit(formData: FormData) {
-    if (!editingService) return;
+    if (isUpdatingService || !editingService) return;
 
-    const userId = await getRequiredUserId();
-    const nextIsAddon = formData.get("is_addon") === "on";
-    const nextIsPublic = formData.get("is_public") === "on";
-    const nextAffectsSchedule =
-      !nextIsAddon || formData.get("affects_schedule") === "on";
-    const cityCodes = getCityCodesFromFormData(formData);
-    const previousGroupKey = getServiceGroupKey(editingService);
-    const nextGroupKey: ServiceGroupKey = nextIsAddon ? "addon" : "main";
-    const nextSortOrder =
-      previousGroupKey === nextGroupKey
-        ? editingService.sort_order
-        : (
-            await supabase
-              .from("services")
-              .select("id", { count: "exact", head: true })
-              .eq("user_id", userId)
-              .eq("is_addon", nextIsAddon)
-          ).count || 0;
-
-    const { error } = await supabase
-      .from("services")
-      .update({
-        name: formData.get("name") as string,
-        description: (formData.get("description") as string) || null,
-        color: resolveHexColor(
-          formData.get("color"),
-          editingService.color,
-          profileBrandColor,
-        ),
-        price: parseFloat(formData.get("price") as string) || 0,
-        original_price: parseFloat(formData.get("original_price") as string) || null,
-        duration_minutes:
-          parseInt((formData.get("duration_hours") as string) || "0", 10) * 60 +
-          parseInt((formData.get("duration_mins") as string) || "0", 10),
-        is_addon: nextIsAddon,
-        is_public: nextIsPublic,
-        affects_schedule: nextAffectsSchedule,
-        sort_order: nextSortOrder,
-        event_types:
-          formData.getAll("event_types").length > 0
-            ? (formData.getAll("event_types") as string[])
-            : null,
-      })
-      .eq("id", editingService.id);
-
-    if (error) {
-      setPageError(error.message);
-      return;
-    }
-
+    setIsUpdatingService(true);
     try {
-      await syncServiceCityScopes({
-        userId,
-        serviceId: editingService.id,
-        cityCodes,
-      });
-    } catch (scopeError) {
-      setPageError(
-        scopeError instanceof Error
-          ? scopeError.message
-          : "Gagal menyimpan scope kota/kabupaten paket.",
-      );
-      return;
-    }
+      const userId = await getRequiredUserId();
+      const nextIsAddon = formData.get("is_addon") === "on";
+      const nextIsPublic = formData.get("is_public") === "on";
+      const nextAffectsSchedule =
+        !nextIsAddon || formData.get("affects_schedule") === "on";
+      const cityCodes = getCityCodesFromFormData(formData);
+      const previousGroupKey = getServiceGroupKey(editingService);
+      const nextGroupKey: ServiceGroupKey = nextIsAddon ? "addon" : "main";
+      const nextSortOrder =
+        previousGroupKey === nextGroupKey
+          ? editingService.sort_order
+          : (
+              await supabase
+                .from("services")
+                .select("id", { count: "exact", head: true })
+                .eq("user_id", userId)
+                .eq("is_addon", nextIsAddon)
+            ).count || 0;
 
-    if (previousGroupKey !== nextGroupKey) {
-      await normalizeGroupAfterMutation(previousGroupKey);
-    }
+      const { error } = await supabase
+        .from("services")
+        .update({
+          name: formData.get("name") as string,
+          description: (formData.get("description") as string) || null,
+          color: resolveHexColor(
+            formData.get("color"),
+            editingService.color,
+            profileBrandColor,
+          ),
+          price: parseFloat(formData.get("price") as string) || 0,
+          original_price: parseFloat(formData.get("original_price") as string) || null,
+          duration_minutes:
+            parseInt((formData.get("duration_hours") as string) || "0", 10) * 60 +
+            parseInt((formData.get("duration_mins") as string) || "0", 10),
+          is_addon: nextIsAddon,
+          is_public: nextIsPublic,
+          affects_schedule: nextAffectsSchedule,
+          sort_order: nextSortOrder,
+          event_types:
+            formData.getAll("event_types").length > 0
+              ? (formData.getAll("event_types") as string[])
+              : null,
+        })
+        .eq("id", editingService.id);
 
-    setIsEditOpen(false);
-    setEditingService(null);
-    await refreshVisibleData();
+      if (error) {
+        setPageError(error.message);
+        return;
+      }
+
+      try {
+        await syncServiceCityScopes({
+          userId,
+          serviceId: editingService.id,
+          cityCodes,
+        });
+      } catch (scopeError) {
+        setPageError(
+          scopeError instanceof Error
+            ? scopeError.message
+            : "Gagal menyimpan scope kota/kabupaten paket.",
+        );
+        return;
+      }
+
+      if (previousGroupKey !== nextGroupKey) {
+        await normalizeGroupAfterMutation(previousGroupKey);
+      }
+
+      setIsEditOpen(false);
+      setEditingService(null);
+      await refreshVisibleData();
+      showSuccessToast(ts("serviceUpdatedSuccess"));
+    } finally {
+      setIsUpdatingService(false);
+    }
   }
 
   async function handleToggleActive(service: Service) {
@@ -2201,7 +2212,18 @@ export default function ServicesPage() {
                 />
               </div>
               <DialogFooter>
-                <Button type="submit">{t("perbarui")}</Button>
+                <Button
+                  type="submit"
+                  disabled={isUpdatingService}
+                  className="gap-2"
+                >
+                  {isUpdatingService ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  {t("perbarui")}
+                </Button>
               </DialogFooter>
             </form>
           ) : null}
@@ -2224,6 +2246,7 @@ export default function ServicesPage() {
         confirmVariant="destructive"
         onConfirm={confirmDeleteService}
       />
+      {successToastNode}
     </div>
   );
 }
