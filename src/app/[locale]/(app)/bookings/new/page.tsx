@@ -198,6 +198,13 @@ const EXTRA_FIELD_LABEL_KEYS = {
     jumlah_anggota: "memberCount",
 } as const;
 
+const SESSION_LOCATION_FIELD_KEYS = new Set([
+    "tempat_akad",
+    "tempat_resepsi",
+    "tempat_wisuda_1",
+    "tempat_wisuda_2",
+]);
+
 function formatNumber(n: number | ""): string {
     if (n === "" || n === 0) return "";
     return new Intl.NumberFormat("id-ID").format(n);
@@ -570,6 +577,22 @@ export default function NewBookingPage() {
         () => getLayoutExtraFields(activeFormLayout),
         [activeFormLayout],
     );
+    const sessionLocationExtraFields = React.useMemo(() => {
+        if (eventType === "Wedding") {
+            return currentExtraFields.filter(
+                (field) =>
+                    field.key === "tempat_akad" || field.key === "tempat_resepsi",
+            );
+        }
+        if (eventType === "Wisuda" && splitDates) {
+            return currentExtraFields.filter(
+                (field) =>
+                    field.key === "tempat_wisuda_1" ||
+                    field.key === "tempat_wisuda_2",
+            );
+        }
+        return [];
+    }, [currentExtraFields, eventType, splitDates]);
     const hasUniversityExtraField = currentExtraFields.some(
         (field) => field.key === UNIVERSITY_EXTRA_FIELD_KEY,
     );
@@ -1059,9 +1082,7 @@ export default function NewBookingPage() {
                     {currentExtraFields.length > 0 && (
                         <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 pt-3 border-t border-dashed">
                             {currentExtraFields.map(f => {
-                                const isWisudaSplitLocationField =
-                                    f.key === "tempat_wisuda_1" || f.key === "tempat_wisuda_2";
-                                if (eventType === "Wisuda" && !splitDates && isWisudaSplitLocationField) {
+                                if (SESSION_LOCATION_FIELD_KEYS.has(f.key)) {
                                     return null;
                                 }
                                 const fieldLabelKey =
@@ -1379,6 +1400,63 @@ export default function NewBookingPage() {
                             <input value={initialBookingStatus} readOnly className={inputClass} />
                             <p className="text-[11px] text-muted-foreground">Status awal selalu Pending. Ubah status setelah booking dibuat.</p>
                         </div>
+                        {sessionLocationExtraFields.length > 0 && (
+                            <div className="col-span-full grid gap-y-4">
+                                {sessionLocationExtraFields.map((field) => {
+                                    const fieldLabelKey =
+                                        EXTRA_FIELD_LABEL_KEYS[
+                                            field.key as keyof typeof EXTRA_FIELD_LABEL_KEYS
+                                        ];
+                                    const fieldLabel = fieldLabelKey
+                                        ? tBookingEditor(`extraFieldLabels.${fieldLabelKey}`)
+                                        : field.label;
+                                    return (
+                                        <div key={field.key} className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">
+                                                {fieldLabel}
+                                                {field.required && (
+                                                    <span className="text-red-500 ml-0.5">*</span>
+                                                )}
+                                            </label>
+                                            <LocationAutocomplete
+                                                value={extraFields[field.key] || ""}
+                                                onChange={(value) =>
+                                                    setExtraFields((prev) => ({
+                                                        ...prev,
+                                                        [field.key]: value,
+                                                    }))
+                                                }
+                                                onLocationChange={(
+                                                    meta: LocationSelectionMeta,
+                                                ) => {
+                                                    setExtraLocationCoords((prev) => ({
+                                                        ...prev,
+                                                        [field.key]:
+                                                            meta.source === "manual" ||
+                                                            meta.source === "clear"
+                                                                ? { lat: null, lng: null }
+                                                                : {
+                                                                      lat: meta.lat,
+                                                                      lng: meta.lng,
+                                                                  },
+                                                    }));
+                                                }}
+                                                placeholder={tBookingEditor(
+                                                    "searchLocationField",
+                                                    { field: fieldLabel.toLowerCase() },
+                                                )}
+                                                initialLat={
+                                                    extraLocationCoords[field.key]?.lat ?? null
+                                                }
+                                                initialLng={
+                                                    extraLocationCoords[field.key]?.lng ?? null
+                                                }
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                         {eventType !== "Wedding" && !(eventType === "Wisuda" && splitDates) && (
                             <div className="col-span-full space-y-1.5">
                                 <label className="text-xs font-medium text-muted-foreground">Lokasi Utama</label>
