@@ -97,6 +97,7 @@ export async function syncSingleBookingCalendar(args: {
   booking: GoogleCalendarSyncBookingRow;
   profile: GoogleCalendarSyncProfile;
   attendeeEmails: string[];
+  attendeeEmailsBySession?: Record<string, string[]>;
   locale?: string | null;
   publicOrigin?: string | null;
   fallbackErrorMessage?: string;
@@ -132,6 +133,7 @@ export async function syncSingleBookingCalendar(args: {
         bookingServices: args.booking.booking_services,
       },
       attendeeEmails: args.attendeeEmails,
+      attendeeEmailsBySession: args.attendeeEmailsBySession,
     });
 
     const updated = await updateBookingCalendarSyncState({

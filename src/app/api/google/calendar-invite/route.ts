@@ -8,7 +8,7 @@ import { syncBookingCalendarEvent } from "@/lib/google-calendar-booking";
 import { resolveBookingFreelancerNames } from "@/lib/booking-freelancers";
 import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
-import { resolveBookingFreelancerAttendeeEmails } from "@/lib/google-calendar-attendees";
+import { resolveBookingFreelancerAttendeeEmailsWithSessions } from "@/lib/google-calendar-attendees";
 import {
     GOOGLE_INVALID_GRANT_CODE,
     GOOGLE_SCOPE_MISMATCH_CODE,
@@ -111,13 +111,16 @@ export async function POST(req: NextRequest) {
         }
 
         let attendeeEmails: string[] = [];
+        let attendeeEmailsBySession: Record<string, string[]> = {};
         try {
-            const attendeeMap = await resolveBookingFreelancerAttendeeEmails({
+            const attendeeResolution = await resolveBookingFreelancerAttendeeEmailsWithSessions({
                 supabase,
                 userId: user.id,
                 bookingIds: [booking.id],
             });
-            attendeeEmails = attendeeMap[booking.id] || [];
+            attendeeEmails = attendeeResolution.attendeeEmailsByBooking[booking.id] || [];
+            attendeeEmailsBySession =
+                attendeeResolution.attendeeEmailsByBookingSession[booking.id] || {};
         } catch (error) {
             const message = getGoogleCalendarSyncErrorMessage(
                 error,
@@ -178,6 +181,7 @@ export async function POST(req: NextRequest) {
                     bookingServices: bookingRecord.booking_services,
                 },
                 attendeeEmails,
+                attendeeEmailsBySession,
             });
 
             const updated = await updateBookingCalendarSyncState({

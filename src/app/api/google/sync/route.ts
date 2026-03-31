@@ -6,7 +6,7 @@ import {
 import { createClient } from "@/utils/supabase/server";
 import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
-import { resolveBookingFreelancerAttendeeEmails } from "@/lib/google-calendar-attendees";
+import { resolveBookingFreelancerAttendeeEmailsWithSessions } from "@/lib/google-calendar-attendees";
 import {
     GOOGLE_INVALID_GRANT_CODE,
     GOOGLE_SCOPE_MISMATCH_CODE,
@@ -120,12 +120,16 @@ export async function POST(request: NextRequest) {
         });
 
         let attendeeEmailsByBooking: Record<string, string[]> = {};
+        let attendeeEmailsByBookingSession: Record<string, Record<string, string[]>> = {};
         try {
-            attendeeEmailsByBooking = await resolveBookingFreelancerAttendeeEmails({
+            const attendeeResolution = await resolveBookingFreelancerAttendeeEmailsWithSessions({
                 supabase,
                 userId: user.id,
                 bookingIds: bookingRows.map((booking) => booking.id),
             });
+            attendeeEmailsByBooking = attendeeResolution.attendeeEmailsByBooking;
+            attendeeEmailsByBookingSession =
+                attendeeResolution.attendeeEmailsByBookingSession;
         } catch (error) {
             const attendeeErrorMessage = getGoogleCalendarSyncErrorMessage(
                 error,
@@ -169,6 +173,8 @@ export async function POST(request: NextRequest) {
                     eventDescriptionMap: profile?.calendar_event_description_map ?? null,
                 },
                 attendeeEmails: attendeeEmailsByBooking[booking.id] || [],
+                attendeeEmailsBySession:
+                    attendeeEmailsByBookingSession[booking.id] || {},
                 locale,
                 publicOrigin,
                 fallbackErrorMessage: "Unknown error",

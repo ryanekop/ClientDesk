@@ -94,6 +94,18 @@ import {
     isCityScopedBookingEventType,
 } from "@/lib/service-availability";
 import { buildServiceSoftPalette, resolveHexColor } from "@/lib/service-colors";
+import {
+    FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY,
+    MAX_FREELANCERS_PER_SESSION,
+    SESSION_FREELANCER_LABELS,
+    buildSessionFreelancerUnion,
+    ensureAssignmentsForSessionKeys,
+    normalizeFreelancerIdList,
+    normalizeSessionFreelancerAssignments,
+    readSessionFreelancerAssignmentsFromExtraFields,
+    resolveSplitFreelancerSessionKeys,
+    type SessionFreelancerAssignments,
+} from "@/lib/freelancer-session-assignments";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -270,6 +282,26 @@ function compareServicesByCatalogOrder(a: Service, b: Service) {
     return a.name.localeCompare(b.name);
 }
 
+function isSameSessionFreelancerAssignments(
+    left: SessionFreelancerAssignments,
+    right: SessionFreelancerAssignments,
+) {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    if (leftKeys.length !== rightKeys.length) return false;
+
+    for (const key of leftKeys) {
+        const leftIds = left[key] || [];
+        const rightIds = right[key] || [];
+        if (leftIds.length !== rightIds.length) return false;
+        for (let index = 0; index < leftIds.length; index++) {
+            if (leftIds[index] !== rightIds[index]) return false;
+        }
+    }
+
+    return true;
+}
+
 function parseExistingPhone(full: string | null): { code: string; number: string } {
     if (!full) return { code: "+62", number: "" };
     const cleaned = full.replace(/[^0-9+]/g, "");
@@ -327,6 +359,8 @@ export default function EditBookingPage() {
     const [packageSearchQuery, setPackageSearchQuery] = React.useState("");
     const [addonSearchQuery, setAddonSearchQuery] = React.useState("");
     const [freelancerIds, setFreelancerIds] = React.useState<string[]>([]);
+    const [freelancerAssignmentsBySession, setFreelancerAssignmentsBySession] =
+        React.useState<SessionFreelancerAssignments>({});
     const [dpPaid, setDpPaid] = React.useState<number | "">("");
     const [accommodationFee, setAccommodationFee] = React.useState<number | "">("");
     const [discountAmount, setDiscountAmount] = React.useState<number | "">("");
@@ -575,7 +609,12 @@ export default function EditBookingPage() {
                 const junctionIds = ((bfRows || []) as Array<{ freelance_id: string | null }>)
                     .map((row) => row.freelance_id)
                     .filter((freelanceId): freelanceId is string => Boolean(freelanceId));
-                setFreelancerIds(junctionIds.length > 0 ? junctionIds : booking.freelance_id ? [booking.freelance_id] : []);
+                const fallbackFreelancerIds = junctionIds.length > 0
+                    ? junctionIds
+                    : booking.freelance_id
+                        ? [booking.freelance_id]
+                        : [];
+                setFreelancerIds(fallbackFreelancerIds);
                 const existingSpecialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
                 setDpPaid(booking.dp_paid || "");
                 setAccommodationFee(existingSpecialOffer?.accommodation_fee ?? "");
@@ -652,11 +691,31 @@ export default function EditBookingPage() {
                 }
                 setExtraLocationCoords(seededExtraCoords);
                 setCustomFieldValues(extractCustomFieldValueMap(booking.extra_fields));
+                const extraFieldAssignments = readSessionFreelancerAssignmentsFromExtraFields(
+                    booking.extra_fields,
+                    {
+                        validFreelancerIds: new Set(
+                            ((frees || []) as Freelance[])
+                                .map((freelancer) => freelancer.id)
+                                .filter((freelancerId): freelancerId is string => Boolean(freelancerId)),
+                        ),
+                        maxItems: MAX_FREELANCERS_PER_SESSION,
+                        preserveEmpty: true,
+                    },
+                );
                 // Pre-populate splitDates from extra_fields
                 if (booking.event_type === "Wedding" && booking.extra_fields?.tanggal_akad) {
                     setSplitDates(true);
                     setAkadDate(booking.extra_fields.tanggal_akad || "");
                     setResepsiDate(booking.extra_fields.tanggal_resepsi || "");
+                    setFreelancerAssignmentsBySession(
+                        ensureAssignmentsForSessionKeys({
+                            assignments: extraFieldAssignments,
+                            sessionKeys: ["akad", "resepsi"],
+                            fallbackFreelancerIds,
+                            maxPerSession: MAX_FREELANCERS_PER_SESSION,
+                        }),
+                    );
                     setIsWisudaDurationOverrideEnabled(false);
                     setWisudaSession1DurationInput("");
                     setWisudaSession2DurationInput("");
@@ -664,6 +723,14 @@ export default function EditBookingPage() {
                     setSplitDates(true);
                     setWisudaSession1Date(booking.extra_fields.tanggal_wisuda_1 || "");
                     setWisudaSession2Date(booking.extra_fields.tanggal_wisuda_2 || "");
+                    setFreelancerAssignmentsBySession(
+                        ensureAssignmentsForSessionKeys({
+                            assignments: extraFieldAssignments,
+                            sessionKeys: ["wisuda_session_1", "wisuda_session_2"],
+                            fallbackFreelancerIds,
+                            maxPerSession: MAX_FREELANCERS_PER_SESSION,
+                        }),
+                    );
                     const wisudaDurationOverride = parseWisudaSessionDurationOverride(
                         booking.extra_fields,
                     );
@@ -682,6 +749,7 @@ export default function EditBookingPage() {
                     }
                 } else {
                     setSplitDates(false);
+                    setFreelancerAssignmentsBySession({});
                     setAkadDate("");
                     setResepsiDate("");
                     setWisudaSession1Date("");
@@ -731,6 +799,24 @@ export default function EditBookingPage() {
         () => [...services].sort(compareServicesByCatalogOrder),
         [services],
     );
+    const validFreelancerIds = React.useMemo(
+        () =>
+            new Set(
+                freelancers
+                    .map((freelancer) => freelancer.id)
+                    .filter((freelancerId): freelancerId is string => Boolean(freelancerId)),
+            ),
+        [freelancers],
+    );
+    const splitFreelancerSessionKeys = React.useMemo(
+        () =>
+            resolveSplitFreelancerSessionKeys({
+                eventType,
+                splitDates,
+            }),
+        [eventType, splitDates],
+    );
+    const isSplitFreelancerMode = splitFreelancerSessionKeys.length > 0;
     const normalizedSelectedCityCode = normalizeCityCode(selectedCityCode);
     const isCityScopedEvent = React.useMemo(
         () => isCityScopedBookingEventType(eventType),
@@ -784,6 +870,38 @@ export default function EditBookingPage() {
             setSelectedCityCode("");
         }
     }, [isCityScopedEvent, selectedCityCode]);
+    React.useEffect(() => {
+        setFreelancerIds((prev) =>
+            normalizeFreelancerIdList(prev, {
+                validFreelancerIds,
+            }),
+        );
+        setFreelancerAssignmentsBySession((prev) =>
+            normalizeSessionFreelancerAssignments(prev, {
+                validFreelancerIds,
+                maxItems: MAX_FREELANCERS_PER_SESSION,
+                preserveEmpty: true,
+            }),
+        );
+    }, [validFreelancerIds]);
+    React.useEffect(() => {
+        if (!isSplitFreelancerMode) return;
+        setFreelancerAssignmentsBySession((prev) => {
+            const next = ensureAssignmentsForSessionKeys({
+                assignments: prev,
+                sessionKeys: splitFreelancerSessionKeys,
+                fallbackFreelancerIds: freelancerIds,
+                validFreelancerIds,
+                maxPerSession: MAX_FREELANCERS_PER_SESSION,
+            });
+            return isSameSessionFreelancerAssignments(prev, next) ? prev : next;
+        });
+    }, [
+        isSplitFreelancerMode,
+        splitFreelancerSessionKeys,
+        freelancerIds,
+        validFreelancerIds,
+    ]);
     const searchedMainServices = React.useMemo(() => {
         const query = packageSearchQuery.trim().toLowerCase();
         if (!query) return mainServices;
@@ -919,6 +1037,50 @@ export default function EditBookingPage() {
             return [...prev, fid];
         });
     };
+    const toggleSessionFreelancer = (sessionKey: string, freelancerId: string) => {
+        setFreelancerAssignmentsBySession((prev) => {
+            const next = normalizeSessionFreelancerAssignments(prev, {
+                validFreelancerIds,
+                maxItems: MAX_FREELANCERS_PER_SESSION,
+                preserveEmpty: true,
+            });
+            const current = next[sessionKey] || [];
+            if (current.includes(freelancerId)) {
+                return {
+                    ...next,
+                    [sessionKey]: current.filter((item) => item !== freelancerId),
+                };
+            }
+            if (current.length >= MAX_FREELANCERS_PER_SESSION) {
+                return next;
+            }
+            return {
+                ...next,
+                [sessionKey]: [...current, freelancerId],
+            };
+        });
+    };
+    const collapseSplitFreelancersToGlobal = React.useCallback(() => {
+        const normalizedAssignments = normalizeSessionFreelancerAssignments(
+            freelancerAssignmentsBySession,
+            {
+                validFreelancerIds,
+                maxItems: MAX_FREELANCERS_PER_SESSION,
+                preserveEmpty: true,
+            },
+        );
+        const unionFreelancerIds = buildSessionFreelancerUnion(
+            normalizedAssignments,
+            splitFreelancerSessionKeys,
+        );
+        if (unionFreelancerIds.length > 0) {
+            setFreelancerIds(unionFreelancerIds);
+        }
+    }, [
+        freelancerAssignmentsBySession,
+        splitFreelancerSessionKeys,
+        validFreelancerIds,
+    ]);
 
     const normalizedEventType = React.useMemo(
         () => normalizeEventTypeName(eventType) || eventType,
@@ -1018,7 +1180,29 @@ export default function EditBookingPage() {
         if (!error && data) {
             const f = data as Freelance;
             setFreelancers(prev => [...prev, f]);
-            setFreelancerIds(prev => prev.length < 5 ? [...prev, f.id] : prev);
+            if (isSplitFreelancerMode) {
+                setFreelancerAssignmentsBySession((prev) => {
+                    const next = ensureAssignmentsForSessionKeys({
+                        assignments: prev,
+                        sessionKeys: splitFreelancerSessionKeys,
+                        fallbackFreelancerIds: freelancerIds,
+                        validFreelancerIds,
+                        maxPerSession: MAX_FREELANCERS_PER_SESSION,
+                    });
+                    for (const sessionKey of splitFreelancerSessionKeys) {
+                        const current = next[sessionKey] || [];
+                        if (
+                            !current.includes(f.id) &&
+                            current.length < MAX_FREELANCERS_PER_SESSION
+                        ) {
+                            next[sessionKey] = [...current, f.id];
+                        }
+                    }
+                    return next;
+                });
+            } else {
+                setFreelancerIds(prev => prev.length < 5 ? [...prev, f.id] : prev);
+            }
             setCustomFreelancerName(""); setCustomFreelancerWa(""); setCustomFreelancerRole("Photographer"); setCustomFreelancerCountryCode("+62");
             setShowCustomFreelancerPopup(false);
         } else { console.error(error); showFeedback(tBookingEditor("failedSaveFreelancer")); }
@@ -1044,6 +1228,23 @@ export default function EditBookingPage() {
             const isWisudaEvent = eventType === "Wisuda";
             const isSplitSessionEnabled =
                 splitDates && (isWeddingEvent || isWisudaEvent);
+            const splitSessionFreelancerAssignments = isSplitSessionEnabled
+                ? ensureAssignmentsForSessionKeys({
+                    assignments: freelancerAssignmentsBySession,
+                    sessionKeys: splitFreelancerSessionKeys,
+                    fallbackFreelancerIds: freelancerIds,
+                    validFreelancerIds,
+                    maxPerSession: MAX_FREELANCERS_PER_SESSION,
+                })
+                : {};
+            const freelancerIdsForSave = isSplitSessionEnabled
+                ? buildSessionFreelancerUnion(
+                    splitSessionFreelancerAssignments,
+                    splitFreelancerSessionKeys,
+                )
+                : normalizeFreelancerIdList(freelancerIds, {
+                    validFreelancerIds,
+                });
 
             if (
                 isWeddingEvent &&
@@ -1129,10 +1330,13 @@ export default function EditBookingPage() {
                 } else {
                     finalSessionDate = akadDate || resepsiDate || null;
                 }
+                mergedExtra[FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY] =
+                    splitSessionFreelancerAssignments;
             } else if (isWeddingEvent && !isSplitSessionEnabled) {
                 // Toggled off: remove split date fields
                 delete mergedExtra.tanggal_akad;
                 delete mergedExtra.tanggal_resepsi;
+                delete mergedExtra[FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY];
             } else if (isWisudaEvent && isSplitSessionEnabled) {
                 mergedExtra.tanggal_wisuda_1 = wisudaSession1Date || "";
                 mergedExtra.tanggal_wisuda_2 = wisudaSession2Date || "";
@@ -1150,12 +1354,17 @@ export default function EditBookingPage() {
                 } else {
                     finalSessionDate = wisudaSession1Date || wisudaSession2Date || null;
                 }
+                mergedExtra[FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY] =
+                    splitSessionFreelancerAssignments;
             } else if (isWisudaEvent && !isSplitSessionEnabled) {
                 delete mergedExtra.tanggal_wisuda_1;
                 delete mergedExtra.tanggal_wisuda_2;
                 delete mergedExtra.tempat_wisuda_1;
                 delete mergedExtra.tempat_wisuda_2;
                 delete mergedExtra[WISUDA_SESSION_DURATION_EXTRA_FIELD_KEY];
+                delete mergedExtra[FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY];
+            } else {
+                delete mergedExtra[FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY];
             }
 
             const stringExtraFields = Object.fromEntries(
@@ -1301,7 +1510,7 @@ export default function EditBookingPage() {
                     isCityScopedEvent && selectedCity
                         ? selectedCity.city_name
                         : null,
-                freelance_id: freelancerIds[0] || null,
+                freelance_id: freelancerIdsForSave[0] || null,
                 total_price: tPrice,
                 dp_paid: dPaid,
                 is_fully_paid: dPaid >= tPrice && tPrice > 0,
@@ -1346,9 +1555,9 @@ export default function EditBookingPage() {
                     bookingServiceRows,
                 );
             }
-            if (freelancerIds.length > 0) {
+            if (freelancerIdsForSave.length > 0) {
                 await supabase.from("booking_freelance").insert(
-                    freelancerIds.map((freelancerId) => ({ booking_id: id, freelance_id: freelancerId })),
+                    freelancerIdsForSave.map((freelancerId) => ({ booking_id: id, freelance_id: freelancerId })),
                 );
             }
 
@@ -1362,11 +1571,11 @@ export default function EditBookingPage() {
                 if (shouldInviteCalendar) {
                     try {
                         const selectedFreelancerEmails = freelancers
-                            .filter((freelancer) => freelancerIds.includes(freelancer.id))
+                            .filter((freelancer) => freelancerIdsForSave.includes(freelancer.id))
                             .map((freelancer) => freelancer.google_email)
                             .filter((email): email is string => Boolean(email));
                         const noEmailNames = freelancers
-                            .filter((freelancer) => freelancerIds.includes(freelancer.id) && !freelancer.google_email)
+                            .filter((freelancer) => freelancerIdsForSave.includes(freelancer.id) && !freelancer.google_email)
                             .map((freelancer) => freelancer.name);
 
                         const res = await fetch("/api/google/calendar-invite", {
@@ -1397,7 +1606,7 @@ export default function EditBookingPage() {
                         setCalendarWarning(tBookingEditor("calendarSyncFailedRun"));
                         setTimeout(() => setCalendarWarning(null), 5000);
                     }
-                } else if (freelancerIds.length > 0) {
+                } else if (freelancerIdsForSave.length > 0) {
                     setCalendarWarning(tBookingEditor("calendarInviteSkippedNoSession"));
                     setTimeout(() => setCalendarWarning(null), 5000);
                 }
@@ -1697,8 +1906,12 @@ export default function EditBookingPage() {
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
                             <select value={eventType} onChange={e => {
+                                if (isSplitFreelancerMode) {
+                                    collapseSplitFreelancersToGlobal();
+                                }
                                 setEventType(e.target.value);
                                 setSplitDates(false);
+                                setFreelancerAssignmentsBySession({});
                                 setAkadDate("");
                                 setResepsiDate("");
                                 setWisudaSession1Date("");
@@ -1733,6 +1946,9 @@ export default function EditBookingPage() {
                             <div className="col-span-full flex items-center gap-3">
                                 <button type="button" onClick={() => {
                                     const nextSplitDates = !splitDates;
+                                    if (!nextSplitDates && isSplitFreelancerMode) {
+                                        collapseSplitFreelancersToGlobal();
+                                    }
                                     setSplitDates(nextSplitDates);
                                     if (!nextSplitDates && eventType === "Wisuda") {
                                         setIsWisudaDurationOverrideEnabled(false);
@@ -2192,24 +2408,53 @@ export default function EditBookingPage() {
                                 </div>
                             )}
                         </div>
-                        <div className="col-span-full space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Freelance (max 5)</label>
-                            <div className="flex flex-wrap gap-2">
-                                {freelancers.map(f => (
-                                    <button
-                                        key={f.id}
-                                        type="button"
-                                        onClick={() => toggleFreelancer(f.id)}
-                                        className={cn(
-                                            "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer",
-                                            freelancerIds.includes(f.id)
-                                                ? "border-foreground bg-foreground/5 dark:bg-foreground/10 text-foreground"
-                                                : "border-input text-muted-foreground hover:bg-muted/50"
-                                        )}
-                                    >
-                                        {f.name}
-                                    </button>
-                                ))}
+                        {isSplitFreelancerMode ? (
+                            <div className="col-span-full space-y-3">
+                                <label className="text-xs font-medium text-muted-foreground">
+                                    Freelance per sesi (max {MAX_FREELANCERS_PER_SESSION})
+                                </label>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    {splitFreelancerSessionKeys.map((sessionKey) => {
+                                        const selectedSessionFreelancerIds =
+                                            freelancerAssignmentsBySession[sessionKey] || [];
+                                        const sessionLabel =
+                                            SESSION_FREELANCER_LABELS[sessionKey] || sessionKey;
+
+                                        return (
+                                            <div key={sessionKey} className="rounded-lg border p-3 space-y-2">
+                                                <p className="text-xs font-semibold text-muted-foreground">
+                                                    {sessionLabel}
+                                                </p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {freelancers.map((freelancer) => (
+                                                        <button
+                                                            key={`${sessionKey}-${freelancer.id}`}
+                                                            type="button"
+                                                            onClick={() =>
+                                                                toggleSessionFreelancer(
+                                                                    sessionKey,
+                                                                    freelancer.id,
+                                                                )
+                                                            }
+                                                            className={cn(
+                                                                "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer",
+                                                                selectedSessionFreelancerIds.includes(freelancer.id)
+                                                                    ? "border-foreground bg-foreground/5 dark:bg-foreground/10 text-foreground"
+                                                                    : "border-input text-muted-foreground hover:bg-muted/50",
+                                                            )}
+                                                        >
+                                                            {freelancer.name}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <p className="text-[10px] text-muted-foreground">
+                                                    {selectedSessionFreelancerIds.length}/
+                                                    {MAX_FREELANCERS_PER_SESSION} dipilih
+                                                </p>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                                 <button
                                     type="button"
                                     onClick={() => setShowCustomFreelancerPopup(true)}
@@ -2218,10 +2463,38 @@ export default function EditBookingPage() {
                                     ＋ Tambah Baru
                                 </button>
                             </div>
-                            {freelancerIds.length > 0 && (
-                                <p className="text-[10px] text-muted-foreground">{freelancerIds.length}/5 dipilih</p>
-                            )}
-                        </div>
+                        ) : (
+                            <div className="col-span-full space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Freelance (global, max 5)</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {freelancers.map(f => (
+                                        <button
+                                            key={f.id}
+                                            type="button"
+                                            onClick={() => toggleFreelancer(f.id)}
+                                            className={cn(
+                                                "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer",
+                                                freelancerIds.includes(f.id)
+                                                    ? "border-foreground bg-foreground/5 dark:bg-foreground/10 text-foreground"
+                                                    : "border-input text-muted-foreground hover:bg-muted/50"
+                                            )}
+                                        >
+                                            {f.name}
+                                        </button>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCustomFreelancerPopup(true)}
+                                        className="px-3 py-1.5 rounded-lg border border-dashed border-input text-xs font-medium text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+                                    >
+                                        ＋ Tambah Baru
+                                    </button>
+                                </div>
+                                {freelancerIds.length > 0 && (
+                                    <p className="text-[10px] text-muted-foreground">{freelancerIds.length} dipilih</p>
+                                )}
+                            </div>
+                        )}
                         {sessionCustomItems.length > 0 && (
                             <BookingAdminCustomFields
                                 items={sessionCustomItems}

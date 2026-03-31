@@ -10,7 +10,7 @@ import {
 import { createClient } from "@/utils/supabase/server";
 import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { getCalendarClient } from "@/utils/google/calendar";
-import { resolveBookingFreelancerAttendeeEmails } from "@/lib/google-calendar-attendees";
+import { resolveBookingFreelancerAttendeeEmailsWithSessions } from "@/lib/google-calendar-attendees";
 import { normalizeGoogleCalendarEventIds } from "@/lib/booking-calendar-sessions";
 import {
   GOOGLE_INVALID_GRANT_CODE,
@@ -289,13 +289,17 @@ export async function POST(request: NextRequest) {
     }
 
     let attendeeEmails: string[] | null = null;
+    let attendeeEmailsBySession: Record<string, string[]> | null = null;
     try {
-      const attendeeMap = await resolveBookingFreelancerAttendeeEmails({
+      const attendeeResolution =
+        await resolveBookingFreelancerAttendeeEmailsWithSessions({
         supabase,
         userId: user.id,
         bookingIds: [booking.id],
       });
-      attendeeEmails = attendeeMap[booking.id] || [];
+      attendeeEmails = attendeeResolution.attendeeEmailsByBooking[booking.id] || [];
+      attendeeEmailsBySession =
+        attendeeResolution.attendeeEmailsByBookingSession[booking.id] || {};
     } catch (error) {
       const attendeeErrorMessage = getGoogleCalendarSyncErrorMessage(
         error,
@@ -332,6 +336,7 @@ export async function POST(request: NextRequest) {
           eventDescriptionMap: profile?.calendar_event_description_map ?? null,
         },
         attendeeEmails,
+        attendeeEmailsBySession: attendeeEmailsBySession || {},
         locale,
         publicOrigin,
         fallbackErrorMessage: apiText(request, "failedSendCalendarInvite"),

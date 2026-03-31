@@ -58,6 +58,7 @@ type SyncBookingCalendarArgs = {
   profile: CalendarProfileConfig;
   booking: CalendarBookingConfig;
   attendeeEmails?: string[];
+  attendeeEmailsBySession?: Record<string, string[]>;
 };
 
 type BookingCalendarPayload = {
@@ -73,6 +74,7 @@ export async function syncBookingCalendarEvent({
   profile,
   booking,
   attendeeEmails = [],
+  attendeeEmailsBySession = {},
 }: SyncBookingCalendarArgs): Promise<BookingCalendarPayload> {
   const sessions = resolveBookingCalendarSessions({
     eventType: booking.eventType,
@@ -186,6 +188,9 @@ export async function syncBookingCalendarEvent({
     const previousEventId =
       existingEventIds[session.key] ||
       (index === 0 ? existingEventIds.primary || booking.googleCalendarEventId || undefined : undefined);
+    const sessionAttendeeEmails = Array.isArray(attendeeEmailsBySession[session.key])
+      ? attendeeEmailsBySession[session.key]
+      : attendeeEmails;
 
     const syncedEvent = await upsertCalendarEvent(
       profile.accessToken,
@@ -196,7 +201,7 @@ export async function syncBookingCalendarEvent({
         description,
         start: range.start,
         end: range.end,
-        attendees: attendeeEmails,
+        attendees: sessionAttendeeEmails,
       },
     );
     const resolvedEventId = syncedEvent.id || previousEventId || null;

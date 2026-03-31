@@ -1,4 +1,5 @@
 import type { createClient } from "@/utils/supabase/server";
+import { readSessionFreelancerAssignmentsFromExtraFields } from "@/lib/freelancer-session-assignments";
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -12,6 +13,11 @@ type ResolveBookingFreelancerAttendeeEmailsArgs = {
   supabase: ServerSupabaseClient;
   userId: string;
   bookingIds: string[];
+};
+
+export type BookingFreelancerAttendeeResolution = {
+  attendeeEmailsByBooking: Record<string, string[]>;
+  attendeeEmailsByBookingSession: Record<string, Record<string, string[]>>;
 };
 
 function normalizeUniqueIds(values: string[]) {
@@ -109,22 +115,65 @@ async function fetchLegacyBookingFreelanceIds({
   return {};
 }
 
-export async function resolveBookingFreelancerAttendeeEmails({
+export async function resolveBookingFreelancerAttendeeEmailsWithSessions({
   supabase,
   userId,
   bookingIds,
 }: ResolveBookingFreelancerAttendeeEmailsArgs): Promise<
-  Record<string, string[]>
+  BookingFreelancerAttendeeResolution
 > {
   const normalizedBookingIds = normalizeUniqueIds(bookingIds);
   const attendeeByBookingId: Record<string, string[]> = {};
+  const attendeeByBookingSession: Record<string, Record<string, string[]>> = {};
 
   for (const bookingId of normalizedBookingIds) {
     attendeeByBookingId[bookingId] = [];
+    attendeeByBookingSession[bookingId] = {};
   }
 
   if (normalizedBookingIds.length === 0) {
-    return attendeeByBookingId;
+    return {
+      attendeeEmailsByBooking: attendeeByBookingId,
+      attendeeEmailsByBookingSession: attendeeByBookingSession,
+    };
+  }
+
+  const { data: bookingRows, error: bookingRowsError } = await supabase
+    .from("bookings")
+    .select("id, extra_fields")
+    .eq("user_id", userId)
+    .in("id", normalizedBookingIds);
+
+  if (bookingRowsError) {
+    throw new Error(
+      `Gagal membaca detail booking untuk assignment sesi freelancer: ${bookingRowsError.message || "Unknown error"}`,
+    );
+  }
+
+  const bookingSessionAssignmentsById: Record<string, Record<string, string[]>> =
+    {};
+  const freelanceIdsFromSessionAssignments = new Set<string>();
+
+  const typedBookingRows = (bookingRows || []) as Array<{
+    id?: string | null;
+    extra_fields?: unknown;
+  }>;
+  for (const row of typedBookingRows) {
+    const bookingId = typeof row.id === "string" ? row.id.trim() : "";
+    if (!bookingId) continue;
+
+    const assignments = readSessionFreelancerAssignmentsFromExtraFields(
+      row.extra_fields,
+      {
+        preserveEmpty: true,
+      },
+    );
+    bookingSessionAssignmentsById[bookingId] = assignments;
+    for (const freelancerIds of Object.values(assignments)) {
+      for (const freelancerId of freelancerIds) {
+        freelanceIdsFromSessionAssignments.add(freelancerId);
+      }
+    }
   }
 
   const { data: bookingFreelanceRows, error: bookingFreelanceError } =
@@ -162,13 +211,31 @@ export async function resolveBookingFreelancerAttendeeEmails({
     freelanceIdsFromJunction.add(freelanceId);
   }
 
+  const unresolvedBookingIds = normalizedBookingIds.filter(
+    (bookingId) => !bookingIdsWithJunctionRow.has(bookingId),
+  );
+  const legacyBookingFreelanceIdMap = await fetchLegacyBookingFreelanceIds({
+    supabase,
+    userId,
+    bookingIds: unresolvedBookingIds,
+  });
+  const legacyFreelanceIds = normalizeUniqueIds(
+    Object.values(legacyBookingFreelanceIdMap),
+  );
+
+  const allFreelanceIds = normalizeUniqueIds([
+    ...Array.from(freelanceIdsFromJunction),
+    ...Array.from(freelanceIdsFromSessionAssignments),
+    ...legacyFreelanceIds,
+  ]);
+
   const freelanceEmailById: Record<string, string> = {};
-  if (freelanceIdsFromJunction.size > 0) {
+  if (allFreelanceIds.length > 0) {
     const { data: freelanceRows, error: freelanceError } = await supabase
       .from("freelance")
       .select("id, google_email")
       .eq("user_id", userId)
-      .in("id", Array.from(freelanceIdsFromJunction));
+      .in("id", allFreelanceIds);
 
     if (freelanceError) {
       throw new Error(
@@ -199,61 +266,53 @@ export async function resolveBookingFreelancerAttendeeEmails({
     attendeeByBookingId[bookingId] = emails;
   }
 
-  const unresolvedBookingIds = normalizedBookingIds.filter((bookingId) => {
+  const unresolvedBookingIdsForLegacy = normalizedBookingIds.filter((bookingId) => {
     const hasEmails = (attendeeByBookingId[bookingId] || []).length > 0;
     if (hasEmails) return false;
     // If booking already has junction rows, do not fallback to legacy column.
     return !bookingIdsWithJunctionRow.has(bookingId);
   });
 
-  if (unresolvedBookingIds.length === 0) {
-    return attendeeByBookingId;
-  }
-
-  const legacyBookingFreelanceIdMap = await fetchLegacyBookingFreelanceIds({
-    supabase,
-    userId,
-    bookingIds: unresolvedBookingIds,
-  });
-
-  const legacyFreelanceIds = normalizeUniqueIds(
-    Object.values(legacyBookingFreelanceIdMap),
-  );
-  if (legacyFreelanceIds.length === 0) {
-    return attendeeByBookingId;
-  }
-
-  const { data: legacyFreelanceRows, error: legacyFreelanceError } =
-    await supabase
-      .from("freelance")
-      .select("id, google_email")
-      .eq("user_id", userId)
-      .in("id", legacyFreelanceIds);
-
-  if (legacyFreelanceError) {
-    throw new Error(
-      `Gagal membaca email freelancer legacy: ${legacyFreelanceError.message || "Unknown error"}`,
-    );
-  }
-
-  const legacyFreelanceEmailById: Record<string, string> = {};
-  const rows = (legacyFreelanceRows || []) as Array<{
-    id?: string | null;
-    google_email?: string | null;
-  }>;
-  for (const row of rows) {
-    const freelanceId = typeof row.id === "string" ? row.id.trim() : "";
-    const email = normalizeEmail(row.google_email);
-    if (!freelanceId || !email) continue;
-    legacyFreelanceEmailById[freelanceId] = email;
-  }
-
-  for (const bookingId of unresolvedBookingIds) {
+  for (const bookingId of unresolvedBookingIdsForLegacy) {
     const legacyFreelanceId = legacyBookingFreelanceIdMap[bookingId];
     if (!legacyFreelanceId) continue;
-    const email = legacyFreelanceEmailById[legacyFreelanceId];
+    const email = freelanceEmailById[legacyFreelanceId];
     attendeeByBookingId[bookingId] = email ? [email] : [];
   }
 
-  return attendeeByBookingId;
+  for (const bookingId of normalizedBookingIds) {
+    const sessionAssignments = bookingSessionAssignmentsById[bookingId] || {};
+    const nextBySession: Record<string, string[]> = {};
+    for (const [sessionKey, freelancerIds] of Object.entries(sessionAssignments)) {
+      const emails = Array.from(
+        new Set(
+          freelancerIds
+            .map((freelancerId) => freelanceEmailById[freelancerId])
+            .filter((email): email is string => Boolean(email)),
+        ),
+      );
+      nextBySession[sessionKey] = emails;
+    }
+    attendeeByBookingSession[bookingId] = nextBySession;
+  }
+
+  return {
+    attendeeEmailsByBooking: attendeeByBookingId,
+    attendeeEmailsByBookingSession: attendeeByBookingSession,
+  };
+}
+
+export async function resolveBookingFreelancerAttendeeEmails({
+  supabase,
+  userId,
+  bookingIds,
+}: ResolveBookingFreelancerAttendeeEmailsArgs): Promise<
+  Record<string, string[]>
+> {
+  const resolved = await resolveBookingFreelancerAttendeeEmailsWithSessions({
+    supabase,
+    userId,
+    bookingIds,
+  });
+  return resolved.attendeeEmailsByBooking;
 }
