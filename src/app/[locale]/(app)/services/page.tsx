@@ -75,11 +75,16 @@ import {
   normalizeCityCode,
   type CityReferenceItem,
 } from "@/lib/city-references";
+import {
+  buildServiceSoftPalette,
+  resolveHexColor,
+} from "@/lib/service-colors";
 
 type Service = {
   id: string;
   name: string;
   description: string | null;
+  color: string | null;
   price: number;
   original_price: number | null;
   duration_minutes: number | null;
@@ -104,6 +109,12 @@ type ServicesPageMetadata = {
   eventTypeOptions: string[];
   usedEventTypes: string[];
   hasAnyServices: boolean;
+};
+
+type ProfilePreferencesRow = {
+  form_event_types: string[] | null;
+  custom_event_types: string[] | null;
+  form_brand_color: string | null;
 };
 
 const EVENT_TYPES = getBuiltInEventTypes();
@@ -231,6 +242,7 @@ function SortableServiceRow({
   cityScopeSummary,
   formatCurrency,
   durationLabel,
+  fallbackColor,
   onMoveUp,
   onMoveDown,
 }: {
@@ -238,10 +250,17 @@ function SortableServiceRow({
   cityScopeSummary: ServiceCityScopeSummary;
   formatCurrency: (n: number) => string;
   durationLabel: string | null;
+  fallbackColor: string;
   onMoveUp: () => void;
   onMoveDown: () => void;
 }) {
   const sortable = useSortable({ id: buildSortableId(service) });
+  const serviceColor = resolveHexColor(service.color, fallbackColor);
+  const softPalette = buildServiceSoftPalette({
+    serviceColor,
+    fallbackColor,
+    selected: true,
+  });
   const style = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
@@ -262,6 +281,14 @@ function SortableServiceRow({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h4 className="text-sm font-semibold">{service.name}</h4>
+                <span
+                  className="inline-flex h-3 w-3 rounded-full border"
+                  style={{
+                    backgroundColor: softPalette.summaryBackgroundColor,
+                    borderColor: softPalette.summaryBorderColor,
+                  }}
+                  title={`Warna paket: ${serviceColor}`}
+                />
                 <span
                   className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                     service.is_active
@@ -397,6 +424,7 @@ function ServiceCard({
   cityScopeSummary,
   formatCurrency,
   durationLabel,
+  fallbackColor,
   onEdit,
   onToggleActive,
   onTogglePublic,
@@ -408,6 +436,7 @@ function ServiceCard({
   cityScopeSummary: ServiceCityScopeSummary;
   formatCurrency: (n: number) => string;
   durationLabel: string | null;
+  fallbackColor: string;
   onEdit: () => void;
   onToggleActive: () => void;
   onTogglePublic: () => void;
@@ -415,11 +444,27 @@ function ServiceCard({
   onMoveUp: () => void;
   onMoveDown: () => void;
 }) {
+  const serviceColor = resolveHexColor(service.color, fallbackColor);
+  const softPalette = buildServiceSoftPalette({
+    serviceColor,
+    fallbackColor,
+    selected: true,
+  });
   return (
     <div className="flex h-full flex-col rounded-xl border bg-card p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold">{service.name}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold">{service.name}</h3>
+            <span
+              className="inline-flex h-3 w-3 rounded-full border"
+              style={{
+                backgroundColor: softPalette.summaryBackgroundColor,
+                borderColor: softPalette.summaryBorderColor,
+              }}
+              title={`Warna paket: ${serviceColor}`}
+            />
+          </div>
           {service.description ? (
             <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
               {service.description}
@@ -592,8 +637,10 @@ export default function ServicesPage() {
   const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [addIsAddon, setAddIsAddon] = React.useState(false);
   const [addAffectsSchedule, setAddAffectsSchedule] = React.useState(true);
+  const [addColorInput, setAddColorInput] = React.useState("#000000");
   const [editIsAddon, setEditIsAddon] = React.useState(false);
   const [editAffectsSchedule, setEditAffectsSchedule] = React.useState(true);
+  const [editColorInput, setEditColorInput] = React.useState("#000000");
   const [mainPage, setMainPage] = React.useState(1);
   const [addonPage, setAddonPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(
@@ -608,6 +655,7 @@ export default function ServicesPage() {
     React.useState<ServiceGroupKey | null>(null);
   const [activeDragId, setActiveDragId] = React.useState<string | null>(null);
   const [pageError, setPageError] = React.useState("");
+  const [profileBrandColor, setProfileBrandColor] = React.useState("#000000");
   const [eventTypeOptions, setEventTypeOptions] = React.useState<string[]>(EVENT_TYPES);
   const [usedEventTypeOptions, setUsedEventTypeOptions] = React.useState<string[]>(EVENT_TYPES);
   const [cityOptions, setCityOptions] = React.useState<CityReferenceItem[]>([]);
@@ -772,13 +820,18 @@ export default function ServicesPage() {
         .order("created_at", { ascending: true }),
       supabase
         .from("profiles")
-        .select("form_event_types, custom_event_types")
+        .select("form_event_types, custom_event_types, form_brand_color")
         .eq("id", user.id)
         .single(),
     ]);
 
     const { data, error } = servicesResult;
-    const profile = profileResult.data;
+    const profile = (profileResult.data || null) as ProfilePreferencesRow | null;
+    const resolvedBrandColor = resolveHexColor(profile?.form_brand_color, "#000000");
+    setProfileBrandColor(resolvedBrandColor);
+    setAddColorInput((currentValue) =>
+      currentValue.trim().length > 0 ? currentValue : resolvedBrandColor,
+    );
     setEventTypeOptions(
       getActiveEventTypes({
         customEventTypes: normalizeEventTypeList(profile?.custom_event_types),
@@ -993,8 +1046,9 @@ export default function ServicesPage() {
       setAddIsAddon(false);
       setAddAffectsSchedule(true);
       setAddCityCodes([]);
+      setAddColorInput(profileBrandColor);
     }
-  }, [isAddOpen]);
+  }, [isAddOpen, profileBrandColor]);
 
   async function persistNormalizedGroup(
     groupKey: ServiceGroupKey,
@@ -1049,6 +1103,11 @@ export default function ServicesPage() {
         user_id: userId,
         name: formData.get("name") as string,
         description: (formData.get("description") as string) || null,
+        color: resolveHexColor(
+          formData.get("color"),
+          profileBrandColor,
+          "#000000",
+        ),
         price: parseFloat(formData.get("price") as string) || 0,
         original_price: parseFloat(formData.get("original_price") as string) || null,
         duration_minutes:
@@ -1116,6 +1175,11 @@ export default function ServicesPage() {
       .update({
         name: formData.get("name") as string,
         description: (formData.get("description") as string) || null,
+        color: resolveHexColor(
+          formData.get("color"),
+          editingService.color,
+          profileBrandColor,
+        ),
         price: parseFloat(formData.get("price") as string) || 0,
         original_price: parseFloat(formData.get("original_price") as string) || null,
         duration_minutes:
@@ -1194,6 +1258,7 @@ export default function ServicesPage() {
     setEditIsAddon(service.is_addon);
     setEditAffectsSchedule(service.affects_schedule !== false);
     setEditCityCodes(serviceCityCodesByServiceId[service.id] || []);
+    setEditColorInput(resolveHexColor(service.color, profileBrandColor));
     setIsEditOpen(true);
   }
 
@@ -1448,6 +1513,30 @@ export default function ServicesPage() {
                     placeholder={ts("descPlaceholder")}
                     className="placeholder:text-muted-foreground w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 md:text-sm"
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Warna Paket</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={resolveHexColor(addColorInput, profileBrandColor)}
+                      onChange={(event) => setAddColorInput(event.target.value)}
+                      className="h-10 w-10 rounded-lg border p-0.5 cursor-pointer"
+                    />
+                    <input
+                      name="color"
+                      value={addColorInput}
+                      onChange={(event) => setAddColorInput(event.target.value)}
+                      placeholder="#000000"
+                      className="placeholder:text-muted-foreground h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 md:text-sm"
+                    />
+                    <div
+                      className="h-9 w-24 rounded-md border"
+                      style={{
+                        backgroundColor: resolveHexColor(addColorInput, profileBrandColor),
+                      }}
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">{t("harga")}</label>
@@ -1711,6 +1800,7 @@ export default function ServicesPage() {
                         }
                         formatCurrency={formatCurrency}
                         durationLabel={formatDuration(service)}
+                        fallbackColor={profileBrandColor}
                         onMoveUp={() => handleMove(service, "up")}
                         onMoveDown={() => handleMove(service, "down")}
                       />
@@ -1752,6 +1842,7 @@ export default function ServicesPage() {
                         }
                         formatCurrency={formatCurrency}
                         durationLabel={formatDuration(service)}
+                        fallbackColor={profileBrandColor}
                         onMoveUp={() => handleMove(service, "up")}
                         onMoveDown={() => handleMove(service, "down")}
                       />
@@ -1805,6 +1896,7 @@ export default function ServicesPage() {
                     }
                     formatCurrency={formatCurrency}
                     durationLabel={formatDuration(service)}
+                    fallbackColor={profileBrandColor}
                     onEdit={() => openEditDialog(service)}
                     onToggleActive={() => handleToggleActive(service)}
                     onTogglePublic={() => handleTogglePublic(service)}
@@ -1861,6 +1953,7 @@ export default function ServicesPage() {
                     }
                     formatCurrency={formatCurrency}
                     durationLabel={formatDuration(service)}
+                    fallbackColor={profileBrandColor}
                     onEdit={() => openEditDialog(service)}
                     onToggleActive={() => handleToggleActive(service)}
                     onTogglePublic={() => handleTogglePublic(service)}
@@ -1898,6 +1991,7 @@ export default function ServicesPage() {
             setEditIsAddon(false);
             setEditAffectsSchedule(true);
             setEditCityCodes([]);
+            setEditColorInput(profileBrandColor);
           }
         }}
       >
@@ -1925,6 +2019,38 @@ export default function ServicesPage() {
                   defaultValue={editingService.description || ""}
                   className="placeholder:text-muted-foreground w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 md:text-sm"
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Warna Paket</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={resolveHexColor(
+                      editColorInput,
+                      editingService.color,
+                      profileBrandColor,
+                    )}
+                    onChange={(event) => setEditColorInput(event.target.value)}
+                    className="h-10 w-10 rounded-lg border p-0.5 cursor-pointer"
+                  />
+                  <input
+                    name="color"
+                    value={editColorInput}
+                    onChange={(event) => setEditColorInput(event.target.value)}
+                    placeholder="#000000"
+                    className="placeholder:text-muted-foreground h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 md:text-sm"
+                  />
+                  <div
+                    className="h-9 w-24 rounded-md border"
+                    style={{
+                      backgroundColor: resolveHexColor(
+                        editColorInput,
+                        editingService.color,
+                        profileBrandColor,
+                      ),
+                    }}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("harga")}</label>

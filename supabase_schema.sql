@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS services (
   is_active BOOLEAN DEFAULT true,
   is_public BOOLEAN DEFAULT true,
   affects_schedule BOOLEAN DEFAULT true,
+  color TEXT NOT NULL DEFAULT '#000000' CHECK (color ~* '^#[0-9a-f]{6}$'),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

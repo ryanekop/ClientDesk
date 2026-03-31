@@ -55,6 +55,7 @@ type VendorServiceRow = {
   price: number;
   original_price: number | null;
   description: string | null;
+  color: string | null;
   event_types: string[] | null;
   is_addon: boolean;
   is_public: boolean;
@@ -168,7 +169,7 @@ async function fetchVendorPayloadById(args: {
   const { data: services } = await supabase
     .from("services")
     .select(
-      "id, name, price, original_price, description, event_types, is_addon, is_public, duration_minutes, affects_schedule, sort_order, created_at",
+      "id, name, price, original_price, description, color, event_types, is_addon, is_public, duration_minutes, affects_schedule, sort_order, created_at",
     )
     .eq("user_id", vendorRaw.id)
     .eq("is_active", true)

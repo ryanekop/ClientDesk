@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
   let listQuery = supabase
     .from("services")
     .select(
-      "id, name, description, price, original_price, duration_minutes, is_active, is_addon, affects_schedule, is_public, sort_order, created_at, event_types",
+      "id, name, description, price, original_price, duration_minutes, is_active, is_addon, affects_schedule, is_public, sort_order, created_at, event_types, color",
       { count: "exact" },
     )
     .eq("user_id", user.id)

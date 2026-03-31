@@ -68,6 +68,7 @@ import {
     type CityReferenceItem,
 } from "@/lib/city-references";
 import { filterServicesForBookingSelection } from "@/lib/service-availability";
+import { buildServiceSoftPalette, resolveHexColor } from "@/lib/service-colors";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -168,6 +169,7 @@ type Service = {
     price: number;
     original_price?: number | null;
     description?: string | null;
+    color?: string | null;
     duration_minutes?: number | null;
     affects_schedule?: boolean | null;
     is_addon?: boolean | null;
@@ -183,6 +185,7 @@ type ProfileRow = {
     form_sections?: unknown;
     form_event_types?: string[] | null;
     custom_event_types?: unknown;
+    form_brand_color?: string | null;
 };
 
 const EXTRA_FIELD_LABEL_KEYS = {
@@ -278,6 +281,7 @@ export default function NewBookingPage() {
     const [discountAmount, setDiscountAmount] = React.useState<number | "">("");
     const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
     const [selectedAddonIds, setSelectedAddonIds] = React.useState<string[]>([]);
+    const [defaultServiceColor, setDefaultServiceColor] = React.useState("#000000");
     const [packageDialogOpen, setPackageDialogOpen] = React.useState(false);
     const [addonDialogOpen, setAddonDialogOpen] = React.useState(false);
     const [packageSearchQuery, setPackageSearchQuery] = React.useState("");
@@ -368,11 +372,11 @@ export default function NewBookingPage() {
             const [{ data: svcs }, { data: frees }, { data: prof }, { data: cityRefs }] = await Promise.all([
                 supabase
                     .from("services")
-                    .select("id, name, price, original_price, description, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types")
+                    .select("id, name, price, original_price, description, color, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types")
                     .eq("user_id", user.id)
                     .eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
-                supabase.from("profiles").select("custom_client_statuses, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
+                supabase.from("profiles").select("custom_client_statuses, form_sections, form_event_types, custom_event_types, form_brand_color").eq("id", user.id).single(),
                 supabase
                     .from("region_city_references")
                     .select("city_code, city_name, province_code, province_name")
@@ -403,6 +407,9 @@ export default function NewBookingPage() {
                 serviceCityCodesMap.set(row.service_id, current);
             });
             const profileRow = (prof ?? null) as ProfileRow | null;
+            setDefaultServiceColor(
+                resolveHexColor(profileRow?.form_brand_color, "#000000"),
+            );
             setServices(
                 serviceRows
                     .map((service) => ({
@@ -725,8 +732,9 @@ export default function NewBookingPage() {
             is_active: true,
             is_addon: false,
             is_public: true,
+            color: resolveHexColor(defaultServiceColor, "#000000"),
             sort_order: services.filter((service) => !service.is_addon).length,
-        }).select("id, name, price, original_price, description, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types").single();
+        }).select("id, name, price, original_price, description, color, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types").single();
         if (!error && data) {
             const s = data as Service;
             setServices(prev => [...prev, s].sort(compareServicesByCatalogOrder));
@@ -1596,23 +1604,38 @@ export default function NewBookingPage() {
                                 </button>
                             </div>
                             {selectedMainServices.length > 0 && (
-                                <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
-                                    {selectedMainServices.map((service) => (
-                                        <div key={service.id} className="flex items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <p className="text-sm font-medium">{service.name}</p>
-                                                {service.description ? (
-                                                    <p className="text-xs text-muted-foreground">{service.description}</p>
-                                                ) : null}
+                                <div className="space-y-2">
+                                    {selectedMainServices.map((service) => {
+                                        const tone = buildServiceSoftPalette({
+                                            serviceColor: service.color,
+                                            fallbackColor: defaultServiceColor,
+                                            selected: true,
+                                        });
+                                        return (
+                                            <div
+                                                key={service.id}
+                                                className="flex items-start justify-between gap-3 rounded-lg border px-3 py-2"
+                                                style={{
+                                                    backgroundColor: tone.backgroundColor,
+                                                    borderColor: tone.borderColor,
+                                                    boxShadow: `0 0 0 1px ${tone.ringColor}`,
+                                                }}
+                                            >
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium">{service.name}</p>
+                                                    {service.description ? (
+                                                        <p className="text-xs text-muted-foreground">{service.description}</p>
+                                                    ) : null}
+                                                </div>
+                                                <div className="shrink-0 text-right">
+                                                    <p className="text-lg font-bold" style={{ color: tone.color }}>{formatCurrency(service.price)}</p>
+                                                    {service.original_price && service.original_price > service.price ? (
+                                                        <p className="text-[11px] text-muted-foreground line-through">{formatCurrency(service.original_price)}</p>
+                                                    ) : null}
+                                                </div>
                                             </div>
-                                            <div className="shrink-0 text-right">
-                                                <p className="text-lg font-bold text-primary">{formatCurrency(service.price)}</p>
-                                                {service.original_price && service.original_price > service.price ? (
-                                                    <p className="text-[11px] text-muted-foreground line-through">{formatCurrency(service.original_price)}</p>
-                                                ) : null}
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -1640,40 +1663,78 @@ export default function NewBookingPage() {
                             ) : null}
                             {selectedAddonServices.length > 0 && (
                                 <div className="space-y-2">
-                                    {selectedAddonServices.map((addon) => (
-                                        <div
-                                            key={addon.id}
-                                            className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
-                                        >
-                                            <div className="min-w-0">
-                                                <p className="font-medium">{addon.name}</p>
-                                                {addon.description ? (
-                                                    <p className="text-[11px] text-muted-foreground truncate">
-                                                        {addon.description}
-                                                    </p>
-                                                ) : null}
+                                    {selectedAddonServices.map((addon) => {
+                                        const tone = buildServiceSoftPalette({
+                                            serviceColor: addon.color,
+                                            fallbackColor: defaultServiceColor,
+                                            selected: true,
+                                        });
+                                        return (
+                                            <div
+                                                key={addon.id}
+                                                className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+                                                style={{
+                                                    backgroundColor: tone.backgroundColor,
+                                                    borderColor: tone.borderColor,
+                                                    boxShadow: `0 0 0 1px ${tone.ringColor}`,
+                                                }}
+                                            >
+                                                <div className="min-w-0">
+                                                    <p className="font-medium">{addon.name}</p>
+                                                    {addon.description ? (
+                                                        <p className="text-[11px] text-muted-foreground truncate">
+                                                            {addon.description}
+                                                        </p>
+                                                    ) : null}
+                                                </div>
+                                                <span className="font-semibold whitespace-nowrap" style={{ color: tone.color }}>
+                                                    +{formatCurrency(addon.price)}
+                                                </span>
                                             </div>
-                                            <span className="font-semibold text-primary whitespace-nowrap">
-                                                +{formatCurrency(addon.price)}
-                                            </span>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                             {selectedAddonServices.length > 0 && selectedMainServices.length > 0 && (
                                 <div className="rounded-lg bg-muted/50 p-3 text-sm">
-                                    {selectedMainServices.map((service) => (
-                                        <div key={service.id} className="flex justify-between">
-                                            <span>{service.name}</span>
-                                            <span>{formatCurrency(service.price)}</span>
-                                        </div>
-                                    ))}
-                                    {selectedAddonServices.map((service) => (
-                                        <div key={service.id} className="flex justify-between text-muted-foreground">
-                                            <span>+ {service.name}</span>
-                                            <span>{formatCurrency(service.price)}</span>
-                                        </div>
-                                    ))}
+                                    {selectedMainServices.map((service) => {
+                                        const tone = buildServiceSoftPalette({
+                                            serviceColor: service.color,
+                                            fallbackColor: defaultServiceColor,
+                                        });
+                                        return (
+                                            <div
+                                                key={service.id}
+                                                className="mb-1 flex items-center justify-between rounded-md border px-2 py-1"
+                                                style={{
+                                                    backgroundColor: tone.summaryBackgroundColor,
+                                                    borderColor: tone.summaryBorderColor,
+                                                }}
+                                            >
+                                                <span>{service.name}</span>
+                                                <span style={{ color: tone.color }}>{formatCurrency(service.price)}</span>
+                                            </div>
+                                        );
+                                    })}
+                                    {selectedAddonServices.map((service) => {
+                                        const tone = buildServiceSoftPalette({
+                                            serviceColor: service.color,
+                                            fallbackColor: defaultServiceColor,
+                                        });
+                                        return (
+                                            <div
+                                                key={service.id}
+                                                className="mb-1 flex items-center justify-between rounded-md border px-2 py-1 text-muted-foreground"
+                                                style={{
+                                                    backgroundColor: tone.summaryBackgroundColor,
+                                                    borderColor: tone.summaryBorderColor,
+                                                }}
+                                            >
+                                                <span>+ {service.name}</span>
+                                                <span style={{ color: tone.color }}>{formatCurrency(service.price)}</span>
+                                            </div>
+                                        );
+                                    })}
                                     <div className="flex justify-between font-bold border-t pt-1 mt-1">
                                         <span>Total</span>
                                         <span>{formatCurrency(totalPrice)}</span>
@@ -1881,15 +1942,32 @@ export default function NewBookingPage() {
                             ) : (
                                 searchedMainServices.map((service) => {
                                     const selected = selectedServiceIds.includes(service.id);
+                                    const tone = buildServiceSoftPalette({
+                                        serviceColor: service.color,
+                                        fallbackColor: defaultServiceColor,
+                                        selected,
+                                    });
                                     return (
                                         <button
                                             key={service.id}
                                             type="button"
                                             onClick={() => toggleService(service.id)}
-                                            className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
+                                            className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer hover:opacity-95 ${selected ? "shadow-sm" : ""}`}
+                                            style={{
+                                                backgroundColor: tone.backgroundColor,
+                                                borderColor: tone.borderColor,
+                                                boxShadow: selected ? `0 0 0 1px ${tone.ringColor}` : undefined,
+                                            }}
                                         >
                                             <div className="flex items-start gap-3">
-                                                <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
+                                                <span
+                                                    className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border"
+                                                    style={{
+                                                        borderColor: tone.iconBorderColor,
+                                                        backgroundColor: selected ? tone.color : "transparent",
+                                                        color: selected ? "#ffffff" : "transparent",
+                                                    }}
+                                                >
                                                     <CheckCircle2 className="h-3.5 w-3.5" />
                                                 </span>
                                                 <div className="min-w-0">
@@ -1902,7 +1980,7 @@ export default function NewBookingPage() {
                                                 </div>
                                             </div>
                                             <div className="shrink-0 text-right">
-                                                <p className="text-sm font-semibold text-primary">
+                                                <p className="text-sm font-semibold" style={{ color: tone.color }}>
                                                     {formatCurrency(service.price)}
                                                 </p>
                                                 {service.original_price && service.original_price > service.price ? (
@@ -1964,15 +2042,32 @@ export default function NewBookingPage() {
                             ) : (
                                 searchedAddonServices.map((addon) => {
                                     const selected = selectedAddonIds.includes(addon.id);
+                                    const tone = buildServiceSoftPalette({
+                                        serviceColor: addon.color,
+                                        fallbackColor: defaultServiceColor,
+                                        selected,
+                                    });
                                     return (
                                         <button
                                             key={addon.id}
                                             type="button"
                                             onClick={() => toggleAddon(addon.id)}
-                                            className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-input hover:bg-muted/30"}`}
+                                            className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer hover:opacity-95 ${selected ? "shadow-sm" : ""}`}
+                                            style={{
+                                                backgroundColor: tone.backgroundColor,
+                                                borderColor: tone.borderColor,
+                                                boxShadow: selected ? `0 0 0 1px ${tone.ringColor}` : undefined,
+                                            }}
                                         >
                                             <div className="flex items-start gap-3">
-                                                <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 text-transparent"}`}>
+                                                <span
+                                                    className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border"
+                                                    style={{
+                                                        borderColor: tone.iconBorderColor,
+                                                        backgroundColor: selected ? tone.color : "transparent",
+                                                        color: selected ? "#ffffff" : "transparent",
+                                                    }}
+                                                >
                                                     <CheckCircle2 className="h-3.5 w-3.5" />
                                                 </span>
                                                 <div className="min-w-0">
@@ -1985,7 +2080,7 @@ export default function NewBookingPage() {
                                                 </div>
                                             </div>
                                             <div className="shrink-0 text-right">
-                                                <p className="text-sm font-semibold text-primary">
+                                                <p className="text-sm font-semibold" style={{ color: tone.color }}>
                                                     +{formatCurrency(addon.price)}
                                                 </p>
                                             </div>

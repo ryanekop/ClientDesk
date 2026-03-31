@@ -40,6 +40,7 @@
 !supabase_migration_finance_filter_sort_event_type.sql
 !supabase_migration_studio_address.sql
 !supabase_migration_city_scopes_and_city_references.sql
+!supabase_migration_service_color.sql
 *.sh
 
 # debug
