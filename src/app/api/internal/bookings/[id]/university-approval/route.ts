@@ -45,6 +45,7 @@ type UniversityReferenceRow = {
   abbreviation?: string | null;
   normalized_name: string;
   normalized_abbreviation?: string | null;
+  source?: string | null;
 };
 
 function isValidUuid(value: string | null | undefined) {
@@ -82,6 +83,14 @@ function getSearchRank(
   if (item.normalized_name.includes(normalizedQuery)) return 2;
   if (abbreviation && abbreviation.includes(normalizedQuery)) return 3;
   return 4;
+}
+
+function getSourceRank(source: string | null | undefined) {
+  const normalizedSource = String(source || "").trim().toLowerCase();
+  if (normalizedSource === "kip_kuliah") return 0;
+  if (normalizedSource.startsWith("wikipedia_")) return 1;
+  if (normalizedSource === "manual") return 2;
+  return 3;
 }
 
 export async function POST(
@@ -213,7 +222,7 @@ export async function POST(
 
       const { data: selectedReference, error: selectedReferenceError } = await service
         .from("university_references")
-        .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
+        .select("id, name, abbreviation, normalized_name, normalized_abbreviation, source")
         .eq("id", selectedReferenceId)
         .maybeSingle<UniversityReferenceRow>();
 
@@ -237,7 +246,7 @@ export async function POST(
     if (!resolvedReference) {
       const { data: exactReference, error: exactReferenceError } = await service
         .from("university_references")
-        .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
+        .select("id, name, abbreviation, normalized_name, normalized_abbreviation, source")
         .eq("normalized_name", normalizedName)
         .maybeSingle<UniversityReferenceRow>();
 
@@ -256,7 +265,7 @@ export async function POST(
     if (!resolvedReference && !forceCreate) {
       const { data: similarRows, error: similarRowsError } = await service
         .from("university_references")
-        .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
+        .select("id, name, abbreviation, normalized_name, normalized_abbreviation, source")
         .or(
           [
             `normalized_name.ilike.%${escapePostgresLikePattern(normalizedName)}%`,
@@ -281,6 +290,9 @@ export async function POST(
           const leftRank = getSearchRank(left, normalizedName);
           const rightRank = getSearchRank(right, normalizedName);
           if (leftRank !== rightRank) return leftRank - rightRank;
+          const leftSourceRank = getSourceRank(left.source);
+          const rightSourceRank = getSourceRank(right.source);
+          if (leftSourceRank !== rightSourceRank) return leftSourceRank - rightSourceRank;
           return buildUniversityDisplayName(
             left.name,
             left.abbreviation,
@@ -316,13 +328,13 @@ export async function POST(
           source: "manual",
           last_seen_at: new Date().toISOString(),
         })
-        .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
+        .select("id, name, abbreviation, normalized_name, normalized_abbreviation, source")
         .single<UniversityReferenceRow>();
 
       if (createReferenceError && isUniqueViolation(createReferenceError)) {
         const { data: retryReference, error: retryReferenceError } = await service
           .from("university_references")
-          .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
+          .select("id, name, abbreviation, normalized_name, normalized_abbreviation, source")
           .eq("normalized_name", normalizedName)
           .maybeSingle<UniversityReferenceRow>();
 

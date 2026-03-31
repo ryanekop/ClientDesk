@@ -15,6 +15,7 @@ type UniversitySearchRow = {
   abbreviation?: string | null;
   normalized_name: string;
   normalized_abbreviation?: string | null;
+  source?: string | null;
 };
 
 function mapUniversityRow(item: UniversitySearchRow) {
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     const normalizedQuery = normalizeUniversityName(query);
     const { data, error } = await supabase
       .from("university_references")
-      .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
+      .select("id, name, abbreviation, normalized_name, normalized_abbreviation, source")
       .eq("normalized_name", normalizedQuery)
       .maybeSingle<UniversitySearchRow>();
 
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("university_references")
-    .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
+    .select("id, name, abbreviation, normalized_name, normalized_abbreviation, source")
     .or(
       [
         `normalized_name.ilike.%${escapePostgresLikePattern(normalizedQuery)}%`,
@@ -94,6 +95,9 @@ export async function GET(request: NextRequest) {
       const leftRank = getSearchRank(left, normalizedQuery);
       const rightRank = getSearchRank(right, normalizedQuery);
       if (leftRank !== rightRank) return leftRank - rightRank;
+      const leftSourceRank = getSourceRank(left.source);
+      const rightSourceRank = getSourceRank(right.source);
+      if (leftSourceRank !== rightSourceRank) return leftSourceRank - rightSourceRank;
       return buildUniversityDisplayName(
         left.name,
         left.abbreviation,
@@ -115,4 +119,12 @@ function getSearchRank(
   if (item.normalized_name.includes(normalizedQuery)) return 2;
   if (abbreviation && abbreviation.includes(normalizedQuery)) return 3;
   return 4;
+}
+
+function getSourceRank(source: string | null | undefined) {
+  const normalizedSource = String(source || "").trim().toLowerCase();
+  if (normalizedSource === "kip_kuliah") return 0;
+  if (normalizedSource.startsWith("wikipedia_")) return 1;
+  if (normalizedSource === "manual") return 2;
+  return 3;
 }
