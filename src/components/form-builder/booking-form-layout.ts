@@ -140,7 +140,7 @@ type BuiltInFieldDefinitionOptions = {
 const BUILT_IN_SECTIONS: BuiltInSectionDefinition[] = [
   {
     sectionId: "client_info",
-    title: "Client Information",
+    title: "Informasi Klien",
     category: "Klien",
   },
   {
