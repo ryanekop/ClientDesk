@@ -50,7 +50,6 @@ import {
 } from "@/lib/payment-config";
 import {
   getActiveEventTypes,
-  isShowAllPackagesEventType,
   LEGACY_PUBLIC_CUSTOM_EVENT_TYPE,
   normalizeEventTypeName,
   normalizeEventTypeList,
@@ -97,6 +96,10 @@ import {
   buildServiceSoftPalette,
   resolveHexColor,
 } from "@/lib/service-colors";
+import {
+  filterServicesForBookingSelection,
+  isCityScopedBookingEventType,
+} from "@/lib/service-availability";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -203,30 +206,6 @@ function compareServicesByCatalogOrder(a: Service, b: Service) {
   const bCreatedAt = b.created_at || "";
   if (aCreatedAt !== bCreatedAt) return aCreatedAt.localeCompare(bCreatedAt);
   return a.name.localeCompare(b.name);
-}
-
-function isServiceAvailableForEventType(service: Service, eventType: string): boolean {
-  if (!eventType) return false;
-  if (!service.event_types || service.event_types.length === 0) return true;
-  if (isShowAllPackagesEventType(eventType)) return true;
-  const normalizedEventType = normalizeEventTypeName(eventType);
-  if (!normalizedEventType) return false;
-  return service.event_types.some(
-    (serviceEventType) =>
-      normalizeEventTypeName(serviceEventType) === normalizedEventType,
-  );
-}
-
-function isServiceAvailableForCity(service: Service, cityCode: string): boolean {
-  const normalizedSelectedCityCode = normalizeCityCode(cityCode);
-  if (!normalizedSelectedCityCode) return false;
-  const scopedCityCodes = Array.isArray(service.city_codes)
-    ? service.city_codes.map((code) => normalizeCityCode(code)).filter(Boolean)
-    : [];
-  if (scopedCityCodes.length === 0) {
-    return true;
-  }
-  return scopedCityCodes.includes(normalizedSelectedCityCode);
 }
 
 function extractSlugFromPath(pathname: string) {
@@ -730,7 +709,7 @@ export function BookingFormClient({
     const requiresClientWhatsapp = hasBuiltInField("client_whatsapp");
     const requiresEventType = hasBuiltInField("event_type");
     const requiresServicePackage = hasBuiltInField("service_package");
-    const requiresCitySelection = requiresServicePackage;
+    const requiresCitySelection = requiresServicePackage && isCityScopedEvent;
     const requiresSessionDate =
       hasBuiltInField("session_date") &&
       !isSplitSessionEnabled;
@@ -874,7 +853,7 @@ export function BookingFormClient({
 
     const fullPhone = `${countryCode}${phone}`.replace(/[^0-9+]/g, "");
     const dpValue = parseFormatted(dpDisplay) || 0;
-    if (!selectedCity) {
+    if (requiresCitySelection && !selectedCity) {
       setError(
         localeCode === "en"
           ? "Selected city/regency is invalid."
@@ -1024,8 +1003,11 @@ export function BookingFormClient({
       formData.append("sessionDate", finalSessionDate);
       formData.append("serviceId", selectedServiceIds[0] || "");
       formData.append("serviceIds", JSON.stringify(selectedServiceIds));
-      formData.append("cityCode", normalizedSelectedCityCode);
-      formData.append("cityName", selectedCity.city_name);
+      formData.append("cityCode", isCityScopedEvent ? normalizedSelectedCityCode : "");
+      formData.append(
+        "cityName",
+        isCityScopedEvent && selectedCity ? selectedCity.city_name : "",
+      );
       if (normalizedOfferToken) {
         formData.append("offerToken", normalizedOfferToken);
       }
@@ -1356,7 +1338,10 @@ export function BookingFormClient({
     );
     return whitelist.length > 0 ? whitelist : availableEventTypes;
   }, [availableEventTypes, eventTypeLocked, specialEventTypes]);
-  const showAllActivePackages = isShowAllPackagesEventType(eventType);
+  const isCityScopedEvent = React.useMemo(
+    () => isCityScopedBookingEventType(eventType),
+    [eventType],
+  );
   const termsAgreementText =
     effectiveVendor.form_terms_agreement_text?.trim() || t("termsAgreementDefault");
   const termsLinkText =
@@ -1425,39 +1410,21 @@ export function BookingFormClient({
   }, [hasTerms]);
   const filteredServices = React.useMemo(
     () =>
-      !eventType || !normalizedSelectedCityCode
-        ? []
-        : showAllActivePackages
-          ? sortedServices.filter(
-              (service) =>
-                !service.is_addon &&
-                isServiceAvailableForCity(service, normalizedSelectedCityCode),
-            )
-          : sortedServices.filter(
-              (service) =>
-                !service.is_addon &&
-                isServiceAvailableForEventType(service, eventType) &&
-                isServiceAvailableForCity(service, normalizedSelectedCityCode),
-            ),
-    [eventType, normalizedSelectedCityCode, showAllActivePackages, sortedServices],
+      filterServicesForBookingSelection(sortedServices, {
+        eventType,
+        cityCode: normalizedSelectedCityCode,
+        group: "main",
+      }),
+    [eventType, normalizedSelectedCityCode, sortedServices],
   );
   const addonServices = React.useMemo(
     () =>
-      !eventType || !normalizedSelectedCityCode
-        ? []
-        : showAllActivePackages
-          ? sortedServices.filter(
-              (service) =>
-                service.is_addon &&
-                isServiceAvailableForCity(service, normalizedSelectedCityCode),
-            )
-          : sortedServices.filter(
-              (service) =>
-                service.is_addon &&
-                isServiceAvailableForEventType(service, eventType) &&
-                isServiceAvailableForCity(service, normalizedSelectedCityCode),
-            ),
-    [eventType, normalizedSelectedCityCode, showAllActivePackages, sortedServices],
+      filterServicesForBookingSelection(sortedServices, {
+        eventType,
+        cityCode: normalizedSelectedCityCode,
+        group: "addon",
+      }),
+    [eventType, normalizedSelectedCityCode, sortedServices],
   );
   const searchedMainServices = React.useMemo(() => {
     const query = packageSearchQuery.trim().toLowerCase();
@@ -1484,11 +1451,16 @@ export function BookingFormClient({
   );
 
   React.useEffect(() => {
-    if (!normalizedSelectedCityCode) {
+    if (isCityScopedEvent && !normalizedSelectedCityCode) {
       setPackageDialogOpen(false);
       setAddonDialogOpen(false);
     }
-  }, [normalizedSelectedCityCode]);
+  }, [isCityScopedEvent, normalizedSelectedCityCode]);
+  React.useEffect(() => {
+    if (!isCityScopedEvent && selectedCityCode) {
+      setSelectedCityCode("");
+    }
+  }, [isCityScopedEvent, selectedCityCode]);
 
   React.useEffect(() => {
     const availableMainIds = new Set(filteredServices.map((service) => service.id));
@@ -2164,29 +2136,31 @@ export function BookingFormClient({
       case "service_package":
         return (
           <div key={item.id} className="space-y-3">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">
-                Kota / Kabupaten <span className="text-red-500">*</span>
-              </label>
-              <CitySingleSelect
-                options={cityOptions}
-                value={normalizedSelectedCityCode}
-                onChange={setSelectedCityCode}
-                placeholder="Pilih kota / kabupaten"
-                searchPlaceholder="Cari kota / kabupaten..."
-                emptyText="Data kota / kabupaten tidak ditemukan."
-              />
-              {selectedCity ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Wilayah terpilih: {buildCityDisplayName(selectedCity)}
-                </p>
-              ) : null}
-            </div>
+            {isCityScopedEvent ? (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">
+                  Kota / Kabupaten <span className="text-red-500">*</span>
+                </label>
+                <CitySingleSelect
+                  options={cityOptions}
+                  value={normalizedSelectedCityCode}
+                  onChange={setSelectedCityCode}
+                  placeholder="Pilih kota / kabupaten"
+                  searchPlaceholder="Cari kota / kabupaten..."
+                  emptyText="Data kota / kabupaten tidak ditemukan."
+                />
+                {selectedCity ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Wilayah terpilih: {buildCityDisplayName(selectedCity)}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">
                 {t("paketLayanan")} <span className="text-red-500">*</span>
               </label>
-              {!normalizedSelectedCityCode ? (
+              {isCityScopedEvent && !normalizedSelectedCityCode ? (
                 <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
                   Pilih kota/kabupaten dulu untuk menampilkan paket yang tersedia.
                 </div>
@@ -2740,7 +2714,11 @@ export function BookingFormClient({
                 className={inputClass}
               />
               <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-                {filteredServices.length === 0 ? (
+                {isCityScopedEvent && !normalizedSelectedCityCode ? (
+                  <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                    Pilih kota/kabupaten dulu untuk melihat paket.
+                  </div>
+                ) : filteredServices.length === 0 ? (
                   <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
                     Belum ada paket untuk tipe acara ini.
                   </div>
@@ -2840,7 +2818,11 @@ export function BookingFormClient({
                 className={inputClass}
               />
               <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-                {addonServices.length === 0 ? (
+                {isCityScopedEvent && !normalizedSelectedCityCode ? (
+                  <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                    Pilih kota/kabupaten dulu untuk melihat add-on.
+                  </div>
+                ) : addonServices.length === 0 ? (
                   <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
                     Belum ada add-on untuk tipe acara ini.
                   </div>

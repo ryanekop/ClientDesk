@@ -15,8 +15,17 @@ export type BookingServiceAvailabilityRecord = {
 
 type BookingAvailabilityInput = {
   eventType: string;
-  cityCode: string;
+  cityCode?: string | null;
+  allowCityFallbackWhenMissing?: boolean;
 };
+
+const CITY_SCOPED_EVENT_TYPE = "Wisuda";
+
+export function isCityScopedBookingEventType(
+  eventType: string | null | undefined,
+): boolean {
+  return normalizeEventTypeName(eventType) === CITY_SCOPED_EVENT_TYPE;
+}
 
 function getNormalizedServiceCityCodes(service: BookingServiceAvailabilityRecord) {
   if (!Array.isArray(service.city_codes)) return [];
@@ -37,9 +46,6 @@ export function isServiceAvailableForBookingSelection(
   service: BookingServiceAvailabilityRecord,
   input: BookingAvailabilityInput,
 ) {
-  const normalizedSelectedCityCode = normalizeCityCode(input.cityCode);
-  if (!normalizedSelectedCityCode) return false;
-
   const normalizedEventType = normalizeEventTypeName(input.eventType);
   if (!normalizedEventType) return false;
 
@@ -49,6 +55,15 @@ export function isServiceAvailableForBookingSelection(
     if (!serviceEventTypes.includes(normalizedEventType)) {
       return false;
     }
+  }
+
+  if (!isCityScopedBookingEventType(normalizedEventType)) {
+    return true;
+  }
+
+  const normalizedSelectedCityCode = normalizeCityCode(input.cityCode);
+  if (!normalizedSelectedCityCode) {
+    return Boolean(input.allowCityFallbackWhenMissing);
   }
 
   const serviceCityCodes = getNormalizedServiceCityCodes(service);
@@ -65,7 +80,7 @@ export function filterServicesForBookingSelection<
   services: T[],
   input: BookingAvailabilityInput & { group: BookingServiceGroup },
 ) {
-  if (!input.eventType || !input.cityCode) return [];
+  if (!input.eventType) return [];
   const targetIsAddon = input.group === "addon";
 
   return services.filter((service) => {

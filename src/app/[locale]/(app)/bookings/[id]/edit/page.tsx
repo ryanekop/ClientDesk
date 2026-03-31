@@ -89,7 +89,10 @@ import {
     normalizeCityCode,
     type CityReferenceItem,
 } from "@/lib/city-references";
-import { filterServicesForBookingSelection } from "@/lib/service-availability";
+import {
+    filterServicesForBookingSelection,
+    isCityScopedBookingEventType,
+} from "@/lib/service-availability";
 import { buildServiceSoftPalette, resolveHexColor } from "@/lib/service-colors";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
@@ -308,6 +311,8 @@ export default function EditBookingPage() {
     const [instagram, setInstagram] = React.useState("");
     const [eventType, setEventType] = React.useState("");
     const [selectedCityCode, setSelectedCityCode] = React.useState("");
+    const [allowLegacyWisudaCityFallback, setAllowLegacyWisudaCityFallback] =
+        React.useState(false);
     const [bookingDate, setBookingDate] = React.useState("");
     const [createdAtDateFallback, setCreatedAtDateFallback] = React.useState("");
     const [sessionDate, setSessionDate] = React.useState("");
@@ -524,11 +529,16 @@ export default function EditBookingPage() {
                 setCountryCode(parsed.code);
                 setPhoneNumber(parsed.number);
                 setInstagram(booking.instagram || "");
-                setEventType(normalizeEventTypeName(booking.event_type) || "");
-                setSelectedCityCode(
-                    normalizeCityCode(
-                        (booking as Record<string, unknown>).city_code,
-                    ),
+                const normalizedBookingEventType =
+                    normalizeEventTypeName(booking.event_type) || "";
+                const normalizedBookingCityCode = normalizeCityCode(
+                    (booking as Record<string, unknown>).city_code,
+                );
+                setEventType(normalizedBookingEventType);
+                setSelectedCityCode(normalizedBookingCityCode);
+                setAllowLegacyWisudaCityFallback(
+                    normalizedBookingEventType === "Wisuda" &&
+                        !normalizedBookingCityCode,
                 );
                 const createdAtDate =
                     typeof (booking as Record<string, unknown>).created_at === "string" &&
@@ -722,6 +732,17 @@ export default function EditBookingPage() {
         [services],
     );
     const normalizedSelectedCityCode = normalizeCityCode(selectedCityCode);
+    const isCityScopedEvent = React.useMemo(
+        () => isCityScopedBookingEventType(eventType),
+        [eventType],
+    );
+    const shouldAllowLegacyCityFallback = React.useMemo(
+        () =>
+            isCityScopedEvent &&
+            !normalizedSelectedCityCode &&
+            allowLegacyWisudaCityFallback,
+        [allowLegacyWisudaCityFallback, isCityScopedEvent, normalizedSelectedCityCode],
+    );
     const selectedCity = React.useMemo(
         () =>
             cityOptions.find((city) => city.city_code === normalizedSelectedCityCode) ||
@@ -733,19 +754,36 @@ export default function EditBookingPage() {
             filterServicesForBookingSelection(sortedServices, {
                 eventType,
                 cityCode: normalizedSelectedCityCode,
+                allowCityFallbackWhenMissing: shouldAllowLegacyCityFallback,
                 group: "main",
             }),
-        [eventType, normalizedSelectedCityCode, sortedServices],
+        [
+            eventType,
+            normalizedSelectedCityCode,
+            shouldAllowLegacyCityFallback,
+            sortedServices,
+        ],
     );
     const addonServices = React.useMemo(
         () =>
             filterServicesForBookingSelection(sortedServices, {
                 eventType,
                 cityCode: normalizedSelectedCityCode,
+                allowCityFallbackWhenMissing: shouldAllowLegacyCityFallback,
                 group: "addon",
             }),
-        [eventType, normalizedSelectedCityCode, sortedServices],
+        [
+            eventType,
+            normalizedSelectedCityCode,
+            shouldAllowLegacyCityFallback,
+            sortedServices,
+        ],
     );
+    React.useEffect(() => {
+        if (!isCityScopedEvent && selectedCityCode) {
+            setSelectedCityCode("");
+        }
+    }, [isCityScopedEvent, selectedCityCode]);
     const searchedMainServices = React.useMemo(() => {
         const query = packageSearchQuery.trim().toLowerCase();
         if (!query) return mainServices;
@@ -1022,7 +1060,7 @@ export default function EditBookingPage() {
                 showFeedback("Lokasi Sesi 1 dan Lokasi Sesi 2 wajib diisi untuk Wisuda split.");
                 return;
             }
-            if (!normalizedSelectedCityCode || !selectedCity) {
+            if (isCityScopedEvent && (!normalizedSelectedCityCode || !selectedCity)) {
                 showFeedback("Pilih kota/kabupaten terlebih dahulu sebelum memilih paket.");
                 return;
             }
@@ -1258,8 +1296,11 @@ export default function EditBookingPage() {
                 location_lng: resolvedLocation.locationLng,
                 location_detail: locationDetail || null,
                 service_id: selectedServiceIds[0] || null,
-                city_code: normalizedSelectedCityCode,
-                city_name: selectedCity.city_name,
+                city_code: isCityScopedEvent ? normalizedSelectedCityCode : null,
+                city_name:
+                    isCityScopedEvent && selectedCity
+                        ? selectedCity.city_name
+                        : null,
                 freelance_id: freelancerIds[0] || null,
                 total_price: tPrice,
                 dp_paid: dPaid,
@@ -1952,42 +1993,51 @@ export default function EditBookingPage() {
                             <label className="text-xs font-medium text-muted-foreground">Detail Lokasi</label>
                             <input value={locationDetail} onChange={e => setLocationDetail(e.target.value)} placeholder={tBookingEditor("locationDetailExample")} className={inputClass} />
                         </div>
-                        <div className="col-span-full space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">Kota / Kabupaten{reqMark}</label>
-                            <CitySingleSelect
-                                options={cityOptions}
-                                value={normalizedSelectedCityCode}
-                                onChange={setSelectedCityCode}
-                                placeholder="Pilih kota / kabupaten"
-                                searchPlaceholder="Cari kota / kabupaten..."
-                                emptyText="Data kota / kabupaten tidak ditemukan."
-                                className="w-full"
-                            />
-                            {selectedCity ? (
-                                <p className="text-[11px] text-muted-foreground">
-                                    Wilayah terpilih: {buildCityDisplayName(selectedCity)}
-                                </p>
-                            ) : (
-                                <p className="text-[11px] text-muted-foreground">
-                                    Pilih kota/kabupaten dulu untuk menampilkan paket.
-                                </p>
-                            )}
-                        </div>
+                        {isCityScopedEvent ? (
+                            <div className="col-span-full space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Kota / Kabupaten{reqMark}</label>
+                                <CitySingleSelect
+                                    options={cityOptions}
+                                    value={normalizedSelectedCityCode}
+                                    onChange={setSelectedCityCode}
+                                    placeholder="Pilih kota / kabupaten"
+                                    searchPlaceholder="Cari kota / kabupaten..."
+                                    emptyText="Data kota / kabupaten tidak ditemukan."
+                                    className="w-full"
+                                />
+                                {selectedCity ? (
+                                    <p className="text-[11px] text-muted-foreground">
+                                        Wilayah terpilih: {buildCityDisplayName(selectedCity)}
+                                    </p>
+                                ) : (
+                                    <p className="text-[11px] text-muted-foreground">
+                                        Pilih kota/kabupaten dulu untuk menampilkan paket.
+                                    </p>
+                                )}
+                                {shouldAllowLegacyCityFallback ? (
+                                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                                        Booking Wisuda lama ini belum memiliki kota. Pilih kota/kabupaten sebelum menyimpan perubahan.
+                                    </p>
+                                ) : null}
+                            </div>
+                        ) : null}
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Paket / Layanan{reqMark}</label>
                             <div className="space-y-2">
                                 <button
                                     type="button"
                                     onClick={() => setPackageDialogOpen(true)}
-                                    disabled={!normalizedSelectedCityCode || !eventType}
+                                    disabled={!eventType || (isCityScopedEvent && !normalizedSelectedCityCode && !shouldAllowLegacyCityFallback)}
                                     className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all hover:bg-muted/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     <span className="text-left">
                                         {selectedMainServices.length > 0
                                             ? `${selectedMainServices.length} paket dipilih`
-                                            : !normalizedSelectedCityCode
+                                            : isCityScopedEvent &&
+                                                !normalizedSelectedCityCode &&
+                                                !shouldAllowLegacyCityFallback
                                                 ? "Pilih kota / kabupaten dulu"
-                                                : !eventType
+                                            : !eventType
                                                     ? "Pilih tipe acara dulu"
                                                     : tBookingEditor("selectPackageService")}
                                     </span>
@@ -2044,7 +2094,7 @@ export default function EditBookingPage() {
                             <button
                                 type="button"
                                 onClick={() => setAddonDialogOpen(true)}
-                                disabled={addonServices.length === 0 || !normalizedSelectedCityCode || !eventType}
+                                disabled={addonServices.length === 0 || !eventType || (isCityScopedEvent && !normalizedSelectedCityCode && !shouldAllowLegacyCityFallback)}
                                 className="flex w-full items-center justify-between rounded-lg border border-input bg-background px-3 py-2 text-sm transition-all hover:bg-muted/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <span className="text-left">
@@ -2398,7 +2448,9 @@ export default function EditBookingPage() {
                             />
                         </div>
                         <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-                            {!normalizedSelectedCityCode ? (
+                            {isCityScopedEvent &&
+                            !normalizedSelectedCityCode &&
+                            !shouldAllowLegacyCityFallback ? (
                                 <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
                                     Pilih kota/kabupaten dulu untuk melihat paket.
                                 </div>
@@ -2498,7 +2550,9 @@ export default function EditBookingPage() {
                             />
                         </div>
                         <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
-                            {!normalizedSelectedCityCode ? (
+                            {isCityScopedEvent &&
+                            !normalizedSelectedCityCode &&
+                            !shouldAllowLegacyCityFallback ? (
                                 <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
                                     Pilih kota/kabupaten dulu untuk melihat add-on.
                                 </div>
