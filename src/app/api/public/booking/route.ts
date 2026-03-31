@@ -88,6 +88,8 @@ type VendorRecord = {
     calendar_event_description_map?: Record<string, string> | null;
     form_payment_methods?: PaymentMethod[] | null;
     form_show_addons?: boolean | null;
+    form_show_wedding_split?: boolean | null;
+    form_show_wisuda_split?: boolean | null;
     form_show_proof?: boolean | null;
     qris_image_url?: string | null;
     qris_drive_file_id?: string | null;
@@ -304,6 +306,8 @@ const VENDOR_SELECT_COLUMNS = [
     "calendar_event_description_map",
     "form_payment_methods",
     "form_show_addons",
+    "form_show_wedding_split",
+    "form_show_wisuda_split",
     "form_show_proof",
     "qris_image_url",
     "qris_drive_file_id",
@@ -460,6 +464,8 @@ export async function POST(request: NextRequest) {
                 ? extraData as Record<string, unknown>
                 : {};
         const directSessionDate = normalizeStoredDateTime(sessionDate);
+        const weddingAkadDate = normalizeStoredDateTime(rawExtraData.tanggal_akad);
+        const weddingResepsiDate = normalizeStoredDateTime(rawExtraData.tanggal_resepsi);
         const wisudaSession1Date = normalizeStoredDateTime(
             rawExtraData.tanggal_wisuda_1,
         );
@@ -479,8 +485,8 @@ export async function POST(request: NextRequest) {
                 ? rawExtraData.tempat_wisuda_2.trim()
                 : "";
         const splitSessionCandidates = [
-            normalizeStoredDateTime(rawExtraData.tanggal_akad),
-            normalizeStoredDateTime(rawExtraData.tanggal_resepsi),
+            weddingAkadDate,
+            weddingResepsiDate,
             wisudaSession1Date,
             wisudaSession2Date,
         ].filter(Boolean);
@@ -616,7 +622,40 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        const isWeddingEventType =
+            (resolvedEventType || "").toLowerCase() === "wedding";
         const isWisudaEventType = (resolvedEventType || "").toLowerCase() === "wisuda";
+        const splitWeddingAllowed = vendor.form_show_wedding_split ?? true;
+        const splitWisudaAllowed = vendor.form_show_wisuda_split ?? true;
+        if (isWeddingEventType && !splitWeddingAllowed) {
+            if (weddingAkadDate || weddingResepsiDate) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error:
+                            "Vendor tidak menerima split sesi Wedding (Akad/Resepsi beda hari).",
+                    },
+                    { status: 400 },
+                );
+            }
+        }
+        if (isWisudaEventType && !splitWisudaAllowed) {
+            if (
+                wisudaSession1Date ||
+                wisudaSession2Date ||
+                wisudaSession1Location ||
+                wisudaSession2Location
+            ) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error:
+                            "Vendor tidak menerima split sesi Wisuda (Sesi 1/2).",
+                    },
+                    { status: 400 },
+                );
+            }
+        }
         if (isWisudaEventType && hasWisudaSession1Date !== hasWisudaSession2Date) {
             return NextResponse.json(
                 {

@@ -81,6 +81,8 @@ type PreviewPayload = {
   form_show_notes: boolean;
   form_show_addons: boolean;
   form_hide_service_prices: boolean;
+  form_show_wedding_split: boolean;
+  form_show_wisuda_split: boolean;
   form_show_proof: boolean;
   form_terms_enabled: boolean;
   form_terms_agreement_text: string;
@@ -103,6 +105,8 @@ type FormBookingSnapshot = {
   form_show_notes: boolean;
   form_show_addons: boolean;
   form_hide_service_prices: boolean;
+  form_show_wedding_split: boolean;
+  form_show_wisuda_split: boolean;
   form_show_proof: boolean;
   form_terms_enabled: boolean;
   form_terms_agreement_text: string;
@@ -122,6 +126,8 @@ const DEFAULTS = {
   showNotes: true,
   showAddons: true,
   hideServicePrices: false,
+  showWeddingSplit: true,
+  showWisudaSplit: true,
   showProof: true,
   termsEnabled: false,
   termsAgreementText: "Saya telah membaca & setuju terhadap",
@@ -144,6 +150,8 @@ function createFormBookingSnapshot({
   showNotes,
   showAddons,
   hideServicePrices,
+  showWeddingSplit,
+  showWisudaSplit,
   showProof,
   termsEnabled,
   termsAgreementText,
@@ -164,6 +172,8 @@ function createFormBookingSnapshot({
   showNotes: boolean;
   showAddons: boolean;
   hideServicePrices: boolean;
+  showWeddingSplit: boolean;
+  showWisudaSplit: boolean;
   showProof: boolean;
   termsEnabled: boolean;
   termsAgreementText: string;
@@ -185,6 +195,8 @@ function createFormBookingSnapshot({
     form_show_notes: showNotes,
     form_show_addons: showAddons,
     form_hide_service_prices: hideServicePrices,
+    form_show_wedding_split: showWeddingSplit,
+    form_show_wisuda_split: showWisudaSplit,
     form_show_proof: showProof,
     form_terms_enabled: termsEnabled,
     form_terms_agreement_text: termsAgreementText,
@@ -231,6 +243,12 @@ export default function FormBookingPage() {
   const [showAddons, setShowAddons] = React.useState(DEFAULTS.showAddons);
   const [hideServicePrices, setHideServicePrices] = React.useState(
     DEFAULTS.hideServicePrices,
+  );
+  const [showWeddingSplit, setShowWeddingSplit] = React.useState(
+    DEFAULTS.showWeddingSplit,
+  );
+  const [showWisudaSplit, setShowWisudaSplit] = React.useState(
+    DEFAULTS.showWisudaSplit,
   );
   const [showProof, setShowProof] = React.useState(DEFAULTS.showProof);
   const [formPaymentMethods, setFormPaymentMethods] = React.useState<PaymentMethod[]>(
@@ -325,6 +343,8 @@ export default function FormBookingPage() {
       form_show_notes: showNotes,
       form_show_addons: showAddons,
       form_hide_service_prices: hideServicePrices,
+      form_show_wedding_split: showWeddingSplit,
+      form_show_wisuda_split: showWisudaSplit,
       form_show_proof: showProof,
       form_terms_enabled: termsEnabled,
       form_terms_agreement_text: termsAgreementText,
@@ -349,6 +369,8 @@ export default function FormBookingPage() {
       showNotes,
       showAddons,
       hideServicePrices,
+      showWeddingSplit,
+      showWisudaSplit,
       showProof,
       qrisImageUrl,
       termsAgreementText,
@@ -371,6 +393,8 @@ export default function FormBookingPage() {
         showNotes,
         showAddons,
         hideServicePrices,
+        showWeddingSplit,
+        showWisudaSplit,
         showProof,
         termsEnabled,
         termsAgreementText,
@@ -396,6 +420,8 @@ export default function FormBookingPage() {
       showNotes,
       showAddons,
       hideServicePrices,
+      showWeddingSplit,
+      showWisudaSplit,
       showProof,
       termsAgreementText,
       termsContent,
@@ -542,6 +568,12 @@ export default function FormBookingPage() {
         const loadedHideServicePrices =
           (p as Record<string, unknown>).form_hide_service_prices ??
           DEFAULTS.hideServicePrices;
+        const loadedShowWeddingSplit =
+          (p as Record<string, unknown>).form_show_wedding_split ??
+          DEFAULTS.showWeddingSplit;
+        const loadedShowWisudaSplit =
+          (p as Record<string, unknown>).form_show_wisuda_split ??
+          DEFAULTS.showWisudaSplit;
         const loadedBanks = normalizeBankAccounts(p.bank_accounts);
         const loadedPaymentMethods = normalizePaymentMethods(
           (p as Record<string, unknown>).form_payment_methods,
@@ -583,6 +615,8 @@ export default function FormBookingPage() {
         setShowNotes(loadedShowNotes);
         setShowAddons(Boolean(loadedShowAddons));
         setHideServicePrices(Boolean(loadedHideServicePrices));
+        setShowWeddingSplit(Boolean(loadedShowWeddingSplit));
+        setShowWisudaSplit(Boolean(loadedShowWisudaSplit));
         setBankAccounts(loadedBanks);
         setFormPaymentMethods(loadedPaymentMethods);
         setQrisImageUrl(loadedQrisImageUrl);
@@ -614,6 +648,8 @@ export default function FormBookingPage() {
               showNotes: loadedShowNotes,
               showAddons: Boolean(loadedShowAddons),
               hideServicePrices: Boolean(loadedHideServicePrices),
+              showWeddingSplit: Boolean(loadedShowWeddingSplit),
+              showWisudaSplit: Boolean(loadedShowWisudaSplit),
               showProof: loadedShowProof,
               termsEnabled: loadedTermsEnabled,
               termsAgreementText: loadedTermsAgreementText,
@@ -760,6 +796,8 @@ export default function FormBookingPage() {
         form_show_notes: showNotes,
         form_show_addons: showAddons,
         form_hide_service_prices: hideServicePrices,
+        form_show_wedding_split: showWeddingSplit,
+        form_show_wisuda_split: showWisudaSplit,
         form_show_proof: showProof,
         form_payment_methods: formPaymentMethods,
         form_terms_enabled: termsEnabled,
@@ -798,6 +836,8 @@ export default function FormBookingPage() {
           showNotes,
           showAddons,
           hideServicePrices,
+          showWeddingSplit,
+          showWisudaSplit,
           showProof,
           termsEnabled,
           termsAgreementText,
@@ -861,6 +901,8 @@ export default function FormBookingPage() {
         form_show_notes: DEFAULTS.showNotes,
         form_show_addons: DEFAULTS.showAddons,
         form_hide_service_prices: DEFAULTS.hideServicePrices,
+        form_show_wedding_split: DEFAULTS.showWeddingSplit,
+        form_show_wisuda_split: DEFAULTS.showWisudaSplit,
         form_show_proof: resetShowProof,
         form_payment_methods: resetPaymentMethods,
         form_terms_enabled: DEFAULTS.termsEnabled,
@@ -897,6 +939,8 @@ export default function FormBookingPage() {
     setShowNotes(DEFAULTS.showNotes);
     setShowAddons(DEFAULTS.showAddons);
     setHideServicePrices(DEFAULTS.hideServicePrices);
+    setShowWeddingSplit(DEFAULTS.showWeddingSplit);
+    setShowWisudaSplit(DEFAULTS.showWisudaSplit);
     setShowProof(resetShowProof);
     setFormPaymentMethods(resetPaymentMethods);
     setTermsEnabled(DEFAULTS.termsEnabled);
@@ -921,6 +965,8 @@ export default function FormBookingPage() {
         showNotes: DEFAULTS.showNotes,
         showAddons: DEFAULTS.showAddons,
         hideServicePrices: DEFAULTS.hideServicePrices,
+        showWeddingSplit: DEFAULTS.showWeddingSplit,
+        showWisudaSplit: DEFAULTS.showWisudaSplit,
         showProof: resetShowProof,
         termsEnabled: DEFAULTS.termsEnabled,
         termsAgreementText: DEFAULTS.termsAgreementText,
@@ -1725,6 +1771,18 @@ export default function FormBookingPage() {
                       label: "Sembunyikan Harga",
                       value: hideServicePrices,
                       setter: setHideServicePrices,
+                      disabled: false,
+                    },
+                    {
+                      label: "Tampilkan Split Wedding (Akad/Resepsi)",
+                      value: showWeddingSplit,
+                      setter: setShowWeddingSplit,
+                      disabled: false,
+                    },
+                    {
+                      label: "Tampilkan Split Wisuda (Sesi 1/2)",
+                      value: showWisudaSplit,
+                      setter: setShowWisudaSplit,
                       disabled: false,
                     },
                     {

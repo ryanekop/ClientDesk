@@ -121,6 +121,8 @@ export type Vendor = {
   form_show_notes: boolean;
   form_show_addons: boolean;
   form_hide_service_prices: boolean;
+  form_show_wedding_split: boolean;
+  form_show_wisuda_split: boolean;
   form_show_proof: boolean;
   form_terms_enabled: boolean;
   form_terms_agreement_text: string | null;
@@ -273,6 +275,8 @@ type PreviewVendorPayload = Partial<
     | "form_show_notes"
     | "form_show_addons"
     | "form_hide_service_prices"
+    | "form_show_wedding_split"
+    | "form_show_wisuda_split"
     | "form_show_proof"
     | "form_terms_enabled"
     | "form_terms_agreement_text"
@@ -569,6 +573,24 @@ export function BookingFormClient({
       setAddonDialogOpen(false);
     }
   }, [eventType]);
+
+  React.useEffect(() => {
+    if (!splitDates) return;
+
+    if (eventType === "Wedding" && effectiveVendor.form_show_wedding_split === false) {
+      setSplitDates(false);
+      return;
+    }
+
+    if (eventType === "Wisuda" && effectiveVendor.form_show_wisuda_split === false) {
+      setSplitDates(false);
+    }
+  }, [
+    effectiveVendor.form_show_wedding_split,
+    effectiveVendor.form_show_wisuda_split,
+    eventType,
+    splitDates,
+  ]);
 
   // ── Helpers ──
 
@@ -1755,7 +1777,12 @@ export function BookingFormClient({
           </div>
         );
       case "wedding_split_toggle":
-        if (eventType !== "Wedding") return null;
+        if (
+          eventType !== "Wedding" ||
+          effectiveVendor.form_show_wedding_split === false
+        ) {
+          return null;
+        }
         return (
           <div key={item.id} className="flex items-center gap-3">
             <button
@@ -1769,7 +1796,12 @@ export function BookingFormClient({
           </div>
         );
       case "wisuda_split_toggle":
-        if (eventType !== "Wisuda") return null;
+        if (
+          eventType !== "Wisuda" ||
+          effectiveVendor.form_show_wisuda_split === false
+        ) {
+          return null;
+        }
         return (
           <div key={item.id} className="flex items-center gap-3">
             <button
