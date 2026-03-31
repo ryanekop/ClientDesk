@@ -10,6 +10,11 @@ import { normalizeGoogleCalendarEventIds } from "@/lib/booking-calendar-sessions
 import { deleteCalendarEvent } from "@/utils/google/calendar";
 import { apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
+import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
+import {
+  buildGoogleInvalidGrantPayload,
+  isGoogleInvalidGrantError,
+} from "@/lib/google-oauth-error";
 
 type DeleteBookingCalendarRequest = {
   bookingId?: string;
@@ -136,6 +141,20 @@ export async function POST(request: NextRequest) {
         await deleteCalendarEvent(accessToken, refreshToken, eventId);
         deletedCount++;
       } catch (error) {
+        if (isGoogleInvalidGrantError(error)) {
+          await clearGoogleCalendarConnection(supabase, user.id);
+          return NextResponse.json(
+            {
+              success: false,
+              deletedCount,
+              failedCount,
+              errors: errors.length > 0 ? errors : undefined,
+              ...buildGoogleInvalidGrantPayload("calendar"),
+            },
+            { status: 403 },
+          );
+        }
+
         if (isNotFoundCalendarError(error)) {
           deletedCount++;
           continue;

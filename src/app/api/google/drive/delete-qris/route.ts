@@ -3,10 +3,17 @@ import { apiText } from "@/lib/i18n/api-errors";
 import { createClient } from "@/utils/supabase/server";
 import { deleteFileFromDrive } from "@/utils/google/drive";
 import { invalidatePublicCachesForProfile } from "@/lib/public-cache-invalidation";
+import { clearGoogleDriveConnection } from "@/lib/google-calendar-reauth";
+import {
+    buildGoogleInvalidGrantPayload,
+    isGoogleInvalidGrantError,
+} from "@/lib/google-oauth-error";
 
 export async function POST(request: NextRequest) {
+    let userId: string | null = null;
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
     try {
-        const supabase = await createClient();
+        supabase = await createClient();
         const {
             data: { user },
         } = await supabase.auth.getUser();
@@ -17,6 +24,7 @@ export async function POST(request: NextRequest) {
                 { status: 401 },
             );
         }
+        userId = user.id;
 
         const { data: profile } = await supabase
             .from("profiles")
@@ -35,7 +43,15 @@ export async function POST(request: NextRequest) {
                     profile.google_drive_refresh_token,
                     profile.qris_drive_file_id,
                 );
-            } catch {
+            } catch (error) {
+                if (isGoogleInvalidGrantError(error)) {
+                    await clearGoogleDriveConnection(supabase, user.id);
+                    return NextResponse.json(
+                        { success: false, ...buildGoogleInvalidGrantPayload("drive") },
+                        { status: 403 },
+                    );
+                }
+
                 // Best effort cleanup.
             }
         }
@@ -61,6 +77,14 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({ success: true });
     } catch (error) {
+        if (userId && supabase && isGoogleInvalidGrantError(error)) {
+            await clearGoogleDriveConnection(supabase, userId);
+            return NextResponse.json(
+                { success: false, ...buildGoogleInvalidGrantPayload("drive") },
+                { status: 403 },
+            );
+        }
+
         const message =
             error instanceof Error ? error.message : apiText(request, "failedDeleteQris");
         return NextResponse.json({ success: false, error: message }, { status: 500 });

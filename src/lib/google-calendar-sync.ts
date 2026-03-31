@@ -1,4 +1,9 @@
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
+import {
+  GOOGLE_INVALID_GRANT_CODE,
+  getGoogleInvalidGrantMessage,
+  isGoogleInvalidGrantError,
+} from "@/lib/google-oauth-error";
 
 type SupabaseErrorLike = {
   message?: string;
@@ -6,11 +11,13 @@ type SupabaseErrorLike = {
   hint?: string;
 } | null;
 
+type SupabaseUpdateQuery = PromiseLike<{ error: SupabaseErrorLike }> & {
+  eq: (column: string, value: string) => SupabaseUpdateQuery;
+};
+
 type SupabaseLike = {
   from: (table: string) => {
-    update: (patch: Record<string, unknown>) => {
-      eq: (column: string, value: string) => any;
-    };
+    update: (patch: Record<string, unknown>) => SupabaseUpdateQuery;
   };
 };
 
@@ -22,6 +29,7 @@ export type GoogleCalendarSyncStatus =
 
 export const NO_SCHEDULE_SYNC_MESSAGE = "Booking belum punya jadwal sesi.";
 export const GOOGLE_SCOPE_MISMATCH_CODE = "GOOGLE_SCOPE_MISMATCH";
+export { GOOGLE_INVALID_GRANT_CODE };
 
 const GOOGLE_SCOPE_MISMATCH_PATTERNS = [
   "insufficient authentication scopes",
@@ -52,6 +60,9 @@ export function isGoogleScopeMismatchError(error: unknown) {
 }
 
 export function getGoogleCalendarSyncErrorCode(error: unknown) {
+  if (isGoogleInvalidGrantError(error)) {
+    return GOOGLE_INVALID_GRANT_CODE;
+  }
   if (isGoogleScopeMismatchError(error)) {
     return GOOGLE_SCOPE_MISMATCH_CODE;
   }
@@ -87,6 +98,9 @@ export function getGoogleCalendarSyncErrorMessage(
   fallback = "Terjadi kesalahan saat sinkronisasi kalender.",
 ) {
   const rawMessage = getGoogleCalendarRawErrorMessage(error);
+  if (isGoogleInvalidGrantError(error)) {
+    return getGoogleInvalidGrantMessage("calendar");
+  }
   if (isGoogleScopeMismatchMessage(rawMessage)) {
     return "Izin Google Calendar sudah tidak sesuai. Silakan hubungkan ulang akun Google Calendar di Pengaturan.";
   }
@@ -120,7 +134,7 @@ export async function updateBookingCalendarSyncState({
   eventId,
   eventIds,
 }: UpdateBookingCalendarSyncStateArgs) {
-  let patch: Record<string, unknown> = {
+  const patch: Record<string, unknown> = {
     google_calendar_sync_status: status,
     google_calendar_sync_error: errorMessage,
     google_calendar_last_synced_at: new Date().toISOString(),

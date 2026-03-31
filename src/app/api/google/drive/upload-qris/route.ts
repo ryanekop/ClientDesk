@@ -9,10 +9,17 @@ import {
     uploadFileToDrive,
 } from "@/utils/google/drive";
 import { invalidatePublicCachesForProfile } from "@/lib/public-cache-invalidation";
+import { clearGoogleDriveConnection } from "@/lib/google-calendar-reauth";
+import {
+    buildGoogleInvalidGrantPayload,
+    isGoogleInvalidGrantError,
+} from "@/lib/google-oauth-error";
 
 export async function POST(request: NextRequest) {
+    let userId: string | null = null;
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
     try {
-        const supabase = await createClient();
+        supabase = await createClient();
         const {
             data: { user },
         } = await supabase.auth.getUser();
@@ -23,6 +30,7 @@ export async function POST(request: NextRequest) {
                 { status: 401 },
             );
         }
+        userId = user.id;
 
         const { data: profile } = await supabase
             .from("profiles")
@@ -142,6 +150,14 @@ export async function POST(request: NextRequest) {
             qrisDriveFileId: uploaded.fileId,
         });
     } catch (error) {
+        if (userId && supabase && isGoogleInvalidGrantError(error)) {
+            await clearGoogleDriveConnection(supabase, userId);
+            return NextResponse.json(
+                { success: false, ...buildGoogleInvalidGrantPayload("drive") },
+                { status: 403 },
+            );
+        }
+
         const message =
             error instanceof Error ? error.message : apiText(request, "failedUploadFile");
         return NextResponse.json({ success: false, error: message }, { status: 500 });

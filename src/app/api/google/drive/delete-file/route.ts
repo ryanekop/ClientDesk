@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiText } from "@/lib/i18n/api-errors";
 import { createClient } from "@/utils/supabase/server";
 import { deleteFileFromDrive } from "@/utils/google/drive";
+import { clearGoogleDriveConnection } from "@/lib/google-calendar-reauth";
+import {
+    buildGoogleInvalidGrantPayload,
+    isGoogleInvalidGrantError,
+} from "@/lib/google-oauth-error";
 
 export async function POST(request: NextRequest) {
+    let userId: string | null = null;
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
     try {
-        const supabase = await createClient();
+        supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
@@ -14,6 +21,7 @@ export async function POST(request: NextRequest) {
                 { status: 401 },
             );
         }
+        userId = user.id;
 
         const { data: profile } = await supabase
             .from("profiles")
@@ -45,6 +53,14 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({ success: true });
     } catch (err: unknown) {
+        if (userId && supabase && isGoogleInvalidGrantError(err)) {
+            await clearGoogleDriveConnection(supabase, userId);
+            return NextResponse.json(
+                { success: false, ...buildGoogleInvalidGrantPayload("drive") },
+                { status: 403 },
+            );
+        }
+
         const message =
             err instanceof Error ? err.message : apiText(request, "failedDeleteFile");
         return NextResponse.json({ success: false, error: message }, { status: 500 });

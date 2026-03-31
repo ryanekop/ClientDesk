@@ -153,4 +153,6 @@ export type ImportSyncSummary = {
   skippedCount: number;
   errors: string[];
   skipped: string[];
+  code?: string;
+  reconnectRequired?: boolean;
 };

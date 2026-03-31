@@ -5,10 +5,15 @@ import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { getCalendarClient } from "@/utils/google/calendar";
 import { getDriveClient } from "@/utils/google/drive";
 import {
+  GOOGLE_INVALID_GRANT_CODE,
   GOOGLE_SCOPE_MISMATCH_CODE,
   isGoogleScopeMismatchError,
 } from "@/lib/google-calendar-sync";
-import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
+import {
+  clearGoogleCalendarConnection,
+  clearGoogleDriveConnection,
+} from "@/lib/google-calendar-reauth";
+import { isGoogleInvalidGrantError } from "@/lib/google-oauth-error";
 
 type ConnectedAccountResponse = {
   calendar: {
@@ -20,6 +25,8 @@ type ConnectedAccountResponse = {
   drive: {
     connected: boolean;
     email: string | null;
+    reconnectRequired?: boolean;
+    code?: string;
   };
 };
 
@@ -47,22 +54,28 @@ async function resolveCalendarConnection(
       const primary = await calendar.calendarList.get({ calendarId: "primary" });
       const primaryEmail = normalizeEmail(primary.data.id);
       if (primaryEmail && primaryEmail.includes("@")) {
-        return { email: primaryEmail, scopeMismatch: false };
+        return { email: primaryEmail, scopeMismatch: false, invalidGrant: false };
       }
 
       const list = await calendar.calendarList.list({ maxResults: 20 });
       const selfCalendar = (list.data.items || []).find(
         (item) => item.primary && normalizeEmail(item.id)?.includes("@"),
       );
-      return { email: normalizeEmail(selfCalendar?.id), scopeMismatch: false };
+      return {
+        email: normalizeEmail(selfCalendar?.id),
+        scopeMismatch: false,
+        invalidGrant: false,
+      };
     } catch {
       // calendar.events scope is enough for sync, even if calendar list/email lookup is not allowed.
-      return { email: null, scopeMismatch: false };
+      return { email: null, scopeMismatch: false, invalidGrant: false };
     }
   } catch (error) {
+    const invalidGrant = isGoogleInvalidGrantError(error);
     return {
       email: null,
-      scopeMismatch: isGoogleScopeMismatchError(error),
+      scopeMismatch: !invalidGrant && isGoogleScopeMismatchError(error),
+      invalidGrant,
     };
   }
 }
@@ -71,9 +84,9 @@ async function resolveDriveEmail(accessToken: string, refreshToken: string) {
   try {
     const { drive } = await getDriveClient(accessToken, refreshToken);
     const about = await drive.about.get({ fields: "user(emailAddress)" });
-    return normalizeEmail(about.data.user?.emailAddress);
-  } catch {
-    return null;
+    return { email: normalizeEmail(about.data.user?.emailAddress), invalidGrant: false };
+  } catch (error) {
+    return { email: null, invalidGrant: isGoogleInvalidGrantError(error) };
   }
 }
 
@@ -164,22 +177,29 @@ export async function GET() {
       },
     };
 
-    const [calendarConnection, driveEmail] = await Promise.all([
+    const [calendarConnection, driveConnection] = await Promise.all([
       calendarConnected &&
       !responsePayload.calendar.email &&
       calendarAccessToken &&
       calendarRefreshToken
         ? resolveCalendarConnection(calendarAccessToken, calendarRefreshToken)
-        : Promise.resolve({ email: null, scopeMismatch: false }),
+        : Promise.resolve({ email: null, scopeMismatch: false, invalidGrant: false }),
       driveConnected &&
       !responsePayload.drive.email &&
       driveAccessToken &&
       driveRefreshToken
         ? resolveDriveEmail(driveAccessToken, driveRefreshToken)
-        : Promise.resolve(null),
+        : Promise.resolve({ email: null, invalidGrant: false }),
     ]);
 
-    if (calendarConnection.scopeMismatch) {
+    if (calendarConnection.invalidGrant) {
+      responsePayload.calendar.connected = false;
+      responsePayload.calendar.email = null;
+      responsePayload.calendar.reconnectRequired = true;
+      responsePayload.calendar.code = GOOGLE_INVALID_GRANT_CODE;
+      await clearGoogleCalendarConnection(supabase, user.id);
+      invalidatePublicCachesForProfile({ userId: user.id });
+    } else if (calendarConnection.scopeMismatch) {
       responsePayload.calendar.connected = false;
       responsePayload.calendar.email = null;
       responsePayload.calendar.reconnectRequired = true;
@@ -189,17 +209,28 @@ export async function GET() {
     } else if (calendarConnection.email) {
       responsePayload.calendar.email = calendarConnection.email;
     }
-    if (driveEmail) {
-      responsePayload.drive.email = driveEmail;
+    if (driveConnection.invalidGrant) {
+      responsePayload.drive.connected = false;
+      responsePayload.drive.email = null;
+      responsePayload.drive.reconnectRequired = true;
+      responsePayload.drive.code = GOOGLE_INVALID_GRANT_CODE;
+      await clearGoogleDriveConnection(supabase, user.id);
+      invalidatePublicCachesForProfile({ userId: user.id });
+    } else if (driveConnection.email) {
+      responsePayload.drive.email = driveConnection.email;
     }
 
     if (supportsEmailColumns) {
       const patch: Record<string, string> = {};
-      if (calendarConnection.email && !calendarConnection.scopeMismatch) {
+      if (
+        calendarConnection.email &&
+        !calendarConnection.scopeMismatch &&
+        !calendarConnection.invalidGrant
+      ) {
         patch.google_calendar_account_email = calendarConnection.email;
       }
-      if (driveEmail) {
-        patch.google_drive_account_email = driveEmail;
+      if (driveConnection.email && !driveConnection.invalidGrant) {
+        patch.google_drive_account_email = driveConnection.email;
       }
       if (Object.keys(patch).length > 0) {
         await supabase.from("profiles").update(patch).eq("id", user.id);

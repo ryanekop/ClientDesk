@@ -9,6 +9,11 @@ import { uploadPaymentProofToDrive } from "@/lib/payment-proof-drive";
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 import { requireRouteUser } from "@/lib/pagination/route-user";
 import { deleteFileFromDrive } from "@/utils/google/drive";
+import { clearGoogleDriveConnection } from "@/lib/google-calendar-reauth";
+import {
+  buildGoogleInvalidGrantPayload,
+  isGoogleInvalidGrantError,
+} from "@/lib/google-oauth-error";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ACCEPTED_PROOF_TYPES = new Set(["application/pdf"]);
@@ -49,11 +54,16 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
+  let userId: string | null = null;
+  let supabase: Awaited<ReturnType<typeof requireRouteUser>>["supabase"] | null = null;
   try {
-    const { errorResponse, supabase, user } = await requireRouteUser();
+    const routeUser = await requireRouteUser();
+    const { errorResponse, user } = routeUser;
+    supabase = routeUser.supabase;
     if (errorResponse || !user) {
       return errorResponse;
     }
+    userId = user.id;
 
     await assertBookingWriteAccessForUser(user.id);
 
@@ -247,6 +257,14 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: error.message },
         { status: error.status },
+      );
+    }
+
+    if (userId && supabase && isGoogleInvalidGrantError(error)) {
+      await clearGoogleDriveConnection(supabase, userId);
+      return NextResponse.json(
+        { success: false, ...buildGoogleInvalidGrantPayload("drive") },
+        { status: 403 },
       );
     }
 

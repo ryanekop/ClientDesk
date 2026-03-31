@@ -10,6 +10,7 @@ import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
 import { resolveBookingFreelancerAttendeeEmails } from "@/lib/google-calendar-attendees";
 import {
+    GOOGLE_INVALID_GRANT_CODE,
     GOOGLE_SCOPE_MISMATCH_CODE,
     getGoogleCalendarSyncErrorCode,
     getGoogleCalendarSyncErrorMessage,
@@ -21,6 +22,7 @@ import { resolveApiLocale } from "@/lib/i18n/api-locale";
 import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
 import { resolvePublicOrigin } from "@/lib/auth/public-origin";
 import { buildBookingDetailLink } from "@/lib/booking-detail-link";
+import { buildGoogleInvalidGrantPayload } from "@/lib/google-oauth-error";
 
 export async function POST(req: NextRequest) {
     try {
@@ -223,6 +225,14 @@ export async function POST(req: NextRequest) {
                         code: GOOGLE_SCOPE_MISMATCH_CODE,
                         reconnectRequired: true,
                     },
+                    { status: 403 },
+                );
+            }
+
+            if (errorCode === GOOGLE_INVALID_GRANT_CODE) {
+                await clearGoogleCalendarConnection(supabase, user.id);
+                return NextResponse.json(
+                    buildGoogleInvalidGrantPayload("calendar", message),
                     { status: 403 },
                 );
             }

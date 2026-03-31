@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getCalendarClient } from "@/utils/google/calendar";
 import { apiText } from "@/lib/i18n/api-errors";
+import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
+import {
+    buildGoogleInvalidGrantPayload,
+    isGoogleInvalidGrantError,
+} from "@/lib/google-oauth-error";
 
 export async function GET(request: NextRequest) {
+    let userId: string | null = null;
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
     try {
-        const supabase = await createClient();
+        supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
@@ -14,6 +21,7 @@ export async function GET(request: NextRequest) {
                 { status: 401 },
             );
         }
+        userId = user.id;
 
         const { data: profile } = await supabase
             .from("profiles")
@@ -63,6 +71,14 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({ success: true, events });
     } catch (error) {
+        if (userId && supabase && isGoogleInvalidGrantError(error)) {
+            await clearGoogleCalendarConnection(supabase, userId);
+            return NextResponse.json(
+                { success: false, ...buildGoogleInvalidGrantPayload("calendar") },
+                { status: 403 },
+            );
+        }
+
         const maybeStatus =
             typeof error === "object" &&
             error !== null &&

@@ -12,7 +12,11 @@ import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { getCalendarClient } from "@/utils/google/calendar";
 import { resolveBookingFreelancerAttendeeEmails } from "@/lib/google-calendar-attendees";
 import { normalizeGoogleCalendarEventIds } from "@/lib/booking-calendar-sessions";
-import { getGoogleCalendarSyncErrorMessage, updateBookingCalendarSyncState } from "@/lib/google-calendar-sync";
+import {
+  GOOGLE_INVALID_GRANT_CODE,
+  getGoogleCalendarSyncErrorMessage,
+  updateBookingCalendarSyncState,
+} from "@/lib/google-calendar-sync";
 import {
   fetchGoogleCalendarSyncBookingById,
   syncSingleBookingCalendar,
@@ -20,6 +24,11 @@ import {
 import { apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
 import { resolvePublicOrigin } from "@/lib/auth/public-origin";
+import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
+import {
+  buildGoogleInvalidGrantPayload,
+  isGoogleInvalidGrantError,
+} from "@/lib/google-oauth-error";
 
 function normalizeOptionalString(value: unknown) {
   if (typeof value !== "string") return null;
@@ -97,6 +106,7 @@ async function resolveCanonicalEventUrl(args: {
         found: true,
         openUrl: htmlLink,
         errorMessage: null,
+        invalidGrant: false,
       };
     }
 
@@ -107,13 +117,24 @@ async function resolveCanonicalEventUrl(args: {
       found: true,
       openUrl: buildGoogleEventEditUrl(args.eventId, eventCalendarId),
       errorMessage: null,
+      invalidGrant: false,
     };
   } catch (error) {
+    if (isGoogleInvalidGrantError(error)) {
+      return {
+        found: false,
+        openUrl: null,
+        errorMessage: getGoogleCalendarSyncErrorMessage(error),
+        invalidGrant: true,
+      };
+    }
+
     if (isGoogleNotFound(error)) {
       return {
         found: false,
         openUrl: null,
         errorMessage: null,
+        invalidGrant: false,
       };
     }
 
@@ -124,15 +145,18 @@ async function resolveCanonicalEventUrl(args: {
         error,
         "Failed to validate Google Calendar event",
       ),
+      invalidGrant: false,
     };
   }
 }
 
 export async function POST(request: NextRequest) {
+  let userId: string | null = null;
+  let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
   try {
     const locale = resolveApiLocale(request);
     const publicOrigin = resolvePublicOrigin(request);
-    const supabase = await createClient();
+    supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -143,6 +167,7 @@ export async function POST(request: NextRequest) {
         { status: 401 },
       );
     }
+    userId = user.id;
 
     await assertBookingWriteAccessForUser(user.id, { locale });
 
@@ -250,6 +275,14 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      if (existingOpen.invalidGrant) {
+        await clearGoogleCalendarConnection(supabase, user.id);
+        return NextResponse.json(
+          { success: false, ...buildGoogleInvalidGrantPayload("calendar") },
+          { status: 403 },
+        );
+      }
+
       if (existingOpen.errorMessage) {
         lastErrorMessage = existingOpen.errorMessage;
       }
@@ -328,10 +361,24 @@ export async function POST(request: NextRequest) {
             });
           }
 
+          if (syncedOpen.invalidGrant) {
+            await clearGoogleCalendarConnection(supabase, user.id);
+            return NextResponse.json(
+              { success: false, ...buildGoogleInvalidGrantPayload("calendar") },
+              { status: 403 },
+            );
+          }
+
           if (syncedOpen.errorMessage) {
             lastErrorMessage = syncedOpen.errorMessage;
           }
         }
+      } else if (syncResult.errorCode === GOOGLE_INVALID_GRANT_CODE) {
+        await clearGoogleCalendarConnection(supabase, user.id);
+        return NextResponse.json(
+          { success: false, ...buildGoogleInvalidGrantPayload("calendar") },
+          { status: 403 },
+        );
       } else if (syncResult.errorMessage) {
         lastErrorMessage = syncResult.errorMessage;
       }
@@ -346,6 +393,14 @@ export async function POST(request: NextRequest) {
       reason: lastErrorMessage,
     });
   } catch (error) {
+    if (userId && supabase && isGoogleInvalidGrantError(error)) {
+      await clearGoogleCalendarConnection(supabase, userId);
+      return NextResponse.json(
+        { success: false, ...buildGoogleInvalidGrantPayload("calendar") },
+        { status: 403 },
+      );
+    }
+
     if (error instanceof BookingWriteAccessDeniedError) {
       return NextResponse.json(
         { success: false, error: error.message },

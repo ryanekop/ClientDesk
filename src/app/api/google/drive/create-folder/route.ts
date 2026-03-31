@@ -8,10 +8,17 @@ import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidatio
 import { createClient } from "@/utils/supabase/server";
 import { createBookingFolder, findOrCreateNestedPath } from "@/utils/google/drive";
 import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
+import { clearGoogleDriveConnection } from "@/lib/google-calendar-reauth";
+import {
+    buildGoogleInvalidGrantPayload,
+    isGoogleInvalidGrantError,
+} from "@/lib/google-oauth-error";
 
 export async function POST(request: NextRequest) {
+    let userId: string | null = null;
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
     try {
-        const supabase = await createClient();
+        supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
@@ -20,6 +27,7 @@ export async function POST(request: NextRequest) {
                 { status: 401 },
             );
         }
+        userId = user.id;
 
         await assertBookingWriteAccessForUser(user.id);
 
@@ -126,6 +134,15 @@ export async function POST(request: NextRequest) {
                 { status: err.status },
             );
         }
+
+        if (userId && supabase && isGoogleInvalidGrantError(err)) {
+            await clearGoogleDriveConnection(supabase, userId);
+            return NextResponse.json(
+                { success: false, ...buildGoogleInvalidGrantPayload("drive") },
+                { status: 403 },
+            );
+        }
+
         const message =
             err instanceof Error ? err.message : apiText(request, "failedCreateFolder");
         return NextResponse.json({ success: false, error: message }, { status: 500 });

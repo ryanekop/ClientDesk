@@ -29,11 +29,14 @@ import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
 import { resolveBookingFreelancerAttendeeEmails } from "@/lib/google-calendar-attendees";
 import {
+  GOOGLE_INVALID_GRANT_CODE,
+  getGoogleCalendarSyncErrorCode,
   getGoogleCalendarSyncErrorMessage,
   isNoScheduleSyncError,
   updateBookingCalendarSyncState,
 } from "@/lib/google-calendar-sync";
 import { buildBookingDetailLink } from "@/lib/booking-detail-link";
+import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
 
 export const runtime = "nodejs";
 
@@ -293,6 +296,7 @@ async function syncImportedBookings(
   let skippedCount = 0;
   const errors: string[] = [];
   const skipped: string[] = [];
+  let hasInvalidGrant = false;
 
   for (const booking of bookingRows) {
     try {
@@ -346,6 +350,7 @@ async function syncImportedBookings(
       });
       successCount += 1;
     } catch (error) {
+      const errorCode = getGoogleCalendarSyncErrorCode(error);
       const message = getGoogleCalendarSyncErrorMessage(error, "Unknown error");
       if (isNoScheduleSyncError(error)) {
         skippedCount += 1;
@@ -362,6 +367,9 @@ async function syncImportedBookings(
 
       failedCount += 1;
       errors.push(`${booking.booking_code}: ${message}`);
+      if (errorCode === GOOGLE_INVALID_GRANT_CODE) {
+        hasInvalidGrant = true;
+      }
       await updateBookingCalendarSyncState({
         supabase,
         bookingId: booking.id,
@@ -370,6 +378,19 @@ async function syncImportedBookings(
         errorMessage: message,
       });
     }
+  }
+
+  if (hasInvalidGrant) {
+    await clearGoogleCalendarConnection(supabase, userId);
+    return {
+      successCount,
+      failedCount,
+      skippedCount,
+      errors,
+      skipped,
+      code: GOOGLE_INVALID_GRANT_CODE,
+      reconnectRequired: true,
+    };
   }
 
   return {

@@ -184,6 +184,8 @@ type ConnectedGoogleAccountResponse = {
   drive?: {
     connected?: boolean;
     email?: string | null;
+    reconnectRequired?: boolean;
+    code?: string;
   };
 };
 

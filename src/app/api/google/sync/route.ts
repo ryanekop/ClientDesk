@@ -8,6 +8,7 @@ import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { fetchGoogleCalendarProfileSchemaSafe } from "@/app/api/google/_lib/calendar-profile";
 import { resolveBookingFreelancerAttendeeEmails } from "@/lib/google-calendar-attendees";
 import {
+    GOOGLE_INVALID_GRANT_CODE,
     GOOGLE_SCOPE_MISMATCH_CODE,
     getGoogleCalendarSyncErrorMessage,
     updateBookingCalendarSyncState,
@@ -20,6 +21,11 @@ import { apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
 import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
 import { resolvePublicOrigin } from "@/lib/auth/public-origin";
+import {
+    buildGoogleInvalidGrantPayload,
+    getGoogleInvalidGrantMessage,
+    isGoogleInvalidGrantError,
+} from "@/lib/google-oauth-error";
 
 type SyncRequestBody = {
     bookingIds?: string[];
@@ -27,10 +33,12 @@ type SyncRequestBody = {
 };
 
 export async function POST(request: NextRequest) {
+    let userId: string | null = null;
+    let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
     try {
         const locale = resolveApiLocale(request);
         const publicOrigin = resolvePublicOrigin(request);
-        const supabase = await createClient();
+        supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user) {
@@ -39,6 +47,7 @@ export async function POST(request: NextRequest) {
                 { status: 401 },
             );
         }
+        userId = user.id;
 
         await assertBookingWriteAccessForUser(user.id, { locale });
 
@@ -143,6 +152,7 @@ export async function POST(request: NextRequest) {
         const errors: string[] = [];
         const skipped: string[] = [];
         let hasScopeMismatch = false;
+        let hasInvalidGrant = false;
 
         for (const booking of bookingRows) {
             const result = await syncSingleBookingCalendar({
@@ -179,7 +189,29 @@ export async function POST(request: NextRequest) {
             errors.push(`${result.bookingCode}: ${result.errorMessage || "Unknown error"}`);
             if (result.errorCode === GOOGLE_SCOPE_MISMATCH_CODE) {
                 hasScopeMismatch = true;
+            } else if (result.errorCode === GOOGLE_INVALID_GRANT_CODE) {
+                hasInvalidGrant = true;
             }
+        }
+
+        if (hasInvalidGrant) {
+            await clearGoogleCalendarConnection(supabase, user.id);
+            return NextResponse.json(
+                {
+                    success: false,
+                    count: successCount,
+                    successCount,
+                    failedCount,
+                    skippedCount,
+                    ...buildGoogleInvalidGrantPayload(
+                        "calendar",
+                        getGoogleInvalidGrantMessage("calendar"),
+                    ),
+                    errors: errors.length > 0 ? errors : undefined,
+                    skipped: skipped.length > 0 ? skipped : undefined,
+                },
+                { status: 403 },
+            );
         }
 
         if (hasScopeMismatch) {
@@ -216,6 +248,17 @@ export async function POST(request: NextRequest) {
             skipped: skipped.length > 0 ? skipped : undefined,
         });
     } catch (error) {
+        if (userId && supabase && isGoogleInvalidGrantError(error)) {
+            await clearGoogleCalendarConnection(supabase, userId);
+            return NextResponse.json(
+                {
+                    success: false,
+                    ...buildGoogleInvalidGrantPayload("calendar"),
+                },
+                { status: 403 },
+            );
+        }
+
         if (error instanceof BookingWriteAccessDeniedError) {
             return NextResponse.json(
                 { success: false, error: error.message },
