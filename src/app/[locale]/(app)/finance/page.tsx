@@ -126,7 +126,8 @@ type FinanceFilterStoragePayload = {
 };
 
 const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
-    { id: "name", label: "Nama", visible: true, locked: true, pin: "left" },
+    { id: "name", label: "Nama", visible: true },
+    { id: "row_number", label: "No.", visible: true, locked: true },
     { id: "event_type", label: "Tipe Acara", visible: false },
     { id: "total_price", label: "Harga Total", visible: true },
     { id: "package_price", label: "Harga Paket", visible: true },
@@ -1109,6 +1110,8 @@ export default function FinancePage() {
         switch (column.id) {
             case "name":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("klien")}</th>;
+            case "row_number":
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "w-16 px-4 py-4 font-medium text-muted-foreground text-center")}>No.</th>;
             case "event_type":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{tb("eventTypeLabel")}</th>;
             case "total_price":
@@ -1135,6 +1138,7 @@ export default function FinancePage() {
     function renderDesktopCell(
         booking: BookingFinance,
         column: TableColumnPreference,
+        rowNumber: number,
         remaining: number,
         finalTotal: number,
         addonTotal: number,
@@ -1147,6 +1151,12 @@ export default function FinancePage() {
                     <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 max-w-[180px]")}>
                         <div className="font-medium truncate">{booking.client_name}</div>
                         <div className="text-xs text-muted-foreground truncate">{booking.booking_code} · {booking.service_label || booking.services?.name || "-"}</div>
+                    </td>
+                );
+            case "row_number":
+                return (
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-4 text-center text-sm text-muted-foreground")}>
+                        {rowNumber}
                     </td>
                 );
             case "event_type":
@@ -2008,7 +2018,7 @@ export default function FinancePage() {
                             </div>
                             <div className="border-t pt-2 space-y-1.5 text-sm">
                                 {orderedVisibleColumns
-                                    .filter((column) => column.id !== "name" && column.id !== "actions")
+                                    .filter((column) => !["name", "row_number", "actions"].includes(column.id))
                                     .map((column) => {
                                         const renderedValue = renderMobileValue(
                                             b,
@@ -2189,19 +2199,22 @@ export default function FinancePage() {
                                     <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground">
                                         {t("tidakAdaData")}
                                     </td></tr>
-                                ) : bookings.map((b) => {
+                                ) : bookings.map((b, rowIndex) => {
                                     const remaining = getRemainingAmount(b);
                                     const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
                                     const initialBreakdown = getInitialPriceBreakdown(b);
                                     const packagePrice = getPackagePrice(b, initialBreakdown);
                                     const addonTotal = getAddonTotal(b, initialBreakdown);
                                     const discountAmount = getDiscountAmount(b, initialBreakdown);
+                                    const rowNumber =
+                                        (currentPage - 1) * itemsPerPage + rowIndex + 1;
                                     return (
                                         <tr key={b.id} className="group hover:bg-muted/60 dark:hover:bg-white/12 transition-colors">
                                             {orderedVisibleColumns.map((column) =>
                                                 renderDesktopCell(
                                                     b,
                                                     column,
+                                                    rowNumber,
                                                     remaining,
                                                     finalTotal,
                                                     addonTotal,

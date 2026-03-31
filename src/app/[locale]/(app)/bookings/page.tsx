@@ -144,7 +144,8 @@ const STATUS_COLOR_PALETTE = [
     "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400 border-none",
 ];
 const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
-    { id: "name", label: "Nama", visible: true, locked: true, pin: "left" },
+    { id: "name", label: "Nama", visible: true },
+    { id: "row_number", label: "No.", visible: true, locked: true },
     { id: "invoice", label: "Invoice", visible: true },
     { id: "booking_date", label: "Booking Date", visible: true },
     { id: "package", label: "Paket", visible: true },
@@ -1185,6 +1186,8 @@ export default function BookingsPage() {
         switch (column.id) {
             case "name":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{t("namaKlien")}</th>;
+            case "row_number":
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "w-16 px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>No.</th>;
             case "invoice":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{tb("invoice")}</th>;
             case "package":
@@ -1212,7 +1215,11 @@ export default function BookingsPage() {
         }
     }
 
-    function renderDesktopCell(booking: Booking, column: TableColumnPreference) {
+    function renderDesktopCell(
+        booking: Booking,
+        column: TableColumnPreference,
+        rowNumber: number,
+    ) {
         const sessionDisplay = getSessionDisplay(booking);
         switch (column.id) {
             case "name":
@@ -1222,6 +1229,12 @@ export default function BookingsPage() {
                         {booking.client_whatsapp && (
                             <div className="text-[11px] text-muted-foreground truncate">{booking.client_whatsapp}</div>
                         )}
+                    </td>
+                );
+            case "row_number":
+                return (
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 whitespace-nowrap text-muted-foreground")}>
+                        {rowNumber}
                     </td>
                 );
             case "invoice":
@@ -2131,7 +2144,7 @@ export default function BookingsPage() {
                             </div>
                             <div className="border-t pt-2 space-y-1.5 text-sm text-muted-foreground">
                                 {orderedVisibleColumns
-                                    .filter((column) => column.id !== "name" && column.id !== "actions")
+                                    .filter((column) => !["name", "row_number", "actions"].includes(column.id))
                                     .map((column) => (
                                         <div key={column.id} className="flex items-start justify-between gap-3">
                                             <span className="shrink-0">{column.label}</span>
@@ -2212,11 +2225,17 @@ export default function BookingsPage() {
                             ) : queryState.totalItems === 0 ? (
                                 <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground text-xs italic">{tb("noDataFound")}</td></tr>
                             ) : (
-                                filteredBookings.map((booking) => (
-                                    <tr key={booking.id} className="hover:bg-muted/55 dark:hover:bg-white/12 transition-colors group">
-                                        {orderedVisibleColumns.map((column) => renderDesktopCell(booking, column))}
-                                    </tr>
-                                ))
+                                filteredBookings.map((booking, rowIndex) => {
+                                    const rowNumber =
+                                        (currentPage - 1) * itemsPerPage + rowIndex + 1;
+                                    return (
+                                        <tr key={booking.id} className="hover:bg-muted/55 dark:hover:bg-white/12 transition-colors group">
+                                            {orderedVisibleColumns.map((column) =>
+                                                renderDesktopCell(booking, column, rowNumber),
+                                            )}
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>

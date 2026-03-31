@@ -38,7 +38,7 @@ export function canToggleTableColumnPin(column: TableColumnPreference) {
 }
 
 export function canToggleTableColumnVisibility(column: TableColumnPreference) {
-  return column.locked !== true && !isAlwaysVisibleTableColumnId(column.id);
+  return !isAlwaysVisibleTableColumnId(column.id);
 }
 
 export function canReorderTableColumn(column: TableColumnPreference) {
@@ -119,7 +119,9 @@ export function mergeTableColumnPreferences(
       const savedPin = normalizeTableColumnPin(item.pin);
       acc.push({
         ...fallback,
-        visible: item.locked ? true : item.visible !== false,
+        visible: isAlwaysVisibleTableColumnId(fallback.id)
+          ? true
+          : item.visible !== false,
         locked: fallback.locked === true,
         pin: fallback.locked ? fallback.pin ?? null : savedPin,
       });

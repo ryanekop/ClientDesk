@@ -73,7 +73,9 @@ function getColumnDescription(column: TableColumnPreference) {
   }
 
   if (column.locked) {
-    return "Kolom selalu terkunci";
+    return column.visible
+      ? "Posisi kolom terkunci, tapi tetap bisa disembunyikan"
+      : "Disembunyikan, posisi kolom tetap terkunci saat ditampilkan";
   }
 
   if (isPinned) {

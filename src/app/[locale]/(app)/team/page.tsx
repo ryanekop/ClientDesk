@@ -64,7 +64,8 @@ const COUNTRY_CODES = [
 ];
 
 const TEAM_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
-    { id: "name", label: "Nama", visible: true, locked: true, pin: "left" },
+    { id: "name", label: "Nama", visible: true },
+    { id: "row_number", label: "No.", visible: true, locked: true },
     { id: "role", label: "Peran", visible: true },
     { id: "tags", label: "Tags", visible: true },
     { id: "whatsapp", label: "Whatsapp", visible: true },
@@ -675,6 +676,8 @@ export default function TeamPage() {
         switch (column.id) {
             case "name":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("nama")}</th>;
+            case "row_number":
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "w-16 px-4 py-4 font-medium text-muted-foreground text-center")}>No.</th>;
             case "role":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("peran")}</th>;
             case "tags":
@@ -690,7 +693,11 @@ export default function TeamPage() {
         }
     }
 
-    function renderDesktopCell(member: Freelancer, column: TableColumnPreference) {
+    function renderDesktopCell(
+        member: Freelancer,
+        column: TableColumnPreference,
+        rowNumber: number,
+    ) {
         switch (column.id) {
             case "name":
                 return (
@@ -701,6 +708,12 @@ export default function TeamPage() {
                             </div>
                             <span className="font-medium">{member.name}</span>
                         </div>
+                    </td>
+                );
+            case "row_number":
+                return (
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-4 text-center text-sm text-muted-foreground")}>
+                        {rowNumber}
                     </td>
                 );
             case "role":
@@ -961,7 +974,7 @@ export default function TeamPage() {
                                 </div>
                                 <div className="space-y-1 text-sm">
                                     {orderedVisibleColumns
-                                        .filter((column) => column.id !== "name" && column.id !== "actions")
+                                        .filter((column) => !["name", "row_number", "actions"].includes(column.id))
                                         .map((column) => (
                                             <div key={column.id} className="flex items-start justify-between gap-3">
                                                 <span className="text-muted-foreground">{column.label}</span>
@@ -1013,11 +1026,17 @@ export default function TeamPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
-                                    {members.map((member) => (
-                                        <tr key={member.id} className="group hover:bg-muted/50 transition-colors">
-                                            {orderedVisibleColumns.map((column) => renderDesktopCell(member, column))}
-                                        </tr>
-                                    ))}
+                                    {members.map((member, rowIndex) => {
+                                        const rowNumber =
+                                            (currentPage - 1) * itemsPerPage + rowIndex + 1;
+                                        return (
+                                            <tr key={member.id} className="group hover:bg-muted/50 transition-colors">
+                                                {orderedVisibleColumns.map((column) =>
+                                                    renderDesktopCell(member, column, rowNumber),
+                                                )}
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

@@ -99,7 +99,8 @@ const STATUS_COLOR_PALETTE = [
 ];
 
 const BASE_CLIENT_STATUS_COLUMNS: TableColumnPreference[] = [
-    { id: "name", label: "Nama", visible: true, locked: true, pin: "left" },
+    { id: "name", label: "Nama", visible: true },
+    { id: "row_number", label: "No.", visible: true, locked: true },
     { id: "package", label: "Paket", visible: true },
     { id: "event_type", label: "Tipe Acara", visible: false },
     { id: "status", label: "Status", visible: true },
@@ -587,6 +588,8 @@ export default function ClientStatusPage() {
         switch (column.id) {
             case "name":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{locale === "en" ? "Client" : "Klien"}</th>;
+            case "row_number":
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "w-16 px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-center")}>No.</th>;
             case "package":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap hidden sm:table-cell")}>{locale === "en" ? "Package" : "Paket"}</th>;
             case "event_type":
@@ -602,7 +605,11 @@ export default function ClientStatusPage() {
         }
     }
 
-    function renderDesktopCell(booking: BookingStatus, column: TableColumnPreference) {
+    function renderDesktopCell(
+        booking: BookingStatus,
+        column: TableColumnPreference,
+        rowNumber: number,
+    ) {
         switch (column.id) {
             case "name":
                 return (
@@ -611,6 +618,12 @@ export default function ClientStatusPage() {
                             <p className="text-sm font-medium leading-tight">{booking.client_name}</p>
                             <p className="text-[11px] text-muted-foreground">{booking.booking_code}</p>
                         </Link>
+                    </td>
+                );
+            case "row_number":
+                return (
+                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 text-center text-sm text-muted-foreground")}>
+                        {rowNumber}
                     </td>
                 );
             case "package":
@@ -779,7 +792,7 @@ export default function ClientStatusPage() {
                         </div>
                         <div className="border-t pt-2 space-y-2">
                             {orderedVisibleColumns
-                                .filter((column) => !["name", "status", "queue", "actions"].includes(column.id))
+                                .filter((column) => !["name", "row_number", "status", "queue", "actions"].includes(column.id))
                                 .map((column) => (
                                     <div key={column.id} className="flex items-start justify-between gap-3 text-sm">
                                         <span className="text-muted-foreground">{column.label}</span>
@@ -857,11 +870,17 @@ export default function ClientStatusPage() {
                                     </td>
                                 </tr>
                             ) : (
-                                bookings.map(b => (
-                                    <tr key={b.id} className="group hover:bg-muted/30 transition-colors">
-                                        {orderedVisibleColumns.map((column) => renderDesktopCell(b, column))}
-                                    </tr>
-                                ))
+                                bookings.map((b, rowIndex) => {
+                                    const rowNumber =
+                                        (currentPage - 1) * itemsPerPage + rowIndex + 1;
+                                    return (
+                                        <tr key={b.id} className="group hover:bg-muted/30 transition-colors">
+                                            {orderedVisibleColumns.map((column) =>
+                                                renderDesktopCell(b, column, rowNumber),
+                                            )}
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
