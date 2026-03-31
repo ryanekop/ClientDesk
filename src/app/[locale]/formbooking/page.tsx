@@ -1,7 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { cache } from "react";
 import {
   BookingFormClient,
   type Service,
@@ -80,7 +79,7 @@ function InfoState({
   );
 }
 
-const resolveSluglessVendor = cache(async (locale: string) => {
+async function resolveSluglessVendor(locale: string) {
   const copy = getCopy(locale);
   const tenant = await getTenantConfig();
   const headersList = await headers();
@@ -123,7 +122,7 @@ const resolveSluglessVendor = cache(async (locale: string) => {
     services: vendorPayload.services as Service[],
     cities: vendorPayload.cities || [],
   };
-});
+}
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { locale } = await params;
