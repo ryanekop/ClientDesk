@@ -18,6 +18,8 @@ import {
   getInitialBookingPriceBreakdown,
   resolveSpecialOfferSnapshotFromExtraFields,
 } from "@/lib/booking-special-offer";
+import { getTenantConfig } from "@/lib/tenant-config";
+import { shouldHideTenantBranding } from "@/lib/tenant-branding";
 
 export const dynamic = "force-dynamic";
 
@@ -167,6 +169,11 @@ const labels: Record<string, Record<string, string>> = {
   },
 };
 
+const UNBRANDED_FOOTER_TEXT_BY_LANG: Record<string, string> = {
+  id: "Terima kasih atas kepercayaan Anda. Invoice ini digenerate otomatis.",
+  en: "Thank you for your trust. This invoice was auto-generated.",
+};
+
 async function resolveInvoiceLogoBytes(source: string) {
   const trimmed = source.trim();
   if (!trimmed) return null;
@@ -211,6 +218,11 @@ export async function GET(request: NextRequest) {
   const lang = request.nextUrl.searchParams.get("lang") || "id";
   const stage = request.nextUrl.searchParams.get("stage") || "initial";
   const t = labels[lang] || labels.id;
+  const tenant = await getTenantConfig();
+  const hideTenantBranding = shouldHideTenantBranding({
+    id: tenant.id,
+    domain: tenant.domain,
+  });
 
   if (!code) {
     return NextResponse.json(
@@ -960,7 +972,9 @@ export async function GET(request: NextRequest) {
   drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 0.5);
 
   y -= 16;
-  const footerText = t.footerText;
+  const footerText = hideTenantBranding
+    ? UNBRANDED_FOOTER_TEXT_BY_LANG[lang] || UNBRANDED_FOOTER_TEXT_BY_LANG.id
+    : t.footerText;
   const footerWidth = helvetica.widthOfTextAtSize(footerText, 9);
   page.drawText(footerText, {
     x: (PAGE_WIDTH - footerWidth) / 2,

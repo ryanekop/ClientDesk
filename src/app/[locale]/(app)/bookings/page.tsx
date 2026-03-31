@@ -204,6 +204,24 @@ type BookingPageMetadata = {
     }>;
 };
 
+function normalizeEventTypeTerminology(value: string) {
+    return value
+        .replace(/Jenis Acara/g, "Tipe Acara")
+        .replace(/jenis acara/g, "tipe acara")
+        .replace(/Jenis acara/g, "Tipe acara");
+}
+
+function normalizeBookingColumnLabels(
+    columns: TableColumnPreference[],
+    eventTypeLabel: string,
+) {
+    return columns.map((column) =>
+        column.id === "event_type" && column.label !== eventTypeLabel
+            ? { ...column, label: eventTypeLabel }
+            : column,
+    );
+}
+
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -329,6 +347,12 @@ export default function BookingsPage() {
     const tb = useTranslations("BookingsPage");
     const tBatchImport = useTranslations("BatchImport");
     const locale = useLocale();
+    const eventTypeLabel = normalizeEventTypeTerminology(tb("eventTypeLabel"));
+    const applyBookingColumnLabelNormalization = React.useCallback(
+        (nextColumns: TableColumnPreference[]) =>
+            normalizeBookingColumnLabels(nextColumns, eventTypeLabel),
+        [eventTypeLabel],
+    );
     const [bookings, setBookings] = React.useState<Booking[]>([]);
     const [savedTemplates, setSavedTemplates] = React.useState<SavedTemplate[]>([]);
     const [packages, setPackages] = React.useState<string[]>([]);
@@ -575,9 +599,11 @@ export default function BookingsPage() {
             setMetadataRows(metadata?.metadataRows || []);
             setExtraFieldRows(metadata?.extraFieldRows || []);
             setColumns(
-                mergeTableColumnPreferences(
-                    nextColumnDefaults,
-                    metadata?.tableColumnPreferences || undefined,
+                applyBookingColumnLabelNormalization(
+                    mergeTableColumnPreferences(
+                        nextColumnDefaults,
+                        metadata?.tableColumnPreferences || undefined,
+                    ),
                 ),
             );
         } finally {
@@ -600,9 +626,12 @@ export default function BookingsPage() {
         sortOrder,
         statusFilter,
         browserTimeZone,
+        applyBookingColumnLabelNormalization,
     ]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
+        const normalizedNextColumns =
+            applyBookingColumnLabelNormalization(nextColumns);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         setSavingColumns(true);
@@ -614,14 +643,14 @@ export default function BookingsPage() {
         const payload = updateTableColumnPreferenceMap(
             profile?.table_column_preferences,
             "bookings",
-            nextColumns,
+            normalizedNextColumns,
         );
         await supabase
             .from("profiles")
             .update({ table_column_preferences: payload })
             .eq("id", user.id);
         await invalidateProfilePublicCache();
-        setColumns(nextColumns);
+        setColumns(normalizedNextColumns);
         setSavingColumns(false);
         setColumnManagerOpen(false);
     }
@@ -1161,7 +1190,7 @@ export default function BookingsPage() {
             case "package":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{t("paket")}</th>;
             case "event_type":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{tb("eventTypeLabel")}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{eventTypeLabel}</th>;
             case "booking_date":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{tb("columnBookingDate")}</th>;
             case "session_date_display":
@@ -1659,8 +1688,12 @@ export default function BookingsPage() {
             ...buildBookingMetadataColumns(metadataRows, formSectionsByEventType),
             BASE_BOOKING_COLUMNS[BASE_BOOKING_COLUMNS.length - 1],
         ]);
-        setColumns((current) => mergeTableColumnPreferences(nextDefaults, current));
-    }, [formSectionsByEventType, metadataRows]);
+        setColumns((current) =>
+            applyBookingColumnLabelNormalization(
+                mergeTableColumnPreferences(nextDefaults, current),
+            ),
+        );
+    }, [applyBookingColumnLabelNormalization, formSectionsByEventType, metadataRows]);
 
     const filteredBookings = bookings;
     const queryState = React.useMemo<PaginatedQueryState>(() => ({
@@ -1999,7 +2032,7 @@ export default function BookingsPage() {
                                 />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
-                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{tb("eventTypeLabel")}</label>
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{eventTypeLabel}</label>
                                 <FilterMultiSelect
                                     values={eventTypeFilter}
                                     onChange={setEventTypeFilter}
@@ -2008,7 +2041,7 @@ export default function BookingsPage() {
                                     allLabel={tb("allEventTypes")}
                                     countSuffix={multiCountSuffix}
                                     className="w-full"
-                                    mobileTitle={tb("eventTypeLabel")}
+                                    mobileTitle={eventTypeLabel}
                                 />
                             </div>
                             <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
