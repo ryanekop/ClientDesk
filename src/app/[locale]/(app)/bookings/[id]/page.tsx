@@ -96,14 +96,8 @@ import {
     resolveSpecialOfferSnapshotFromExtraFields,
 } from "@/lib/booking-special-offer";
 import {
-    cleanUniversityName,
-    getUniversityDraftAbbreviation,
-    getUniversityReferenceId,
-    isUniversityReferenceItem,
     UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
-    UNIVERSITY_EXTRA_FIELD_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
-    type UniversityReferenceItem,
 } from "@/lib/university-references";
 
 const EXTRA_FIELD_LABEL_KEYS: Record<string, string> = {
@@ -240,15 +234,6 @@ type BookingProfileRow = {
     google_drive_refresh_token?: string | null;
     fastpik_link_display_mode?: FastpikLinkDisplayMode | null;
     fastpik_link_display_mode_booking_detail?: FastpikLinkDisplayMode | null;
-    role?: string | null;
-};
-
-type UniversityApprovalResponse = {
-    success?: boolean;
-    error?: string;
-    code?: string;
-    candidates?: unknown[];
-    extraFields?: Record<string, unknown> | null;
 };
 
 type EditableAdjustment = {
@@ -276,8 +261,6 @@ const RESPONSIVE_INLINE_ACTION_CLASS =
     "flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center";
 const RESPONSIVE_MONEY_INPUT_CLASS =
     "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] sm:w-40";
-const DETAIL_INPUT_CLASS =
-    "h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 
 function StatusBadge({ status }: { status: string }) {
     const variants: Record<string, string> = {
@@ -685,12 +668,6 @@ export default function BookingDetailPage() {
     }>({ open: false, title: "", message: "" });
     const [proofUploadsEnabled, setProofUploadsEnabled] = React.useState(true);
     const [uploadingProofStage, setUploadingProofStage] = React.useState<BookingProofStage | null>(null);
-    const [profileRole, setProfileRole] = React.useState("");
-    const [universityApprovalName, setUniversityApprovalName] = React.useState("");
-    const [universityApprovalAbbreviation, setUniversityApprovalAbbreviation] = React.useState("");
-    const [savingUniversityApproval, setSavingUniversityApproval] = React.useState(false);
-    const [universityCandidateDialogOpen, setUniversityCandidateDialogOpen] = React.useState(false);
-    const [universityCandidates, setUniversityCandidates] = React.useState<UniversityReferenceItem[]>([]);
     const { canWriteBookings } = useBookingWriteAccess();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const currentDpValue = booking?.dp_paid ?? 0;
@@ -707,39 +684,6 @@ export default function BookingDetailPage() {
             booking?.drive_folder_url,
         ],
     );
-    const isAdmin = profileRole === "admin";
-    const pendingUniversityName = cleanUniversityName(
-        booking?.extra_fields && typeof booking.extra_fields[UNIVERSITY_EXTRA_FIELD_KEY] === "string"
-            ? booking.extra_fields[UNIVERSITY_EXTRA_FIELD_KEY]
-            : "",
-    );
-    const pendingUniversityReferenceId = getUniversityReferenceId(
-        booking?.extra_fields,
-    );
-    const pendingUniversityAbbreviation = getUniversityDraftAbbreviation(
-        booking?.extra_fields,
-    );
-    const needsUniversityApproval =
-        Boolean(booking) &&
-        Boolean(pendingUniversityName) &&
-        !pendingUniversityReferenceId;
-
-    React.useEffect(() => {
-        if (!needsUniversityApproval) {
-            setUniversityApprovalName("");
-            setUniversityApprovalAbbreviation("");
-            setUniversityCandidates([]);
-            setUniversityCandidateDialogOpen(false);
-            return;
-        }
-
-        setUniversityApprovalName(pendingUniversityName);
-        setUniversityApprovalAbbreviation(pendingUniversityAbbreviation);
-    }, [
-        needsUniversityApproval,
-        pendingUniversityAbbreviation,
-        pendingUniversityName,
-    ]);
 
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
@@ -810,93 +754,6 @@ export default function BookingDetailPage() {
             }
         },
         [showFeedback, showSuccessToast, warningTitle],
-    );
-    const handleApproveUniversity = React.useCallback(
-        async (options: {
-            selectedReferenceId?: string | null;
-            forceCreate?: boolean;
-        } = {}) => {
-            if (!requireBookingWrite()) return false;
-            if (!booking) return false;
-
-            setSavingUniversityApproval(true);
-            try {
-                const response = await fetch(
-                    `/api/internal/bookings/${booking.id}/university-approval`,
-                    {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            name: universityApprovalName,
-                            abbreviation: universityApprovalAbbreviation || null,
-                            selectedReferenceId: options.selectedReferenceId || null,
-                            forceCreate: options.forceCreate === true,
-                        }),
-                    },
-                );
-
-                const payload = (await response.json().catch(() => null)) as UniversityApprovalResponse | null;
-
-                if (
-                    response.status === 409 &&
-                    payload?.code === "similar_university_candidates"
-                ) {
-                    const nextCandidates = Array.isArray(payload.candidates)
-                        ? payload.candidates.filter(isUniversityReferenceItem)
-                        : [];
-                    setUniversityCandidates(nextCandidates);
-                    setUniversityCandidateDialogOpen(true);
-                    return false;
-                }
-
-                if (!response.ok || payload?.success !== true) {
-                    showFeedback(
-                        payload?.error || tBookingDetail("failedApproveUniversity"),
-                        warningTitle,
-                    );
-                    return false;
-                }
-
-                setBooking((prev) =>
-                    prev
-                        ? {
-                              ...prev,
-                              extra_fields:
-                                  payload?.extraFields && typeof payload.extraFields === "object"
-                                      ? payload.extraFields
-                                      : prev.extra_fields,
-                          }
-                        : prev,
-                );
-                setUniversityCandidates([]);
-                setUniversityCandidateDialogOpen(false);
-                showSuccessToast(tBookingDetail("universityApprovalSuccess"));
-                await invalidateBookingPublicCache({
-                    bookingCode: booking.booking_code,
-                    trackingUuid: booking.tracking_uuid,
-                });
-                return true;
-            } catch {
-                showFeedback(
-                    tBookingDetail("failedApproveUniversity"),
-                    warningTitle,
-                );
-                return false;
-            } finally {
-                setSavingUniversityApproval(false);
-            }
-        },
-        [
-            booking,
-            invalidateBookingPublicCache,
-            requireBookingWrite,
-            showFeedback,
-            showSuccessToast,
-            tBookingDetail,
-            universityApprovalAbbreviation,
-            universityApprovalName,
-            warningTitle,
-        ],
     );
     const fastpikDashboardUrl = React.useMemo(
         () => `${FASTPIK_APP_BASE_URL}/${locale}/dashboard`,
@@ -1172,7 +1029,7 @@ export default function BookingDetailPage() {
                 supabase.from("bookings")
                     .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, admin_notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, price, duration_minutes, is_addon, affects_schedule)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
-                supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, dp_verify_trigger_status, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof, role").eq("id", user.id).single(),
+                supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, dp_verify_trigger_status, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof").eq("id", user.id).single(),
                 supabase.from("services")
                     .select("id, name, price, description, event_types")
                     .eq("user_id", user.id)
@@ -1200,7 +1057,6 @@ export default function BookingDetailPage() {
             )?.fastpik_link_display_mode_booking_detail;
             const statusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
             setDpVerifyTriggerStatus(profileRow?.dp_verify_trigger_status ?? "");
-            setProfileRole((profileRow?.role || "").trim().toLowerCase());
             setFastpikLinkDisplayMode(
                 normalizeFastpikLinkDisplayMode(
                     bookingDetailLinkMode ??
@@ -2642,81 +2498,6 @@ export default function BookingDetailPage() {
                 ))}
             </div>
 
-            {isAdmin && needsUniversityApproval ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-4 sm:p-6 dark:border-amber-800 dark:bg-amber-950/20">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="space-y-1">
-                            <h3 className="font-semibold text-sm uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                                {tBookingDetail("universityApprovalTitle")}
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                                {tBookingDetail("universityApprovalDescription")}
-                            </p>
-                        </div>
-                        <span className="inline-flex w-fit rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
-                            {tBookingDetail("universityPendingBadge")}
-                        </span>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-1.5 sm:col-span-2">
-                            <label className="text-sm font-medium">
-                                {tBookingDetail("universityNameLabel")}
-                            </label>
-                            <input
-                                value={universityApprovalName}
-                                onChange={(event) =>
-                                    setUniversityApprovalName(event.target.value)
-                                }
-                                placeholder={tBookingDetail("universityNamePlaceholder")}
-                                className={DETAIL_INPUT_CLASS}
-                                disabled={savingUniversityApproval}
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <label className="text-sm font-medium">
-                                {tBookingDetail("universityAbbreviationLabel")}
-                            </label>
-                            <input
-                                value={universityApprovalAbbreviation}
-                                onChange={(event) =>
-                                    setUniversityApprovalAbbreviation(
-                                        event.target.value,
-                                    )
-                                }
-                                placeholder={tBookingDetail(
-                                    "universityAbbreviationPlaceholder",
-                                )}
-                                className={DETAIL_INPUT_CLASS}
-                                disabled={savingUniversityApproval}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                {tBookingDetail("universityAbbreviationHint")}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <Button
-                            onClick={() => {
-                                void handleApproveUniversity();
-                            }}
-                            disabled={
-                                savingUniversityApproval ||
-                                !canWriteBookings ||
-                                !cleanUniversityName(universityApprovalName)
-                            }
-                            className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
-                        >
-                            {savingUniversityApproval ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : null}
-                            {tBookingDetail("approveUniversityAction")}
-                        </Button>
-                    </div>
-                </div>
-            ) : null}
-
             {/* Detail Sesi */}
             <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Detail Sesi</h3>
@@ -3509,61 +3290,6 @@ export default function BookingDetailPage() {
                 )}
             </div>
         </div>
-
-            <Dialog
-                open={universityCandidateDialogOpen}
-                onOpenChange={setUniversityCandidateDialogOpen}
-            >
-                <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {tBookingDetail("universityCandidateDialogTitle")}
-                        </DialogTitle>
-                        <DialogDescription>
-                            {tBookingDetail("universityCandidateDialogDescription")}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-2 py-2">
-                        {universityCandidates.map((candidate) => (
-                            <button
-                                key={candidate.id}
-                                type="button"
-                                onClick={() => {
-                                    void handleApproveUniversity({
-                                        selectedReferenceId: candidate.id,
-                                    });
-                                }}
-                                disabled={savingUniversityApproval}
-                                className="w-full rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                <p className="text-sm font-medium">
-                                    {candidate.displayName || candidate.name}
-                                </p>
-                            </button>
-                        ))}
-                    </div>
-                    <DialogFooter className="gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={() => setUniversityCandidateDialogOpen(false)}
-                            disabled={savingUniversityApproval}
-                        >
-                            {tBookingDetail("cancelAction")}
-                        </Button>
-                        <Button
-                            onClick={() => {
-                                void handleApproveUniversity({ forceCreate: true });
-                            }}
-                            disabled={savingUniversityApproval}
-                        >
-                            {savingUniversityApproval ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : null}
-                            {tBookingDetail("createUniversityAnywayAction")}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
 
             {/* Delete File Confirmation Modal */}
             <Dialog open={deleteFileModal.open} onOpenChange={(o) => !o && setDeleteFileModal({ open: false, idx: null })}>

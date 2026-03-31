@@ -76,8 +76,8 @@ import {
   normalizeUuidList,
 } from "@/lib/booking-special-offer";
 import {
+  getUniversityReferenceId,
   hasUniversityValue,
-  UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
   UNIVERSITY_EXTRA_FIELD_KEY,
   UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
@@ -435,8 +435,6 @@ export function BookingFormClient({
   const [instagram, setInstagram] = React.useState("");
   const [customFields, setCustomFields] = React.useState<Record<string, string>>({});
   const [extraData, setExtraData] = React.useState<Record<string, string>>({});
-  const [isUniversityManualEntryActive, setIsUniversityManualEntryActive] =
-    React.useState(false);
   const [extraLocationCoords, setExtraLocationCoords] = React.useState<
     Record<string, LocationCoordinates>
   >({});
@@ -736,9 +734,13 @@ export function BookingFormClient({
       return;
     }
 
-    if (hasExtraField(UNIVERSITY_EXTRA_FIELD_KEY) && !hasUniversityValue(extraData)) {
-      setError(t("errorUniversityRequired"));
-      return;
+    if (hasExtraField(UNIVERSITY_EXTRA_FIELD_KEY)) {
+      const hasUniversityName = hasUniversityValue(extraData);
+      const selectedUniversityRefId = getUniversityReferenceId(extraData);
+      if (!hasUniversityName || !selectedUniversityRefId) {
+        setError(t("errorUniversityRequired"));
+        return;
+      }
     }
 
     if (!selectedPaymentMethod) {
@@ -928,6 +930,11 @@ export function BookingFormClient({
           delete mergedExtra.tempat_wisuda_1;
           delete mergedExtra.tempat_wisuda_2;
       }
+      if (!hasExtraField(UNIVERSITY_EXTRA_FIELD_KEY)) {
+        delete mergedExtra[UNIVERSITY_EXTRA_FIELD_KEY];
+        delete mergedExtra[UNIVERSITY_REFERENCE_EXTRA_KEY];
+      }
+      delete mergedExtra.universitas_abbreviation_draft;
       const customFieldSnapshots = buildCustomFieldSnapshots(
         normalizedActiveLayout,
         eventType || "Umum",
@@ -1291,14 +1298,6 @@ export function BookingFormClient({
     [effectiveVendor.form_terms_content],
   );
 
-  React.useEffect(() => {
-    const hasUniversityField = currentExtraFields.some(
-      (field) => field.key === UNIVERSITY_EXTRA_FIELD_KEY,
-    );
-    if (!hasUniversityField) {
-      setIsUniversityManualEntryActive(false);
-    }
-  }, [currentExtraFields]);
   const hasTerms = effectiveVendor.form_terms_enabled && !isRichTextEmpty(termsContent);
   const canAcceptTerms = termsViewedOnce;
   const proofRequired =
@@ -1573,7 +1572,6 @@ export function BookingFormClient({
                 if (item) {
                   next[field.key] = item.displayName || item.name;
                   next[UNIVERSITY_REFERENCE_EXTRA_KEY] = item.id;
-                  delete next[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY];
                 } else {
                   delete next[UNIVERSITY_REFERENCE_EXTRA_KEY];
                 }
@@ -1582,28 +1580,6 @@ export function BookingFormClient({
             }
             placeholder={t("universityPlaceholder")}
             required={field.required}
-            allowManualEntry
-            manualEntryActive={isUniversityManualEntryActive}
-            onManualEntryActiveChange={(value) => {
-              setIsUniversityManualEntryActive(value);
-              setExtraData((prev) => {
-                const next = { ...prev };
-                delete next[UNIVERSITY_REFERENCE_EXTRA_KEY];
-                if (!value) {
-                  delete next[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY];
-                }
-                return next;
-              });
-            }}
-            manualAbbreviationValue={
-              extraData[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY] || ""
-            }
-            onManualAbbreviationChange={(value) =>
-              setExtraData((prev) => ({
-                ...prev,
-                [UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY]: value,
-              }))
-            }
             strings={{
               noResults: t("universityNoResults"),
               selectionHint: t("universitySelectionHint"),
@@ -1751,7 +1727,6 @@ export function BookingFormClient({
                 setWisudaSession1Date("");
                 setWisudaSession2Date("");
                 setExtraData({});
-                setIsUniversityManualEntryActive(false);
                 setExtraLocationCoords({});
                 setCustomFields({});
                 setSelectedServiceIds(

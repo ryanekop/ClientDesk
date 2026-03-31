@@ -48,12 +48,11 @@ import {
     mergeSpecialOfferSnapshotIntoExtraFields,
 } from "@/lib/booking-special-offer";
 import {
+    getUniversityReferenceId,
     hasUniversityValue,
-    UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
     UNIVERSITY_EXTRA_FIELD_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
-import { resolveUniversityExtraFieldsForClient } from "@/lib/university-reference-client";
 import { normalizeFormSectionsByEventType } from "@/lib/form-sections";
 import {
     getBookingDurationMinutes,
@@ -272,7 +271,6 @@ export default function NewBookingPage() {
     const [clientName, setClientName] = React.useState("");
     const [eventType, setEventType] = React.useState("");
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
-    const [isUniversityManualEntryActive, setIsUniversityManualEntryActive] = React.useState(false);
     const [extraLocationCoords, setExtraLocationCoords] = React.useState<Record<string, LocationCoords>>({});
     const [location, setLocation] = React.useState("");
     const [locationCoords, setLocationCoords] = React.useState<LocationCoords>({ lat: null, lng: null });
@@ -605,12 +603,6 @@ export default function NewBookingPage() {
     }, [activeFormLayout, normalizedEventType]);
 
     React.useEffect(() => {
-        if (!hasUniversityExtraField) {
-            setIsUniversityManualEntryActive(false);
-        }
-    }, [hasUniversityExtraField]);
-
-    React.useEffect(() => {
         if (eventType === "Wisuda" && splitDates) {
             return;
         }
@@ -733,7 +725,10 @@ export default function NewBookingPage() {
                     return;
                 }
             }
-            if (hasUniversityExtraField && !hasUniversityValue(extraFields)) {
+            if (
+                hasUniversityExtraField &&
+                (!hasUniversityValue(extraFields) || !getUniversityReferenceId(extraFields))
+            ) {
                 showFeedback(tBookingEditor("errorUniversitySuggestionRequired"));
                 return;
             }
@@ -782,16 +777,12 @@ export default function NewBookingPage() {
             const nonStringExtraFields = Object.fromEntries(
                 Object.entries(mergedExtra).filter(([, value]) => typeof value !== "string"),
             ) as Record<string, unknown>;
-            let resolvedStringExtraFields = { ...stringExtraFields };
-            try {
-                resolvedStringExtraFields = await resolveUniversityExtraFieldsForClient(
-                    stringExtraFields,
-                    { enabled: hasUniversityExtraField },
-                );
-            } catch {
-                showFeedback(tBookingEditor("failedResolveUniversity"));
-                return;
+            if (!hasUniversityExtraField) {
+                delete stringExtraFields[UNIVERSITY_EXTRA_FIELD_KEY];
+                delete stringExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY];
             }
+            delete stringExtraFields.universitas_abbreviation_draft;
+            const resolvedStringExtraFields = { ...stringExtraFields };
             const resolvedExtraFields: Record<string, unknown> = {
                 ...resolvedStringExtraFields,
                 ...nonStringExtraFields,
@@ -1108,7 +1099,6 @@ export default function NewBookingPage() {
                                                     if (item) {
                                                         next[f.key] = item.displayName || item.name;
                                                         next[UNIVERSITY_REFERENCE_EXTRA_KEY] = item.id;
-                                                        delete next[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY];
                                                     } else {
                                                         delete next[UNIVERSITY_REFERENCE_EXTRA_KEY];
                                                     }
@@ -1117,28 +1107,6 @@ export default function NewBookingPage() {
                                             }
                                             placeholder={tBookingEditor("searchUniversity")}
                                             required={f.required}
-                                            allowManualEntry
-                                            manualEntryActive={isUniversityManualEntryActive}
-                                            onManualEntryActiveChange={(value) => {
-                                                setIsUniversityManualEntryActive(value);
-                                                setExtraFields((prev) => {
-                                                    const next = { ...prev };
-                                                    delete next[UNIVERSITY_REFERENCE_EXTRA_KEY];
-                                                    if (!value) {
-                                                        delete next[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY];
-                                                    }
-                                                    return next;
-                                                });
-                                            }}
-                                            manualAbbreviationValue={
-                                                extraFields[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY] || ""
-                                            }
-                                            onManualAbbreviationChange={(value) =>
-                                                setExtraFields((prev) => ({
-                                                    ...prev,
-                                                    [UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY]: value,
-                                                }))
-                                            }
                                         />
                                     ) : f.isLocation ? (
                                         <LocationAutocomplete
@@ -1207,7 +1175,6 @@ export default function NewBookingPage() {
                                 setWisudaSession1DurationInput("");
                                 setWisudaSession2DurationInput("");
                                 setExtraFields({});
-                                setIsUniversityManualEntryActive(false);
                                 setExtraLocationCoords({});
                                 setCustomFieldValues({});
                                 setPackageSearchQuery("");

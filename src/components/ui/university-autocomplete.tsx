@@ -16,12 +16,6 @@ type UniversityAutocompleteStrings = {
   noResults?: string;
   selectionHint?: string;
   searchError?: string;
-  manualOptionLabel?: string;
-  manualOptionHint?: string;
-  manualModeHint?: string;
-  manualAbbreviationLabel?: string;
-  manualAbbreviationPlaceholder?: string;
-  backToSuggestionsLabel?: string;
 };
 
 type UniversityAutocompleteProps = {
@@ -33,11 +27,6 @@ type UniversityAutocompleteProps = {
   required?: boolean;
   disabled?: boolean;
   inputClassName?: string;
-  allowManualEntry?: boolean;
-  manualEntryActive?: boolean;
-  onManualEntryActiveChange?: (value: boolean) => void;
-  manualAbbreviationValue?: string;
-  onManualAbbreviationChange?: (value: string) => void;
   strings?: UniversityAutocompleteStrings;
 };
 
@@ -53,11 +42,6 @@ export function UniversityAutocomplete({
   required = false,
   disabled = false,
   inputClassName,
-  allowManualEntry = false,
-  manualEntryActive = false,
-  onManualEntryActiveChange,
-  manualAbbreviationValue = "",
-  onManualAbbreviationChange,
   strings,
 }: UniversityAutocompleteProps) {
   const t = useTranslations("UniversityAutocomplete");
@@ -66,12 +50,6 @@ export function UniversityAutocomplete({
       noResults: t("noResults"),
       selectionHint: t("selectionHint"),
       searchError: t("searchError"),
-      manualOptionLabel: t("manualOptionLabel"),
-      manualOptionHint: t("manualOptionHint"),
-      manualModeHint: t("manualModeHint"),
-      manualAbbreviationLabel: t("manualAbbreviationLabel"),
-      manualAbbreviationPlaceholder: t("manualAbbreviationPlaceholder"),
-      backToSuggestionsLabel: t("backToSuggestionsLabel"),
     }),
     [t],
   );
@@ -105,13 +83,6 @@ export function UniversityAutocomplete({
   }, [open]);
 
   React.useEffect(() => {
-    if (manualEntryActive) {
-      setItems([]);
-      setLoading(false);
-      setOpen(false);
-      return;
-    }
-
     const normalizedSearchTerm = normalizeUniversityName(searchTerm);
     if (normalizedSearchTerm.length < 2) {
       setItems([]);
@@ -170,17 +141,14 @@ export function UniversityAutocomplete({
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [manualEntryActive, searchTerm, uiStrings.searchError]);
+  }, [searchTerm, uiStrings.searchError]);
 
-  const invalidSelection =
-    !manualEntryActive && searchTerm.length > 0 && !selectedId && !loading;
+  const invalidSelection = searchTerm.length > 0 && !selectedId && !loading;
 
   function handleInputChange(nextValue: string) {
     onValueChange(nextValue);
     onSelect(null);
-    if (!manualEntryActive) {
-      setOpen(true);
-    }
+    setOpen(true);
     setError("");
   }
 
@@ -195,22 +163,6 @@ export function UniversityAutocomplete({
     });
     setOpen(false);
     setActiveIndex(-1);
-    setError("");
-    onManualEntryActiveChange?.(false);
-    onManualAbbreviationChange?.("");
-  }
-
-  function handleEnableManualEntry() {
-    onSelect(null);
-    onManualEntryActiveChange?.(true);
-    setOpen(false);
-    setError("");
-    setActiveIndex(-1);
-  }
-
-  function handleDisableManualEntry() {
-    onManualEntryActiveChange?.(false);
-    onManualAbbreviationChange?.("");
     setError("");
   }
 
@@ -249,10 +201,7 @@ export function UniversityAutocomplete({
     }
   }
 
-  const showResults =
-    !manualEntryActive &&
-    open &&
-    (loading || items.length > 0 || !!error || invalidSelection);
+  const showResults = open && (loading || items.length > 0 || !!error || invalidSelection);
 
   return (
     <div ref={rootRef} className="space-y-1.5">
@@ -262,9 +211,7 @@ export function UniversityAutocomplete({
           value={value}
           onChange={(event) => handleInputChange(event.target.value)}
           onFocus={() => {
-            if (!manualEntryActive) {
-              setOpen(true);
-            }
+            setOpen(true);
           }}
           onKeyDown={handleKeyDown}
           placeholder={resolvedPlaceholder}
@@ -323,49 +270,6 @@ export function UniversityAutocomplete({
           </div>
         ) : null}
       </div>
-
-      {manualEntryActive ? (
-        <div className="space-y-2 rounded-lg border border-dashed bg-muted/25 p-3">
-          <p className="text-[11px] text-muted-foreground">
-            {uiStrings.manualModeHint}
-          </p>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">
-              {uiStrings.manualAbbreviationLabel}
-            </label>
-            <input
-              value={manualAbbreviationValue}
-              onChange={(event) =>
-                onManualAbbreviationChange?.(event.target.value)
-              }
-              placeholder={uiStrings.manualAbbreviationPlaceholder}
-              className={cn(DEFAULT_INPUT_CLASS, inputClassName)}
-              disabled={disabled}
-              autoComplete="off"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={handleDisableManualEntry}
-            className="text-xs font-medium text-primary transition-opacity hover:opacity-80"
-          >
-            {uiStrings.backToSuggestionsLabel}
-          </button>
-        </div>
-      ) : allowManualEntry ? (
-        <div className="space-y-1">
-          <button
-            type="button"
-            onClick={handleEnableManualEntry}
-            className="text-xs font-medium text-primary transition-opacity hover:opacity-80"
-          >
-            {uiStrings.manualOptionLabel}
-          </button>
-          <p className="text-[11px] text-muted-foreground">
-            {uiStrings.manualOptionHint}
-          </p>
-        </div>
-      ) : null}
 
       {invalidSelection ? (
         <p className="text-[11px] text-amber-600">{uiStrings.selectionHint}</p>

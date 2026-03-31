@@ -56,12 +56,9 @@ import {
 } from "@/lib/booking-special-offer";
 import {
     buildUniversityDisplayName,
-    cleanUniversityAbbreviation,
     cleanUniversityName,
     isUniversityEventType,
     matchesUniversityDisplayValue,
-    normalizeUniversityName,
-    UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
     UNIVERSITY_EXTRA_FIELD_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
@@ -659,79 +656,53 @@ export async function POST(request: NextRequest) {
                     ? rawExtraData[UNIVERSITY_EXTRA_FIELD_KEY]
                     : "",
             );
-            const submittedUniversityAbbreviation = cleanUniversityAbbreviation(
-                typeof rawExtraData[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY] === "string"
-                    ? rawExtraData[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY]
-                    : "",
-            );
             const submittedUniversityRefId =
                 typeof rawExtraData[UNIVERSITY_REFERENCE_EXTRA_KEY] === "string"
                     ? rawExtraData[UNIVERSITY_REFERENCE_EXTRA_KEY].trim()
                     : "";
 
-            if (!submittedUniversityName) {
+            if (!submittedUniversityName || !isValidUuid(submittedUniversityRefId)) {
                 return NextResponse.json(
                     {
                         success: false,
-                        error: "Silakan isi nama universitas atau pilih dari suggestion yang tersedia.",
+                        error: "Silakan pilih universitas dari suggestion yang tersedia.",
                     },
                     { status: 400 },
                 );
             }
 
-            if (isValidUuid(submittedUniversityRefId)) {
-                const { data: universityReference, error: universityReferenceError } =
-                    await supabaseAdmin
-                        .from("university_references")
-                        .select("id, name, abbreviation")
-                        .eq("id", submittedUniversityRefId)
-                        .maybeSingle<UniversityReferenceRow>();
+            const { data: universityReference, error: universityReferenceError } =
+                await supabaseAdmin
+                    .from("university_references")
+                    .select("id, name, abbreviation")
+                    .eq("id", submittedUniversityRefId)
+                    .maybeSingle<UniversityReferenceRow>();
 
-                if (universityReferenceError || !universityReference) {
-                    return NextResponse.json(
-                        {
-                            success: false,
-                            error: "Universitas yang dipilih tidak valid.",
-                        },
-                        { status: 400 },
-                    );
-                }
-
-                if (!matchesUniversityDisplayValue({
-                    submittedValue: submittedUniversityName,
-                    name: universityReference.name,
-                    abbreviation: universityReference.abbreviation,
-                })) {
-                    return NextResponse.json(
-                        {
-                            success: false,
-                            error: "Universitas yang dipilih tidak valid.",
-                        },
-                        { status: 400 },
-                    );
-                }
-
-                resolvedUniversityReference = universityReference;
-            } else {
-                const { data: exactUniversityReference, error: exactUniversityReferenceError } =
-                    await supabaseAdmin
-                        .from("university_references")
-                        .select("id, name, abbreviation")
-                        .eq("normalized_name", normalizeUniversityName(submittedUniversityName))
-                        .maybeSingle<UniversityReferenceRow>();
-
-                if (exactUniversityReferenceError) {
-                    return NextResponse.json(
-                        {
-                            success: false,
-                            error: "Gagal memvalidasi universitas.",
-                        },
-                        { status: 500 },
-                    );
-                }
-
-                resolvedUniversityReference = exactUniversityReference || null;
+            if (universityReferenceError || !universityReference) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "Universitas yang dipilih tidak valid.",
+                    },
+                    { status: 400 },
+                );
             }
+
+            if (!matchesUniversityDisplayValue({
+                submittedValue: submittedUniversityName,
+                name: universityReference.name,
+                abbreviation: universityReference.abbreviation,
+            })) {
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: "Universitas yang dipilih tidak valid.",
+                    },
+                    { status: 400 },
+                );
+            }
+
+            resolvedUniversityReference = universityReference;
         }
 
         const availablePaymentMethods = normalizePaymentMethods(vendor.form_payment_methods);
@@ -941,42 +912,19 @@ export async function POST(request: NextRequest) {
             delete sanitizedExtraData.tempat_wisuda_1;
             delete sanitizedExtraData.tempat_wisuda_2;
         }
-        if (shouldRequireUniversitySelection) {
-            const submittedUniversityName = cleanUniversityName(
-                typeof rawExtraData[UNIVERSITY_EXTRA_FIELD_KEY] === "string"
-                    ? rawExtraData[UNIVERSITY_EXTRA_FIELD_KEY]
-                    : "",
-            );
-            const submittedUniversityAbbreviation = cleanUniversityAbbreviation(
-                typeof rawExtraData[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY] === "string"
-                    ? rawExtraData[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY]
-                    : "",
-            );
-
-            if (resolvedUniversityReference) {
-                sanitizedExtraData[UNIVERSITY_EXTRA_FIELD_KEY] =
-                    buildUniversityDisplayName(
-                        resolvedUniversityReference.name,
-                        resolvedUniversityReference.abbreviation,
-                    );
-                sanitizedExtraData[UNIVERSITY_REFERENCE_EXTRA_KEY] =
-                    resolvedUniversityReference.id;
-                delete sanitizedExtraData[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY];
-            } else {
-                sanitizedExtraData[UNIVERSITY_EXTRA_FIELD_KEY] = submittedUniversityName;
-                if (submittedUniversityAbbreviation) {
-                    sanitizedExtraData[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY] =
-                        submittedUniversityAbbreviation;
-                } else {
-                    delete sanitizedExtraData[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY];
-                }
-                delete sanitizedExtraData[UNIVERSITY_REFERENCE_EXTRA_KEY];
-            }
+        if (shouldRequireUniversitySelection && resolvedUniversityReference) {
+            sanitizedExtraData[UNIVERSITY_EXTRA_FIELD_KEY] =
+                buildUniversityDisplayName(
+                    resolvedUniversityReference.name,
+                    resolvedUniversityReference.abbreviation,
+                );
+            sanitizedExtraData[UNIVERSITY_REFERENCE_EXTRA_KEY] =
+                resolvedUniversityReference.id;
         } else {
             delete sanitizedExtraData[UNIVERSITY_EXTRA_FIELD_KEY];
             delete sanitizedExtraData[UNIVERSITY_REFERENCE_EXTRA_KEY];
-            delete sanitizedExtraData[UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY];
         }
+        delete sanitizedExtraData.universitas_abbreviation_draft;
         if (addonServices.length > 0) {
             sanitizedExtraData.addon_ids = addonServices.map((service) => service.id);
             sanitizedExtraData.addon_names = addonServices.map((service) => service.name);
