@@ -148,6 +148,7 @@ const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
     { id: "invoice", label: "Invoice", visible: true },
     { id: "booking_date", label: "Booking Date", visible: true },
     { id: "package", label: "Paket", visible: true },
+    { id: "event_type", label: "Jenis Acara", visible: false },
     { id: "session_date_display", label: "Session Date", visible: true },
     { id: "session_time_display", label: "Session Time", visible: true },
     { id: "location", label: "Lokasi", visible: true },
@@ -1159,6 +1160,8 @@ export default function BookingsPage() {
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{tb("invoice")}</th>;
             case "package":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{t("paket")}</th>;
+            case "event_type":
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{tb("eventTypeLabel")}</th>;
             case "booking_date":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{tb("columnBookingDate")}</th>;
             case "session_date_display":
@@ -1202,6 +1205,8 @@ export default function BookingsPage() {
                 );
             case "package":
                 return <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 max-w-[150px] truncate text-muted-foreground")} title={booking.service_label || booking.services?.name || "-"}>{booking.service_label || booking.services?.name || "-"}</td>;
+            case "event_type":
+                return <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 max-w-[150px] truncate text-muted-foreground")} title={booking.event_type || "-"}>{booking.event_type || "-"}</td>;
             case "booking_date":
                 return (
                     <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 whitespace-nowrap text-muted-foreground font-light")}>
@@ -1441,6 +1446,8 @@ export default function BookingsPage() {
                 return booking.booking_code;
             case "package":
                 return booking.service_label || booking.services?.name || "-";
+            case "event_type":
+                return booking.event_type || "-";
             case "booking_date":
                 return booking.booking_date
                     ? formatSessionDate(booking.booking_date, {

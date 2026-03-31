@@ -127,6 +127,7 @@ type FinanceFilterStoragePayload = {
 
 const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
     { id: "name", label: "Nama", visible: true, locked: true, pin: "left" },
+    { id: "event_type", label: "Jenis Acara", visible: false },
     { id: "total_price", label: "Harga Total", visible: true },
     { id: "package_price", label: "Harga Paket", visible: true },
     { id: "addon", label: "Add-on", visible: true },
@@ -1108,6 +1109,8 @@ export default function FinancePage() {
         switch (column.id) {
             case "name":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("klien")}</th>;
+            case "event_type":
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{tb("eventTypeLabel")}</th>;
             case "total_price":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("hargaTotal")}</th>;
             case "package_price":
@@ -1146,6 +1149,8 @@ export default function FinancePage() {
                         <div className="text-xs text-muted-foreground truncate">{booking.booking_code} · {booking.service_label || booking.services?.name || "-"}</div>
                     </td>
                 );
+            case "event_type":
+                return <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 max-w-[180px] truncate text-muted-foreground")} title={booking.event_type || "-"}>{booking.event_type || "-"}</td>;
             case "total_price":
                 return <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap font-medium")}>{formatCurrency(finalTotal)}</td>;
             case "package_price":
@@ -1431,6 +1436,8 @@ export default function FinancePage() {
         discountAmount: number,
     ) {
         switch (column.id) {
+            case "event_type":
+                return booking.event_type || "-";
             case "total_price":
                 return formatCurrency(finalTotal);
             case "package_price":
