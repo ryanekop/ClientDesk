@@ -3,6 +3,12 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { google } from "googleapis";
 import { getDriveOAuth2Client } from "@/utils/google/drive";
 import { createClient } from "@/utils/supabase/server";
+import {
+  buildGoogleOAuthReturnUrl,
+  sanitizeGoogleOAuthOrigin,
+  sanitizeGoogleOAuthReturnPath,
+  verifySignedGoogleOAuthState,
+} from "@/lib/google-oauth-state";
 
 const supabaseAdmin = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -69,18 +75,107 @@ async function resolveGoogleAccountEmail(
   }
 }
 
+function buildCallbackHtml(args: {
+  success: boolean;
+  errorCode?: string;
+  targetOrigin: string | null;
+  redirectOrigin: string | null;
+  returnPath: string;
+}) {
+  const payload = args.success
+    ? { type: "GOOGLE_DRIVE_SUCCESS" }
+    : { type: "GOOGLE_DRIVE_ERROR", error: args.errorCode || "unknown_error" };
+
+  const redirectUrl = buildGoogleOAuthReturnUrl({
+    origin: args.redirectOrigin,
+    returnPath: args.returnPath,
+    service: "drive",
+    status: args.success ? "success" : "error",
+    error: args.success ? null : payload.error,
+  });
+
+  const successTitle = "✅ Google Drive Terhubung!";
+  const successSubtitle = "Jendela ini akan tertutup otomatis...";
+  const errorTitle = "⚠️ Gagal menghubungkan Google Drive";
+  const errorSubtitle = args.errorCode
+    ? `Kode error: ${args.errorCode}`
+    : "Silakan coba lagi.";
+
+  return htmlResponse(`<!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8" />
+                <title>Menghubungkan...</title>
+            </head>
+            <body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#333;">
+                <div style="text-align:center;max-width:320px;">
+                    <p style="font-size:1.2rem;font-weight:600;">${
+                      args.success ? successTitle : errorTitle
+                    }</p>
+                    <p style="color:#888;">${
+                      args.success ? successSubtitle : errorSubtitle
+                    }</p>
+                </div>
+                <script>
+                    var payload = ${JSON.stringify(payload)};
+                    var redirectUrl = ${JSON.stringify(redirectUrl)};
+                    var targetOrigin = ${JSON.stringify(
+                      sanitizeGoogleOAuthOrigin(args.targetOrigin),
+                    )};
+
+                    try {
+                        var ch = new BroadcastChannel("clientdesk-google-auth");
+                        ch.postMessage(payload);
+                        ch.close();
+                    } catch (e) {}
+
+                    if (window.opener) {
+                        try {
+                            if (targetOrigin) {
+                                window.opener.postMessage(payload, targetOrigin);
+                            } else {
+                                window.opener.postMessage(payload, "*");
+                            }
+                        } catch (e) {}
+
+                        setTimeout(function () {
+                            try { window.close(); } catch (e) {}
+                        }, 1200);
+
+                        setTimeout(function () {
+                            if (!window.closed) {
+                                window.location.href = redirectUrl;
+                            }
+                        }, 2200);
+                    } else {
+                        setTimeout(function () {
+                            window.location.href = redirectUrl;
+                        }, 1200);
+                    }
+                </script>
+            </body>
+            </html>`);
+}
+
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
+  const stateParam = url.searchParams.get("state");
+  const verifiedState = verifySignedGoogleOAuthState(stateParam, "drive");
+  const statePayload = verifiedState.valid ? verifiedState.payload : null;
+  const returnPath = sanitizeGoogleOAuthReturnPath(statePayload?.returnPath);
+  const targetOrigin = statePayload?.origin ?? null;
+  const redirectOrigin = statePayload?.origin ?? request.nextUrl.origin;
 
   if (error || !code) {
-    return htmlResponse(
-      `<!DOCTYPE html><html><body><script>
-                window.opener?.postMessage({ type: "GOOGLE_DRIVE_ERROR", error: "${error || "no_code"}" }, "*");
-                window.close();
-            </script></body></html>`,
-    );
+    return buildCallbackHtml({
+      success: false,
+      errorCode: error || "no_code",
+      targetOrigin,
+      redirectOrigin,
+      returnPath,
+    });
   }
 
   try {
@@ -94,37 +189,46 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient();
     const {
-      data: { user },
+      data: { user: sessionUser },
     } = await supabase.auth.getUser();
 
-    if (!user) {
-      return htmlResponse(
-        `<!DOCTYPE html><html><body><script>
-                    window.opener?.postMessage({ type: "GOOGLE_DRIVE_ERROR", error: "not_authenticated" }, "*");
-                    window.close();
-                </script></body></html>`,
-      );
+    const stateUserId = statePayload?.userId ?? null;
+    const targetUserId = stateUserId || sessionUser?.id || null;
+
+    if (!targetUserId) {
+      return buildCallbackHtml({
+        success: false,
+        errorCode: stateParam ? "invalid_state" : "not_authenticated",
+        targetOrigin,
+        redirectOrigin,
+        returnPath,
+      });
     }
+
+    const effectiveSessionUser =
+      sessionUser && sessionUser.id === targetUserId ? sessionUser : null;
 
     const { data: existingProfile } = await supabaseAdmin
       .from("profiles")
       .select(
-        "google_drive_access_token, google_drive_refresh_token, google_drive_account_email",
+        "full_name, google_drive_access_token, google_drive_refresh_token, google_drive_account_email",
       )
-      .eq("id", user.id)
+      .eq("id", targetUserId)
       .maybeSingle();
 
+    const fallbackFullName = normalizeEmail(existingProfile?.full_name) || "User";
+    const fullName =
+      String(effectiveSessionUser?.user_metadata?.full_name || "").trim() ||
+      String(effectiveSessionUser?.email || "").split("@")[0] ||
+      fallbackFullName;
+
     const profilePatch: Record<string, unknown> = {
-      id: user.id,
-      full_name: String(
-        user.user_metadata?.full_name || user.email?.split("@")[0] || "",
-      ),
+      id: targetUserId,
+      full_name: fullName,
       google_drive_access_token:
         tokens.access_token ?? existingProfile?.google_drive_access_token ?? null,
       google_drive_refresh_token:
-        tokens.refresh_token ??
-        existingProfile?.google_drive_refresh_token ??
-        null,
+        tokens.refresh_token ?? existingProfile?.google_drive_refresh_token ?? null,
       google_drive_token_expiry: tokens.expiry_date
         ? new Date(tokens.expiry_date).toISOString()
         : null,
@@ -146,52 +250,28 @@ export async function GET(request: NextRequest) {
     }
 
     if (dbError) {
-      return htmlResponse(
-        `<!DOCTYPE html><html><body><script>
-                    window.opener?.postMessage({ type: "GOOGLE_DRIVE_ERROR", error: "db_error" }, "*");
-                    window.close();
-                </script></body></html>`,
-      );
+      return buildCallbackHtml({
+        success: false,
+        errorCode: "db_error",
+        targetOrigin,
+        redirectOrigin,
+        returnPath,
+      });
     }
 
-    return htmlResponse(
-      `<!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8" />
-                <title>Menghubungkan...</title>
-            </head>
-            <body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#333;">
-                <div style="text-align:center;">
-                    <p style="font-size:1.2rem;font-weight:600;">✅ Google Drive Terhubung!</p>
-                    <p style="color:#888;">Jendela ini akan tertutup otomatis...</p>
-                </div>
-                <script>
-                    // BroadcastChannel: lebih reliable dari window.opener.postMessage
-                    // karena window.opener bisa menjadi null setelah cross-origin redirect ke Google
-                    try {
-                        var ch = new BroadcastChannel("clientdesk-google-auth");
-                        ch.postMessage({ type: "GOOGLE_DRIVE_SUCCESS" });
-                        ch.close();
-                    } catch(e) {}
-                    // Fallback: postMessage via window.opener
-                    if (window.opener) {
-                        try { window.opener.postMessage({ type: "GOOGLE_DRIVE_SUCCESS" }, "*"); } catch(e) {}
-                        setTimeout(() => window.close(), 1500);
-                    } else {
-                        // Fallback: if opened in same tab (popup blocked), redirect back to settings
-                        setTimeout(() => { window.location.href = "/id/settings"; }, 1500);
-                    }
-                </script>
-            </body>
-            </html>`,
-    );
+    return buildCallbackHtml({
+      success: true,
+      targetOrigin,
+      redirectOrigin,
+      returnPath,
+    });
   } catch {
-    return htmlResponse(
-      `<!DOCTYPE html><html><body><script>
-                window.opener?.postMessage({ type: "GOOGLE_DRIVE_ERROR", error: "token_exchange_failed" }, "*");
-                window.close();
-            </script></body></html>`,
-    );
+    return buildCallbackHtml({
+      success: false,
+      errorCode: "token_exchange_failed",
+      targetOrigin,
+      redirectOrigin,
+      returnPath,
+    });
   }
 }

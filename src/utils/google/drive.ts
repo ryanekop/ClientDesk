@@ -20,7 +20,7 @@ export function getDriveOAuth2Client() {
     );
 }
 
-export function getDriveAuthUrl() {
+export function getDriveAuthUrl(options?: { state?: string | null }) {
     const oauth2Client = getDriveOAuth2Client();
     return oauth2Client.generateAuthUrl({
         access_type: "offline",
@@ -31,6 +31,7 @@ export function getDriveAuthUrl() {
             "profile",
             "https://www.googleapis.com/auth/drive.file",
         ],
+        state: options?.state || undefined,
     });
 }
 

@@ -10,7 +10,7 @@ export function getOAuth2Client() {
     );
 }
 
-export function getAuthUrl() {
+export function getAuthUrl(options?: { state?: string | null }) {
     const oauth2Client = getOAuth2Client();
     return oauth2Client.generateAuthUrl({
         access_type: "offline",
@@ -21,6 +21,7 @@ export function getAuthUrl() {
             "profile",
             "https://www.googleapis.com/auth/calendar.events",
         ],
+        state: options?.state || undefined,
     });
 }
 

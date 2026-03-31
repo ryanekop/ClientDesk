@@ -187,6 +187,11 @@ type ConnectedGoogleAccountResponse = {
   };
 };
 
+type GoogleConnectionService = "calendar" | "drive";
+
+const GOOGLE_CONNECT_POLL_INTERVAL_MS = 2_000;
+const GOOGLE_CONNECT_POLL_TIMEOUT_MS = 90_000;
+
 const templateTypes = [
   { value: "whatsapp_client" },
   { value: "whatsapp_freelancer" },
@@ -567,6 +572,51 @@ function parseTemplateContentKey(key: string) {
   return { type: key, eventType: undefined, mode: "normal" as WhatsAppTemplateMode };
 }
 
+function resolveGoogleOAuthErrorMessage(args: {
+  locale: string;
+  service: GoogleConnectionService;
+  errorCode?: string | null;
+}) {
+  const serviceName = args.service === "calendar" ? "Google Calendar" : "Google Drive";
+  const code = typeof args.errorCode === "string" ? args.errorCode : "";
+  const isEnglish = args.locale === "en";
+
+  switch (code) {
+    case "insufficient_scope":
+      return isEnglish
+        ? `${serviceName} permissions are incomplete. Please approve all required access and try again.`
+        : `Izin ${serviceName} belum lengkap. Mohon izinkan semua akses yang diminta lalu coba lagi.`;
+    case "not_authenticated":
+      return isEnglish
+        ? `Your session could not be verified while connecting ${serviceName}. Please sign in again and retry.`
+        : `Sesi login tidak terverifikasi saat menghubungkan ${serviceName}. Silakan login ulang lalu coba lagi.`;
+    case "invalid_state":
+      return isEnglish
+        ? `${serviceName} connection request has expired or is invalid. Please start the connection again from Settings.`
+        : `Permintaan koneksi ${serviceName} sudah kedaluwarsa atau tidak valid. Silakan mulai ulang koneksi dari Settings.`;
+    case "token_exchange_failed":
+      return isEnglish
+        ? `Failed to complete ${serviceName} authorization. Please try again.`
+        : `Gagal menyelesaikan otorisasi ${serviceName}. Silakan coba lagi.`;
+    case "db_error":
+      return isEnglish
+        ? `${serviceName} connected but failed to save the account state. Please try again.`
+        : `${serviceName} berhasil diautentikasi tetapi gagal menyimpan status koneksi. Silakan coba lagi.`;
+    case "access_denied":
+      return isEnglish
+        ? `You cancelled ${serviceName} authorization.`
+        : `Kamu membatalkan izin ${serviceName}.`;
+    case "no_code":
+      return isEnglish
+        ? `Authorization callback for ${serviceName} is incomplete. Please retry the connection.`
+        : `Callback otorisasi ${serviceName} tidak lengkap. Silakan ulangi koneksi.`;
+    default:
+      return isEnglish
+        ? `Failed to connect ${serviceName}. Please try again.`
+        : `Gagal menghubungkan ${serviceName}. Silakan coba lagi.`;
+  }
+}
+
 export default function SettingsPage() {
   const supabase = createClient();
   const t = useTranslations("Settings");
@@ -634,6 +684,8 @@ export default function SettingsPage() {
   >(null);
   const [loadingConnectedAccountInfo, setLoadingConnectedAccountInfo] =
     React.useState(false);
+  const googleConnectPollIntervalRef = React.useRef<number | null>(null);
+  const googleConnectPollTimeoutRef = React.useRef<number | null>(null);
   const [fastpikIntegrationEnabled, setFastpikIntegrationEnabled] =
     React.useState(false);
   const [fastpikSyncMode, setFastpikSyncMode] = React.useState<
@@ -770,6 +822,98 @@ export default function SettingsPage() {
       showSuccessToast(message || defaultSettingsSavedToastMessage);
     },
     [defaultSettingsSavedToastMessage, showSuccessToast],
+  );
+  const stopGoogleConnectPolling = React.useCallback(() => {
+    if (googleConnectPollIntervalRef.current !== null) {
+      window.clearInterval(googleConnectPollIntervalRef.current);
+      googleConnectPollIntervalRef.current = null;
+    }
+    if (googleConnectPollTimeoutRef.current !== null) {
+      window.clearTimeout(googleConnectPollTimeoutRef.current);
+      googleConnectPollTimeoutRef.current = null;
+    }
+    setLoadingConnectedAccountInfo(false);
+  }, []);
+  const applyConnectedAccountInfo = React.useEffectEvent(
+    (payload: ConnectedGoogleAccountResponse | null) => {
+      if (!payload) return;
+      if (typeof payload.calendar?.connected === "boolean") {
+        setIsCalendarConnected(payload.calendar.connected);
+      }
+      if (typeof payload.drive?.connected === "boolean") {
+        setIsDriveConnected(payload.drive.connected);
+      }
+      setCalendarConnectedEmail(payload.calendar?.email || null);
+      setDriveConnectedEmail(payload.drive?.email || null);
+    },
+  );
+  const fetchConnectedAccountInfo = React.useEffectEvent(
+    async (withLoading: boolean = true) => {
+      if (withLoading) setLoadingConnectedAccountInfo(true);
+      try {
+        const response = await fetch("/api/google/connected-account");
+        if (!response.ok) return null;
+        return (await response.json().catch(
+          () => null,
+        )) as ConnectedGoogleAccountResponse | null;
+      } catch {
+        return null;
+      } finally {
+        if (withLoading) setLoadingConnectedAccountInfo(false);
+      }
+    },
+  );
+  const startGoogleConnectPolling = React.useEffectEvent(
+    (service: GoogleConnectionService) => {
+      stopGoogleConnectPolling();
+      setLoadingConnectedAccountInfo(true);
+
+      const runCheck = async () => {
+        const payload = await fetchConnectedAccountInfo(false);
+        if (!payload) return;
+        applyConnectedAccountInfo(payload);
+        const connected =
+          service === "calendar"
+            ? Boolean(payload.calendar?.connected)
+            : Boolean(payload.drive?.connected);
+        if (connected) {
+          stopGoogleConnectPolling();
+        }
+      };
+
+      void runCheck();
+      googleConnectPollIntervalRef.current = window.setInterval(() => {
+        void runCheck();
+      }, GOOGLE_CONNECT_POLL_INTERVAL_MS);
+      googleConnectPollTimeoutRef.current = window.setTimeout(() => {
+        stopGoogleConnectPolling();
+      }, GOOGLE_CONNECT_POLL_TIMEOUT_MS);
+    },
+  );
+  const openGoogleConnectPopup = React.useEffectEvent(
+    (service: GoogleConnectionService) => {
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.delete("google_oauth");
+      currentUrl.searchParams.delete("error");
+      const returnPath = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+      const endpoint =
+        service === "calendar" ? "/api/google/auth" : "/api/google/drive/auth";
+      const authUrl = `${endpoint}?returnPath=${encodeURIComponent(returnPath)}`;
+      const popupName = service === "calendar" ? "google-auth" : "google-drive-auth";
+      const width = 500;
+      const height = 600;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+      const popup = window.open(
+        authUrl,
+        popupName,
+        `width=${width},height=${height},left=${left},top=${top},popup=yes`,
+      );
+      startGoogleConnectPolling(service);
+      if (!popup) {
+        window.location.assign(authUrl);
+      }
+    },
   );
   const calendarFormatInputRef = React.useRef<HTMLInputElement>(null);
   const calendarDescriptionInputRef = React.useRef<HTMLTextAreaElement>(null);
@@ -954,12 +1098,27 @@ export default function SettingsPage() {
   // Listen for Google auth popup callbacks
   React.useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // Setelah Google auth sukses, lakukan silent fetchAll agar state tersync dari DB
+      const messageType = event.data?.type;
+      if (messageType === "GOOGLE_AUTH_SUCCESS") {
+        startGoogleConnectPolling("calendar");
+        return;
+      }
+      if (messageType === "GOOGLE_DRIVE_SUCCESS") {
+        startGoogleConnectPolling("drive");
+        return;
+      }
       if (
-        event.data?.type === "GOOGLE_AUTH_SUCCESS" ||
-        event.data?.type === "GOOGLE_DRIVE_SUCCESS"
+        messageType === "GOOGLE_AUTH_ERROR" ||
+        messageType === "GOOGLE_DRIVE_ERROR"
       ) {
-        void fetchAll(true);
+        stopGoogleConnectPolling();
+        const service: GoogleConnectionService =
+          messageType === "GOOGLE_AUTH_ERROR" ? "calendar" : "drive";
+        const errorCode =
+          typeof event.data?.error === "string" ? event.data.error : null;
+        showFeedback(
+          resolveGoogleOAuthErrorMessage({ locale, service, errorCode }),
+        );
       }
     };
 
@@ -977,8 +1136,9 @@ export default function SettingsPage() {
     return () => {
       window.removeEventListener("message", handleMessage);
       channel?.close();
+      stopGoogleConnectPolling();
     };
-  }, []);
+  }, [locale, showFeedback, stopGoogleConnectPolling]);
 
   React.useEffect(() => {
     if (!availableEventTypes.includes(selectedEventType)) {
@@ -1308,48 +1468,55 @@ export default function SettingsPage() {
   }, []);
 
   React.useEffect(() => {
-    if (activeTab !== "google") return;
-    if (!isCalendarConnected && !isDriveConnected) {
-      setCalendarConnectedEmail(null);
-      setDriveConnectedEmail(null);
-      setLoadingConnectedAccountInfo(false);
-      return;
+    const currentUrl = new URL(window.location.href);
+    const oauthStatus = currentUrl.searchParams.get("google_oauth");
+    if (!oauthStatus) return;
+
+    const errorCode = currentUrl.searchParams.get("error");
+    if (oauthStatus === "calendar_success") {
+      startGoogleConnectPolling("calendar");
+      void fetchAll(true);
+    } else if (oauthStatus === "drive_success") {
+      startGoogleConnectPolling("drive");
+      void fetchAll(true);
+    } else if (oauthStatus === "calendar_error" || oauthStatus === "drive_error") {
+      stopGoogleConnectPolling();
+      const service: GoogleConnectionService = oauthStatus.startsWith("calendar")
+        ? "calendar"
+        : "drive";
+      showFeedback(
+        resolveGoogleOAuthErrorMessage({ locale, service, errorCode }),
+      );
     }
 
+    currentUrl.searchParams.delete("google_oauth");
+    currentUrl.searchParams.delete("error");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`,
+    );
+  }, [locale, showFeedback, stopGoogleConnectPolling]);
+
+  React.useEffect(() => {
+    if (activeTab !== "google") return;
+
     let cancelled = false;
-    setLoadingConnectedAccountInfo(true);
-    void fetch("/api/google/connected-account")
-      .then(async (response) => {
-        if (!response.ok) return null;
-        return (await response.json().catch(
-          () => null,
-        )) as ConnectedGoogleAccountResponse | null;
-      })
-      .then((payload) => {
-        if (cancelled) return;
-        if (typeof payload?.calendar?.connected === "boolean") {
-          setIsCalendarConnected(payload.calendar.connected);
-        }
-        if (typeof payload?.drive?.connected === "boolean") {
-          setIsDriveConnected(payload.drive.connected);
-        }
-        setCalendarConnectedEmail(payload?.calendar?.email || null);
-        setDriveConnectedEmail(payload?.drive?.email || null);
-      })
-      .catch(() => {
-        if (cancelled) return;
+    void (async () => {
+      const payload = await fetchConnectedAccountInfo(true);
+      if (cancelled) return;
+      if (payload) {
+        applyConnectedAccountInfo(payload);
+      } else {
         setCalendarConnectedEmail(null);
         setDriveConnectedEmail(null);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoadingConnectedAccountInfo(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [activeTab, isCalendarConnected, isDriveConnected]);
+  }, [activeTab]);
 
   const saveProfilePatch = React.useEffectEvent(
     async (patch: Record<string, unknown>) => {
@@ -1994,6 +2161,7 @@ export default function SettingsPage() {
 
   async function handleDisconnect() {
     if (!disconnectModal.service) return;
+    stopGoogleConnectPolling();
     setIsDisconnecting(true);
     const {
       data: { user },
@@ -2011,6 +2179,7 @@ export default function SettingsPage() {
         google_calendar_account_email: null,
       });
       setIsCalendarConnected(false);
+      setCalendarConnectedEmail(null);
     } else {
       await saveProfilePatch({
         google_drive_access_token: null,
@@ -2019,6 +2188,7 @@ export default function SettingsPage() {
         google_drive_account_email: null,
       });
       setIsDriveConnected(false);
+      setDriveConnectedEmail(null);
     }
     setIsDisconnecting(false);
     setDisconnectModal({ open: false, service: null });
@@ -3034,19 +3204,7 @@ export default function SettingsPage() {
                           variant="outline"
                           size="sm"
                           className="gap-1.5"
-                          onClick={() => {
-                            const w = 500,
-                              h = 600;
-                            const left =
-                              window.screenX + (window.outerWidth - w) / 2;
-                            const top =
-                              window.screenY + (window.outerHeight - h) / 2;
-                            window.open(
-                              "/api/google/auth",
-                              "google-auth",
-                              `width=${w},height=${h},left=${left},top=${top},popup=yes`,
-                            );
-                          }}
+                          onClick={() => openGoogleConnectPopup("calendar")}
                         >
                           <Link2 className="w-3.5 h-3.5" /> {tp("connect")}
                         </Button>
@@ -3267,19 +3425,7 @@ export default function SettingsPage() {
                           variant="outline"
                           size="sm"
                           className="gap-1.5"
-                          onClick={() => {
-                            const w = 500,
-                              h = 600;
-                            const left =
-                              window.screenX + (window.outerWidth - w) / 2;
-                            const top =
-                              window.screenY + (window.outerHeight - h) / 2;
-                            window.open(
-                              "/api/google/drive/auth",
-                              "google-drive-auth",
-                              `width=${w},height=${h},left=${left},top=${top},popup=yes`,
-                            );
-                          }}
+                          onClick={() => openGoogleConnectPopup("drive")}
                         >
                           <Link2 className="w-3.5 h-3.5" /> {tp("connect")}
                         </Button>
