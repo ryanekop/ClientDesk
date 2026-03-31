@@ -1221,7 +1221,7 @@ export default function BookingsPage() {
                         aria-label={`Resize ${column.label}`}
                         title={locale === "en" ? "Drag to resize column" : "Geser untuk ubah lebar kolom"}
                         className={cn(
-                            "absolute -right-2 top-1/2 h-7 w-4 -translate-y-1/2 touch-none select-none cursor-col-resize rounded transition-colors",
+                            "absolute -right-3 top-1/2 h-8 w-6 -translate-y-1/2 touch-none select-none cursor-col-resize rounded transition-colors",
                             resizing ? "bg-primary/15" : "hover:bg-muted/80",
                         )}
                         onPointerDown={resizeHandleProps.onPointerDown}

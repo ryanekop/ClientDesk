@@ -21,6 +21,10 @@ function areWidthMapsEqual(
   return currentEntries.every(([key, value]) => next[key] === value);
 }
 
+function toStableWidth(value: number) {
+  return Math.round(value);
+}
+
 export function useStickyTableColumns(columns: TableColumnPreference[]) {
   const tableRef = React.useRef<HTMLTableElement | null>(null);
   const [widths, setWidths] = React.useState<Record<string, number>>({});
@@ -46,7 +50,7 @@ export function useStickyTableColumns(columns: TableColumnPreference[]) {
       headerCells.forEach((cell) => {
         const columnId = cell.dataset.columnId;
         if (!columnId) return;
-        next[columnId] = cell.getBoundingClientRect().width;
+        next[columnId] = toStableWidth(cell.getBoundingClientRect().width);
       });
       setWidths((current) => (areWidthMapsEqual(current, next) ? current : next));
     };
@@ -57,14 +61,27 @@ export function useStickyTableColumns(columns: TableColumnPreference[]) {
       return undefined;
     }
 
+    let frameId: number | null = null;
+    const scheduleUpdate = () => {
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        updateWidths();
+      });
+    };
+
     const observer = new ResizeObserver(() => {
-      updateWidths();
+      scheduleUpdate();
     });
 
     headerCells.forEach((cell) => observer.observe(cell));
-    observer.observe(table);
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
   }, [columnsKey]);
 
   const stickyColumns = React.useMemo(() => {

@@ -87,13 +87,11 @@ export function useResizableTableColumns({
   const [widthByColumnId, setWidthByColumnId] = React.useState<Record<string, number>>(
     {},
   );
-  const [hydratedStorageKey, setHydratedStorageKey] = React.useState<string | null>(
-    null,
-  );
   const [activeResizeColumnId, setActiveResizeColumnId] = React.useState<string | null>(
     null,
   );
   const widthByColumnIdRef = React.useRef(widthByColumnId);
+  const loadedStorageKeyRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
     widthByColumnIdRef.current = widthByColumnId;
@@ -118,30 +116,39 @@ export function useResizableTableColumns({
   );
 
   React.useEffect(() => {
-    setHydratedStorageKey(null);
+    loadedStorageKeyRef.current = null;
 
     if (!storageKey) {
-      setWidthByColumnId({});
+      setWidthByColumnId((current) =>
+        Object.keys(current).length === 0 ? current : {},
+      );
+      loadedStorageKeyRef.current = null;
       return;
     }
 
     try {
       const rawValue = window.localStorage.getItem(storageKey);
       if (!rawValue) {
-        setWidthByColumnId({});
+        setWidthByColumnId((current) =>
+          Object.keys(current).length === 0 ? current : {},
+        );
       } else {
         const parsed = JSON.parse(rawValue) as unknown;
-        setWidthByColumnId(normalizeMap(parsed));
+        const normalized = normalizeMap(parsed);
+        setWidthByColumnId((current) =>
+          areWidthMapsEqual(current, normalized) ? current : normalized,
+        );
       }
     } catch {
-      setWidthByColumnId({});
-    } finally {
-      setHydratedStorageKey(storageKey);
+      setWidthByColumnId((current) =>
+        Object.keys(current).length === 0 ? current : {},
+      );
     }
+    loadedStorageKeyRef.current = storageKey;
   }, [normalizeMap, storageKey]);
 
   React.useEffect(() => {
-    if (!storageKey || hydratedStorageKey !== storageKey) return;
+    if (!storageKey || loadedStorageKeyRef.current !== storageKey) return;
 
     try {
       if (Object.keys(widthByColumnId).length === 0) {
@@ -152,7 +159,7 @@ export function useResizableTableColumns({
     } catch {
       // Ignore storage write failures.
     }
-  }, [hydratedStorageKey, storageKey, widthByColumnId]);
+  }, [storageKey, widthByColumnId]);
 
   React.useEffect(() => {
     if (!storageKey) return;
@@ -224,8 +231,13 @@ export function useResizableTableColumns({
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
       setActiveResizeColumnId(columnId);
+      const pointerId = event.pointerId;
+      if (event.currentTarget.hasPointerCapture?.(pointerId) === false) {
+        event.currentTarget.setPointerCapture?.(pointerId);
+      }
 
       const handlePointerMove = (moveEvent: PointerEvent) => {
+        if (moveEvent.pointerId !== pointerId) return;
         const deltaX = moveEvent.clientX - startX;
         const nextWidth = Math.round(clamp(startWidth + deltaX, minWidth, maxWidth));
         setWidthByColumnId((current) => {
@@ -234,10 +246,12 @@ export function useResizableTableColumns({
         });
       };
 
-      const cleanup = () => {
+      const cleanup = (cleanupEvent?: PointerEvent) => {
+        if (cleanupEvent && cleanupEvent.pointerId !== pointerId) return;
         document.body.style.cursor = previousCursor;
         document.body.style.userSelect = previousUserSelect;
         setActiveResizeColumnId((current) => (current === columnId ? null : current));
+        event.currentTarget.releasePointerCapture?.(pointerId);
         window.removeEventListener("pointermove", handlePointerMove);
         window.removeEventListener("pointerup", cleanup);
         window.removeEventListener("pointercancel", cleanup);
