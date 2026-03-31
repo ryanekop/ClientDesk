@@ -1244,6 +1244,18 @@ export default function ServicesPage() {
     }
   }
 
+  function handleAddSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    void handleAdd(formData);
+  }
+
+  function handleEditSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    void handleEdit(formData);
+  }
+
   async function handleToggleActive(service: Service) {
     const { error } = await supabase
       .from("services")
@@ -1514,7 +1526,7 @@ export default function ServicesPage() {
                 <DialogTitle>{t("tambahTitle")}</DialogTitle>
                 <DialogDescription>{t("tambahDesc")}</DialogDescription>
               </DialogHeader>
-              <form action={(fd) => handleAdd(fd)} className="grid gap-4 py-4">
+              <form onSubmit={handleAddSubmit} className="grid gap-4 py-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">{t("namaLayanan")}</label>
                   <input
@@ -2031,7 +2043,7 @@ export default function ServicesPage() {
             <DialogDescription>{ts("editDesc")}</DialogDescription>
           </DialogHeader>
           {editingService ? (
-            <form action={(fd) => handleEdit(fd)} className="grid gap-4 py-4">
+            <form onSubmit={handleEditSubmit} className="grid gap-4 py-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("namaLayanan")}</label>
                 <input
