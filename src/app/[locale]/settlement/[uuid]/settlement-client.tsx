@@ -29,6 +29,7 @@ import {
   fillWhatsAppTemplate,
   getDefaultWhatsAppTemplate,
   normalizeWhatsAppNumber,
+  resolveWhatsAppTemplateMode,
 } from "@/lib/whatsapp-template";
 import { formatSessionDate, formatTemplateSessionDate } from "@/utils/format-date";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
@@ -389,10 +390,17 @@ export default function SettlementClient({
           effectiveVendor.settlementConfirmTemplate
         : effectiveVendor.settlementConfirmTemplate ||
           effectiveVendor.settlementConfirmTemplateEn;
+    const templateMode = resolveWhatsAppTemplateMode({
+      eventType: booking.eventType,
+      extraFields: booking.extraFields,
+    });
 
     const resolvedTemplate = templateContent.trim()
       ? templateContent
-      : getDefaultWhatsAppTemplate("whatsapp_settlement_confirm", locale);
+      : getDefaultWhatsAppTemplate("whatsapp_settlement_confirm", locale, {
+          eventType: booking.eventType,
+          mode: templateMode,
+        });
     const message = fillWhatsAppTemplate(resolvedTemplate, {
       client_name: booking.clientName,
       client_whatsapp: booking.clientWhatsapp || "-",

@@ -52,7 +52,9 @@ import {
 import {
   getStoredTemplateName,
   getStoredTemplateType,
+  resolveTemplateMode,
   resolveTemplateType,
+  type WhatsAppTemplateMode,
 } from "@/lib/whatsapp-template";
 import { BOOKING_WHATSAPP_TIME_VARIABLES } from "@/lib/booking-whatsapp-template-vars";
 import {
@@ -194,17 +196,35 @@ const EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES = new Set([
   "whatsapp_settlement_client",
   "whatsapp_settlement_confirm",
 ]);
+const SPLIT_CAPABLE_TEMPLATE_EVENTS = new Set(["Wedding", "Wisuda"]);
+const TEMPLATE_MODES: WhatsAppTemplateMode[] = ["normal", "split"];
 
 function isEventScopedWhatsAppTemplateType(type: string) {
   return EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES.has(type);
 }
 
+function isSplitCapableTemplateEvent(eventType: string | null | undefined) {
+  const normalized = normalizeTemplateEventTypeValue(eventType);
+  return normalized ? SPLIT_CAPABLE_TEMPLATE_EVENTS.has(normalized) : false;
+}
+
+function getSupportedTemplateModesForEvent(
+  eventType: string | null | undefined,
+): WhatsAppTemplateMode[] {
+  return isSplitCapableTemplateEvent(eventType) ? TEMPLATE_MODES : ["normal"];
+}
+
 function buildTemplateContentKey(
   type: string,
   eventType: string | null | undefined,
+  mode: WhatsAppTemplateMode = "normal",
 ) {
   if (!isEventScopedWhatsAppTemplateType(type)) return type;
-  return `${type}__${normalizeTemplateEventTypeValue(eventType) || "Umum"}`;
+  const normalizedEventType = normalizeTemplateEventTypeValue(eventType) || "Umum";
+  const normalizedMode = getSupportedTemplateModesForEvent(normalizedEventType).includes(mode)
+    ? mode
+    : "normal";
+  return `${type}__${normalizedEventType}__${normalizedMode}`;
 }
 
 const templateTitleKeyByType: Record<string, string> = {
@@ -529,11 +549,13 @@ function parseTemplateContentKey(key: string) {
   for (const type of EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES) {
     const prefix = `${type}__`;
     if (key.startsWith(prefix)) {
-      const eventType = key.slice(prefix.length) || "Umum";
-      return { type, eventType };
+      const [eventTypePart, modePart] = key.slice(prefix.length).split("__");
+      const eventType = eventTypePart || "Umum";
+      const mode = modePart === "split" ? "split" : "normal";
+      return { type, eventType, mode: mode as WhatsAppTemplateMode };
     }
   }
-  return { type: key, eventType: undefined };
+  return { type: key, eventType: undefined, mode: "normal" as WhatsAppTemplateMode };
 }
 
 export default function SettingsPage() {
@@ -584,6 +606,8 @@ export default function SettingsPage() {
 
   // Event type selector for freelancer template
   const [selectedEventType, setSelectedEventType] = React.useState("Umum");
+  const [selectedTemplateMode, setSelectedTemplateMode] =
+    React.useState<WhatsAppTemplateMode>("normal");
 
   // Language tab per template
   const [templateLang, setTemplateLang] = React.useState<
@@ -946,6 +970,9 @@ export default function SettingsPage() {
     if (!availableEventTypes.includes(selectedEventType)) {
       setSelectedEventType("Umum");
     }
+    if (!getSupportedTemplateModesForEvent(selectedEventType).includes(selectedTemplateMode)) {
+      setSelectedTemplateMode("normal");
+    }
     if (!availableEventTypes.includes(selectedCalendarEventType)) {
       setSelectedCalendarEventType("Umum");
     }
@@ -957,6 +984,7 @@ export default function SettingsPage() {
     selectedCalendarEventType,
     selectedDriveEventType,
     selectedEventType,
+    selectedTemplateMode,
   ]);
 
   React.useEffect(() => {
@@ -1223,14 +1251,17 @@ export default function SettingsPage() {
     templateTypes.forEach((tt) => {
       if (isEventScopedWhatsAppTemplateType(tt.value)) {
         templateEventTypes.forEach((et) => {
-          const key = buildTemplateContentKey(tt.value, et);
-          const existing = allTemplates.find(
-            (tmpl: Template) =>
-              resolveTemplateType(tmpl) === tt.value &&
-              (normalizeTemplateEventTypeValue(tmpl.event_type) || "Umum") === et,
-          );
-          contents[key] = existing?.content || "";
-          contentsEn[key] = existing?.content_en || "";
+          getSupportedTemplateModesForEvent(et).forEach((mode) => {
+            const key = buildTemplateContentKey(tt.value, et, mode);
+            const existing = allTemplates.find(
+              (tmpl: Template) =>
+                resolveTemplateType(tmpl) === tt.value &&
+                resolveTemplateMode(tmpl) === mode &&
+                (normalizeTemplateEventTypeValue(tmpl.event_type) || "Umum") === et,
+            );
+            contents[key] = existing?.content || "";
+            contentsEn[key] = existing?.content_en || "";
+          });
         });
       } else {
         const existing = allTemplates.find(
@@ -1677,12 +1708,13 @@ export default function SettingsPage() {
       let nextTemplates = [...templates];
 
       for (const key of changedKeys) {
-        const { type, eventType } = resolveTemplateTargetFromKey(key);
+        const { type, eventType, mode } = resolveTemplateTargetFromKey(key);
         const content = templateContents[key] || "";
         const contentEn = templateContentsEn[key] || "";
         const existing = nextTemplates.find(
           (item) =>
             resolveTemplateType(item) === type &&
+            resolveTemplateMode(item) === mode &&
             (eventType
               ? (normalizeTemplateEventTypeValue(item.event_type) || "Umum") ===
                 eventType
@@ -1692,6 +1724,7 @@ export default function SettingsPage() {
         const storedName = getStoredTemplateName(
           type,
           tp(templateTitleKeyByType[type] || "templateInvoice"),
+          mode,
         );
 
         if (existing) {
@@ -2188,6 +2221,14 @@ export default function SettingsPage() {
     resepsi_date: "15 April 2026",
     resepsi_time: "18.00",
     resepsi_maps_url: "https://maps.google.com/maps?q=Grand+Ballroom+Jakarta",
+    wisuda_session_1_location: "Balairung Kampus",
+    wisuda_session_1_date: "10 September 2026",
+    wisuda_session_1_time: "07.30",
+    wisuda_session_1_maps_url: "https://maps.google.com/maps?q=Balairung+Kampus",
+    wisuda_session_2_location: "Taman Wisuda",
+    wisuda_session_2_date: "10 September 2026",
+    wisuda_session_2_time: "13.00",
+    wisuda_session_2_maps_url: "https://maps.google.com/maps?q=Taman+Wisuda",
     location_maps_url:
       "https://maps.google.com/maps?q=Jakarta+Convention+Center",
     detail_location: "Gedung Utama, Lt. 3, Ruang Ballroom A",
@@ -2291,8 +2332,14 @@ export default function SettingsPage() {
 
   function renderTemplateCard(tt: (typeof templateTypes)[0]) {
     const isEventScoped = isEventScopedWhatsAppTemplateType(tt.value);
+    const supportedModes = isEventScoped
+      ? getSupportedTemplateModesForEvent(selectedEventType)
+      : (["normal"] as WhatsAppTemplateMode[]);
+    const activeTemplateMode = supportedModes.includes(selectedTemplateMode)
+      ? selectedTemplateMode
+      : "normal";
     const contentKey = isEventScoped
-      ? buildTemplateContentKey(tt.value, selectedEventType)
+      ? buildTemplateContentKey(tt.value, selectedEventType, activeTemplateMode)
       : tt.value;
     const cardToneClass =
       templateCardToneByType[tt.value] ||
@@ -2366,6 +2413,25 @@ export default function SettingsPage() {
                   </option>
                 ))}
               </select>
+              {supportedModes.length > 1 && (
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    {tp("templateMode")}
+                  </label>
+                  <select
+                    value={activeTemplateMode}
+                    onChange={(e) =>
+                      setSelectedTemplateMode(
+                        e.target.value === "split" ? "split" : "normal",
+                      )
+                    }
+                    className={inputClass + " cursor-pointer"}
+                  >
+                    <option value="normal">{tp("templateModeNormal")}</option>
+                    <option value="split">{tp("templateModeSplit")}</option>
+                  </select>
+                </div>
+              )}
             </div>
           )}
 

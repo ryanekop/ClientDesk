@@ -13,7 +13,12 @@ type BookingMetadataRow = {
   extra_fields?: unknown;
 };
 
-const FORMATTED_DATE_METADATA_KEYS = new Set(["tanggal_akad", "tanggal_resepsi"]);
+const FORMATTED_DATE_METADATA_KEYS = new Set([
+  "tanggal_akad",
+  "tanggal_resepsi",
+  "tanggal_wisuda_1",
+  "tanggal_wisuda_2",
+]);
 
 function humanizeKey(value: string) {
   return value

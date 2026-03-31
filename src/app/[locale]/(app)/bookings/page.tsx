@@ -60,7 +60,10 @@ import {
     buildBookingMetadataColumns,
     getBookingMetadataValue,
 } from "@/lib/booking-table-columns";
-import { getWhatsAppTemplateContent } from "@/lib/whatsapp-template";
+import {
+    getWhatsAppTemplateContent,
+    resolveWhatsAppTemplateMode,
+} from "@/lib/whatsapp-template";
 import {
     DEFAULT_CLIENT_STATUSES,
     getBookingStatusOptions,
@@ -281,6 +284,10 @@ type SavedTemplate = {
 function generateWATemplate(booking: Booking, locale: string, savedTemplates: SavedTemplate[], studioName: string, freelancerName?: string) {
     const templateLocale = locale === "en" ? "en" : "id";
     const siteUrl = typeof window !== "undefined" ? window.location.origin : "";
+    const templateMode = resolveWhatsAppTemplateMode({
+        eventType: booking.event_type,
+        extraFields: booking.extra_fields,
+    });
     const vars = buildBookingWhatsAppTemplateVars({
         booking,
         locale: templateLocale,
@@ -300,6 +307,7 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
             "whatsapp_freelancer",
             locale,
             booking.event_type,
+            templateMode,
         );
         return applyVars(content);
     }
@@ -309,6 +317,7 @@ function generateWATemplate(booking: Booking, locale: string, savedTemplates: Sa
         "whatsapp_client",
         locale,
         booking.event_type,
+        templateMode,
     );
     return applyVars(content);
 }

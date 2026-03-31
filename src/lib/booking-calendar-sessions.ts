@@ -83,6 +83,37 @@ export function resolveBookingCalendarSessions({
     }
   }
 
+  if (normalizedEventType === "wisuda") {
+    const session1Date = normalizeDateValue(extras.tanggal_wisuda_1);
+    const session2Date = normalizeDateValue(extras.tanggal_wisuda_2);
+
+    if (session1Date) {
+      sessions.push({
+        key: "wisuda_session_1",
+        label: "Sesi 1",
+        titlePrefix: "[Sesi 1]",
+        sessionDate: session1Date,
+        location:
+          typeof extras.tempat_wisuda_1 === "string" && extras.tempat_wisuda_1.trim()
+            ? extras.tempat_wisuda_1.trim()
+            : defaultLocation || null,
+      });
+    }
+
+    if (session2Date) {
+      sessions.push({
+        key: "wisuda_session_2",
+        label: "Sesi 2",
+        titlePrefix: "[Sesi 2]",
+        sessionDate: session2Date,
+        location:
+          typeof extras.tempat_wisuda_2 === "string" && extras.tempat_wisuda_2.trim()
+            ? extras.tempat_wisuda_2.trim()
+            : defaultLocation || null,
+      });
+    }
+  }
+
   const sortedSplitSessions = sessions.sort(
     (a, b) => getSessionSortValue(a.sessionDate) - getSessionSortValue(b.sessionDate),
   );

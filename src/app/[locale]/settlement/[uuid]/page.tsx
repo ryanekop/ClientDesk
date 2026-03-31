@@ -9,6 +9,7 @@ import {
 import { normalizeFinalAdjustments } from "@/lib/final-settlement";
 import {
   getWhatsAppTemplateContent,
+  resolveWhatsAppTemplateMode,
   type WhatsAppTemplate,
 } from "@/lib/whatsapp-template";
 import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
@@ -60,17 +61,23 @@ async function getSettlementData(uuid: string) {
           typeof template.event_type === "string" ? template.event_type : null,
       }))
     : [];
+  const templateMode = resolveWhatsAppTemplateMode({
+    eventType: booking.event_type,
+    extraFields: booking.extra_fields,
+  });
   const settlementConfirmTemplate = getWhatsAppTemplateContent(
     normalizedTemplates,
     "whatsapp_settlement_confirm",
     "id",
     booking.event_type,
+    templateMode,
   );
   const settlementConfirmTemplateEn = getWhatsAppTemplateContent(
     normalizedTemplates,
     "whatsapp_settlement_confirm",
     "en",
     booking.event_type,
+    templateMode,
   );
   const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
 

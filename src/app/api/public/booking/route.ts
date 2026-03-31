@@ -27,7 +27,11 @@ import {
 } from "@/lib/payment-config";
 import { uploadPaymentProofToDrive } from "@/lib/payment-proof-drive";
 import { getInitialBookingStatus } from "@/lib/client-status";
-import { getWhatsAppTemplateContent, type WhatsAppTemplate } from "@/lib/whatsapp-template";
+import {
+    getWhatsAppTemplateContent,
+    resolveWhatsAppTemplateMode,
+    type WhatsAppTemplate,
+} from "@/lib/whatsapp-template";
 import {
     createBookingCode,
     isDuplicateBookingCodeError,
@@ -459,13 +463,33 @@ export async function POST(request: NextRequest) {
                 ? extraData as Record<string, unknown>
                 : {};
         const directSessionDate = normalizeStoredDateTime(sessionDate);
-        const weddingSessionCandidates = [
+        const wisudaSession1Date = normalizeStoredDateTime(
+            rawExtraData.tanggal_wisuda_1,
+        );
+        const wisudaSession2Date = normalizeStoredDateTime(
+            rawExtraData.tanggal_wisuda_2,
+        );
+        const hasWisudaSession1Date = Boolean(wisudaSession1Date);
+        const hasWisudaSession2Date = Boolean(wisudaSession2Date);
+        const hasCompleteWisudaSplitDates =
+            hasWisudaSession1Date && hasWisudaSession2Date;
+        const wisudaSession1Location =
+            typeof rawExtraData.tempat_wisuda_1 === "string"
+                ? rawExtraData.tempat_wisuda_1.trim()
+                : "";
+        const wisudaSession2Location =
+            typeof rawExtraData.tempat_wisuda_2 === "string"
+                ? rawExtraData.tempat_wisuda_2.trim()
+                : "";
+        const splitSessionCandidates = [
             normalizeStoredDateTime(rawExtraData.tanggal_akad),
             normalizeStoredDateTime(rawExtraData.tanggal_resepsi),
+            wisudaSession1Date,
+            wisudaSession2Date,
         ].filter(Boolean);
         const resolvedSessionDate =
             directSessionDate ||
-            weddingSessionCandidates
+            splitSessionCandidates
                 .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0] ||
             "";
 
@@ -579,7 +603,9 @@ export async function POST(request: NextRequest) {
         const shouldRequireSessionDate =
             normalizedLayoutBuiltInFieldIds.has("session_date") ||
             normalizedLayoutBuiltInFieldIds.has("akad_date") ||
-            normalizedLayoutBuiltInFieldIds.has("resepsi_date");
+            normalizedLayoutBuiltInFieldIds.has("resepsi_date") ||
+            normalizedLayoutBuiltInFieldIds.has("wisuda_session1_date") ||
+            normalizedLayoutBuiltInFieldIds.has("wisuda_session2_date");
         const shouldRequireUniversitySelection =
             isUniversityEventType(resolvedEventType) &&
             normalizedLayoutBuiltInFieldIds.has(
@@ -589,6 +615,32 @@ export async function POST(request: NextRequest) {
         if (shouldRequireEventType && !resolvedEventType) {
             return NextResponse.json(
                 { success: false, error: "Silakan pilih tipe acara terlebih dahulu." },
+                { status: 400 },
+            );
+        }
+
+        const isWisudaEventType = (resolvedEventType || "").toLowerCase() === "wisuda";
+        if (isWisudaEventType && hasWisudaSession1Date !== hasWisudaSession2Date) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error:
+                        "Untuk Wisuda split, tanggal Sesi 1 dan Sesi 2 harus diisi lengkap.",
+                },
+                { status: 400 },
+            );
+        }
+        if (
+            isWisudaEventType &&
+            hasCompleteWisudaSplitDates &&
+            (!wisudaSession1Location || !wisudaSession2Location)
+        ) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error:
+                        "Lokasi Sesi 1 dan Lokasi Sesi 2 wajib diisi untuk Wisuda split.",
+                },
                 { status: 400 },
             );
         }
@@ -882,6 +934,12 @@ export async function POST(request: NextRequest) {
         }
 
         const sanitizedExtraData: Record<string, unknown> = { ...rawExtraData };
+        if (!isWisudaEventType || !hasCompleteWisudaSplitDates) {
+            delete sanitizedExtraData.tanggal_wisuda_1;
+            delete sanitizedExtraData.tanggal_wisuda_2;
+            delete sanitizedExtraData.tempat_wisuda_1;
+            delete sanitizedExtraData.tempat_wisuda_2;
+        }
         if (shouldRequireUniversitySelection) {
             const submittedUniversityName = cleanUniversityName(
                 typeof rawExtraData[UNIVERSITY_EXTRA_FIELD_KEY] === "string"
@@ -1254,6 +1312,10 @@ export async function POST(request: NextRequest) {
                 "whatsapp_booking_confirm",
                 "id",
                 resolvedEventType,
+                resolveWhatsAppTemplateMode({
+                    eventType: resolvedEventType,
+                    extraFields: sanitizedExtraData,
+                }),
             );
             bookingConfirmTemplate = content.trim() || null;
         } catch {

@@ -21,6 +21,16 @@ export const EVENT_EXTRA_FIELDS: Record<string, EventExtraField[]> = {
   Wisuda: [
     { key: "universitas", label: "Universitas" },
     { key: "fakultas", label: "Fakultas" },
+    {
+      key: "tempat_wisuda_1",
+      label: "Lokasi Sesi 1",
+      isLocation: true,
+    },
+    {
+      key: "tempat_wisuda_2",
+      label: "Lokasi Sesi 2",
+      isLocation: true,
+    },
   ],
   Wedding: [
     {
@@ -126,6 +136,14 @@ export const MULTI_SESSION_TEMPLATE_KEYS = [
   "resepsi_date",
   "resepsi_time",
   "resepsi_maps_url",
+  "wisuda_session_1_location",
+  "wisuda_session_1_date",
+  "wisuda_session_1_time",
+  "wisuda_session_1_maps_url",
+  "wisuda_session_2_location",
+  "wisuda_session_2_date",
+  "wisuda_session_2_time",
+  "wisuda_session_2_maps_url",
 ] as const;
 
 const EXTRA_FIELD_PREVIEW_VALUES: Record<string, string> = {
@@ -136,6 +154,8 @@ const EXTRA_FIELD_PREVIEW_VALUES: Record<string, string> = {
   jumlah_tamu: "300",
   tempat_akad: "Masjid Raya",
   tempat_resepsi: "Grand Ballroom",
+  tempat_wisuda_1: "Balairung Kampus",
+  tempat_wisuda_2: "Taman Wisuda",
   usia_kehamilan: "32 minggu",
   gender_bayi: "Perempuan",
   nama_bayi: "Alya",
@@ -265,10 +285,30 @@ export function buildMultiSessionTemplateVars(
 
   const akad = buildSessionDateTimeVars(source, "tanggal_akad", locale);
   const resepsi = buildSessionDateTimeVars(source, "tanggal_resepsi", locale);
+  const wisudaSession1 = buildSessionDateTimeVars(
+    source,
+    "tanggal_wisuda_1",
+    locale,
+  );
+  const wisudaSession2 = buildSessionDateTimeVars(
+    source,
+    "tanggal_wisuda_2",
+    locale,
+  );
   const akadLocation = readStringField(source, "tempat_akad");
   const resepsiLocation = readStringField(source, "tempat_resepsi");
+  const wisudaSession1Location = readStringField(source, "tempat_wisuda_1");
+  const wisudaSession2Location = readStringField(source, "tempat_wisuda_2");
   const resepsiMapsUrl = buildGoogleMapsUrlOrFallback(
     { address: resepsiLocation || null },
+    "-",
+  );
+  const wisudaSession1MapsUrl = buildGoogleMapsUrlOrFallback(
+    { address: wisudaSession1Location || null },
+    "-",
+  );
+  const wisudaSession2MapsUrl = buildGoogleMapsUrlOrFallback(
+    { address: wisudaSession2Location || null },
     "-",
   );
 
@@ -280,6 +320,14 @@ export function buildMultiSessionTemplateVars(
     ["resepsi_date", resepsi.date],
     ["resepsi_time", resepsi.time],
     ["resepsi_maps_url", resepsiMapsUrl],
+    ["wisuda_session_1_location", wisudaSession1Location],
+    ["wisuda_session_1_date", wisudaSession1.date],
+    ["wisuda_session_1_time", wisudaSession1.time],
+    ["wisuda_session_1_maps_url", wisudaSession1MapsUrl],
+    ["wisuda_session_2_location", wisudaSession2Location],
+    ["wisuda_session_2_date", wisudaSession2.date],
+    ["wisuda_session_2_time", wisudaSession2.time],
+    ["wisuda_session_2_maps_url", wisudaSession2MapsUrl],
   ].filter(([, value]) => value.length > 0) as Array<[string, string]>;
 
   return Object.fromEntries(entries);

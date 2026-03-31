@@ -43,6 +43,8 @@ export const IMPORT_COLUMNS = {
   sessionDate: "session_date",
   akadDate: "akad_date",
   resepsiDate: "resepsi_date",
+  wisudaSession1Date: "wisuda_session_1_date",
+  wisudaSession2Date: "wisuda_session_2_date",
   dpPaid: "dp_paid",
   status: "status",
   addonServices: "addon_services",
@@ -66,6 +68,8 @@ const REQUIRED_TEMPLATE_COLUMNS = [
   IMPORT_COLUMNS.sessionDate,
   IMPORT_COLUMNS.akadDate,
   IMPORT_COLUMNS.resepsiDate,
+  IMPORT_COLUMNS.wisudaSession1Date,
+  IMPORT_COLUMNS.wisudaSession2Date,
   IMPORT_COLUMNS.dpPaid,
 ];
 
@@ -222,6 +226,8 @@ function getTemplateHeaders(context: ImportContext): string[] {
     IMPORT_COLUMNS.sessionDate,
     IMPORT_COLUMNS.akadDate,
     IMPORT_COLUMNS.resepsiDate,
+    IMPORT_COLUMNS.wisudaSession1Date,
+    IMPORT_COLUMNS.wisudaSession2Date,
     IMPORT_COLUMNS.dpPaid,
     IMPORT_COLUMNS.status,
     IMPORT_COLUMNS.addonServices,
@@ -291,6 +297,9 @@ function buildTemplateSampleRows(
     "Umum";
   const weddingEventType = context.eventTypeOptions.find(
     (item) => item.toLowerCase() === "wedding",
+  );
+  const wisudaEventType = context.eventTypeOptions.find(
+    (item) => item.toLowerCase() === "wisuda",
   );
 
   const baseRow = Object.fromEntries(headers.map((header) => [header, ""])) as Record<
@@ -385,6 +394,55 @@ function buildTemplateSampleRows(
     );
 
     rows.push(row2);
+  }
+
+  if (wisudaEventType) {
+    const wisudaMainService =
+      context.mainServices.find((service) =>
+        isServiceAvailableForEvent(service, wisudaEventType),
+      ) || context.mainServices[0];
+    const wisudaAddonService =
+      context.addonServices.find((service) =>
+        isServiceAvailableForEvent(service, wisudaEventType),
+      ) || context.addonServices[0];
+
+    const row3 = {
+      ...baseRow,
+      [IMPORT_COLUMNS.clientName]: "CONTOH - Nama Klien Wisuda Split",
+      [IMPORT_COLUMNS.eventType]: wisudaEventType,
+      [IMPORT_COLUMNS.mainServices]: wisudaMainService?.name || "",
+      [IMPORT_COLUMNS.mainServiceIds]: "",
+      [IMPORT_COLUMNS.sessionDate]: "",
+      [IMPORT_COLUMNS.akadDate]: "",
+      [IMPORT_COLUMNS.resepsiDate]: "",
+      [IMPORT_COLUMNS.wisudaSession1Date]: "2026-09-10T07:30",
+      [IMPORT_COLUMNS.wisudaSession2Date]: "2026-09-10T13:00",
+      [IMPORT_COLUMNS.dpPaid]: "1000000",
+      [IMPORT_COLUMNS.status]: context.initialStatus,
+      [IMPORT_COLUMNS.addonServices]: wisudaAddonService?.name || "",
+      [IMPORT_COLUMNS.addonServiceIds]: "",
+      [IMPORT_COLUMNS.freelancers]: sampleFreelancer?.name || "",
+      [IMPORT_COLUMNS.freelanceIds]: "",
+      [IMPORT_COLUMNS.location]: "Contoh Lokasi Wisuda",
+      [IMPORT_COLUMNS.locationDetail]: "Area Kampus",
+      [IMPORT_COLUMNS.bookingDate]: "2026-09-01",
+      [IMPORT_COLUMNS.notes]: "Contoh booking wisuda split sesi.",
+      [IMPORT_COLUMNS.adminNotes]: "",
+      [IMPORT_COLUMNS.accommodationFee]: "0",
+      [IMPORT_COLUMNS.discountAmount]: "0",
+      "extra.tempat_wisuda_1": "Balairung Kampus",
+      "extra.tempat_wisuda_2": "Taman Wisuda",
+    };
+
+    fillRequiredExtraFields(row3, wisudaEventType);
+    fillRequiredCustomFields(
+      row3,
+      context.customFieldsByEventType[wisudaEventType] ||
+        context.customFieldsByEventType.Umum ||
+        [],
+    );
+
+    rows.push(row3);
   }
 
   return rows;
@@ -773,13 +831,14 @@ export function buildTemplateWorkbookBuffer(context: ImportContext): Buffer {
     ["1. Wajib isi: client_name, event_type, dp_paid, dan salah satu main_services/main_service_ids."],
     ["2. Date format: YYYY-MM-DD atau YYYY-MM-DDTHH:mm (timezone Asia/Jakarta)."],
     ["3. Untuk Wedding: isi session_date ATAU isi lengkap akad_date + resepsi_date."],
-    ["4. Gunakan pemisah | atau koma untuk multi-value (services/addons/freelancers)."],
-    ["5. Mapping Name + ID fallback: isi nama untuk mudah dibaca, pakai ID bila ada nama ganda."],
-    ["6. Kolom dynamic: extra.<key> untuk built-in extra fields, cf.<id> untuk custom fields."],
-    ["7. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
-    ["8. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
-    ["9. Batas maksimum 500 baris per file .xlsx."],
-    ["10. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
+    ["4. Untuk Wisuda: isi session_date ATAU isi lengkap wisuda_session_1_date + wisuda_session_2_date."],
+    ["5. Gunakan pemisah | atau koma untuk multi-value (services/addons/freelancers)."],
+    ["6. Mapping Name + ID fallback: isi nama untuk mudah dibaca, pakai ID bila ada nama ganda."],
+    ["7. Kolom dynamic: extra.<key> untuk built-in extra fields, cf.<id> untuk custom fields."],
+    ["8. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
+    ["9. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
+    ["10. Batas maksimum 500 baris per file .xlsx."],
+    ["11. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
   ];
   const guideSheet = XLSX.utils.aoa_to_sheet(guideRows);
   guideSheet["!cols"] = [{ wch: 140 }];
@@ -1313,10 +1372,22 @@ function validateOneRow(input: {
   const sessionRaw = normalizeText(input.row[IMPORT_COLUMNS.sessionDate]);
   const akadRaw = normalizeText(input.row[IMPORT_COLUMNS.akadDate]);
   const resepsiRaw = normalizeText(input.row[IMPORT_COLUMNS.resepsiDate]);
+  const wisudaSession1Raw = normalizeText(
+    input.row[IMPORT_COLUMNS.wisudaSession1Date],
+  );
+  const wisudaSession2Raw = normalizeText(
+    input.row[IMPORT_COLUMNS.wisudaSession2Date],
+  );
 
   const sessionDate = sessionRaw ? normalizeSessionDateInput(sessionRaw) : null;
   const akadDate = akadRaw ? normalizeSessionDateInput(akadRaw) : null;
   const resepsiDate = resepsiRaw ? normalizeSessionDateInput(resepsiRaw) : null;
+  const wisudaSession1Date = wisudaSession1Raw
+    ? normalizeSessionDateInput(wisudaSession1Raw)
+    : null;
+  const wisudaSession2Date = wisudaSession2Raw
+    ? normalizeSessionDateInput(wisudaSession2Raw)
+    : null;
 
   if (sessionRaw && !sessionDate) {
     pushIssue(normalized, "error", "session_date tidak valid.");
@@ -1327,8 +1398,22 @@ function validateOneRow(input: {
   if (resepsiRaw && !resepsiDate) {
     pushIssue(normalized, "error", "resepsi_date tidak valid.");
   }
+  if (wisudaSession1Raw && !wisudaSession1Date) {
+    pushIssue(normalized, "error", "wisuda_session_1_date tidak valid.");
+  }
+  if (wisudaSession2Raw && !wisudaSession2Date) {
+    pushIssue(normalized, "error", "wisuda_session_2_date tidak valid.");
+  }
 
   if (normalized.eventType.toLowerCase() === "wedding") {
+    if (wisudaSession1Raw || wisudaSession2Raw) {
+      pushIssue(
+        normalized,
+        "warning",
+        "wisuda_session_1_date/wisuda_session_2_date diabaikan karena event_type bukan Wisuda.",
+      );
+    }
+
     if ((akadRaw && !resepsiRaw) || (!akadRaw && resepsiRaw)) {
       pushIssue(normalized, "error", "Untuk Wedding, akad_date dan resepsi_date harus diisi lengkap.");
     }
@@ -1346,12 +1431,55 @@ function validateOneRow(input: {
         "Untuk Wedding, isi session_date atau akad_date + resepsi_date.",
       );
     }
+  } else if (normalized.eventType.toLowerCase() === "wisuda") {
+    if (akadRaw || resepsiRaw) {
+      pushIssue(
+        normalized,
+        "warning",
+        "akad_date/resepsi_date diabaikan karena event_type bukan Wedding.",
+      );
+    }
+
+    if (
+      (wisudaSession1Raw && !wisudaSession2Raw) ||
+      (!wisudaSession1Raw && wisudaSession2Raw)
+    ) {
+      pushIssue(
+        normalized,
+        "error",
+        "Untuk Wisuda, wisuda_session_1_date dan wisuda_session_2_date harus diisi lengkap.",
+      );
+    }
+
+    if (wisudaSession1Date && wisudaSession2Date) {
+      normalized.sessionDate =
+        wisudaSession1Date < wisudaSession2Date
+          ? wisudaSession1Date
+          : wisudaSession2Date;
+      normalized.builtInExtraFields.tanggal_wisuda_1 = wisudaSession1Date;
+      normalized.builtInExtraFields.tanggal_wisuda_2 = wisudaSession2Date;
+    } else if (sessionDate) {
+      normalized.sessionDate = sessionDate;
+    } else {
+      pushIssue(
+        normalized,
+        "error",
+        "Untuk Wisuda, isi session_date atau wisuda_session_1_date + wisuda_session_2_date.",
+      );
+    }
   } else {
     if (akadRaw || resepsiRaw) {
       pushIssue(
         normalized,
         "warning",
         "akad_date/resepsi_date diabaikan karena event_type bukan Wedding.",
+      );
+    }
+    if (wisudaSession1Raw || wisudaSession2Raw) {
+      pushIssue(
+        normalized,
+        "warning",
+        "wisuda_session_1_date/wisuda_session_2_date diabaikan karena event_type bukan Wisuda.",
       );
     }
     normalized.sessionDate = sessionDate;
@@ -1655,10 +1783,21 @@ export function resolveImportedLocation(row: NormalizedImportRow): {
 } {
   const weddingAkad = normalizeNullableText(row.builtInExtraFields.tempat_akad);
   const weddingResepsi = normalizeNullableText(row.builtInExtraFields.tempat_resepsi);
+  const wisudaSession1 = normalizeNullableText(
+    row.builtInExtraFields.tempat_wisuda_1,
+  );
+  const wisudaSession2 = normalizeNullableText(
+    row.builtInExtraFields.tempat_wisuda_2,
+  );
   const fallback = normalizeNullableText(row.location);
 
   return {
-    location: weddingAkad || weddingResepsi || fallback,
+    location:
+      weddingAkad ||
+      weddingResepsi ||
+      wisudaSession1 ||
+      wisudaSession2 ||
+      fallback,
     locationLat: null,
     locationLng: null,
   };

@@ -435,6 +435,8 @@ export function BookingFormClient({
   const [splitDates, setSplitDates] = React.useState(false);
   const [akadDate, setAkadDate] = React.useState("");
   const [resepsiDate, setResepsiDate] = React.useState("");
+  const [wisudaSession1Date, setWisudaSession1Date] = React.useState("");
+  const [wisudaSession2Date, setWisudaSession2Date] = React.useState("");
   const [selectedPaymentMethod, setSelectedPaymentMethod] = React.useState<PaymentMethod | null>(null);
   const [selectedPaymentSource, setSelectedPaymentSource] = React.useState<PaymentSource | null>(null);
   const [proofFile, setProofFile] = React.useState<File | null>(null);
@@ -664,6 +666,10 @@ export function BookingFormClient({
       );
     const hasExtraField = (key: string) =>
       hasBuiltInField(`extra:${key}`);
+    const isWeddingEvent = eventType === "Wedding";
+    const isWisudaEvent = eventType === "Wisuda";
+    const isSplitSessionEnabled =
+      splitDates && (isWeddingEvent || isWisudaEvent);
 
     const requiresClientName = hasBuiltInField("client_name");
     const requiresClientWhatsapp = hasBuiltInField("client_whatsapp");
@@ -671,11 +677,19 @@ export function BookingFormClient({
     const requiresServicePackage = hasBuiltInField("service_package");
     const requiresSessionDate =
       hasBuiltInField("session_date") &&
-      !(eventType === "Wedding" && splitDates);
+      !isSplitSessionEnabled;
     const requiresAkadDate =
-      hasBuiltInField("akad_date") && eventType === "Wedding" && splitDates;
+      hasBuiltInField("akad_date") && isWeddingEvent && isSplitSessionEnabled;
     const requiresResepsiDate =
-      hasBuiltInField("resepsi_date") && eventType === "Wedding" && splitDates;
+      hasBuiltInField("resepsi_date") && isWeddingEvent && isSplitSessionEnabled;
+    const requiresWisudaSession1Date =
+      hasBuiltInField("wisuda_session1_date") &&
+      isWisudaEvent &&
+      isSplitSessionEnabled;
+    const requiresWisudaSession2Date =
+      hasBuiltInField("wisuda_session2_date") &&
+      isWisudaEvent &&
+      isSplitSessionEnabled;
 
     if (
       (requiresClientName && !clientName.trim()) ||
@@ -684,19 +698,33 @@ export function BookingFormClient({
       (requiresSessionDate && !sessionDate) ||
       (requiresAkadDate && !akadDate) ||
       (requiresResepsiDate && !resepsiDate) ||
+      (requiresWisudaSession1Date && !wisudaSession1Date) ||
+      (requiresWisudaSession2Date && !wisudaSession2Date) ||
       (requiresServicePackage && selectedServiceIds.length === 0) ||
-      (!location && eventType !== "Wedding" && showsLocationField)
+      (!location &&
+        !isWeddingEvent &&
+        !(isWisudaEvent && isSplitSessionEnabled) &&
+        showsLocationField)
     ) {
       setError(t("errorWajib"));
       return;
     }
 
     if (
-      eventType === "Wedding" &&
+      isWeddingEvent &&
       ((hasExtraField("tempat_akad") && !extraData.tempat_akad) ||
         (hasExtraField("tempat_resepsi") && !extraData.tempat_resepsi))
     ) {
       setError(t("errorLokasiWedding"));
+      return;
+    }
+    if (
+      isWisudaEvent &&
+      isSplitSessionEnabled &&
+      ((hasExtraField("tempat_wisuda_1") && !extraData.tempat_wisuda_1) ||
+        (hasExtraField("tempat_wisuda_2") && !extraData.tempat_wisuda_2))
+    ) {
+      setError("Mohon lengkapi Lokasi Sesi 1 dan Lokasi Sesi 2.");
       return;
     }
 
@@ -778,7 +806,7 @@ export function BookingFormClient({
     const fullPhone = `${countryCode}${phone}`.replace(/[^0-9+]/g, "");
     const dpValue = parseFormatted(dpDisplay) || 0;
     const resolvedLocation = resolvePreferredLocation(
-      eventType === "Wedding"
+      isWeddingEvent
         ? [
             {
               address: extraData.tempat_akad,
@@ -796,6 +824,24 @@ export function BookingFormClient({
               lng: locationCoords.lng,
             },
           ]
+        : isWisudaEvent && isSplitSessionEnabled
+          ? [
+              {
+                address: extraData.tempat_wisuda_1,
+                lat: extraLocationCoords.tempat_wisuda_1?.lat,
+                lng: extraLocationCoords.tempat_wisuda_1?.lng,
+              },
+              {
+                address: extraData.tempat_wisuda_2,
+                lat: extraLocationCoords.tempat_wisuda_2?.lat,
+                lng: extraLocationCoords.tempat_wisuda_2?.lng,
+              },
+              {
+                address: location,
+                lat: locationCoords.lat,
+                lng: locationCoords.lng,
+              },
+            ]
         : [
             {
               address: location,
@@ -848,7 +894,7 @@ export function BookingFormClient({
     try {
       const mergedExtra = { ...extraData };
       let finalSessionDate = sessionDate;
-      if (eventType === "Wedding" && splitDates) {
+      if (isWeddingEvent && isSplitSessionEnabled) {
           mergedExtra.tanggal_akad = akadDate || "";
           mergedExtra.tanggal_resepsi = resepsiDate || "";
           if (akadDate && resepsiDate) {
@@ -856,6 +902,23 @@ export function BookingFormClient({
           } else {
               finalSessionDate = akadDate || resepsiDate || sessionDate;
           }
+      } else if (isWisudaEvent && isSplitSessionEnabled) {
+          mergedExtra.tanggal_wisuda_1 = wisudaSession1Date || "";
+          mergedExtra.tanggal_wisuda_2 = wisudaSession2Date || "";
+          if (wisudaSession1Date && wisudaSession2Date) {
+              finalSessionDate =
+                wisudaSession1Date < wisudaSession2Date
+                  ? wisudaSession1Date
+                  : wisudaSession2Date;
+          } else {
+              finalSessionDate =
+                wisudaSession1Date || wisudaSession2Date || sessionDate;
+          }
+      } else if (isWisudaEvent) {
+          delete mergedExtra.tanggal_wisuda_1;
+          delete mergedExtra.tanggal_wisuda_2;
+          delete mergedExtra.tempat_wisuda_1;
+          delete mergedExtra.tempat_wisuda_2;
       }
       const customFieldSnapshots = buildCustomFieldSnapshots(
         normalizedActiveLayout,
@@ -979,8 +1042,42 @@ export function BookingFormClient({
       .replace(/[^0-9]/g, "");
     const clientWhatsapp = `${countryCode}${phone}`.replace(/[^0-9+]/g, "") || "-";
     const svcName = selectedMainServices.map((service) => service.name).join(", ") || "-";
-    const dateStr = sessionDate
-      ? new Date(sessionDate).toLocaleDateString("id-ID", {
+    const isWeddingEvent = eventType === "Wedding";
+    const isWisudaEvent = eventType === "Wisuda";
+    const isSplitSessionEnabled =
+      splitDates && (isWeddingEvent || isWisudaEvent);
+
+    const mergedExtraForTemplate = { ...extraData };
+    let resolvedSessionDate = sessionDate;
+    if (isWeddingEvent && isSplitSessionEnabled) {
+      mergedExtraForTemplate.tanggal_akad = akadDate || "";
+      mergedExtraForTemplate.tanggal_resepsi = resepsiDate || "";
+      if (akadDate && resepsiDate) {
+        resolvedSessionDate = akadDate < resepsiDate ? akadDate : resepsiDate;
+      } else {
+        resolvedSessionDate = akadDate || resepsiDate || sessionDate;
+      }
+    } else if (isWisudaEvent && isSplitSessionEnabled) {
+      mergedExtraForTemplate.tanggal_wisuda_1 = wisudaSession1Date || "";
+      mergedExtraForTemplate.tanggal_wisuda_2 = wisudaSession2Date || "";
+      if (wisudaSession1Date && wisudaSession2Date) {
+        resolvedSessionDate =
+          wisudaSession1Date < wisudaSession2Date
+            ? wisudaSession1Date
+            : wisudaSession2Date;
+      } else {
+        resolvedSessionDate =
+          wisudaSession1Date || wisudaSession2Date || sessionDate;
+      }
+    } else if (isWisudaEvent) {
+      delete mergedExtraForTemplate.tanggal_wisuda_1;
+      delete mergedExtraForTemplate.tanggal_wisuda_2;
+      delete mergedExtraForTemplate.tempat_wisuda_1;
+      delete mergedExtraForTemplate.tempat_wisuda_2;
+    }
+
+    const dateStr = resolvedSessionDate
+      ? new Date(resolvedSessionDate).toLocaleDateString("id-ID", {
           weekday: "long",
           day: "numeric",
           month: "long",
@@ -991,7 +1088,7 @@ export function BookingFormClient({
       : "-";
     const dpVal = parseFormatted(dpDisplay) || 0;
     const resolvedLocation = resolvePreferredLocation(
-      eventType === "Wedding"
+      isWeddingEvent
         ? [
             {
               address: extraData.tempat_akad,
@@ -1009,6 +1106,24 @@ export function BookingFormClient({
               lng: locationCoords.lng,
             },
           ]
+        : isWisudaEvent && isSplitSessionEnabled
+          ? [
+              {
+                address: extraData.tempat_wisuda_1,
+                lat: extraLocationCoords.tempat_wisuda_1?.lat,
+                lng: extraLocationCoords.tempat_wisuda_1?.lng,
+              },
+              {
+                address: extraData.tempat_wisuda_2,
+                lat: extraLocationCoords.tempat_wisuda_2?.lat,
+                lng: extraLocationCoords.tempat_wisuda_2?.lng,
+              },
+              {
+                address: location,
+                lat: locationCoords.lat,
+                lng: locationCoords.lng,
+              },
+            ]
         : [
             {
               address: location,
@@ -1025,15 +1140,6 @@ export function BookingFormClient({
       },
       "-",
     );
-    const mergedExtraForTemplate = {
-      ...extraData,
-      ...(eventType === "Wedding" && splitDates
-        ? {
-            tanggal_akad: akadDate || "",
-            tanggal_resepsi: resepsiDate || "",
-          }
-        : {}),
-    };
 
     const msg =
       (resultData.bookingConfirmTemplate || "").trim()
@@ -1387,6 +1493,11 @@ export function BookingFormClient({
   function renderEventExtraField(extraKey: string) {
     const field = currentExtraFields.find((item) => item.key === extraKey);
     if (!field) return null;
+    const isWisudaSplitLocationField =
+      field.key === "tempat_wisuda_1" || field.key === "tempat_wisuda_2";
+    if (eventType === "Wisuda" && !splitDates && isWisudaSplitLocationField) {
+      return null;
+    }
 
     return (
       <div
@@ -1582,6 +1693,11 @@ export function BookingFormClient({
               value={eventType}
               onChange={(e) => {
                 setEventType(e.target.value);
+                setSplitDates(false);
+                setAkadDate("");
+                setResepsiDate("");
+                setWisudaSession1Date("");
+                setWisudaSession2Date("");
                 setExtraData({});
                 setIsUniversityManualEntryActive(false);
                 setExtraLocationCoords({});
@@ -1623,6 +1739,20 @@ export function BookingFormClient({
               <span className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${splitDates ? "translate-x-4" : "translate-x-0"}`} />
             </button>
             <span className="text-sm font-medium">Akad &amp; Resepsi beda hari</span>
+          </div>
+        );
+      case "wisuda_split_toggle":
+        if (eventType !== "Wisuda") return null;
+        return (
+          <div key={item.id} className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setSplitDates(!splitDates)}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${splitDates ? "bg-primary" : "bg-gray-300"}`}
+            >
+              <span className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${splitDates ? "translate-x-4" : "translate-x-0"}`} />
+            </button>
+            <span className="text-sm font-medium">Sesi 1 &amp; Sesi 2 beda waktu/lokasi</span>
           </div>
         );
       case "akad_date":
@@ -1691,8 +1821,74 @@ export function BookingFormClient({
             />
           </div>
         );
+      case "wisuda_session1_date":
+        if (eventType !== "Wisuda" || !splitDates) return null;
+        return (
+          <div key={item.id} className="space-y-1.5">
+            <label className="text-sm font-medium">Tanggal Sesi 1 <span className="text-red-500">*</span></label>
+            <input
+              type="date"
+              value={wisudaSession1Date ? wisudaSession1Date.split("T")[0] : ""}
+              onChange={(e) => {
+                const timePart = wisudaSession1Date?.split("T")[1] || "10:00";
+                setWisudaSession1Date(e.target.value ? `${e.target.value}T${timePart}` : "");
+              }}
+              className={inputClass}
+              required
+            />
+          </div>
+        );
+      case "wisuda_session1_time":
+        if (eventType !== "Wisuda" || !splitDates) return null;
+        return (
+          <div key={item.id} className="space-y-1.5">
+            <label className="text-sm font-medium">Jam Sesi 1 <span className="text-red-500">*</span></label>
+            <input
+              type="time"
+              value={wisudaSession1Date ? wisudaSession1Date.split("T")[1] || "10:00" : ""}
+              onChange={(e) => {
+                const datePart = wisudaSession1Date?.split("T")[0] || "";
+                if (datePart) setWisudaSession1Date(`${datePart}T${e.target.value}`);
+              }}
+              className={inputClass}
+            />
+          </div>
+        );
+      case "wisuda_session2_date":
+        if (eventType !== "Wisuda" || !splitDates) return null;
+        return (
+          <div key={item.id} className="space-y-1.5">
+            <label className="text-sm font-medium">Tanggal Sesi 2 <span className="text-red-500">*</span></label>
+            <input
+              type="date"
+              value={wisudaSession2Date ? wisudaSession2Date.split("T")[0] : ""}
+              onChange={(e) => {
+                const timePart = wisudaSession2Date?.split("T")[1] || "10:00";
+                setWisudaSession2Date(e.target.value ? `${e.target.value}T${timePart}` : "");
+              }}
+              className={inputClass}
+              required
+            />
+          </div>
+        );
+      case "wisuda_session2_time":
+        if (eventType !== "Wisuda" || !splitDates) return null;
+        return (
+          <div key={item.id} className="space-y-1.5">
+            <label className="text-sm font-medium">Jam Sesi 2 <span className="text-red-500">*</span></label>
+            <input
+              type="time"
+              value={wisudaSession2Date ? wisudaSession2Date.split("T")[1] || "10:00" : ""}
+              onChange={(e) => {
+                const datePart = wisudaSession2Date?.split("T")[0] || "";
+                if (datePart) setWisudaSession2Date(`${datePart}T${e.target.value}`);
+              }}
+              className={inputClass}
+            />
+          </div>
+        );
       case "session_date":
-        if (eventType === "Wedding" && splitDates) return null;
+        if ((eventType === "Wedding" || eventType === "Wisuda") && splitDates) return null;
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
@@ -1711,7 +1907,7 @@ export function BookingFormClient({
           </div>
         );
       case "session_time":
-        if (eventType === "Wedding" && splitDates) return null;
+        if ((eventType === "Wedding" || eventType === "Wisuda") && splitDates) return null;
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
@@ -1729,7 +1925,13 @@ export function BookingFormClient({
           </div>
         );
       case "location":
-        if (eventType === "Wedding" || effectiveVendor.form_show_location === false) return null;
+        if (
+          eventType === "Wedding" ||
+          (eventType === "Wisuda" && splitDates) ||
+          effectiveVendor.form_show_location === false
+        ) {
+          return null;
+        }
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium flex items-center gap-1.5">

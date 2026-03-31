@@ -55,6 +55,7 @@ import {
     fillWhatsAppTemplate,
     getWhatsAppTemplateContent,
     normalizeWhatsAppNumber,
+    resolveWhatsAppTemplateMode,
 } from "@/lib/whatsapp-template";
 import { getInitialBookingPriceBreakdown } from "@/lib/booking-special-offer";
 import {
@@ -888,11 +889,16 @@ export default function FinancePage() {
         const remaining = Math.max((booking.total_price || 0) - (booking.dp_paid || 0), 0);
         const invoiceLink = getInitialInvoiceLink(booking);
         const trackingLink = getTrackingLink(booking);
+        const templateMode = resolveWhatsAppTemplateMode({
+            eventType: booking.event_type,
+            extraFields: booking.extra_fields,
+        });
         const templateContent = getWhatsAppTemplateContent(
             savedTemplates,
             "whatsapp_client",
             locale,
             booking.event_type,
+            templateMode,
         );
 
         if (templateContent.trim()) {
@@ -937,11 +943,16 @@ export default function FinancePage() {
         const trackingLink = getTrackingLink(booking);
         const settlementLink = getSettlementLink(booking);
         const invoiceLink = getFinalInvoiceLink(booking);
+        const templateMode = resolveWhatsAppTemplateMode({
+            eventType: booking.event_type,
+            extraFields: booking.extra_fields,
+        });
         const templateContent = getWhatsAppTemplateContent(
             savedTemplates,
             "whatsapp_settlement_client",
             locale,
             booking.event_type,
+            templateMode,
         );
 
         if (templateContent.trim()) {

@@ -44,10 +44,15 @@ export type BuiltInFieldId =
   | "instagram"
   | "event_type"
   | "wedding_split_toggle"
+  | "wisuda_split_toggle"
   | "akad_date"
   | "akad_time"
   | "resepsi_date"
   | "resepsi_time"
+  | "wisuda_session1_date"
+  | "wisuda_session1_time"
+  | "wisuda_session2_date"
+  | "wisuda_session2_time"
   | "session_date"
   | "session_time"
   | "location"
@@ -205,6 +210,39 @@ const WEDDING_BUILT_IN_FIELDS: BuiltInFieldDefinition[] = [
   {
     builtinId: "resepsi_time",
     label: "Reception Time",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+];
+
+const WISUDA_BUILT_IN_FIELDS: BuiltInFieldDefinition[] = [
+  {
+    builtinId: "wisuda_split_toggle",
+    label: "Toggle Sesi 1 & Sesi 2",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+  {
+    builtinId: "wisuda_session1_date",
+    label: "Tanggal Sesi 1",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+  {
+    builtinId: "wisuda_session1_time",
+    label: "Jam Sesi 1",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+  {
+    builtinId: "wisuda_session2_date",
+    label: "Tanggal Sesi 2",
+    category: "Sesi",
+    sectionId: "session_details",
+  },
+  {
+    builtinId: "wisuda_session2_time",
+    label: "Jam Sesi 2",
     category: "Sesi",
     sectionId: "session_details",
   },
@@ -431,6 +469,8 @@ export function getBuiltInFieldDefinitions(
   eventType: string,
   options: BuiltInFieldDefinitionOptions = {},
 ): BuiltInFieldDefinition[] {
+  const isWeddingEvent = eventType === "Wedding";
+  const isWisudaEvent = eventType === "Wisuda";
   const extraFieldKeys = new Set<string>(
     (EVENT_EXTRA_FIELDS[eventType] || []).map((field) => field.key),
   );
@@ -456,7 +496,7 @@ export function getBuiltInFieldDefinitions(
       sectionId: "session_details" as const,
     }));
   const locationFields =
-    eventType === "Wedding"
+    isWeddingEvent
       ? [
           {
             builtinId: "location_detail" as const,
@@ -480,11 +520,16 @@ export function getBuiltInFieldDefinitions(
           },
         ];
 
+  const splitSessionFields = isWeddingEvent
+    ? WEDDING_BUILT_IN_FIELDS
+    : isWisudaEvent
+      ? WISUDA_BUILT_IN_FIELDS
+      : [];
+
   return [
     ...BASE_BUILT_IN_FIELDS,
-    ...(eventType === "Wedding"
-      ? [...WEDDING_BUILT_IN_FIELDS, ...DEFAULT_SESSION_FIELDS]
-      : DEFAULT_SESSION_FIELDS),
+    ...splitSessionFields,
+    ...DEFAULT_SESSION_FIELDS,
     ...extraFields,
     ...locationFields,
     {

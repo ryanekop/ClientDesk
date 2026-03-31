@@ -86,6 +86,8 @@ type ExtraFieldDefinition = {
         | "estimatedGuests"
         | "akadVenue"
         | "receptionVenue"
+        | "wisudaSession1Venue"
+        | "wisudaSession2Venue"
         | "pregnancyAge"
         | "babyGender"
         | "babyName"
@@ -103,6 +105,8 @@ const EXTRA_FIELDS: Record<string, ExtraFieldDefinition[]> = {
     Wisuda: [
         { key: "universitas", labelKey: "university" },
         { key: "fakultas", labelKey: "faculty" },
+        { key: "tempat_wisuda_1", labelKey: "wisudaSession1Venue", isLocation: true },
+        { key: "tempat_wisuda_2", labelKey: "wisudaSession2Venue", isLocation: true },
     ],
     Wedding: [
         { key: "nama_pasangan", labelKey: "partnerName", fullWidth: true, required: true },
@@ -173,6 +177,8 @@ const EXTRA_FIELD_LABEL_KEYS = {
     jumlah_tamu: "estimatedGuests",
     tempat_akad: "akadVenue",
     tempat_resepsi: "receptionVenue",
+    tempat_wisuda_1: "wisudaSession1Venue",
+    tempat_wisuda_2: "wisudaSession2Venue",
     usia_kehamilan: "pregnancyAge",
     gender_bayi: "babyGender",
     nama_bayi: "babyName",
@@ -265,6 +271,8 @@ export default function NewBookingPage() {
     const [splitDates, setSplitDates] = React.useState(false);
     const [akadDate, setAkadDate] = React.useState("");
     const [resepsiDate, setResepsiDate] = React.useState("");
+    const [wisudaSession1Date, setWisudaSession1Date] = React.useState("");
+    const [wisudaSession2Date, setWisudaSession2Date] = React.useState("");
     const [statusOptions, setStatusOptions] = React.useState<string[]>(
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
     );
@@ -567,9 +575,24 @@ export default function NewBookingPage() {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
+            const isWeddingEvent = eventType === "Wedding";
+            const isWisudaEvent = eventType === "Wisuda";
+            const isSplitSessionEnabled =
+                splitDates && (isWeddingEvent || isWisudaEvent);
 
-            if (eventType === "Wedding" && (!extraFields.tempat_akad || !extraFields.tempat_resepsi)) {
+            if (
+                isWeddingEvent &&
+                (!extraFields.tempat_akad || !extraFields.tempat_resepsi)
+            ) {
                 showFeedback(tBookingEditor("errorWeddingLocationRequired"));
+                return;
+            }
+            if (
+                isWisudaEvent &&
+                isSplitSessionEnabled &&
+                (!extraFields.tempat_wisuda_1 || !extraFields.tempat_wisuda_2)
+            ) {
+                showFeedback("Lokasi Sesi 1 dan Lokasi Sesi 2 wajib diisi untuk Wisuda split.");
                 return;
             }
             if (selectedServiceIds.length === 0) {
@@ -586,7 +609,7 @@ export default function NewBookingPage() {
             // Determine session_date: if split, use earliest; merge extra_fields with dates
             let finalSessionDate = sessionDate || null;
             const mergedExtra = { ...extraFields };
-            if (eventType === "Wedding" && splitDates) {
+            if (isWeddingEvent && isSplitSessionEnabled) {
                 mergedExtra.tanggal_akad = akadDate || "";
                 mergedExtra.tanggal_resepsi = resepsiDate || "";
                 // session_date = earliest date for sorting/calendar
@@ -595,6 +618,22 @@ export default function NewBookingPage() {
                 } else {
                     finalSessionDate = akadDate || resepsiDate || null;
                 }
+            } else if (isWisudaEvent && isSplitSessionEnabled) {
+                mergedExtra.tanggal_wisuda_1 = wisudaSession1Date || "";
+                mergedExtra.tanggal_wisuda_2 = wisudaSession2Date || "";
+                if (wisudaSession1Date && wisudaSession2Date) {
+                    finalSessionDate =
+                        wisudaSession1Date < wisudaSession2Date
+                            ? wisudaSession1Date
+                            : wisudaSession2Date;
+                } else {
+                    finalSessionDate = wisudaSession1Date || wisudaSession2Date || null;
+                }
+            } else {
+                delete mergedExtra.tanggal_wisuda_1;
+                delete mergedExtra.tanggal_wisuda_2;
+                delete mergedExtra.tempat_wisuda_1;
+                delete mergedExtra.tempat_wisuda_2;
             }
             let resolvedExtraFields = { ...mergedExtra };
             try {
@@ -651,7 +690,7 @@ export default function NewBookingPage() {
                 nextSpecialOffer,
             );
             const resolvedLocation = resolvePreferredLocation(
-                eventType === "Wedding"
+                isWeddingEvent
                     ? [
                         {
                             address: resolvedExtraFields.tempat_akad,
@@ -669,6 +708,24 @@ export default function NewBookingPage() {
                             lng: locationCoords.lng,
                         },
                     ]
+                    : isWisudaEvent && isSplitSessionEnabled
+                        ? [
+                            {
+                                address: resolvedExtraFields.tempat_wisuda_1,
+                                lat: extraLocationCoords.tempat_wisuda_1?.lat,
+                                lng: extraLocationCoords.tempat_wisuda_1?.lng,
+                            },
+                            {
+                                address: resolvedExtraFields.tempat_wisuda_2,
+                                lat: extraLocationCoords.tempat_wisuda_2?.lat,
+                                lng: extraLocationCoords.tempat_wisuda_2?.lng,
+                            },
+                            {
+                                address: location,
+                                lat: locationCoords.lat,
+                                lng: locationCoords.lng,
+                            },
+                        ]
                     : [
                         {
                             address: location,
@@ -874,6 +931,11 @@ export default function NewBookingPage() {
                     {currentExtraFields.length > 0 && (
                         <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 pt-3 border-t border-dashed">
                             {currentExtraFields.map(f => {
+                                const isWisudaSplitLocationField =
+                                    f.key === "tempat_wisuda_1" || f.key === "tempat_wisuda_2";
+                                if (eventType === "Wisuda" && !splitDates && isWisudaSplitLocationField) {
+                                    return null;
+                                }
                                 const fieldLabelKey =
                                     EXTRA_FIELD_LABEL_KEYS[
                                         f.key as keyof typeof EXTRA_FIELD_LABEL_KEYS
@@ -985,24 +1047,41 @@ export default function NewBookingPage() {
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="col-span-full space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Tipe Acara{reqMark}</label>
-                            <select value={eventType} onChange={e => { setEventType(e.target.value); setExtraFields({}); setIsUniversityManualEntryActive(false); setExtraLocationCoords({}); setCustomFieldValues({}); setPackageSearchQuery(""); setAddonSearchQuery(""); }} className={selectClass} required>
+                            <select value={eventType} onChange={e => {
+                                setEventType(e.target.value);
+                                setSplitDates(false);
+                                setAkadDate("");
+                                setResepsiDate("");
+                                setWisudaSession1Date("");
+                                setWisudaSession2Date("");
+                                setExtraFields({});
+                                setIsUniversityManualEntryActive(false);
+                                setExtraLocationCoords({});
+                                setCustomFieldValues({});
+                                setPackageSearchQuery("");
+                                setAddonSearchQuery("");
+                            }} className={selectClass} required>
                                 {eventTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
 
-                        {/* Wedding split dates toggle */}
-                        {eventType === "Wedding" && (
+                        {/* Split dates toggle */}
+                        {(eventType === "Wedding" || eventType === "Wisuda") && (
                             <div className="col-span-full flex items-center gap-3">
                                 <button type="button" onClick={() => setSplitDates(!splitDates)}
                                     className={cn("relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors", splitDates ? "bg-primary" : "bg-muted-foreground/30")}
                                 >
                                     <span className={cn("pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform", splitDates ? "translate-x-4" : "translate-x-0")} />
                                 </button>
-                                <span className="text-xs font-medium text-muted-foreground">Akad &amp; Resepsi beda hari</span>
+                                <span className="text-xs font-medium text-muted-foreground">
+                                    {eventType === "Wedding"
+                                        ? "Akad & Resepsi beda hari"
+                                        : "Sesi 1 & Sesi 2 beda waktu/lokasi"}
+                                </span>
                             </div>
                         )}
 
-                        {/* Dual dates for Wedding (split) */}
+                        {/* Dual dates for split sessions */}
                         {eventType === "Wedding" && splitDates ? (
                             <>
                                 <div className="space-y-1.5">
@@ -1034,6 +1113,37 @@ export default function NewBookingPage() {
                                     }} className={cn(inputClass, "block")} />
                                 </div>
                             </>
+                        ) : eventType === "Wisuda" && splitDates ? (
+                            <>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Tanggal Sesi 1{reqMark}</label>
+                                    <input type="date" value={wisudaSession1Date ? wisudaSession1Date.split("T")[0] : ""} onChange={e => {
+                                        const timePart = wisudaSession1Date?.split("T")[1] || "10:00";
+                                        setWisudaSession1Date(e.target.value ? `${e.target.value}T${timePart}` : "");
+                                    }} required className={cn(inputClass, "block")} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Jam Sesi 1{reqMark}</label>
+                                    <input type="time" value={wisudaSession1Date ? wisudaSession1Date.split("T")[1] || "10:00" : ""} onChange={e => {
+                                        const datePart = wisudaSession1Date?.split("T")[0] || "";
+                                        if (datePart) setWisudaSession1Date(`${datePart}T${e.target.value}`);
+                                    }} className={cn(inputClass, "block")} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Tanggal Sesi 2{reqMark}</label>
+                                    <input type="date" value={wisudaSession2Date ? wisudaSession2Date.split("T")[0] : ""} onChange={e => {
+                                        const timePart = wisudaSession2Date?.split("T")[1] || "10:00";
+                                        setWisudaSession2Date(e.target.value ? `${e.target.value}T${timePart}` : "");
+                                    }} required className={cn(inputClass, "block")} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Jam Sesi 2{reqMark}</label>
+                                    <input type="time" value={wisudaSession2Date ? wisudaSession2Date.split("T")[1] || "10:00" : ""} onChange={e => {
+                                        const datePart = wisudaSession2Date?.split("T")[0] || "";
+                                        if (datePart) setWisudaSession2Date(`${datePart}T${e.target.value}`);
+                                    }} className={cn(inputClass, "block")} />
+                                </div>
+                            </>
                         ) : (
                             <>
                                 <div className="space-y-1.5">
@@ -1058,7 +1168,7 @@ export default function NewBookingPage() {
                             <input value={initialBookingStatus} readOnly className={inputClass} />
                             <p className="text-[11px] text-muted-foreground">Status awal selalu Pending. Ubah status setelah booking dibuat.</p>
                         </div>
-                        {eventType !== "Wedding" && (
+                        {eventType !== "Wedding" && !(eventType === "Wisuda" && splitDates) && (
                             <div className="col-span-full space-y-1.5">
                                 <label className="text-xs font-medium text-muted-foreground">Lokasi Utama</label>
                                 <LocationAutocomplete

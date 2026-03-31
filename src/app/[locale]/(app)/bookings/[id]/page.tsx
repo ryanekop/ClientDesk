@@ -49,6 +49,7 @@ import {
     fillWhatsAppTemplate,
     getWhatsAppTemplateContent,
     normalizeWhatsAppNumber,
+    resolveWhatsAppTemplateMode,
 } from "@/lib/whatsapp-template";
 import {
     getBookingServiceLabel,
@@ -117,8 +118,12 @@ const EXTRA_FIELD_LABEL_KEYS: Record<string, string> = {
     instagram_pasangan: "extraFieldLabels.partnerInstagram",
     tempat_akad: "extraFieldLabels.akadVenue",
     tempat_resepsi: "extraFieldLabels.receptionVenue",
+    tempat_wisuda_1: "extraFieldLabels.wisudaSession1Venue",
+    tempat_wisuda_2: "extraFieldLabels.wisudaSession2Venue",
     tanggal_akad: "extraFieldLabels.akadDate",
     tanggal_resepsi: "extraFieldLabels.receptionDate",
+    tanggal_wisuda_1: "extraFieldLabels.wisudaSession1Date",
+    tanggal_wisuda_2: "extraFieldLabels.wisudaSession2Date",
     usia_kehamilan: "extraFieldLabels.pregnancyAge",
     gender_bayi: "extraFieldLabels.babyGender",
     nama_bayi: "extraFieldLabels.babyName",
@@ -129,7 +134,12 @@ const EXTRA_FIELD_LABEL_KEYS: Record<string, string> = {
     jumlah_tamu: "extraFieldLabels.estimatedGuests",
 };
 
-const LOCATION_FIELDS = new Set(["tempat_akad", "tempat_resepsi"]);
+const LOCATION_FIELDS = new Set([
+    "tempat_akad",
+    "tempat_resepsi",
+    "tempat_wisuda_1",
+    "tempat_wisuda_2",
+]);
 const HIDDEN_EXTRA_FIELD_KEYS = new Set([
     "terms_accepted",
     "terms_accepted_at",
@@ -1646,12 +1656,17 @@ export default function BookingDetailPage() {
     function sendWA(phone: string | null, name: string) {
         if (!phone || !booking) return;
         const cleaned = normalizeWhatsAppNumber(phone);
+        const templateMode = resolveWhatsAppTemplateMode({
+            eventType: booking.event_type,
+            extraFields: booking.extra_fields,
+        });
         // Use client template if available
         const content = getWhatsAppTemplateContent(
             savedTemplates,
             "whatsapp_client",
             locale,
             booking.event_type,
+            templateMode,
         );
         let msg: string;
         if (content.trim()) {
@@ -1676,12 +1691,17 @@ export default function BookingDetailPage() {
     function sendWAFreelance(phone: string | null, fname: string) {
         if (!phone || !booking) { showFeedback(tBookingDetail("freelancerPhoneUnavailable")); return; }
         const cleaned = normalizeWhatsAppNumber(phone);
+        const templateMode = resolveWhatsAppTemplateMode({
+            eventType: booking.event_type,
+            extraFields: booking.extra_fields,
+        });
         // Use freelancer template if available
         const content = getWhatsAppTemplateContent(
             savedTemplates,
             "whatsapp_freelancer",
             locale,
             booking.event_type,
+            templateMode,
         );
         let msg: string;
         if (content.trim()) {
@@ -1984,11 +2004,16 @@ export default function BookingDetailPage() {
         const invoiceUrl = `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(booking.booking_code)}&lang=${locale}&stage=final`;
         const settlementUrl = `${window.location.origin}/${locale}/settlement/${booking.tracking_uuid}`;
         const cleaned = normalizeWhatsAppNumber(booking.client_whatsapp);
+        const templateMode = resolveWhatsAppTemplateMode({
+            eventType: booking.event_type,
+            extraFields: booking.extra_fields,
+        });
         const templateContent = getWhatsAppTemplateContent(
             savedTemplates,
             "whatsapp_settlement_client",
             locale,
             booking.event_type,
+            templateMode,
         );
         const message = templateContent.trim()
             ? fillWhatsAppTemplate(templateContent, {
@@ -2412,7 +2437,12 @@ export default function BookingDetailPage() {
         );
     };
     const renderExtraFieldValue = (key: string, rawValue: string) => {
-        if (key === "tanggal_akad" || key === "tanggal_resepsi") {
+        if (
+            key === "tanggal_akad" ||
+            key === "tanggal_resepsi" ||
+            key === "tanggal_wisuda_1" ||
+            key === "tanggal_wisuda_2"
+        ) {
             return formatDate(rawValue);
         }
         if (key === "instagram_pasangan") {
