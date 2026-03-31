@@ -569,7 +569,7 @@ export async function POST(request: NextRequest) {
                     return NextResponse.json(
                         {
                             success: false,
-                            error: "Jenis acara untuk link booking khusus belum dikonfigurasi.",
+                            error: "Tipe acara untuk link booking khusus belum dikonfigurasi.",
                         },
                         { status: 400 },
                     );
@@ -581,7 +581,7 @@ export async function POST(request: NextRequest) {
                     return NextResponse.json(
                         {
                             success: false,
-                            error: "Jenis acara tidak sesuai whitelist link booking khusus.",
+                            error: "Tipe acara tidak sesuai whitelist link booking khusus.",
                         },
                         { status: 400 },
                     );

@@ -148,7 +148,7 @@ const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
     { id: "invoice", label: "Invoice", visible: true },
     { id: "booking_date", label: "Booking Date", visible: true },
     { id: "package", label: "Paket", visible: true },
-    { id: "event_type", label: "Jenis Acara", visible: false },
+    { id: "event_type", label: "Tipe Acara", visible: false },
     { id: "session_date_display", label: "Session Date", visible: true },
     { id: "session_time_display", label: "Session Time", visible: true },
     { id: "location", label: "Lokasi", visible: true },

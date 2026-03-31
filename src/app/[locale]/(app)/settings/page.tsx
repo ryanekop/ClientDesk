@@ -3220,13 +3220,13 @@ export default function SettingsPage() {
                         Format Nama Event Calendar
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Bisa dibedakan per jenis acara. Jika format jenis acara
+                        Bisa dibedakan per tipe acara. Jika format tipe acara
                         kosong, sistem akan pakai format Umum.
                       </p>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Jenis Acara
+                        Tipe Acara
                       </label>
                       <select
                         value={selectedCalendarEventType}
@@ -3441,12 +3441,12 @@ export default function SettingsPage() {
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Pisahkan format folder dari koneksi Google Drive, dan
-                        atur sendiri per jenis acara.
+                        atur sendiri per tipe acara.
                       </p>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Jenis Acara
+                        Tipe Acara
                       </label>
                       <select
                         value={selectedDriveEventType}
@@ -3516,7 +3516,7 @@ export default function SettingsPage() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Atur urutan folder sebelum masuk ke folder klien. Bisa
-                          dibuat beda per jenis acara.
+                          dibuat beda per tipe acara.
                         </p>
                       </div>
                       <div className="space-y-2">
@@ -4272,16 +4272,16 @@ export default function SettingsPage() {
           </>
         )}
 
-        {/* ═══ TAB: Jenis Acara ═══ */}
+        {/* ═══ TAB: Tipe Acara ═══ */}
         {activeTab === "jenis-acara" && (
           <div className="space-y-6">
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
               <div className="px-6 py-4 border-b">
                 <h3 className="font-semibold flex items-center gap-2">
-                  <Globe className="w-4 h-4" /> Jenis Acara Global
+                  <Globe className="w-4 h-4" /> Tipe Acara Global
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  Kelola urutan, aktif/nonaktif, dan custom jenis acara dari
+                  Kelola urutan, aktif/nonaktif, dan custom tipe acara dari
                   sini. Berlaku untuk form booking, paket, template, dan
                   filter.
                 </p>
@@ -4309,7 +4309,7 @@ export default function SettingsPage() {
                       );
                       setNewCustomEventType("");
                     }}
-                    placeholder="Tambah jenis acara custom..."
+                    placeholder="Tambah tipe acara custom..."
                     className={inputClass}
                   />
                   <Button
@@ -4329,8 +4329,8 @@ export default function SettingsPage() {
                   </Button>
                 </div>
                 <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                  Jenis acara bawaan bisa diurutkan dan
-                  diaktifkan/nonaktifkan. Jenis acara custom bisa ditambah,
+                  Tipe acara bawaan bisa diurutkan dan
+                  diaktifkan/nonaktifkan. Tipe acara custom bisa ditambah,
                   diubah nama, dihapus, dan diurutkan.
                 </div>
               </div>

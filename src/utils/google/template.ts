@@ -59,7 +59,7 @@ const DAYS_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"]
 
 export const DEFAULT_CALENDAR_EVENT_FORMAT = "📸 {{client_name}} — {{service_name}}";
 export const DEFAULT_CALENDAR_EVENT_DESCRIPTION =
-    "Klien: {{client_name}}\nWhatsApp: {{client_whatsapp}}\nBooking: {{booking_code}}\nDetail Booking: {{booking_detail_link}}\nPaket: {{service_name}}\nTanggal: {{session_date}}\nJam: {{session_time}} - {{end_time}}\nJenis Acara: {{event_type}}\nLokasi: {{location}}\nMaps: {{location_maps_url}}\nDetail Lokasi: {{detail_location}}\nCatatan: {{notes}}";
+    "Klien: {{client_name}}\nWhatsApp: {{client_whatsapp}}\nBooking: {{booking_code}}\nDetail Booking: {{booking_detail_link}}\nPaket: {{service_name}}\nTanggal: {{session_date}}\nJam: {{session_time}} - {{end_time}}\nTipe Acara: {{event_type}}\nLokasi: {{location}}\nMaps: {{location_maps_url}}\nDetail Lokasi: {{detail_location}}\nCatatan: {{notes}}";
 export const CALENDAR_TEMPLATE_SPLIT_MODE_SUFFIX = "__split";
 const SPLIT_CAPABLE_CALENDAR_TEMPLATE_EVENTS = new Set(["Wedding", "Wisuda"]);
 const DEFAULT_CALENDAR_SPLIT_EVENT_DESCRIPTIONS: Record<
@@ -67,9 +67,9 @@ const DEFAULT_CALENDAR_SPLIT_EVENT_DESCRIPTIONS: Record<
     string
 > = {
     Wedding:
-        "Klien: {{client_name}}\nWhatsApp: {{client_whatsapp}}\nBooking: {{booking_code}}\nDetail Booking: {{booking_detail_link}}\nPaket: {{service_name}}\nJadwal:\n- Akad: {{akad_date}} {{akad_time}} di {{akad_location}}\n- Resepsi: {{resepsi_date}} {{resepsi_time}} di {{resepsi_location}}\nJenis Acara: {{event_type}}\nLokasi Utama: {{location}}\nMaps: {{location_maps_url}}\nDetail Lokasi: {{detail_location}}\nCatatan: {{notes}}",
+        "Klien: {{client_name}}\nWhatsApp: {{client_whatsapp}}\nBooking: {{booking_code}}\nDetail Booking: {{booking_detail_link}}\nPaket: {{service_name}}\nJadwal:\n- Akad: {{akad_date}} {{akad_time}} di {{akad_location}}\n- Resepsi: {{resepsi_date}} {{resepsi_time}} di {{resepsi_location}}\nTipe Acara: {{event_type}}\nLokasi Utama: {{location}}\nMaps: {{location_maps_url}}\nDetail Lokasi: {{detail_location}}\nCatatan: {{notes}}",
     Wisuda:
-        "Klien: {{client_name}}\nWhatsApp: {{client_whatsapp}}\nBooking: {{booking_code}}\nDetail Booking: {{booking_detail_link}}\nPaket: {{service_name}}\nJadwal:\n- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} di {{wisuda_session_1_location}}\n- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} di {{wisuda_session_2_location}}\nJenis Acara: {{event_type}}\nLokasi Utama: {{location}}\nMaps: {{location_maps_url}}\nDetail Lokasi: {{detail_location}}\nCatatan: {{notes}}",
+        "Klien: {{client_name}}\nWhatsApp: {{client_whatsapp}}\nBooking: {{booking_code}}\nDetail Booking: {{booking_detail_link}}\nPaket: {{service_name}}\nJadwal:\n- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} di {{wisuda_session_1_location}}\n- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} di {{wisuda_session_2_location}}\nTipe Acara: {{event_type}}\nLokasi Utama: {{location}}\nMaps: {{location_maps_url}}\nDetail Lokasi: {{detail_location}}\nCatatan: {{notes}}",
 };
 export const DEFAULT_DRIVE_FOLDER_FORMAT = "{client_name}";
 export const DEFAULT_DRIVE_FOLDER_STRUCTURE = [DEFAULT_DRIVE_FOLDER_FORMAT];

@@ -278,7 +278,7 @@ function SortableServiceRow({
               {service.event_types?.length ? (
                 <span>{service.event_types.join(", ")}</span>
               ) : (
-                <span>Semua jenis acara</span>
+                <span>Semua tipe acara</span>
               )}
             </div>
             <div className="flex gap-1">
@@ -1312,9 +1312,9 @@ export default function ServicesPage() {
                   </div>
                 ) : null}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Jenis Acara</label>
+                  <label className="text-sm font-medium">Tipe Acara</label>
                   <p className="-mt-1 text-[11px] text-muted-foreground">
-                    Kosongkan jika paket ini untuk semua jenis acara.
+                    Kosongkan jika paket ini untuk semua tipe acara.
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {eventTypeOptions.map((eventType) => (
@@ -1754,9 +1754,9 @@ export default function ServicesPage() {
                 </div>
               ) : null}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Jenis Acara</label>
+                <label className="text-sm font-medium">Tipe Acara</label>
                 <p className="-mt-1 text-[11px] text-muted-foreground">
-                  Kosongkan jika paket ini untuk semua jenis acara.
+                  Kosongkan jika paket ini untuk semua tipe acara.
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {eventTypeOptions.map((eventType) => (

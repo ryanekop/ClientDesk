@@ -101,7 +101,7 @@ const STATUS_COLOR_PALETTE = [
 const BASE_CLIENT_STATUS_COLUMNS: TableColumnPreference[] = [
     { id: "name", label: "Nama", visible: true, locked: true, pin: "left" },
     { id: "package", label: "Paket", visible: true },
-    { id: "event_type", label: "Jenis Acara", visible: false },
+    { id: "event_type", label: "Tipe Acara", visible: false },
     { id: "status", label: "Status", visible: true },
     { id: "queue", label: "Antrian", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
@@ -590,7 +590,7 @@ export default function ClientStatusPage() {
             case "package":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap hidden sm:table-cell")}>{locale === "en" ? "Package" : "Paket"}</th>;
             case "event_type":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap hidden sm:table-cell")}>{locale === "en" ? "Event Type" : "Jenis Acara"}</th>;
+                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap hidden sm:table-cell")}>{locale === "en" ? "Event Type" : "Tipe Acara"}</th>;
             case "status":
                 return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap")}>{locale === "en" ? "Status" : "Status"}</th>;
             case "queue":

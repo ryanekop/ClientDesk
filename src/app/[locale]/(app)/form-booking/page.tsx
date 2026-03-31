@@ -1193,13 +1193,13 @@ export default function FormBookingPage() {
                     <Percent className="w-4 h-4" /> Pengaturan Pembayaran
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Atur minimum DP berbeda untuk setiap jenis acara.
+                    Atur minimum DP berbeda untuk setiap tipe acara.
                   </p>
                 </div>
                 <div className="p-6 space-y-4">
                   {/* Event type selector */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Jenis Acara</label>
+                    <label className="text-sm font-medium">Tipe Acara</label>
                     <select
                       value={selectedDpEventType}
                       onChange={(e) => setSelectedDpEventType(e.target.value)}
@@ -1695,7 +1695,7 @@ export default function FormBookingPage() {
                     ))}
                   </div>
                   <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                    Pengaturan aktif/nonaktif, urutan, dan custom jenis acara sekarang dikelola dari halaman Pengaturan Umum.
+                    Pengaturan aktif/nonaktif, urutan, dan custom tipe acara sekarang dikelola dari halaman Pengaturan Umum.
                   </div>
                 </div>
               </div>
@@ -1852,14 +1852,14 @@ export default function FormBookingPage() {
                   <List className="w-4 h-4" /> Custom Form
                 </h3>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Setiap jenis acara memiliki section bawaan sendiri: Informasi Klien, Detail Sesi, dan Paket Pembayaran. Item bawaan di dalamnya bisa direorder, lalu kamu bisa tambah field atau divider custom per section.
+                  Setiap tipe acara memiliki section bawaan sendiri: Informasi Klien, Detail Sesi, dan Paket Pembayaran. Item bawaan di dalamnya bisa direorder, lalu kamu bisa tambah field atau divider custom per section.
                 </p>
               </div>
               <div className="p-6 space-y-4">
                 {customFormEventTypes.length > 0 ? (
                   <>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Jenis Acara</label>
+                      <label className="text-sm font-medium">Tipe Acara</label>
                       <select
                         value={selectedCustomFormEventType}
                         onChange={(e) => setSelectedCustomFormEventType(e.target.value)}
@@ -1885,7 +1885,7 @@ export default function FormBookingPage() {
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Belum ada jenis acara aktif. Tambahkan dulu di Pengaturan Umum.
+                    Belum ada tipe acara aktif. Tambahkan dulu di Pengaturan Umum.
                   </p>
                 )}
               </div>

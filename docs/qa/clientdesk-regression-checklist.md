@@ -25,7 +25,7 @@ Isi kolom `Status` dengan `PASS` / `FAIL` / `BLOCKED` dan tambahkan bukti singka
 
 | No | Skenario | Steps Ringkas | Expected Result | Status | Evidence/Notes |
 | --- | --- | --- | --- | --- | --- |
-| 1 | WA template per jenis acara | Set template berbeda untuk `Wedding` dan `Umum` pada semua tipe WA, lalu kirim dari bookings/finance/form/settlement | Template yang dipakai mengikuti `event_type`; fallback ke `Umum` jika event-specific belum ada |  |  |
+| 1 | WA template per tipe acara | Set template berbeda untuk `Wedding` dan `Umum` pada semua tipe WA, lalu kirim dari bookings/finance/form/settlement | Template yang dipakai mengikuti `event_type`; fallback ke `Umum` jika event-specific belum ada |  |  |
 | 2 | Token split session WA | Tambah `{{akad_date}}` + `{{resepsi_date}}` di template, kirim untuk booking Wedding split day | Dua tanggal terganti benar, bukan token mentah |  |  |
 | 3 | Blank white first open | Buka `/dashboard` atau `/bookings` langsung dari incognito/new profile | Halaman tidak blank putih, route resolve normal |  |  |
 | 4 | Storage restricted mode | Aktifkan mode browser ketat (storage dibatasi), buka app | App tetap render, tidak crash di auth/sidebar/changelog |  |  |
