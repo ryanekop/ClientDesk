@@ -388,6 +388,7 @@ export default function BookingsPage() {
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_BOOKING_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
+    const [resettingColumnWidths, setResettingColumnWidths] = React.useState(false);
 
     // Filters & Search
     const [searchQuery, setSearchQuery] = React.useState("");
@@ -669,6 +670,15 @@ export default function BookingsPage() {
         setColumns(normalizedNextColumns);
         setSavingColumns(false);
         setColumnManagerOpen(false);
+    }
+
+    async function handleResetColumnWidths() {
+        setResettingColumnWidths(true);
+        try {
+            resetColumnWidths();
+        } finally {
+            setResettingColumnWidths(false);
+        }
     }
 
     React.useEffect(() => {
@@ -1752,6 +1762,7 @@ export default function BookingsPage() {
         getResizeHandleProps,
         isColumnResizable,
         isColumnBeingResized,
+        resetColumnWidths,
     } = useResizableTableColumns({
         menuKey: "bookings",
         userId: currentUserId,
@@ -1917,7 +1928,9 @@ export default function BookingsPage() {
                             onOpenChange={setColumnManagerOpen}
                             onChange={setColumns}
                             onSave={() => saveColumnPreferences(columns)}
+                            onResetWidths={() => handleResetColumnWidths()}
                             saving={savingColumns}
+                            resettingWidths={resettingColumnWidths}
                             triggerClassName="w-full lg:order-2 lg:w-auto"
                         />
                         <div className="lg:hidden">

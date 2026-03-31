@@ -250,6 +250,7 @@ export default function TeamPage() {
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(TEAM_COLUMN_DEFAULTS);
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
+    const [resettingColumnWidths, setResettingColumnWidths] = React.useState(false);
     const [deleteConfirmDialog, setDeleteConfirmDialog] = React.useState<{
         open: boolean;
         member: Freelancer | null;
@@ -608,6 +609,7 @@ export default function TeamPage() {
         getResizeHandleProps,
         isColumnResizable,
         isColumnBeingResized,
+        resetColumnWidths,
     } = useResizableTableColumns({
         menuKey: "team",
         userId: currentUserId,
@@ -704,6 +706,15 @@ export default function TeamPage() {
         setColumns(nextColumns);
         setSavingColumns(false);
         setColumnManagerOpen(false);
+    }
+
+    async function handleResetColumnWidths() {
+        setResettingColumnWidths(true);
+        try {
+            resetColumnWidths();
+        } finally {
+            setResettingColumnWidths(false);
+        }
     }
 
     function renderDesktopHeaderLabel(column: TableColumnPreference, label: React.ReactNode) {
@@ -938,7 +949,9 @@ export default function TeamPage() {
                                 onOpenChange={setColumnManagerOpen}
                                 onChange={setColumns}
                                 onSave={() => saveColumnPreferences(columns)}
+                                onResetWidths={() => handleResetColumnWidths()}
                                 saving={savingColumns}
+                                resettingWidths={resettingColumnWidths}
                                 triggerClassName="order-1 w-full lg:order-2 lg:w-auto"
                             />
                         ) : null}

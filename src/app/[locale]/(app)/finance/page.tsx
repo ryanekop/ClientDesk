@@ -292,6 +292,7 @@ export default function FinancePage() {
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_FINANCE_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
+    const [resettingColumnWidths, setResettingColumnWidths] = React.useState(false);
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
     const [metadataRows, setMetadataRows] = React.useState<Array<{ event_type?: string | null; extra_fields?: Record<string, unknown> | null }>>([]);
     const [packageOptions, setPackageOptions] = React.useState<string[]>([]);
@@ -658,6 +659,7 @@ export default function FinancePage() {
         getResizeHandleProps,
         isColumnResizable,
         isColumnBeingResized,
+        resetColumnWidths,
     } = useResizableTableColumns({
         menuKey: "finance",
         userId: currentUserId,
@@ -720,6 +722,15 @@ export default function FinancePage() {
         setColumns(nextColumns);
         setSavingColumns(false);
         setColumnManagerOpen(false);
+    }
+
+    async function handleResetColumnWidths() {
+        setResettingColumnWidths(true);
+        try {
+            resetColumnWidths();
+        } finally {
+            setResettingColumnWidths(false);
+        }
     }
 
     async function handleMarkPaid(id: string) {
@@ -1804,7 +1815,9 @@ export default function FinancePage() {
                             onOpenChange={setColumnManagerOpen}
                             onChange={setColumns}
                             onSave={() => saveColumnPreferences(columns)}
+                            onResetWidths={() => handleResetColumnWidths()}
                             saving={savingColumns}
+                            resettingWidths={resettingColumnWidths}
                             triggerClassName="hidden w-full md:inline-flex md:w-auto"
                         />
                     </>

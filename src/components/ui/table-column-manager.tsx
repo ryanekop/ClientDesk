@@ -9,6 +9,7 @@ import {
   Lock,
   LockOpen,
   Loader2,
+  RotateCcw,
   Settings2,
 } from "lucide-react";
 import {
@@ -58,7 +59,9 @@ type TableColumnManagerProps = {
   onOpenChange: (open: boolean) => void;
   onChange: (columns: TableColumnPreference[]) => void;
   onSave: () => void | Promise<void>;
+  onResetWidths?: () => void | Promise<void>;
   saving?: boolean;
+  resettingWidths?: boolean;
   triggerLabel?: string;
   triggerClassName?: string;
 };
@@ -205,7 +208,9 @@ export function TableColumnManager({
   onOpenChange,
   onChange,
   onSave,
+  onResetWidths,
   saving = false,
+  resettingWidths = false,
   triggerLabel = "Kelola Kolom",
   triggerClassName,
 }: TableColumnManagerProps) {
@@ -355,14 +360,41 @@ export function TableColumnManager({
               : null}
           </DndContext>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Tutup
-            </Button>
-            <Button onClick={() => void onSave()} disabled={saving}>
-              {saving ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : null}
-              Simpan Kolom
-            </Button>
+          <DialogFooter className="sm:justify-between gap-2">
+            {onResetWidths ? (
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => void onResetWidths()}
+                disabled={saving || resettingWidths}
+              >
+                {resettingWidths ? (
+                  <Loader2 className="mr-2 w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="mr-2 w-4 h-4" />
+                )}
+                Reset Lebar
+              </Button>
+            ) : (
+              <div className="hidden sm:block" />
+            )}
+            <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+              <Button
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                className="w-full sm:w-auto"
+              >
+                Tutup
+              </Button>
+              <Button
+                onClick={() => void onSave()}
+                disabled={saving}
+                className="w-full sm:w-auto"
+              >
+                {saving ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : null}
+                Simpan Kolom
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

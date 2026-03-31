@@ -144,6 +144,10 @@ export function useResizableTableColumns({
     if (!storageKey || hydratedStorageKey !== storageKey) return;
 
     try {
+      if (Object.keys(widthByColumnId).length === 0) {
+        window.localStorage.removeItem(storageKey);
+        return;
+      }
       window.localStorage.setItem(storageKey, JSON.stringify(widthByColumnId));
     } catch {
       // Ignore storage write failures.
@@ -276,11 +280,16 @@ export function useResizableTableColumns({
     (columnId: string) => activeResizeColumnId === columnId,
     [activeResizeColumnId],
   );
+  const resetColumnWidths = React.useCallback(() => {
+    setActiveResizeColumnId(null);
+    setWidthByColumnId({});
+  }, []);
 
   return {
     getColumnWidthStyle,
     getResizeHandleProps,
     isColumnResizable,
     isColumnBeingResized,
+    resetColumnWidths,
   };
 }

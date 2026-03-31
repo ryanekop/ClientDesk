@@ -149,6 +149,7 @@ export default function ClientStatusPage() {
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_CLIENT_STATUS_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
+    const [resettingColumnWidths, setResettingColumnWidths] = React.useState(false);
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
     const [metadataRows, setMetadataRows] = React.useState<Array<{ event_type?: string | null; extra_fields?: Record<string, unknown> | null }>>([]);
     const [totalItems, setTotalItems] = React.useState(0);
@@ -544,6 +545,7 @@ export default function ClientStatusPage() {
         getResizeHandleProps,
         isColumnResizable,
         isColumnBeingResized,
+        resetColumnWidths,
     } = useResizableTableColumns({
         menuKey: "client_status",
         userId: currentUserId,
@@ -616,6 +618,15 @@ export default function ClientStatusPage() {
         setColumns(nextColumns);
         setSavingColumns(false);
         setColumnManagerOpen(false);
+    }
+
+    async function handleResetColumnWidths() {
+        setResettingColumnWidths(true);
+        try {
+            resetColumnWidths();
+        } finally {
+            setResettingColumnWidths(false);
+        }
     }
 
     function renderDesktopHeaderLabel(column: TableColumnPreference, label: React.ReactNode) {
@@ -818,7 +829,9 @@ export default function ClientStatusPage() {
                         onOpenChange={setColumnManagerOpen}
                         onChange={setColumns}
                         onSave={() => saveColumnPreferences(columns)}
+                        onResetWidths={() => handleResetColumnWidths()}
                         saving={savingColumns}
+                        resettingWidths={resettingColumnWidths}
                         triggerClassName="w-full lg:w-auto"
                     />
                 )}
