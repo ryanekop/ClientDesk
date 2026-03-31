@@ -2398,8 +2398,15 @@ export default function BookingDetailPage() {
 
     // Separate nama_pasangan from other extra fields (show right after Nama for Wedding)
     const namaPasangan = builtInExtraFields.nama_pasangan;
+    const sessionLocationEntries = extraEntries.filter(
+        ([key, val]) =>
+            LOCATION_FIELDS.has(key) && typeof val === "string" && val.trim().length > 0,
+    );
     const otherExtraEntries = extraEntries.filter(
-        ([key]) => key !== "nama_pasangan" && !HIDDEN_EXTRA_FIELD_KEYS.has(key),
+        ([key]) =>
+            key !== "nama_pasangan" &&
+            !HIDDEN_EXTRA_FIELD_KEYS.has(key) &&
+            !LOCATION_FIELDS.has(key),
     );
     const normalizeInstagramValue = (rawValue: string) => {
         const trimmed = rawValue.trim();
@@ -2715,7 +2722,14 @@ export default function BookingDetailPage() {
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Detail Sesi</h3>
                 <InfoRow label={tBookingDetail("sessionDateLabel")} value={renderSessionDisplayValue(sessionDisplay.dateDisplay)} />
                 <InfoRow label={tBookingDetail("sessionTimeLabel")} value={renderSessionDisplayValue(sessionDisplay.timeDisplay)} />
-                {booking.location && (
+                {sessionLocationEntries.map(([key, value]) => (
+                    <InfoRow
+                        key={key}
+                        label={EXTRA_FIELD_LABEL_KEYS[key] ? tBookingDetail(EXTRA_FIELD_LABEL_KEYS[key]) : key}
+                        value={renderExtraFieldValue(key, value)}
+                    />
+                ))}
+                {booking.location && sessionLocationEntries.length === 0 && (
                     <InfoRow
                         label="Lokasi"
                         value={
