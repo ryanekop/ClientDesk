@@ -637,6 +637,7 @@ export default function ServicesPage() {
   const [editingService, setEditingService] = React.useState<Service | null>(null);
   const [isAddOpen, setIsAddOpen] = React.useState(false);
   const [isEditOpen, setIsEditOpen] = React.useState(false);
+  const [isCreatingService, setIsCreatingService] = React.useState(false);
   const [isUpdatingService, setIsUpdatingService] = React.useState(false);
   const [addIsAddon, setAddIsAddon] = React.useState(false);
   const [addAffectsSchedule, setAddAffectsSchedule] = React.useState(true);
@@ -1088,68 +1089,75 @@ export default function ServicesPage() {
   }
 
   async function handleAdd(formData: FormData) {
-    const userId = await getRequiredUserId();
+    if (isCreatingService) return;
 
-    const isAddon = formData.get("is_addon") === "on";
-    const isPublic = formData.get("is_public") === "on";
-    const affectsSchedule = !isAddon || formData.get("affects_schedule") === "on";
-    const cityCodes = getCityCodesFromFormData(formData);
-    const { count } = await supabase
-      .from("services")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("is_addon", isAddon);
-    const nextSortOrder = count || 0;
-
-    const { data, error } = await supabase
-      .from("services")
-      .insert({
-        user_id: userId,
-        name: formData.get("name") as string,
-        description: (formData.get("description") as string) || null,
-        color: resolveHexColor(
-          formData.get("color"),
-          profileBrandColor,
-          "#000000",
-        ),
-        price: parseFloat(formData.get("price") as string) || 0,
-        original_price: parseFloat(formData.get("original_price") as string) || null,
-        duration_minutes:
-          parseInt((formData.get("duration_hours") as string) || "0", 10) * 60 +
-          parseInt((formData.get("duration_mins") as string) || "0", 10),
-        is_active: true,
-        is_addon: isAddon,
-        is_public: isPublic,
-        affects_schedule: affectsSchedule,
-        sort_order: nextSortOrder,
-        event_types:
-          formData.getAll("event_types").length > 0
-            ? (formData.getAll("event_types") as string[])
-            : null,
-      })
-      .select("id")
-      .single();
-
-    if (error || !data?.id) {
-      setPageError(error?.message || "Gagal menambahkan paket.");
-      return;
-    }
-
+    setIsCreatingService(true);
     try {
-      await syncServiceCityScopes({
-        userId,
-        serviceId: data.id,
-        cityCodes,
-      });
-      setIsAddOpen(false);
-      await refreshVisibleData();
-      showSuccessToast(ts("serviceCreatedSuccess"));
-    } catch (scopeError) {
-      setPageError(
-        scopeError instanceof Error
-          ? scopeError.message
-          : "Gagal menyimpan scope kota/kabupaten paket.",
-      );
+      const userId = await getRequiredUserId();
+
+      const isAddon = formData.get("is_addon") === "on";
+      const isPublic = formData.get("is_public") === "on";
+      const affectsSchedule = !isAddon || formData.get("affects_schedule") === "on";
+      const cityCodes = getCityCodesFromFormData(formData);
+      const { count } = await supabase
+        .from("services")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("is_addon", isAddon);
+      const nextSortOrder = count || 0;
+
+      const { data, error } = await supabase
+        .from("services")
+        .insert({
+          user_id: userId,
+          name: formData.get("name") as string,
+          description: (formData.get("description") as string) || null,
+          color: resolveHexColor(
+            formData.get("color"),
+            profileBrandColor,
+            "#000000",
+          ),
+          price: parseFloat(formData.get("price") as string) || 0,
+          original_price: parseFloat(formData.get("original_price") as string) || null,
+          duration_minutes:
+            parseInt((formData.get("duration_hours") as string) || "0", 10) * 60 +
+            parseInt((formData.get("duration_mins") as string) || "0", 10),
+          is_active: true,
+          is_addon: isAddon,
+          is_public: isPublic,
+          affects_schedule: affectsSchedule,
+          sort_order: nextSortOrder,
+          event_types:
+            formData.getAll("event_types").length > 0
+              ? (formData.getAll("event_types") as string[])
+              : null,
+        })
+        .select("id")
+        .single();
+
+      if (error || !data?.id) {
+        setPageError(error?.message || "Gagal menambahkan paket.");
+        return;
+      }
+
+      try {
+        await syncServiceCityScopes({
+          userId,
+          serviceId: data.id,
+          cityCodes,
+        });
+        setIsAddOpen(false);
+        await refreshVisibleData();
+        showSuccessToast(ts("serviceCreatedSuccess"));
+      } catch (scopeError) {
+        setPageError(
+          scopeError instanceof Error
+            ? scopeError.message
+            : "Gagal menyimpan scope kota/kabupaten paket.",
+        );
+      }
+    } finally {
+      setIsCreatingService(false);
     }
   }
 
@@ -1699,7 +1707,18 @@ export default function ServicesPage() {
                   />
                 </div>
                 <DialogFooter>
-                  <Button type="submit">{t("simpan")}</Button>
+                  <Button
+                    type="submit"
+                    disabled={isCreatingService}
+                    className="gap-2"
+                  >
+                    {isCreatingService ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    {t("simpan")}
+                  </Button>
                 </DialogFooter>
               </form>
               </DialogContent>
