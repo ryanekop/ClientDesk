@@ -1,22 +1,9 @@
 import { normalizeEventTypeName } from "@/lib/event-type-config";
-import { parseSessionDateParts } from "@/utils/format-date";
+import { resolveSplitSessionDateTimes } from "@/lib/split-session-extra-fields";
 
 export type BookingTemplateMode = "normal" | "split";
 
 const SPLIT_CAPABLE_EVENT_TYPES = new Set(["Wedding", "Wisuda"]);
-
-function normalizeExtraFields(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function hasValidDateTime(value: unknown) {
-  if (typeof value !== "string") return false;
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  return Boolean(parseSessionDateParts(trimmed));
-}
 
 export function normalizeBookingTemplateMode(
   value: unknown,
@@ -40,19 +27,19 @@ export function resolveBookingTemplateMode({
 }): BookingTemplateMode {
   const normalizedEventType = normalizeEventTypeName(eventType);
   if (!normalizedEventType) return "normal";
-  const extras = normalizeExtraFields(extraFields);
+  const splitSessionDateTimes = resolveSplitSessionDateTimes(extraFields);
 
   if (
     normalizedEventType === "Wedding" &&
-    hasValidDateTime(extras.tanggal_akad) &&
-    hasValidDateTime(extras.tanggal_resepsi)
+    splitSessionDateTimes.akad &&
+    splitSessionDateTimes.resepsi
   ) {
     return "split";
   }
   if (
     normalizedEventType === "Wisuda" &&
-    hasValidDateTime(extras.tanggal_wisuda_1) &&
-    hasValidDateTime(extras.tanggal_wisuda_2)
+    splitSessionDateTimes.wisudaSession1 &&
+    splitSessionDateTimes.wisudaSession2
   ) {
     return "split";
   }

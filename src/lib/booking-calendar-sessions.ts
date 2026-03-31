@@ -1,4 +1,5 @@
 import { parseSessionDateParts } from "@/utils/format-date";
+import { resolveSplitSessionDateTimes } from "@/lib/split-session-extra-fields";
 
 export type BookingCalendarSession = {
   key: string;
@@ -51,10 +52,11 @@ export function resolveBookingCalendarSessions({
   const sessions: BookingCalendarSession[] = [];
   const normalizedEventType = (eventType || "").trim().toLowerCase();
   const extras = asRecord(extraFields);
+  const splitSessionDateTimes = resolveSplitSessionDateTimes(extraFields);
 
   if (normalizedEventType === "wedding") {
-    const akadDate = normalizeDateValue(extras.tanggal_akad);
-    const resepsiDate = normalizeDateValue(extras.tanggal_resepsi);
+    const akadDate = splitSessionDateTimes.akad;
+    const resepsiDate = splitSessionDateTimes.resepsi;
 
     if (akadDate) {
       sessions.push({
@@ -84,8 +86,8 @@ export function resolveBookingCalendarSessions({
   }
 
   if (normalizedEventType === "wisuda") {
-    const session1Date = normalizeDateValue(extras.tanggal_wisuda_1);
-    const session2Date = normalizeDateValue(extras.tanggal_wisuda_2);
+    const session1Date = splitSessionDateTimes.wisudaSession1;
+    const session2Date = splitSessionDateTimes.wisudaSession2;
 
     if (session1Date) {
       sessions.push({

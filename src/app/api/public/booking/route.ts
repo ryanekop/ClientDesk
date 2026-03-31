@@ -1417,7 +1417,7 @@ export async function POST(request: NextRequest) {
             const content = getWhatsAppTemplateContent(
                 normalizedTemplates,
                 "whatsapp_booking_confirm",
-                "id",
+                locale,
                 resolvedEventType,
                 resolveWhatsAppTemplateMode({
                     eventType: resolvedEventType,

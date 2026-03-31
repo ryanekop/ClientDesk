@@ -8,6 +8,7 @@ import {
   UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
   UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
+import { resolveSplitSessionDateTimes } from "@/lib/split-session-extra-fields";
 
 export type EventExtraField = {
   key: string;
@@ -271,12 +272,11 @@ function readStringField(source: Record<string, unknown>, key: string) {
 }
 
 function buildSessionDateTimeVars(
-  source: Record<string, unknown>,
-  key: string,
+  rawValue: string | null | undefined,
   locale: "id" | "en",
   durationMinutes?: number,
 ) {
-  const raw = readStringField(source, key);
+  const raw = typeof rawValue === "string" ? rawValue.trim() : "";
   if (!raw) {
     return { date: "", time: "", endTime: "", timeRange: "" };
   }
@@ -309,18 +309,23 @@ export function buildMultiSessionTemplateVars(
 
   const locale = options.locale || "id";
   const source = raw as Record<string, unknown>;
+  const splitSessionDateTimes = resolveSplitSessionDateTimes(raw);
 
-  const akad = buildSessionDateTimeVars(source, "tanggal_akad", locale);
-  const resepsi = buildSessionDateTimeVars(source, "tanggal_resepsi", locale);
+  const akad = buildSessionDateTimeVars(
+    splitSessionDateTimes.akad,
+    locale,
+  );
+  const resepsi = buildSessionDateTimeVars(
+    splitSessionDateTimes.resepsi,
+    locale,
+  );
   const wisudaSession1 = buildSessionDateTimeVars(
-    source,
-    "tanggal_wisuda_1",
+    splitSessionDateTimes.wisudaSession1,
     locale,
     options.sessionDurationMinutesByKey?.wisuda_session_1,
   );
   const wisudaSession2 = buildSessionDateTimeVars(
-    source,
-    "tanggal_wisuda_2",
+    splitSessionDateTimes.wisudaSession2,
     locale,
     options.sessionDurationMinutesByKey?.wisuda_session_2,
   );

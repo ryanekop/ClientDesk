@@ -381,6 +381,7 @@ const variableHints: Record<string, string[]> = {
     "{{invoice_url}}",
   ],
 };
+const MULTI_SESSION_WHATSAPP_VAR_SET = new Set(MULTI_SESSION_WHATSAPP_VARS);
 
 function slugify(str: string) {
   return str
@@ -2582,10 +2583,17 @@ export default function SettingsPage() {
       currentLang === "id"
         ? templateContents[contentKey] || ""
         : templateContentsEn[contentKey] || "";
+    const defaultHints = variableHints[tt.value] || [];
+    const modeAwareHints =
+      isEventScoped && activeTemplateMode !== "split"
+        ? defaultHints.filter(
+            (token) => !MULTI_SESSION_WHATSAPP_VAR_SET.has(token),
+          )
+        : defaultHints;
     const hints = isEventScoped
       ? Array.from(
           new Set([
-            ...(variableHints[tt.value] || []),
+            ...modeAwareHints,
             ...getEventExtraFieldTemplateTokens(selectedEventType),
             ...getCustomFieldTemplateTokens(
               formSectionsByEventType[selectedEventType] ||
@@ -2596,7 +2604,7 @@ export default function SettingsPage() {
             ),
           ]),
         )
-      : variableHints[tt.value] || [];
+      : modeAwareHints;
     const preview = renderPreview(
       content,
       isEventScoped
