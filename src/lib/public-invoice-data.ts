@@ -56,6 +56,7 @@ export type InvoiceBookingRow = {
 
 export type InvoiceProfileRow = {
   studio_name: string | null;
+  studio_address: string | null;
   invoice_logo_url: string | null;
 };
 
@@ -106,11 +107,34 @@ async function fetchInvoicePayload(bookingCode: string) {
     return null;
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("studio_name, invoice_logo_url")
-    .eq("id", booking.user_id)
-    .maybeSingle<InvoiceProfileRow>();
+  const profileSelect = "studio_name, studio_address, invoice_logo_url";
+  const { data: profileWithAddress, error: profileWithAddressError } =
+    await supabase
+      .from("profiles")
+      .select(profileSelect)
+      .eq("id", booking.user_id)
+      .maybeSingle<InvoiceProfileRow>();
+
+  const missingStudioAddressColumn =
+    typeof profileWithAddressError?.message === "string" &&
+    /Could not find the 'studio_address' column|studio_address["']?\s+does not exist/i.test(
+      profileWithAddressError.message,
+    );
+  let profile: InvoiceProfileRow | null = profileWithAddress || null;
+
+  if (missingStudioAddressColumn) {
+    const { data: legacyProfile } = await supabase
+      .from("profiles")
+      .select("studio_name, invoice_logo_url")
+      .eq("id", booking.user_id)
+      .maybeSingle<Pick<InvoiceProfileRow, "studio_name" | "invoice_logo_url">>();
+    profile = legacyProfile
+      ? {
+          ...legacyProfile,
+          studio_address: null,
+        }
+      : null;
+  }
 
   return {
     booking,

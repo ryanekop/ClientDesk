@@ -126,6 +126,7 @@ type Profile = {
   role?: string | null;
   tenant_id?: string | null;
   studio_name: string | null;
+  studio_address?: string | null;
   whatsapp_number: string | null;
   vendor_slug: string | null;
   google_access_token?: string | null;
@@ -424,6 +425,7 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "id",
   "full_name",
   "studio_name",
+  "studio_address",
   "whatsapp_number",
   "vendor_slug",
   "google_access_token",
@@ -642,6 +644,7 @@ export default function SettingsPage() {
 
   // Controlled fields for profile
   const [studioName, setStudioName] = React.useState("");
+  const [studioAddress, setStudioAddress] = React.useState("");
   const [countryCode, setCountryCode] = React.useState("+62");
   const [waNumber, setWaNumber] = React.useState("");
   const [vendorSlug, setVendorSlug] = React.useState("");
@@ -1275,6 +1278,7 @@ export default function SettingsPage() {
     setCustomEventTypes(loadedCustomEventTypes);
     setActiveEventTypes(loadedActiveEventTypes);
     setStudioName(prof?.studio_name || "");
+    setStudioAddress((prof as any)?.studio_address || "");
     setIsCalendarConnected(isGoogleCalendarConnected(prof));
     setIsDriveConnected(isGoogleDriveConnected(prof));
     setLogoUrl((prof as any)?.invoice_logo_url || null);
@@ -1625,6 +1629,7 @@ export default function SettingsPage() {
     try {
       await saveProfilePatch({
         studio_name: studioName || null,
+        studio_address: studioAddress.trim() ? studioAddress.trim() : null,
         whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
         vendor_slug: slug || null,
         default_wa_target: defaultWaTarget,
@@ -2198,6 +2203,8 @@ export default function SettingsPage() {
 
   const inputClass =
     "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
+  const textareaClass =
+    "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-y";
   const unifiedSaveButtonClass = "h-11 min-w-[190px] gap-2 px-6 text-sm";
   const unifiedResetButtonClass = "h-11 gap-2 px-5";
 
@@ -3083,6 +3090,22 @@ export default function SettingsPage() {
                         {tp("uploading")}
                       </p>
                     )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">
+                      {tp("studioAddressLabel")}
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      {tp("studioAddressDesc")}
+                    </p>
+                    <textarea
+                      value={studioAddress}
+                      onChange={(e) => setStudioAddress(e.target.value)}
+                      rows={3}
+                      className={textareaClass}
+                      placeholder={tp("studioAddressPlaceholder")}
+                    />
                   </div>
                 </div>
 

@@ -38,6 +38,7 @@
 !supabase_migration_form_hide_service_prices.sql
 !supabase_migration_form_show_split_toggle.sql
 !supabase_migration_finance_filter_sort_event_type.sql
+!supabase_migration_studio_address.sql
 *.sh
 
 # debug

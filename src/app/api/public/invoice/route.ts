@@ -241,6 +241,7 @@ export async function GET(request: NextRequest) {
   const { booking, profile } = cachedPayload;
 
   const studioName = profile?.studio_name || "Studio";
+  const studioAddress = profile?.studio_address?.trim() || "";
   const logoSource = profile?.invoice_logo_url || null;
   const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
   const adjustments = normalizeFinalAdjustments(booking.final_adjustments);
@@ -523,6 +524,7 @@ export async function GET(request: NextRequest) {
   };
 
   let logoDrawn = false;
+  let logoBottomY = y;
   if (logoSource) {
     try {
       const logoBytes = await resolveInvoiceLogoBytes(logoSource);
@@ -536,12 +538,14 @@ export async function GET(request: NextRequest) {
         const scale = Math.min(maxW / image.width, maxH / image.height, 1);
         const drawW = image.width * scale;
         const drawH = image.height * scale;
+        const logoY = y - drawH + 22;
         page.drawImage(image, {
           x: MARGIN_X,
-          y: y - drawH + 22,
+          y: logoY,
           width: drawW,
           height: drawH,
         });
+        logoBottomY = logoY;
         logoDrawn = true;
       }
     } catch {
@@ -549,6 +553,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  let leftBlockBottomY = logoDrawn ? logoBottomY : y;
   if (!logoDrawn) {
     page.drawText(studioName, {
       x: MARGIN_X,
@@ -557,7 +562,9 @@ export async function GET(request: NextRequest) {
       size: 18,
       color: black,
     });
+    leftBlockBottomY = y - 18;
   }
+
   page.drawText(invoiceTitle, {
     x: PAGE_WIDTH - MARGIN_X - helveticaBold.widthOfTextAtSize(invoiceTitle, 22),
     y,
@@ -566,37 +573,60 @@ export async function GET(request: NextRequest) {
     color: black,
   });
 
-  y -= 18;
+  const codeY = y - 18;
   if (!logoDrawn) {
     page.drawText(t.studioManagement, {
       x: MARGIN_X,
-      y,
+      y: codeY,
       font: helvetica,
       size: 9,
       color: gray,
     });
+    leftBlockBottomY = Math.min(leftBlockBottomY, codeY - 9);
   }
 
   const codeW = helvetica.widthOfTextAtSize(booking.booking_code, 10);
   page.drawText(booking.booking_code, {
     x: PAGE_WIDTH - MARGIN_X - codeW,
-    y,
+    y: codeY,
     font: helvetica,
     size: 10,
     color: gray,
   });
 
-  y -= 14;
+  const dateY = codeY - 14;
   const dateW = helvetica.widthOfTextAtSize(invoiceHeaderDate, 9);
   page.drawText(invoiceHeaderDate, {
     x: PAGE_WIDTH - MARGIN_X - dateW,
-    y,
+    y: dateY,
     font: helvetica,
     size: 9,
     color: gray,
   });
+  const rightBlockBottomY = dateY - 9;
 
-  y -= 16;
+  if (studioAddress) {
+    const addressLines = wrapTextLines(studioAddress, helvetica, 8.5, 250);
+    if (addressLines.length > 0) {
+      const addressLineHeight = 10;
+      const addressStartY = (logoDrawn ? logoBottomY : leftBlockBottomY) - 12;
+      addressLines.forEach((line, index) => {
+        page.drawText(line, {
+          x: MARGIN_X,
+          y: addressStartY - index * addressLineHeight,
+          font: helvetica,
+          size: 8.5,
+          color: gray,
+        });
+      });
+      const addressBottomY =
+        addressStartY - (addressLines.length - 1) * addressLineHeight - 8.5;
+      leftBlockBottomY = Math.min(leftBlockBottomY, addressBottomY);
+    }
+  }
+
+  const headerBottomY = Math.min(leftBlockBottomY, rightBlockBottomY);
+  y = headerBottomY - 8;
   drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 1);
 
   y -= 24;
