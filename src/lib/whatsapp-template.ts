@@ -259,8 +259,8 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
         "Halo {{client_name}}, berikut detail booking {{booking_code}}.\n\n" +
         "Paket: {{service_name}}\n" +
         "Jadwal:\n" +
-        "- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time}} di {{wisuda_session_1_location}}\n" +
-        "- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time}} di {{wisuda_session_2_location}}\n" +
+        "- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} di {{wisuda_session_1_location}}\n" +
+        "- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} di {{wisuda_session_2_location}}\n" +
         "Total: {{total_price}}\n" +
         "DP Dibayar: {{dp_paid}}\n\n" +
         "Invoice: {{invoice_url}}\n" +
@@ -270,8 +270,8 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
         "Hello {{client_name}}, here are your booking details for {{booking_code}}.\n\n" +
         "Package: {{service_name}}\n" +
         "Schedule:\n" +
-        "- Session 1: {{wisuda_session_1_date}} {{wisuda_session_1_time}} at {{wisuda_session_1_location}}\n" +
-        "- Session 2: {{wisuda_session_2_date}} {{wisuda_session_2_time}} at {{wisuda_session_2_location}}\n" +
+        "- Session 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} at {{wisuda_session_1_location}}\n" +
+        "- Session 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} at {{wisuda_session_2_location}}\n" +
         "Total: {{total_price}}\n" +
         "DP Paid: {{dp_paid}}\n\n" +
         "Invoice: {{invoice_url}}\n" +
@@ -284,8 +284,8 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
         "Kode Booking: {{booking_code}}\n" +
         "Paket: {{service_name}}\n" +
         "Jadwal:\n" +
-        "- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time}} di {{wisuda_session_1_location}}\n" +
-        "- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time}} di {{wisuda_session_2_location}}\n" +
+        "- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} di {{wisuda_session_1_location}}\n" +
+        "- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} di {{wisuda_session_2_location}}\n" +
         "Total: {{total_price}}\n" +
         "DP: {{dp_paid}}\n\n" +
         "Mohon konfirmasi booking saya. Terima kasih.",
@@ -294,8 +294,8 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
         "Booking Code: {{booking_code}}\n" +
         "Package: {{service_name}}\n" +
         "Schedule:\n" +
-        "- Session 1: {{wisuda_session_1_date}} {{wisuda_session_1_time}} at {{wisuda_session_1_location}}\n" +
-        "- Session 2: {{wisuda_session_2_date}} {{wisuda_session_2_time}} at {{wisuda_session_2_location}}\n" +
+        "- Session 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} at {{wisuda_session_1_location}}\n" +
+        "- Session 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} at {{wisuda_session_2_location}}\n" +
         "Total: {{total_price}}\n" +
         "DP: {{dp_paid}}\n\n" +
         "Please confirm my booking. Thank you.",
@@ -307,8 +307,8 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
         "Kode Booking: {{booking_code}}\n" +
         "Paket: {{service_name}}\n" +
         "Jadwal:\n" +
-        "- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time}} di {{wisuda_session_1_location}}\n" +
-        "- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time}} di {{wisuda_session_2_location}}\n" +
+        "- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} di {{wisuda_session_1_location}}\n" +
+        "- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} di {{wisuda_session_2_location}}\n" +
         "Link Drive: {{drive_link}}\n\n" +
         "Mohon konfirmasi kehadiran. Terima kasih, {{studio_name}}.",
       en:
@@ -317,8 +317,8 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
         "Booking Code: {{booking_code}}\n" +
         "Package: {{service_name}}\n" +
         "Schedule:\n" +
-        "- Session 1: {{wisuda_session_1_date}} {{wisuda_session_1_time}} at {{wisuda_session_1_location}}\n" +
-        "- Session 2: {{wisuda_session_2_date}} {{wisuda_session_2_time}} at {{wisuda_session_2_location}}\n" +
+        "- Session 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} at {{wisuda_session_1_location}}\n" +
+        "- Session 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} at {{wisuda_session_2_location}}\n" +
         "Drive Link: {{drive_link}}\n\n" +
         "Please confirm your availability. Thank you, {{studio_name}}.",
     },
@@ -327,8 +327,8 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
         "Halo {{client_name}}, invoice final untuk booking {{booking_code}} sudah tersedia.\n\n" +
         "Paket: {{service_name}}\n" +
         "Jadwal:\n" +
-        "- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time}} di {{wisuda_session_1_location}}\n" +
-        "- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time}} di {{wisuda_session_2_location}}\n" +
+        "- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} di {{wisuda_session_1_location}}\n" +
+        "- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} di {{wisuda_session_2_location}}\n" +
         "Total awal: {{total_price}}\n" +
         "Total final: {{final_total}}\n" +
         "Sisa pelunasan: {{remaining_payment}}\n\n" +
@@ -339,8 +339,8 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
         "Hello {{client_name}}, your final invoice for booking {{booking_code}} is ready.\n\n" +
         "Package: {{service_name}}\n" +
         "Schedule:\n" +
-        "- Session 1: {{wisuda_session_1_date}} {{wisuda_session_1_time}} at {{wisuda_session_1_location}}\n" +
-        "- Session 2: {{wisuda_session_2_date}} {{wisuda_session_2_time}} at {{wisuda_session_2_location}}\n" +
+        "- Session 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} at {{wisuda_session_1_location}}\n" +
+        "- Session 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} at {{wisuda_session_2_location}}\n" +
         "Base total: {{total_price}}\n" +
         "Final total: {{final_total}}\n" +
         "Remaining payment: {{remaining_payment}}\n\n" +
@@ -352,8 +352,8 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
       id:
         "Halo {{studio_name}}, saya {{client_name}} sudah mengirim pelunasan untuk booking {{booking_code}}.\n\n" +
         "Jadwal:\n" +
-        "- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time}} di {{wisuda_session_1_location}}\n" +
-        "- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time}} di {{wisuda_session_2_location}}\n" +
+        "- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} di {{wisuda_session_1_location}}\n" +
+        "- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} di {{wisuda_session_2_location}}\n" +
         "Metode pembayaran: {{payment_method}}\n" +
         "Total final: {{final_total}}\n" +
         "Sisa pelunasan: {{remaining_payment}}\n\n" +
@@ -363,8 +363,8 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
       en:
         "Hello {{studio_name}}, I am {{client_name}} and I have submitted the settlement payment for booking {{booking_code}}.\n\n" +
         "Schedule:\n" +
-        "- Session 1: {{wisuda_session_1_date}} {{wisuda_session_1_time}} at {{wisuda_session_1_location}}\n" +
-        "- Session 2: {{wisuda_session_2_date}} {{wisuda_session_2_time}} at {{wisuda_session_2_location}}\n" +
+        "- Session 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} at {{wisuda_session_1_location}}\n" +
+        "- Session 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} at {{wisuda_session_2_location}}\n" +
         "Payment method: {{payment_method}}\n" +
         "Final total: {{final_total}}\n" +
         "Remaining payment: {{remaining_payment}}\n\n" +

@@ -8,6 +8,7 @@ import {
   resolveBookingCalendarSessions,
 } from "@/lib/booking-calendar-sessions";
 import { formatBookingFreelancerNames } from "@/lib/booking-freelancers";
+import { resolveSessionDurationMinutesBySessionKey } from "@/lib/wisuda-session-duration";
 import {
   DEFAULT_CALENDAR_EVENT_DESCRIPTION,
   DEFAULT_CALENDAR_EVENT_FORMAT,
@@ -87,6 +88,12 @@ export async function syncBookingCalendarEvent({
     booking.services,
   );
   const durationMinutes = getBookingDurationMinutes(serviceSelections);
+  const durationBySessionKey = resolveSessionDurationMinutesBySessionKey({
+    eventType: booking.eventType,
+    sessions,
+    totalDurationMinutes: durationMinutes,
+    extraFields: booking.extraFields,
+  });
   const serviceName = getBookingServiceLabel(serviceSelections, {
     kind: "main",
     fallback: booking.eventType || "Sesi Foto",
@@ -117,9 +124,10 @@ export async function syncBookingCalendarEvent({
         sessionLocationKey &&
         sessionLocationKey === primaryLocation,
     );
+    const sessionDuration = durationBySessionKey[session.key] || durationMinutes;
     const range = buildCalendarRangeFromStoredSession(
       session.sessionDate,
-      durationMinutes,
+      sessionDuration,
     );
     const templateVars = buildCalendarTemplateVars(
       {

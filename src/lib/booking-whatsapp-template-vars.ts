@@ -6,6 +6,8 @@ import {
   normalizeBookingServiceSelections,
   type BookingServiceSelection,
 } from "@/lib/booking-services";
+import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
+import { resolveSessionDurationMinutesBySessionKey } from "@/lib/wisuda-session-duration";
 import {
   formatSessionTime,
   formatSessionTimeRange,
@@ -68,7 +70,7 @@ function formatCurrency(amount: number | null | undefined) {
 
 function resolveSessionTimeTemplateVars(
   sessionDate: string | null | undefined,
-  serviceSelections: BookingServiceSelection[],
+  durationMinutes: number,
 ) {
   if (!sessionDate) {
     return {
@@ -79,10 +81,7 @@ function resolveSessionTimeTemplateVars(
   }
 
   const sessionStart = formatSessionTime(sessionDate);
-  const sessionTime = formatSessionTimeRange(
-    sessionDate,
-    getBookingDurationMinutes(serviceSelections),
-  );
+  const sessionTime = formatSessionTimeRange(sessionDate, durationMinutes);
   const sessionEnd =
     sessionTime === "-" ? "-" : sessionTime.split(" - ").at(1) || "-";
 
@@ -110,6 +109,25 @@ export function buildBookingWhatsAppTemplateVars({
           booking.booking_services,
           booking.services || null,
         );
+  const totalDurationMinutes = getBookingDurationMinutes(serviceSelections);
+  const sessions = resolveBookingCalendarSessions({
+    eventType: booking.event_type,
+    sessionDate: booking.session_date || null,
+    extraFields: booking.extra_fields,
+    defaultLocation: booking.location || null,
+  });
+  const durationBySessionKey = resolveSessionDurationMinutesBySessionKey({
+    eventType: booking.event_type,
+    sessions,
+    totalDurationMinutes,
+    extraFields: booking.extra_fields,
+  });
+  const primarySession = sessions.find(
+    (session) => session.sessionDate === booking.session_date,
+  );
+  const primarySessionDurationMinutes = primarySession
+    ? durationBySessionKey[primarySession.key] || totalDurationMinutes
+    : totalDurationMinutes;
   const sessionDate =
     booking.session_date
       ? formatTemplateSessionDate(booking.session_date, {
@@ -118,7 +136,7 @@ export function buildBookingWhatsAppTemplateVars({
       : "-";
   const sessionTimeVars = resolveSessionTimeTemplateVars(
     booking.session_date,
-    serviceSelections,
+    primarySessionDurationMinutes,
   );
 
   return {
@@ -150,6 +168,7 @@ export function buildBookingWhatsAppTemplateVars({
     ...buildExtraFieldTemplateVars(booking.extra_fields),
     ...buildMultiSessionTemplateVars(booking.extra_fields, {
       locale: templateLocale,
+      sessionDurationMinutesByKey: durationBySessionKey,
     }),
     ...buildCustomFieldTemplateVars(booking.extra_fields),
   };

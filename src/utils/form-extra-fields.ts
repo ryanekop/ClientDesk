@@ -1,5 +1,6 @@
 import {
   formatSessionTime,
+  formatSessionTimeRange,
   formatTemplateSessionDate,
 } from "@/utils/format-date";
 import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
@@ -146,6 +147,13 @@ export const MULTI_SESSION_TEMPLATE_KEYS = [
   "wisuda_session_2_maps_url",
 ] as const;
 
+export const MULTI_SESSION_WHATSAPP_ONLY_TEMPLATE_KEYS = [
+  "wisuda_session_1_end_time",
+  "wisuda_session_1_time_range",
+  "wisuda_session_2_end_time",
+  "wisuda_session_2_time_range",
+] as const;
+
 const EXTRA_FIELD_PREVIEW_VALUES: Record<string, string> = {
   universitas: "Universitas Indonesia",
   fakultas: "FISIP",
@@ -232,7 +240,14 @@ export function getMultiSessionTemplateTokens(
   const wrap = format === "drive"
     ? (key: string) => `{${key}}`
     : (key: string) => `{{${key}}}`;
-  return MULTI_SESSION_TEMPLATE_KEYS.map((key) => wrap(key));
+  const keys =
+    format === "whatsapp"
+      ? [
+          ...MULTI_SESSION_TEMPLATE_KEYS,
+          ...MULTI_SESSION_WHATSAPP_ONLY_TEMPLATE_KEYS,
+        ]
+      : MULTI_SESSION_TEMPLATE_KEYS;
+  return keys.map((key) => wrap(key));
 }
 
 export function buildExtraFieldTemplateVars(raw: unknown): Record<string, string> {
@@ -259,24 +274,36 @@ function buildSessionDateTimeVars(
   source: Record<string, unknown>,
   key: string,
   locale: "id" | "en",
+  durationMinutes?: number,
 ) {
   const raw = readStringField(source, key);
   if (!raw) {
-    return { date: "", time: "" };
+    return { date: "", time: "", endTime: "", timeRange: "" };
   }
 
   const formattedDate = formatTemplateSessionDate(raw, { locale });
   const formattedTime = formatSessionTime(raw);
+  const formattedRange =
+    typeof durationMinutes === "number" && durationMinutes > 0
+      ? formatSessionTimeRange(raw, durationMinutes)
+      : "-";
+  const formattedEndTime =
+    formattedRange === "-" ? "" : formattedRange.split(" - ").at(1) || "";
 
   return {
     date: formattedDate === "-" ? raw : formattedDate,
     time: formattedTime === "-" ? "" : formattedTime,
+    endTime: formattedEndTime,
+    timeRange: formattedRange === "-" ? "" : formattedRange,
   };
 }
 
 export function buildMultiSessionTemplateVars(
   raw: unknown,
-  options: { locale?: "id" | "en" } = {},
+  options: {
+    locale?: "id" | "en";
+    sessionDurationMinutesByKey?: Record<string, number | undefined>;
+  } = {},
 ): Record<string, string> {
   if (!raw || typeof raw !== "object") return {};
 
@@ -289,11 +316,13 @@ export function buildMultiSessionTemplateVars(
     source,
     "tanggal_wisuda_1",
     locale,
+    options.sessionDurationMinutesByKey?.wisuda_session_1,
   );
   const wisudaSession2 = buildSessionDateTimeVars(
     source,
     "tanggal_wisuda_2",
     locale,
+    options.sessionDurationMinutesByKey?.wisuda_session_2,
   );
   const akadLocation = readStringField(source, "tempat_akad");
   const resepsiLocation = readStringField(source, "tempat_resepsi");
@@ -323,10 +352,14 @@ export function buildMultiSessionTemplateVars(
     ["wisuda_session_1_location", wisudaSession1Location],
     ["wisuda_session_1_date", wisudaSession1.date],
     ["wisuda_session_1_time", wisudaSession1.time],
+    ["wisuda_session_1_end_time", wisudaSession1.endTime],
+    ["wisuda_session_1_time_range", wisudaSession1.timeRange],
     ["wisuda_session_1_maps_url", wisudaSession1MapsUrl],
     ["wisuda_session_2_location", wisudaSession2Location],
     ["wisuda_session_2_date", wisudaSession2.date],
     ["wisuda_session_2_time", wisudaSession2.time],
+    ["wisuda_session_2_end_time", wisudaSession2.endTime],
+    ["wisuda_session_2_time_range", wisudaSession2.timeRange],
     ["wisuda_session_2_maps_url", wisudaSession2MapsUrl],
   ].filter(([, value]) => value.length > 0) as Array<[string, string]>;
 

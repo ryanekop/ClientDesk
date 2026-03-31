@@ -57,6 +57,12 @@ import {
 } from "@/lib/event-type-config";
 import { fillWhatsAppTemplate } from "@/lib/whatsapp-template";
 import {
+  getBookingDurationMinutes,
+  type BookingServiceSelection,
+} from "@/lib/booking-services";
+import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
+import { resolveSessionDurationMinutesBySessionKey } from "@/lib/wisuda-session-duration";
+import {
   buildGoogleMapsUrlOrFallback,
   resolvePreferredLocation,
   type LocationCoordinates,
@@ -94,6 +100,8 @@ export type Service = {
   is_addon: boolean;
   is_public?: boolean | null;
   sort_order?: number;
+  duration_minutes?: number | null;
+  affects_schedule?: boolean | null;
   created_at?: string;
 };
 
@@ -1140,6 +1148,49 @@ export function BookingFormClient({
       },
       "-",
     );
+    const serviceSelectionsForTemplate: BookingServiceSelection[] = [
+      ...selectedMainServices.map((service, index) => ({
+        id: service.id,
+        booking_service_id: null,
+        kind: "main" as const,
+        sort_order: index,
+        service: {
+          id: service.id,
+          name: service.name,
+          duration_minutes: service.duration_minutes ?? null,
+          is_addon: service.is_addon ?? false,
+          affects_schedule: service.affects_schedule ?? null,
+        },
+      })),
+      ...selectedAddonServices.map((service, index) => ({
+        id: service.id,
+        booking_service_id: null,
+        kind: "addon" as const,
+        sort_order: index,
+        service: {
+          id: service.id,
+          name: service.name,
+          duration_minutes: service.duration_minutes ?? null,
+          is_addon: service.is_addon ?? true,
+          affects_schedule: service.affects_schedule ?? null,
+        },
+      })),
+    ];
+    const totalDurationMinutes = getBookingDurationMinutes(
+      serviceSelectionsForTemplate,
+    );
+    const sessionsForTemplate = resolveBookingCalendarSessions({
+      eventType,
+      sessionDate: resolvedSessionDate || null,
+      extraFields: mergedExtraForTemplate,
+      defaultLocation: resolvedLocation.location,
+    });
+    const sessionDurationMinutesByKey = resolveSessionDurationMinutesBySessionKey({
+      eventType,
+      sessions: sessionsForTemplate,
+      totalDurationMinutes,
+      extraFields: mergedExtraForTemplate,
+    });
 
     const msg =
       (resultData.bookingConfirmTemplate || "").trim()
@@ -1162,6 +1213,7 @@ export function BookingFormClient({
             ...buildExtraFieldTemplateVars(mergedExtraForTemplate),
             ...buildMultiSessionTemplateVars(mergedExtraForTemplate, {
               locale: localeCode,
+              sessionDurationMinutesByKey,
             }),
             ...buildCustomFieldTemplateVars(mergedExtraForTemplate),
           })

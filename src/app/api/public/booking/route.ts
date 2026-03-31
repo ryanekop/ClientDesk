@@ -934,6 +934,7 @@ export async function POST(request: NextRequest) {
         }
 
         const sanitizedExtraData: Record<string, unknown> = { ...rawExtraData };
+        delete sanitizedExtraData.wisuda_session_duration_minutes;
         if (!isWisudaEventType || !hasCompleteWisudaSplitDates) {
             delete sanitizedExtraData.tanggal_wisuda_1;
             delete sanitizedExtraData.tanggal_wisuda_2;

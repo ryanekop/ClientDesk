@@ -20,15 +20,10 @@ import {
 } from "@/lib/booking-write-access-context";
 import { formatSessionDate, formatTemplateSessionDate } from "@/utils/format-date";
 import {
-    buildCustomFieldTemplateVars,
     extractBuiltInExtraFieldValues,
     extractCustomFieldSnapshots,
     type CustomFieldSnapshot,
 } from "@/components/form-builder/booking-form-layout";
-import {
-    buildExtraFieldTemplateVars,
-    buildMultiSessionTemplateVars,
-} from "@/utils/form-extra-fields";
 import { buildDriveImageUrl, type PaymentSource } from "@/lib/payment-config";
 import {
     buildAutoDpVerificationPatch,
@@ -146,6 +141,7 @@ const HIDDEN_EXTRA_FIELD_KEYS = new Set([
     "addon_ids",
     "addon_names",
     "special_offer",
+    "wisuda_session_duration_minutes",
     UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 ]);
@@ -2015,29 +2011,39 @@ export default function BookingDetailPage() {
             booking.event_type,
             templateMode,
         );
-        const message = templateContent.trim()
-            ? fillWhatsAppTemplate(templateContent, {
+        const baseVars = buildBookingWhatsAppTemplateVars({
+            booking: {
                 client_name: booking.client_name,
                 client_whatsapp: booking.client_whatsapp || "-",
                 booking_code: booking.booking_code,
-                session_date: booking.session_date ? formatTemplateSessionDate(booking.session_date, { locale: locale === "en" ? "en" : "id" }) : "-",
-                service_name: booking.service_label || booking.services?.name || "-",
-                total_price: formatCurrency(booking.total_price),
-                dp_paid: formatCurrency(booking.dp_paid),
+                session_date: booking.session_date,
+                total_price: booking.total_price,
+                dp_paid: booking.dp_paid,
+                event_type: booking.event_type,
+                location: booking.location,
+                location_lat: booking.location_lat,
+                location_lng: booking.location_lng,
+                location_detail: booking.location_detail,
+                notes: booking.notes,
+                extra_fields: booking.extra_fields,
+                service_label: booking.service_label || booking.services?.name || "-",
+                services: booking.services,
+                service_selections: booking.service_selections,
+            },
+            locale,
+            studioName,
+            trackingLink: booking.tracking_uuid
+                ? `${window.location.origin}/${locale}/track/${booking.tracking_uuid}`
+                : "-",
+            invoiceUrl,
+        });
+        const message = templateContent.trim()
+            ? fillWhatsAppTemplate(templateContent, {
+                ...baseVars,
                 final_total: formatCurrency(finalTotal),
                 adjustments_total: formatCurrency(getFinalAdjustmentsTotal(normalizedAdjustments)),
                 remaining_payment: formatCurrency(remainingFinal),
-                studio_name: studioName || "",
-                event_type: booking.event_type || "-",
-                location: booking.location || "-",
-                tracking_link: booking.tracking_uuid ? `${window.location.origin}/${locale}/track/${booking.tracking_uuid}` : "-",
-                invoice_url: invoiceUrl,
                 settlement_link: settlementUrl,
-                ...buildExtraFieldTemplateVars(booking.extra_fields),
-                ...buildMultiSessionTemplateVars(booking.extra_fields, {
-                    locale: locale === "en" ? "en" : "id",
-                }),
-                ...buildCustomFieldTemplateVars(booking.extra_fields),
             })
             : `Halo ${booking.client_name}, invoice final untuk booking ${booking.booking_code} sudah kami siapkan.\n\n` +
                 `Paket: ${booking.service_label || booking.services?.name || "-"}\n` +

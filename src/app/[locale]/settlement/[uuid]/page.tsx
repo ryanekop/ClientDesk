@@ -13,6 +13,7 @@ import {
   type WhatsAppTemplate,
 } from "@/lib/whatsapp-template";
 import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
+import { normalizeBookingServiceSelections } from "@/lib/booking-services";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ async function getSettlementData(uuid: string) {
   const { data: booking } = await supabaseAdmin
     .from("bookings")
     .select(
-      "id, booking_code, tracking_uuid, client_name, client_whatsapp, session_date, event_type, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_payment_method, final_payment_source, final_payment_proof_url, final_paid_at, final_invoice_sent_at, extra_fields, user_id, services(name)",
+      "id, booking_code, tracking_uuid, client_name, client_whatsapp, session_date, event_type, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_payment_method, final_payment_source, final_payment_proof_url, final_paid_at, final_invoice_sent_at, extra_fields, user_id, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon, affects_schedule))",
     )
     .eq("tracking_uuid", uuid)
     .single();
@@ -80,6 +81,10 @@ async function getSettlementData(uuid: string) {
     templateMode,
   );
   const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
+  const serviceSelections = normalizeBookingServiceSelections(
+    (booking as { booking_services?: unknown[] }).booking_services,
+    booking.services,
+  );
 
   return {
     booking: {
@@ -102,6 +107,7 @@ async function getSettlementData(uuid: string) {
       finalPaidAt: booking.final_paid_at || null,
       finalInvoiceSentAt: booking.final_invoice_sent_at || null,
       serviceName: (booking.services as { name?: string } | null)?.name || null,
+      serviceSelections,
       extraFields: (booking.extra_fields as Record<string, unknown> | null) || null,
       initialBreakdown: specialOffer
         ? {

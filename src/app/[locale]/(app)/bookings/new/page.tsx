@@ -55,6 +55,14 @@ import {
 } from "@/lib/university-references";
 import { resolveUniversityExtraFieldsForClient } from "@/lib/university-reference-client";
 import { normalizeFormSectionsByEventType } from "@/lib/form-sections";
+import {
+    getBookingDurationMinutes,
+    type BookingServiceSelection,
+} from "@/lib/booking-services";
+import {
+    buildWisudaSessionDurationOverride,
+    getWisudaSessionDurationExtraFieldKey,
+} from "@/lib/wisuda-session-duration";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -155,6 +163,8 @@ type Service = {
     price: number;
     original_price?: number | null;
     description?: string | null;
+    duration_minutes?: number | null;
+    affects_schedule?: boolean | null;
     is_addon?: boolean | null;
     is_public?: boolean | null;
     sort_order?: number | null;
@@ -215,6 +225,13 @@ function sanitizePhone(raw: string): string {
     return cleaned;
 }
 
+function sanitizeDurationInput(value: string) {
+    return value.replace(/\D+/g, "");
+}
+
+const WISUDA_SESSION_DURATION_EXTRA_FIELD_KEY =
+    getWisudaSessionDurationExtraFieldKey();
+
 function compareServicesByCatalogOrder(a: Service, b: Service) {
     const aSort = typeof a.sort_order === "number" ? a.sort_order : Number.MAX_SAFE_INTEGER;
     const bSort = typeof b.sort_order === "number" ? b.sort_order : Number.MAX_SAFE_INTEGER;
@@ -273,6 +290,9 @@ export default function NewBookingPage() {
     const [resepsiDate, setResepsiDate] = React.useState("");
     const [wisudaSession1Date, setWisudaSession1Date] = React.useState("");
     const [wisudaSession2Date, setWisudaSession2Date] = React.useState("");
+    const [isWisudaDurationOverrideEnabled, setIsWisudaDurationOverrideEnabled] = React.useState(false);
+    const [wisudaSession1DurationInput, setWisudaSession1DurationInput] = React.useState("");
+    const [wisudaSession2DurationInput, setWisudaSession2DurationInput] = React.useState("");
     const [statusOptions, setStatusOptions] = React.useState<string[]>(
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
     );
@@ -344,7 +364,7 @@ export default function NewBookingPage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
             const [{ data: svcs }, { data: frees }, { data: prof }] = await Promise.all([
-                supabase.from("services").select("id, name, price, original_price, description, is_addon, is_public, sort_order, event_types").eq("user_id", user.id).eq("is_active", true),
+                supabase.from("services").select("id, name, price, original_price, description, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("profiles").select("custom_client_statuses, form_sections, form_event_types, custom_event_types").eq("id", user.id).single(),
             ]);
@@ -415,6 +435,65 @@ export default function NewBookingPage() {
     const selectedAddonServices = React.useMemo(
         () => addonServices.filter((service) => selectedAddonIds.includes(service.id)),
         [addonServices, selectedAddonIds],
+    );
+    const selectedServiceSelections = React.useMemo<BookingServiceSelection[]>(
+        () => [
+            ...selectedMainServices.map((service, index) => ({
+                id: service.id,
+                booking_service_id: null,
+                kind: "main" as const,
+                sort_order: index,
+                service: {
+                    id: service.id,
+                    name: service.name,
+                    price: service.price,
+                    original_price: service.original_price ?? null,
+                    description: service.description ?? null,
+                    duration_minutes: service.duration_minutes ?? null,
+                    is_addon: service.is_addon ?? false,
+                    affects_schedule: service.affects_schedule ?? null,
+                    is_public: service.is_public ?? null,
+                    event_types: service.event_types ?? null,
+                },
+            })),
+            ...selectedAddonServices.map((service, index) => ({
+                id: service.id,
+                booking_service_id: null,
+                kind: "addon" as const,
+                sort_order: index,
+                service: {
+                    id: service.id,
+                    name: service.name,
+                    price: service.price,
+                    original_price: service.original_price ?? null,
+                    description: service.description ?? null,
+                    duration_minutes: service.duration_minutes ?? null,
+                    is_addon: service.is_addon ?? true,
+                    affects_schedule: service.affects_schedule ?? null,
+                    is_public: service.is_public ?? null,
+                    event_types: service.event_types ?? null,
+                },
+            })),
+        ],
+        [selectedMainServices, selectedAddonServices],
+    );
+    const selectedScheduleDurationMinutes = React.useMemo(
+        () => getBookingDurationMinutes(selectedServiceSelections),
+        [selectedServiceSelections],
+    );
+    const wisudaDefaultSession1DurationMinutes = React.useMemo(
+        () =>
+            Math.floor(selectedScheduleDurationMinutes / 2) +
+            (selectedScheduleDurationMinutes % 2),
+        [selectedScheduleDurationMinutes],
+    );
+    const wisudaDefaultSession2DurationMinutes = React.useMemo(
+        () =>
+            Math.max(
+                selectedScheduleDurationMinutes - wisudaDefaultSession1DurationMinutes,
+                1,
+            ),
+        [selectedScheduleDurationMinutes, wisudaDefaultSession1DurationMinutes],
     );
 
     const toggleService = (serviceId: string) => {
@@ -508,6 +587,15 @@ export default function NewBookingPage() {
         }
     }, [hasUniversityExtraField]);
 
+    React.useEffect(() => {
+        if (eventType === "Wisuda" && splitDates) {
+            return;
+        }
+        setIsWisudaDurationOverrideEnabled(false);
+        setWisudaSession1DurationInput("");
+        setWisudaSession2DurationInput("");
+    }, [eventType, splitDates]);
+
     const clientCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "client_info")?.items || [];
     const sessionCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "session_details")?.items || [];
     const paymentCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "payment_details")?.items || [];
@@ -534,7 +622,7 @@ export default function NewBookingPage() {
             is_addon: false,
             is_public: true,
             sort_order: services.filter((service) => !service.is_addon).length,
-        }).select("id, name, price, original_price, description, is_addon, is_public, sort_order, event_types").single();
+        }).select("id, name, price, original_price, description, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types").single();
         if (!error && data) {
             const s = data as Service;
             setServices(prev => [...prev, s].sort(compareServicesByCatalogOrder));
@@ -599,6 +687,29 @@ export default function NewBookingPage() {
                 showFeedback(tBookingEditor("errorSelectMainPackage"));
                 return;
             }
+            const wisudaDurationOverride = buildWisudaSessionDurationOverride({
+                session1Minutes: wisudaSession1DurationInput,
+                session2Minutes: wisudaSession2DurationInput,
+            });
+            if (
+                isWisudaEvent &&
+                isSplitSessionEnabled &&
+                isWisudaDurationOverrideEnabled
+            ) {
+                if (!wisudaDurationOverride) {
+                    showFeedback("Durasi Sesi 1 dan Sesi 2 harus diisi angka positif.");
+                    return;
+                }
+                const overrideTotal =
+                    wisudaDurationOverride.wisuda_session_1 +
+                    wisudaDurationOverride.wisuda_session_2;
+                if (overrideTotal !== selectedScheduleDurationMinutes) {
+                    showFeedback(
+                        `Total durasi split harus ${selectedScheduleDurationMinutes} menit (sesuai paket).`,
+                    );
+                    return;
+                }
+            }
             if (hasUniversityExtraField && !hasUniversityValue(extraFields)) {
                 showFeedback(tBookingEditor("errorUniversitySuggestionRequired"));
                 return;
@@ -608,7 +719,7 @@ export default function NewBookingPage() {
 
             // Determine session_date: if split, use earliest; merge extra_fields with dates
             let finalSessionDate = sessionDate || null;
-            const mergedExtra = { ...extraFields };
+            const mergedExtra: Record<string, unknown> = { ...extraFields };
             if (isWeddingEvent && isSplitSessionEnabled) {
                 mergedExtra.tanggal_akad = akadDate || "";
                 mergedExtra.tanggal_resepsi = resepsiDate || "";
@@ -621,6 +732,12 @@ export default function NewBookingPage() {
             } else if (isWisudaEvent && isSplitSessionEnabled) {
                 mergedExtra.tanggal_wisuda_1 = wisudaSession1Date || "";
                 mergedExtra.tanggal_wisuda_2 = wisudaSession2Date || "";
+                if (isWisudaDurationOverrideEnabled && wisudaDurationOverride) {
+                    mergedExtra[WISUDA_SESSION_DURATION_EXTRA_FIELD_KEY] =
+                        wisudaDurationOverride;
+                } else {
+                    delete mergedExtra[WISUDA_SESSION_DURATION_EXTRA_FIELD_KEY];
+                }
                 if (wisudaSession1Date && wisudaSession2Date) {
                     finalSessionDate =
                         wisudaSession1Date < wisudaSession2Date
@@ -634,17 +751,28 @@ export default function NewBookingPage() {
                 delete mergedExtra.tanggal_wisuda_2;
                 delete mergedExtra.tempat_wisuda_1;
                 delete mergedExtra.tempat_wisuda_2;
+                delete mergedExtra[WISUDA_SESSION_DURATION_EXTRA_FIELD_KEY];
             }
-            let resolvedExtraFields = { ...mergedExtra };
+            const stringExtraFields = Object.fromEntries(
+                Object.entries(mergedExtra).filter(([, value]) => typeof value === "string"),
+            ) as Record<string, string>;
+            const nonStringExtraFields = Object.fromEntries(
+                Object.entries(mergedExtra).filter(([, value]) => typeof value !== "string"),
+            ) as Record<string, unknown>;
+            let resolvedStringExtraFields = { ...stringExtraFields };
             try {
-                resolvedExtraFields = await resolveUniversityExtraFieldsForClient(
-                    mergedExtra,
+                resolvedStringExtraFields = await resolveUniversityExtraFieldsForClient(
+                    stringExtraFields,
                     { enabled: hasUniversityExtraField },
                 );
             } catch {
                 showFeedback(tBookingEditor("failedResolveUniversity"));
                 return;
             }
+            const resolvedExtraFields: Record<string, unknown> = {
+                ...resolvedStringExtraFields,
+                ...nonStringExtraFields,
+            };
 
             const packageTotalValue = selectedMainServices.reduce(
                 (sum, service) => sum + service.price,
@@ -693,12 +821,12 @@ export default function NewBookingPage() {
                 isWeddingEvent
                     ? [
                         {
-                            address: resolvedExtraFields.tempat_akad,
+                            address: resolvedStringExtraFields.tempat_akad,
                             lat: extraLocationCoords.tempat_akad?.lat,
                             lng: extraLocationCoords.tempat_akad?.lng,
                         },
                         {
-                            address: resolvedExtraFields.tempat_resepsi,
+                            address: resolvedStringExtraFields.tempat_resepsi,
                             lat: extraLocationCoords.tempat_resepsi?.lat,
                             lng: extraLocationCoords.tempat_resepsi?.lng,
                         },
@@ -711,12 +839,12 @@ export default function NewBookingPage() {
                     : isWisudaEvent && isSplitSessionEnabled
                         ? [
                             {
-                                address: resolvedExtraFields.tempat_wisuda_1,
+                                address: resolvedStringExtraFields.tempat_wisuda_1,
                                 lat: extraLocationCoords.tempat_wisuda_1?.lat,
                                 lng: extraLocationCoords.tempat_wisuda_1?.lng,
                             },
                             {
-                                address: resolvedExtraFields.tempat_wisuda_2,
+                                address: resolvedStringExtraFields.tempat_wisuda_2,
                                 lat: extraLocationCoords.tempat_wisuda_2?.lat,
                                 lng: extraLocationCoords.tempat_wisuda_2?.lng,
                             },
@@ -1054,6 +1182,9 @@ export default function NewBookingPage() {
                                 setResepsiDate("");
                                 setWisudaSession1Date("");
                                 setWisudaSession2Date("");
+                                setIsWisudaDurationOverrideEnabled(false);
+                                setWisudaSession1DurationInput("");
+                                setWisudaSession2DurationInput("");
                                 setExtraFields({});
                                 setIsUniversityManualEntryActive(false);
                                 setExtraLocationCoords({});
@@ -1068,7 +1199,15 @@ export default function NewBookingPage() {
                         {/* Split dates toggle */}
                         {(eventType === "Wedding" || eventType === "Wisuda") && (
                             <div className="col-span-full flex items-center gap-3">
-                                <button type="button" onClick={() => setSplitDates(!splitDates)}
+                                <button type="button" onClick={() => {
+                                    const nextSplitDates = !splitDates;
+                                    setSplitDates(nextSplitDates);
+                                    if (!nextSplitDates && eventType === "Wisuda") {
+                                        setIsWisudaDurationOverrideEnabled(false);
+                                        setWisudaSession1DurationInput("");
+                                        setWisudaSession2DurationInput("");
+                                    }
+                                }}
                                     className={cn("relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors", splitDates ? "bg-primary" : "bg-muted-foreground/30")}
                                 >
                                     <span className={cn("pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform", splitDates ? "translate-x-4" : "translate-x-0")} />
@@ -1142,6 +1281,78 @@ export default function NewBookingPage() {
                                         const datePart = wisudaSession2Date?.split("T")[0] || "";
                                         if (datePart) setWisudaSession2Date(`${datePart}T${e.target.value}`);
                                     }} className={cn(inputClass, "block")} />
+                                </div>
+                                <div className="col-span-full rounded-lg border border-dashed p-3 space-y-3">
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const nextValue = !isWisudaDurationOverrideEnabled;
+                                                setIsWisudaDurationOverrideEnabled(nextValue);
+                                                if (!nextValue) {
+                                                    setWisudaSession1DurationInput("");
+                                                    setWisudaSession2DurationInput("");
+                                                }
+                                            }}
+                                            className={cn(
+                                                "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+                                                isWisudaDurationOverrideEnabled ? "bg-primary" : "bg-muted-foreground/30",
+                                            )}
+                                        >
+                                            <span
+                                                className={cn(
+                                                    "pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform",
+                                                    isWisudaDurationOverrideEnabled ? "translate-x-4" : "translate-x-0",
+                                                )}
+                                            />
+                                        </button>
+                                        <span className="text-xs font-medium text-muted-foreground">
+                                            Override durasi sesi Wisuda
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        Total durasi paket: {selectedScheduleDurationMinutes} menit. Default:
+                                        {" "}
+                                        Sesi 1 {wisudaDefaultSession1DurationMinutes} menit,
+                                        {" "}
+                                        Sesi 2 {wisudaDefaultSession2DurationMinutes} menit.
+                                    </p>
+                                    {isWisudaDurationOverrideEnabled && (
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-medium text-muted-foreground">
+                                                    Durasi Sesi 1 (menit){reqMark}
+                                                </label>
+                                                <input
+                                                    value={wisudaSession1DurationInput}
+                                                    onChange={(event) =>
+                                                        setWisudaSession1DurationInput(
+                                                            sanitizeDurationInput(event.target.value),
+                                                        )
+                                                    }
+                                                    inputMode="numeric"
+                                                    placeholder="60"
+                                                    className={cn(inputClass, "block")}
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-medium text-muted-foreground">
+                                                    Durasi Sesi 2 (menit){reqMark}
+                                                </label>
+                                                <input
+                                                    value={wisudaSession2DurationInput}
+                                                    onChange={(event) =>
+                                                        setWisudaSession2DurationInput(
+                                                            sanitizeDurationInput(event.target.value),
+                                                        )
+                                                    }
+                                                    inputMode="numeric"
+                                                    placeholder="60"
+                                                    className={cn(inputClass, "block")}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         ) : (

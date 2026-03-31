@@ -31,13 +31,12 @@ import {
   normalizeWhatsAppNumber,
   resolveWhatsAppTemplateMode,
 } from "@/lib/whatsapp-template";
-import { formatSessionDate, formatTemplateSessionDate } from "@/utils/format-date";
+import { formatSessionDate } from "@/utils/format-date";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
 import {
-  buildExtraFieldTemplateVars,
-  buildMultiSessionTemplateVars,
-} from "@/utils/form-extra-fields";
-import { buildCustomFieldTemplateVars } from "@/components/form-builder/booking-form-layout";
+  type BookingServiceSelection,
+} from "@/lib/booking-services";
+import { buildBookingWhatsAppTemplateVars } from "@/lib/booking-whatsapp-template-vars";
 
 type BookingData = {
   bookingCode: string;
@@ -65,6 +64,7 @@ type BookingData = {
   finalPaidAt: string | null;
   finalInvoiceSentAt: string | null;
   serviceName: string | null;
+  serviceSelections?: BookingServiceSelection[] | null;
   extraFields?: Record<string, unknown> | null;
   initialBreakdown: {
     packageTotal: number;
@@ -402,26 +402,25 @@ export default function SettlementClient({
           mode: templateMode,
         });
     const message = fillWhatsAppTemplate(resolvedTemplate, {
-      client_name: booking.clientName,
-      client_whatsapp: booking.clientWhatsapp || "-",
-      booking_code: booking.bookingCode,
-      service_name: booking.serviceName || "-",
-      session_date: booking.sessionDate
-        ? formatTemplateSessionDate(booking.sessionDate, {
-            locale: locale === "en" ? "en" : "id",
-          })
-        : "-",
+      ...buildBookingWhatsAppTemplateVars({
+        booking: {
+          client_name: booking.clientName,
+          client_whatsapp: booking.clientWhatsapp || "-",
+          booking_code: booking.bookingCode,
+          session_date: booking.sessionDate,
+          event_type: booking.eventType,
+          service_label: booking.serviceName || "-",
+          extra_fields: booking.extraFields,
+          service_selections: booking.serviceSelections || null,
+        },
+        locale,
+        studioName: effectiveVendor.studioName,
+        invoiceUrl,
+      }),
       payment_method: paymentMethodLabel,
       final_total: formatCurrency(finalInvoiceTotal),
       remaining_payment: formatCurrency(remaining),
-      studio_name: effectiveVendor.studioName,
-      invoice_url: invoiceUrl,
       settlement_link: settlementUrl,
-      ...buildExtraFieldTemplateVars(booking.extraFields),
-      ...buildMultiSessionTemplateVars(booking.extraFields, {
-        locale: locale === "en" ? "en" : "id",
-      }),
-      ...buildCustomFieldTemplateVars(booking.extraFields),
     });
 
     openWhatsAppUrl(buildWhatsAppUrl(normalizedAdminWhatsapp, message));

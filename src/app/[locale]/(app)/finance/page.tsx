@@ -43,7 +43,6 @@ import {
     getBookingMetadataValue,
 } from "@/lib/booking-table-columns";
 import {
-    buildCustomFieldTemplateVars,
     type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
 import {
@@ -58,11 +57,6 @@ import {
     resolveWhatsAppTemplateMode,
 } from "@/lib/whatsapp-template";
 import { getInitialBookingPriceBreakdown } from "@/lib/booking-special-offer";
-import {
-    buildExtraFieldTemplateVars,
-    buildMultiSessionTemplateVars,
-} from "@/utils/form-extra-fields";
-import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
 import {
     DEFAULT_CLIENT_STATUSES,
     getBookingStatusOptions,
@@ -79,6 +73,7 @@ import { FilterMultiSelect } from "@/components/ui/filter-multi-select";
 import { BookingDateRangePicker } from "@/components/ui/booking-date-range-picker";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
+import { buildBookingWhatsAppTemplateVars } from "@/lib/booking-whatsapp-template-vars";
 
 type BookingFinance = {
     id: string;
@@ -902,35 +897,30 @@ export default function FinancePage() {
         );
 
         if (templateContent.trim()) {
-            return fillWhatsAppTemplate(templateContent, {
-                client_name: booking.client_name,
-                client_whatsapp: booking.client_whatsapp || "-",
-                booking_code: booking.booking_code,
-                session_date: date,
-                service_name: booking.service_label || booking.services?.name || "-",
-                total_price: formatCurrency(booking.total_price),
-                dp_paid: formatCurrency(booking.dp_paid),
-                studio_name: studioName || "",
-                event_type: booking.event_type || "-",
-                location: booking.location || "-",
-                location_maps_url: buildGoogleMapsUrlOrFallback(
-                    {
-                        address: booking.location,
-                        lat: booking.location_lat,
-                        lng: booking.location_lng,
-                    },
-                    "-",
-                ),
-                detail_location: "-",
-                notes: "-",
-                tracking_link: trackingLink || "-",
-                invoice_url: invoiceLink,
-                ...buildExtraFieldTemplateVars(booking.extra_fields),
-                ...buildMultiSessionTemplateVars(booking.extra_fields, {
-                    locale: locale === "en" ? "en" : "id",
-                }),
-                ...buildCustomFieldTemplateVars(booking.extra_fields),
+            const vars = buildBookingWhatsAppTemplateVars({
+                booking: {
+                    client_name: booking.client_name,
+                    client_whatsapp: booking.client_whatsapp || "-",
+                    booking_code: booking.booking_code,
+                    session_date: booking.session_date,
+                    total_price: booking.total_price,
+                    dp_paid: booking.dp_paid,
+                    event_type: booking.event_type,
+                    location: booking.location,
+                    location_lat: booking.location_lat,
+                    location_lng: booking.location_lng,
+                    extra_fields: booking.extra_fields,
+                    service_label: booking.service_label || booking.services?.name || "-",
+                    services: booking.services,
+                    booking_services: booking.booking_services,
+                    service_selections: booking.service_selections,
+                },
+                locale,
+                studioName,
+                trackingLink,
+                invoiceUrl: invoiceLink,
             });
+            return fillWhatsAppTemplate(templateContent, vars);
         }
 
         return `📄 *${tf("waInvoiceTitle")} - ${booking.booking_code}*\n\n${tf("waInvoiceHello", { name: booking.client_name })}\n${tf("waInvoiceDetail")}\n\n📦 ${tf("waInvoicePackage")}: ${booking.service_label || booking.services?.name || "-"}\n📅 ${tf("waInvoiceSchedule")}: ${date}\n💰 ${tf("waInvoiceTotal")}: ${formatCurrency(booking.total_price)}\n✅ ${tf("waInvoiceDPPaid")}: ${formatCurrency(booking.dp_paid)}\n📌 ${tf("waInvoiceRemaining")}: ${formatCurrency(remaining)}\n\nStatus: ${booking.is_fully_paid ? `✅ ${tf("waInvoicePaid")}` : `⏳ ${tf("waInvoiceUnpaid")}`}\n\n📎 ${tf("waInvoiceDownload")}: ${invoiceLink}${trackingLink ? `\n🔗 ${tf("waInvoiceViewStatus")}: ${trackingLink}` : ""}\n\n${tf("waInvoiceThankYou")} 🙏`;
@@ -956,28 +946,35 @@ export default function FinancePage() {
         );
 
         if (templateContent.trim()) {
+            const baseVars = buildBookingWhatsAppTemplateVars({
+                booking: {
+                    client_name: booking.client_name,
+                    client_whatsapp: booking.client_whatsapp || "-",
+                    booking_code: booking.booking_code,
+                    session_date: booking.session_date,
+                    total_price: booking.total_price,
+                    dp_paid: booking.dp_paid,
+                    event_type: booking.event_type,
+                    location: booking.location,
+                    location_lat: booking.location_lat,
+                    location_lng: booking.location_lng,
+                    extra_fields: booking.extra_fields,
+                    service_label: booking.service_label || booking.services?.name || "-",
+                    services: booking.services,
+                    booking_services: booking.booking_services,
+                    service_selections: booking.service_selections,
+                },
+                locale,
+                studioName,
+                trackingLink,
+                invoiceUrl: invoiceLink,
+            });
             return fillWhatsAppTemplate(templateContent, {
-                client_name: booking.client_name,
-                client_whatsapp: booking.client_whatsapp || "-",
-                booking_code: booking.booking_code,
-                session_date: date,
-                service_name: booking.service_label || booking.services?.name || "-",
-                total_price: formatCurrency(booking.total_price),
-                dp_paid: formatCurrency(booking.dp_paid),
+                ...baseVars,
                 final_total: formatCurrency(finalTotal),
                 adjustments_total: formatCurrency(finalTotal - booking.total_price),
                 remaining_payment: formatCurrency(remaining),
-                studio_name: studioName || "",
-                event_type: booking.event_type || "-",
-                location: booking.location || "-",
-                tracking_link: trackingLink || "-",
-                invoice_url: invoiceLink,
                 settlement_link: settlementLink || "-",
-                ...buildExtraFieldTemplateVars(booking.extra_fields),
-                ...buildMultiSessionTemplateVars(booking.extra_fields, {
-                    locale: locale === "en" ? "en" : "id",
-                }),
-                ...buildCustomFieldTemplateVars(booking.extra_fields),
             });
         }
 

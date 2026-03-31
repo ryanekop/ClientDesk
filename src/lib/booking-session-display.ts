@@ -4,6 +4,7 @@ import {
   normalizeBookingServiceSelections,
   type BookingServiceSelection,
 } from "@/lib/booking-services";
+import { resolveSessionDurationMinutesBySessionKey } from "@/lib/wisuda-session-duration";
 import {
   formatSessionDate,
   formatSessionTimeRange,
@@ -63,6 +64,12 @@ export function buildBookingSessionDisplay({
       ? serviceSelections
       : normalizeBookingServiceSelections(bookingServices, legacyService);
   const durationMinutes = getBookingDurationMinutes(normalizedSelections);
+  const durationBySessionKey = resolveSessionDurationMinutesBySessionKey({
+    eventType,
+    sessions,
+    totalDurationMinutes: durationMinutes,
+    extraFields,
+  });
   const dateDisplay = sessions
     .map((session) => {
       const label = formatSessionDate(session.sessionDate, {
@@ -76,7 +83,9 @@ export function buildBookingSessionDisplay({
     .join("\n");
   const timeDisplay = sessions
     .map((session) => {
-      const label = formatSessionTimeRange(session.sessionDate, durationMinutes);
+      const sessionDuration =
+        durationBySessionKey[session.key] || durationMinutes;
+      const label = formatSessionTimeRange(session.sessionDate, sessionDuration);
       return session.label ? `${session.label}: ${label}` : label;
     })
     .join("\n");
