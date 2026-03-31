@@ -145,8 +145,8 @@ const STATUS_COLOR_PALETTE = [
     "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400 border-none",
 ];
 const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
-    { id: "name", label: "Nama", visible: true },
     { id: "row_number", label: "No.", visible: true, locked: true },
+    { id: "name", label: "Nama", visible: true },
     { id: "invoice", label: "Invoice", visible: true },
     { id: "booking_date", label: "Booking Date", visible: true },
     { id: "package", label: "Paket", visible: true },

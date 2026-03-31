@@ -65,8 +65,8 @@ const COUNTRY_CODES = [
 ];
 
 const TEAM_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
-    { id: "name", label: "Nama", visible: true },
     { id: "row_number", label: "No.", visible: true, locked: true },
+    { id: "name", label: "Nama", visible: true },
     { id: "role", label: "Peran", visible: true },
     { id: "tags", label: "Tags", visible: true },
     { id: "whatsapp", label: "Whatsapp", visible: true },

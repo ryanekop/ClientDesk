@@ -162,32 +162,19 @@ export function lockBoundaryColumns(
 ): TableColumnPreference[] {
   if (columns.length === 0) return columns;
 
-  const first = columns.find((column) => column.id === "name") || columns[0];
+  const leadingFixed = columns.find((column) => column.id === "row_number");
+  const first =
+    columns.find((column) => column.id === "name") ||
+    columns.find((column) => column.id !== "row_number") ||
+    columns[0];
   const last =
     columns.find((column) => column.id === "actions") ||
     columns[columns.length - 1];
   const middle = columns.filter((column) => {
-    if (first.id === last.id) return column.id !== first.id;
-    return column.id !== first.id && column.id !== last.id;
+    if (column.id === first.id || column.id === last.id) return false;
+    if (leadingFixed && column.id === leadingFixed.id) return false;
+    return true;
   });
-
-  if (first.id === last.id) {
-    return [
-      {
-        ...first,
-        locked: false,
-        visible: true,
-        pin:
-          first.id === "actions"
-            ? first.pin === "right"
-              ? ("right" as const)
-              : null
-            : first.pin === "left"
-              ? ("left" as const)
-              : null,
-      },
-    ];
-  }
 
   const normalizedMiddle = normalizePinnedColumnOrder(
     middle.map((column) => ({
@@ -196,22 +183,41 @@ export function lockBoundaryColumns(
       pin: column.pin === "left" ? ("left" as const) : null,
     })),
   );
+  const result: TableColumnPreference[] = [];
 
-  return [
-    {
+  if (leadingFixed) {
+    result.push({
+      ...leadingFixed,
+      locked: leadingFixed.locked === true,
+      visible: leadingFixed.visible !== false,
+      pin: null,
+    });
+  }
+
+  if (!leadingFixed || leadingFixed.id !== first.id) {
+    result.push({
       ...first,
       locked: false,
       visible: true,
       pin: first.pin === "left" ? ("left" as const) : null,
-    },
-    ...normalizedMiddle,
-    {
+    });
+  }
+
+  result.push(...normalizedMiddle);
+
+  if (
+    (!leadingFixed || leadingFixed.id !== last.id) &&
+    first.id !== last.id
+  ) {
+    result.push({
       ...last,
       locked: false,
       visible: true,
       pin: last.pin === "right" ? ("right" as const) : null,
-    },
-  ];
+    });
+  }
+
+  return result;
 }
 
 export function updateTableColumnPreferenceMap(

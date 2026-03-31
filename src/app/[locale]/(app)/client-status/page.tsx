@@ -100,8 +100,8 @@ const STATUS_COLOR_PALETTE = [
 ];
 
 const BASE_CLIENT_STATUS_COLUMNS: TableColumnPreference[] = [
-    { id: "name", label: "Nama", visible: true },
     { id: "row_number", label: "No.", visible: true, locked: true },
+    { id: "name", label: "Nama", visible: true },
     { id: "package", label: "Paket", visible: true },
     { id: "event_type", label: "Tipe Acara", visible: false },
     { id: "status", label: "Status", visible: true },

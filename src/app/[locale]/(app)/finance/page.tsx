@@ -127,8 +127,8 @@ type FinanceFilterStoragePayload = {
 };
 
 const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
-    { id: "name", label: "Nama", visible: true },
     { id: "row_number", label: "No.", visible: true, locked: true },
+    { id: "name", label: "Nama", visible: true },
     { id: "event_type", label: "Tipe Acara", visible: false },
     { id: "total_price", label: "Harga Total", visible: true },
     { id: "package_price", label: "Harga Paket", visible: true },
