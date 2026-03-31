@@ -25,6 +25,7 @@ export const GOOGLE_EVENT_TYPES = [
 
 export type GoogleEventType = (typeof GOOGLE_EVENT_TYPES)[number];
 export type TemplateFormatMap = Record<string, string>;
+export type GoogleCalendarTemplateMode = "normal" | "split";
 export type GoogleCalendarDateTime = {
     dateTime: string;
     timeZone: string;
@@ -59,6 +60,17 @@ const DAYS_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"]
 export const DEFAULT_CALENDAR_EVENT_FORMAT = "📸 {{client_name}} — {{service_name}}";
 export const DEFAULT_CALENDAR_EVENT_DESCRIPTION =
     "Klien: {{client_name}}\nWhatsApp: {{client_whatsapp}}\nBooking: {{booking_code}}\nDetail Booking: {{booking_detail_link}}\nPaket: {{service_name}}\nTanggal: {{session_date}}\nJam: {{session_time}} - {{end_time}}\nJenis Acara: {{event_type}}\nLokasi: {{location}}\nMaps: {{location_maps_url}}\nDetail Lokasi: {{detail_location}}\nCatatan: {{notes}}";
+export const CALENDAR_TEMPLATE_SPLIT_MODE_SUFFIX = "__split";
+const SPLIT_CAPABLE_CALENDAR_TEMPLATE_EVENTS = new Set(["Wedding", "Wisuda"]);
+const DEFAULT_CALENDAR_SPLIT_EVENT_DESCRIPTIONS: Record<
+    "Wedding" | "Wisuda",
+    string
+> = {
+    Wedding:
+        "Klien: {{client_name}}\nWhatsApp: {{client_whatsapp}}\nBooking: {{booking_code}}\nDetail Booking: {{booking_detail_link}}\nPaket: {{service_name}}\nJadwal:\n- Akad: {{akad_date}} {{akad_time}} di {{akad_location}}\n- Resepsi: {{resepsi_date}} {{resepsi_time}} di {{resepsi_location}}\nJenis Acara: {{event_type}}\nLokasi Utama: {{location}}\nMaps: {{location_maps_url}}\nDetail Lokasi: {{detail_location}}\nCatatan: {{notes}}",
+    Wisuda:
+        "Klien: {{client_name}}\nWhatsApp: {{client_whatsapp}}\nBooking: {{booking_code}}\nDetail Booking: {{booking_detail_link}}\nPaket: {{service_name}}\nJadwal:\n- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} di {{wisuda_session_1_location}}\n- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} di {{wisuda_session_2_location}}\nJenis Acara: {{event_type}}\nLokasi Utama: {{location}}\nMaps: {{location_maps_url}}\nDetail Lokasi: {{detail_location}}\nCatatan: {{notes}}",
+};
 export const DEFAULT_DRIVE_FOLDER_FORMAT = "{client_name}";
 export const DEFAULT_DRIVE_FOLDER_STRUCTURE = [DEFAULT_DRIVE_FOLDER_FORMAT];
 
@@ -116,6 +128,131 @@ function getEventTypeLookupKeys(eventType: string | null | undefined): string[] 
         return [CANONICAL_CUSTOM_EVENT_TYPE, LEGACY_CUSTOM_EVENT_TYPE];
     }
     return [normalized];
+}
+
+export function normalizeGoogleCalendarTemplateMode(
+    value: unknown,
+): GoogleCalendarTemplateMode {
+    return value === "split" ? "split" : "normal";
+}
+
+export function isSplitCapableCalendarTemplateEvent(
+    eventType: string | null | undefined,
+) {
+    const normalized = normalizeTemplateEventTypeName(eventType);
+    return normalized
+        ? SPLIT_CAPABLE_CALENDAR_TEMPLATE_EVENTS.has(normalized)
+        : false;
+}
+
+export function buildCalendarDescriptionMapKey(
+    eventType: string | null | undefined,
+    mode: GoogleCalendarTemplateMode = "normal",
+) {
+    const normalizedEventType = normalizeTemplateEventTypeName(eventType) || "Umum";
+    const normalizedMode = normalizeGoogleCalendarTemplateMode(mode);
+    if (normalizedMode === "split") {
+        return `${normalizedEventType}${CALENDAR_TEMPLATE_SPLIT_MODE_SUFFIX}`;
+    }
+    return normalizedEventType;
+}
+
+export function getDefaultCalendarEventDescriptionByMode({
+    eventType,
+    mode = "normal",
+}: {
+    eventType?: string | null;
+    mode?: GoogleCalendarTemplateMode;
+} = {}) {
+    const normalizedEventType = normalizeTemplateEventTypeName(eventType);
+    const normalizedMode = normalizeGoogleCalendarTemplateMode(mode);
+    if (
+        normalizedMode === "split" &&
+        normalizedEventType &&
+        isSplitCapableCalendarTemplateEvent(normalizedEventType)
+    ) {
+        return DEFAULT_CALENDAR_SPLIT_EVENT_DESCRIPTIONS[
+            normalizedEventType as "Wedding" | "Wisuda"
+        ];
+    }
+    return DEFAULT_CALENDAR_EVENT_DESCRIPTION;
+}
+
+export function normalizeCalendarEventDescriptionMap(
+    value: unknown,
+    fallback: string = DEFAULT_CALENDAR_EVENT_DESCRIPTION,
+): TemplateFormatMap {
+    const normalized = normalizeTemplateFormatMap(value, fallback);
+    (["Wedding", "Wisuda"] as const).forEach((eventType) => {
+        const splitKey = buildCalendarDescriptionMapKey(eventType, "split");
+        if (!Object.prototype.hasOwnProperty.call(normalized, splitKey)) {
+            normalized[splitKey] =
+                DEFAULT_CALENDAR_SPLIT_EVENT_DESCRIPTIONS[eventType];
+        }
+    });
+    return normalized;
+}
+
+export function resolveCalendarDescriptionTemplateByMode({
+    mapValue,
+    eventType,
+    mode,
+    fallback = DEFAULT_CALENDAR_EVENT_DESCRIPTION,
+}: {
+    mapValue: unknown;
+    eventType: string | null | undefined;
+    mode?: GoogleCalendarTemplateMode;
+    fallback?: string;
+}): string {
+    const normalized = normalizeTemplateFormatMap(mapValue, fallback);
+    const normalizedMode = normalizeGoogleCalendarTemplateMode(mode);
+    const eventKeys = getEventTypeLookupKeys(eventType);
+    const normalizedEventType = normalizeTemplateEventTypeName(eventType);
+
+    const findTemplate = (key: string) => {
+        const value = normalized[key];
+        return typeof value === "string" && value.trim() ? value.trim() : null;
+    };
+    const findByMode = (
+        keys: string[],
+        targetMode: GoogleCalendarTemplateMode,
+    ) => {
+        for (const key of keys) {
+            const entry = findTemplate(buildCalendarDescriptionMapKey(key, targetMode));
+            if (entry) return entry;
+        }
+        return null;
+    };
+
+    if (normalizedMode === "split") {
+        const eventSplit = findByMode(eventKeys, "split");
+        if (eventSplit) return eventSplit;
+    }
+
+    const eventNormal = findByMode(eventKeys, "normal");
+    if (eventNormal) return eventNormal;
+
+    if (normalizedMode === "split") {
+        const generalSplit = findTemplate(
+            buildCalendarDescriptionMapKey("Umum", "split"),
+        );
+        if (generalSplit) return generalSplit;
+    }
+
+    const generalNormal = findTemplate("Umum");
+    if (generalNormal) return generalNormal;
+
+    if (
+        normalizedMode === "split" &&
+        normalizedEventType &&
+        isSplitCapableCalendarTemplateEvent(normalizedEventType)
+    ) {
+        return DEFAULT_CALENDAR_SPLIT_EVENT_DESCRIPTIONS[
+            normalizedEventType as "Wedding" | "Wisuda"
+        ];
+    }
+
+    return fallback;
 }
 
 export function normalizeTemplateFormatMap(value: unknown, fallback: string): TemplateFormatMap {
@@ -180,10 +317,17 @@ export function applyCalendarTemplate(template: string, vars: Record<string, str
 export function buildCalendarTemplateVars(
     baseVars: Record<string, string | null | undefined>,
     extraFields?: unknown,
+    options: {
+        locale?: "id" | "en";
+        sessionDurationMinutesByKey?: Record<string, number | undefined>;
+    } = {},
 ): Record<string, string | null | undefined> {
     return {
         ...baseVars,
-        ...buildMultiSessionTemplateVars(extraFields, { locale: "id" }),
+        ...buildMultiSessionTemplateVars(extraFields, {
+            locale: options.locale || "id",
+            sessionDurationMinutesByKey: options.sessionDurationMinutesByKey,
+        }),
         ...buildExtraFieldTemplateVars(extraFields),
         ...buildGoogleCustomFieldTemplateVars(extraFields),
     };

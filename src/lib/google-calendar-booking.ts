@@ -15,11 +15,13 @@ import {
   applyCalendarTemplate,
   buildCalendarRangeFromStoredSession,
   buildCalendarTemplateVars,
+  resolveCalendarDescriptionTemplateByMode,
   resolveTemplateByEventType,
   type GoogleCalendarDateTime,
 } from "@/utils/google/template";
 import { deleteCalendarEvent, upsertCalendarEvent } from "@/utils/google/calendar";
 import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
+import { resolveBookingTemplateMode } from "@/lib/booking-template-mode";
 
 type CalendarProfileConfig = {
   accessToken: string;
@@ -102,6 +104,16 @@ export async function syncBookingCalendarEvent({
     booking.googleCalendarEventIds,
     booking.googleCalendarEventId,
   );
+  const templateMode = resolveBookingTemplateMode({
+    eventType: booking.eventType,
+    extraFields: booking.extraFields,
+  });
+  const descriptionTemplate = resolveCalendarDescriptionTemplateByMode({
+    mapValue: profile.eventDescriptionMap,
+    eventType: booking.eventType,
+    mode: templateMode,
+    fallback: profile.eventDescription || DEFAULT_CALENDAR_EVENT_DESCRIPTION,
+  });
   const nextEventIds: Record<string, string> = {};
   const activeEventIds = new Set<string>();
 
@@ -153,6 +165,10 @@ export async function syncBookingCalendarEvent({
         ...range.templateVars,
       },
       booking.extraFields,
+      {
+        locale: "id",
+        sessionDurationMinutesByKey: durationBySessionKey,
+      },
     );
     const baseSummary = applyCalendarTemplate(
       resolveTemplateByEventType(
@@ -165,14 +181,7 @@ export async function syncBookingCalendarEvent({
     const summary = session.titlePrefix
       ? `${session.titlePrefix} ${baseSummary}`
       : baseSummary;
-    const description = applyCalendarTemplate(
-      resolveTemplateByEventType(
-        profile.eventDescriptionMap,
-        booking.eventType,
-        profile.eventDescription || DEFAULT_CALENDAR_EVENT_DESCRIPTION,
-      ),
-      templateVars,
-    );
+    const description = applyCalendarTemplate(descriptionTemplate, templateVars);
 
     const previousEventId =
       existingEventIds[session.key] ||

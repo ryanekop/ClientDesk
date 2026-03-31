@@ -1,5 +1,5 @@
 import { normalizeEventTypeName } from "@/lib/event-type-config";
-import { parseSessionDateParts } from "@/utils/format-date";
+import { resolveBookingTemplateMode } from "@/lib/booking-template-mode";
 
 export type WhatsAppTemplate = {
   type: string;
@@ -406,19 +406,6 @@ function isGeneralTemplateEventType(eventType: string | null | undefined) {
   return trimmed.length === 0 || trimmed.toLowerCase() === "umum";
 }
 
-function normalizeExtraFields(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function hasValidDateTime(value: unknown) {
-  if (typeof value !== "string") return false;
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  return Boolean(parseSessionDateParts(trimmed));
-}
-
 export function isEventScopedWhatsAppTemplateType(type: string) {
   return EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES.has(type);
 }
@@ -430,26 +417,7 @@ export function resolveWhatsAppTemplateMode({
   eventType?: string | null;
   extraFields?: unknown;
 }): WhatsAppTemplateMode {
-  const normalizedEventType = normalizeEventTypeName(eventType);
-  if (!normalizedEventType) return "normal";
-  const extras = normalizeExtraFields(extraFields);
-
-  if (
-    normalizedEventType === "Wedding" &&
-    hasValidDateTime(extras.tanggal_akad) &&
-    hasValidDateTime(extras.tanggal_resepsi)
-  ) {
-    return "split";
-  }
-  if (
-    normalizedEventType === "Wisuda" &&
-    hasValidDateTime(extras.tanggal_wisuda_1) &&
-    hasValidDateTime(extras.tanggal_wisuda_2)
-  ) {
-    return "split";
-  }
-
-  return "normal";
+  return resolveBookingTemplateMode({ eventType, extraFields });
 }
 
 export function resolveTemplateType(template: { type: string; name?: string | null }) {

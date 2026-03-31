@@ -38,12 +38,18 @@ import {
   DEFAULT_CALENDAR_EVENT_DESCRIPTION,
   DEFAULT_CALENDAR_EVENT_FORMAT,
   DEFAULT_DRIVE_FOLDER_FORMAT,
+  buildCalendarDescriptionMapKey,
   getDriveTemplateVariables,
+  getDefaultCalendarEventDescriptionByMode,
+  normalizeCalendarEventDescriptionMap,
+  normalizeGoogleCalendarTemplateMode,
   normalizeTemplateFormatMap,
+  resolveCalendarDescriptionTemplateByMode,
   resolveTemplateByEventType,
   applyCalendarTemplate,
   applyDriveTemplate,
   getCalendarTemplateVariables,
+  type GoogleCalendarTemplateMode,
 } from "@/utils/google/template";
 import {
   isGoogleCalendarConnected,
@@ -57,6 +63,7 @@ import {
   type WhatsAppTemplateMode,
 } from "@/lib/whatsapp-template";
 import { BOOKING_WHATSAPP_TIME_VARIABLES } from "@/lib/booking-whatsapp-template-vars";
+import { isSplitCapableBookingEventType } from "@/lib/booking-template-mode";
 import {
   getEventExtraFieldPreviewVars,
   getEventExtraFieldTemplateTokens,
@@ -196,16 +203,18 @@ const EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES = new Set([
   "whatsapp_settlement_client",
   "whatsapp_settlement_confirm",
 ]);
-const SPLIT_CAPABLE_TEMPLATE_EVENTS = new Set(["Wedding", "Wisuda"]);
 const TEMPLATE_MODES: WhatsAppTemplateMode[] = ["normal", "split"];
+const CALENDAR_DESCRIPTION_MODES: GoogleCalendarTemplateMode[] = [
+  "normal",
+  "split",
+];
 
 function isEventScopedWhatsAppTemplateType(type: string) {
   return EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES.has(type);
 }
 
 function isSplitCapableTemplateEvent(eventType: string | null | undefined) {
-  const normalized = normalizeTemplateEventTypeValue(eventType);
-  return normalized ? SPLIT_CAPABLE_TEMPLATE_EVENTS.has(normalized) : false;
+  return isSplitCapableBookingEventType(normalizeTemplateEventTypeValue(eventType));
 }
 
 function getSupportedTemplateModesForEvent(
@@ -717,10 +726,15 @@ export default function SettingsPage() {
   >(() => normalizeTemplateFormatMap(null, DEFAULT_CALENDAR_EVENT_FORMAT));
   const [calendarEventDescriptions, setCalendarEventDescriptions] =
     React.useState<Record<string, string>>(() =>
-      normalizeTemplateFormatMap(null, DEFAULT_CALENDAR_EVENT_DESCRIPTION),
+      normalizeCalendarEventDescriptionMap(
+        null,
+        DEFAULT_CALENDAR_EVENT_DESCRIPTION,
+      ),
     );
   const [selectedCalendarEventType, setSelectedCalendarEventType] =
     React.useState("Umum");
+  const [selectedCalendarDescriptionMode, setSelectedCalendarDescriptionMode] =
+    React.useState<GoogleCalendarTemplateMode>("normal");
 
   // Drive folder format
   const [driveFolderFormats, setDriveFolderFormats] = React.useState<
@@ -976,12 +990,21 @@ export default function SettingsPage() {
     if (!availableEventTypes.includes(selectedCalendarEventType)) {
       setSelectedCalendarEventType("Umum");
     }
+    const supportedCalendarModes = isSplitCapableTemplateEvent(
+      selectedCalendarEventType,
+    )
+      ? CALENDAR_DESCRIPTION_MODES
+      : (["normal"] as GoogleCalendarTemplateMode[]);
+    if (!supportedCalendarModes.includes(selectedCalendarDescriptionMode)) {
+      setSelectedCalendarDescriptionMode("normal");
+    }
     if (!availableEventTypes.includes(selectedDriveEventType)) {
       setSelectedDriveEventType("Umum");
     }
   }, [
     availableEventTypes,
     selectedCalendarEventType,
+    selectedCalendarDescriptionMode,
     selectedDriveEventType,
     selectedEventType,
     selectedTemplateMode,
@@ -1100,7 +1123,7 @@ export default function SettingsPage() {
       ),
     );
     setCalendarEventDescriptions(
-      normalizeTemplateFormatMap(
+      normalizeCalendarEventDescriptionMap(
         (prof as any)?.calendar_event_description_map,
         (prof as any)?.calendar_event_description ||
           DEFAULT_CALENDAR_EVENT_DESCRIPTION,
@@ -1831,7 +1854,7 @@ export default function SettingsPage() {
       null,
       DEFAULT_CALENDAR_EVENT_FORMAT,
     );
-    const defaultCalendarDescriptions = normalizeTemplateFormatMap(
+    const defaultCalendarDescriptions = normalizeCalendarEventDescriptionMap(
       null,
       DEFAULT_CALENDAR_EVENT_DESCRIPTION,
     );
@@ -2033,8 +2056,13 @@ export default function SettingsPage() {
     setCalendarEventFormats((prev) => ({ ...prev, [eventType]: value }));
   }
 
-  function updateCalendarDescription(eventType: string, value: string) {
-    setCalendarEventDescriptions((prev) => ({ ...prev, [eventType]: value }));
+  function updateCalendarDescription(
+    eventType: string,
+    value: string,
+    mode: GoogleCalendarTemplateMode = "normal",
+  ) {
+    const key = buildCalendarDescriptionMapKey(eventType, mode);
+    setCalendarEventDescriptions((prev) => ({ ...prev, [key]: value }));
   }
 
   function updateDriveFormat(eventType: string, value: string) {
@@ -2224,10 +2252,14 @@ export default function SettingsPage() {
     wisuda_session_1_location: "Balairung Kampus",
     wisuda_session_1_date: "10 September 2026",
     wisuda_session_1_time: "07.30",
+    wisuda_session_1_end_time: "09.00",
+    wisuda_session_1_time_range: "07.30 - 09.00",
     wisuda_session_1_maps_url: "https://maps.google.com/maps?q=Balairung+Kampus",
     wisuda_session_2_location: "Taman Wisuda",
     wisuda_session_2_date: "10 September 2026",
     wisuda_session_2_time: "13.00",
+    wisuda_session_2_end_time: "14.00",
+    wisuda_session_2_time_range: "13.00 - 14.00",
     wisuda_session_2_maps_url: "https://maps.google.com/maps?q=Taman+Wisuda",
     location_maps_url:
       "https://maps.google.com/maps?q=Jakarta+Convention+Center",
@@ -2274,8 +2306,22 @@ export default function SettingsPage() {
   };
   const currentCalendarFormat =
     calendarEventFormats[selectedCalendarEventType] || "";
+  const supportedCalendarDescriptionModes = isSplitCapableTemplateEvent(
+    selectedCalendarEventType,
+  )
+    ? CALENDAR_DESCRIPTION_MODES
+    : (["normal"] as GoogleCalendarTemplateMode[]);
+  const activeCalendarDescriptionMode = supportedCalendarDescriptionModes.includes(
+    selectedCalendarDescriptionMode,
+  )
+    ? selectedCalendarDescriptionMode
+    : "normal";
+  const currentCalendarDescriptionKey = buildCalendarDescriptionMapKey(
+    selectedCalendarEventType,
+    activeCalendarDescriptionMode,
+  );
   const currentCalendarDescription =
-    calendarEventDescriptions[selectedCalendarEventType] || "";
+    calendarEventDescriptions[currentCalendarDescriptionKey] || "";
   const currentDriveFormat = driveFolderFormats[selectedDriveEventType] || "";
   const calendarTemplateVariables = Array.from(
     new Set([
@@ -2298,11 +2344,15 @@ export default function SettingsPage() {
     calendarPreviewVars,
   );
   const calendarDescriptionPreview = applyCalendarTemplate(
-    resolveTemplateByEventType(
-      calendarEventDescriptions,
-      selectedCalendarEventType,
-      DEFAULT_CALENDAR_EVENT_DESCRIPTION,
-    ),
+    resolveCalendarDescriptionTemplateByMode({
+      mapValue: calendarEventDescriptions,
+      eventType: selectedCalendarEventType,
+      mode: activeCalendarDescriptionMode,
+      fallback: getDefaultCalendarEventDescriptionByMode({
+        eventType: selectedCalendarEventType,
+        mode: activeCalendarDescriptionMode,
+      }),
+    }),
     calendarPreviewVars,
   );
   const driveFolderPreview = applyDriveTemplate(
@@ -3087,6 +3137,31 @@ export default function SettingsPage() {
                           saat tim di-update.
                         </p>
                       </div>
+                      {supportedCalendarDescriptionModes.length > 1 && (
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            {tp("templateMode")}
+                          </label>
+                          <select
+                            value={activeCalendarDescriptionMode}
+                            onChange={(e) =>
+                              setSelectedCalendarDescriptionMode(
+                                normalizeGoogleCalendarTemplateMode(
+                                  e.target.value,
+                                ),
+                              )
+                            }
+                            className={inputClass}
+                          >
+                            <option value="normal">
+                              {tp("templateModeNormal")}
+                            </option>
+                            <option value="split">
+                              {tp("templateModeSplit")}
+                            </option>
+                          </select>
+                        </div>
+                      )}
                       <textarea
                         ref={calendarDescriptionInputRef}
                         value={currentCalendarDescription}
@@ -3094,11 +3169,15 @@ export default function SettingsPage() {
                           updateCalendarDescription(
                             selectedCalendarEventType,
                             e.target.value,
+                            activeCalendarDescriptionMode,
                           )
                         }
                         rows={5}
                         className="placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-y"
-                        placeholder={DEFAULT_CALENDAR_EVENT_DESCRIPTION}
+                        placeholder={getDefaultCalendarEventDescriptionByMode({
+                          eventType: selectedCalendarEventType,
+                          mode: activeCalendarDescriptionMode,
+                        })}
                       />
                       <div className="flex flex-wrap gap-1.5">
                         {calendarTemplateVariables.map((token) => (
@@ -3114,6 +3193,7 @@ export default function SettingsPage() {
                                   updateCalendarDescription(
                                     selectedCalendarEventType,
                                     value,
+                                    activeCalendarDescriptionMode,
                                   ),
                               )
                             }
