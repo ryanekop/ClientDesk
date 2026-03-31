@@ -14,6 +14,7 @@ import { useLocale } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { useStickyTableColumns } from "@/components/ui/use-sticky-table-columns";
+import { useResizableTableColumns } from "@/components/ui/use-resizable-table-columns";
 import { Link } from "@/i18n/routing";
 import {
     BookingWriteReadonlyBanner,
@@ -138,6 +139,18 @@ const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ];
+const FINANCE_NON_RESIZABLE_COLUMN_IDS = ["row_number", "actions"];
+const FINANCE_COLUMN_MIN_WIDTHS: Record<string, number> = {
+    name: 180,
+    event_type: 140,
+    total_price: 140,
+    package_price: 140,
+    addon: 124,
+    discount: 120,
+    dp_paid: 128,
+    remaining: 132,
+    status: 116,
+};
 const FINANCE_FILTER_VALUES = ["all", "pending", "paid"] as const;
 const FINANCE_SORT_ORDERS = [
     "booking_newest",
@@ -640,6 +653,18 @@ export default function FinancePage() {
         getStickyColumnStyle,
         getStickyColumnClassName,
     } = useStickyTableColumns(orderedVisibleColumns);
+    const {
+        getColumnWidthStyle,
+        getResizeHandleProps,
+        isColumnResizable,
+        isColumnBeingResized,
+    } = useResizableTableColumns({
+        menuKey: "finance",
+        userId: currentUserId,
+        columns: orderedVisibleColumns,
+        nonResizableColumnIds: FINANCE_NON_RESIZABLE_COLUMN_IDS,
+        minWidthByColumnId: FINANCE_COLUMN_MIN_WIDTHS,
+    });
     const getDesktopHeaderClassName = React.useCallback(
         (columnId: string, className: string) =>
             cn(className, getStickyColumnClassName(columnId, { header: true })),
@@ -649,6 +674,19 @@ export default function FinancePage() {
         (columnId: string, className: string) =>
             cn(className, getStickyColumnClassName(columnId)),
         [getStickyColumnClassName],
+    );
+    const getDesktopColumnStyle = React.useCallback(
+        (columnId: string, options?: { header?: boolean }) => {
+            const stickyStyle = getStickyColumnStyle(columnId, options);
+            const widthStyle = getColumnWidthStyle(columnId);
+
+            if (stickyStyle && widthStyle) {
+                return { ...widthStyle, ...stickyStyle };
+            }
+
+            return widthStyle || stickyStyle;
+        },
+        [getColumnWidthStyle, getStickyColumnStyle],
     );
 
     React.useEffect(() => {
@@ -1106,32 +1144,80 @@ export default function FinancePage() {
         await handleSendInvoiceWaStage(booking, resolveWaInvoiceStageFromContext(booking));
     }
 
+    function renderDesktopHeaderLabel(column: TableColumnPreference, label: React.ReactNode) {
+        const resizeHandleProps = getResizeHandleProps(column.id);
+        const resizable = isColumnResizable(column.id);
+        const resizing = isColumnBeingResized(column.id);
+
+        return (
+            <div className={cn("relative flex items-center", resizable && "pr-3")}>
+                <span>{label}</span>
+                {resizeHandleProps ? (
+                    <button
+                        type="button"
+                        aria-label={`Resize ${column.label}`}
+                        title={locale === "en" ? "Drag to resize column" : "Geser untuk ubah lebar kolom"}
+                        className={cn(
+                            "absolute -right-2 top-1/2 h-7 w-4 -translate-y-1/2 touch-none select-none cursor-col-resize rounded transition-colors",
+                            resizing ? "bg-primary/15" : "hover:bg-muted/80",
+                        )}
+                        onPointerDown={resizeHandleProps.onPointerDown}
+                    >
+                        <span
+                            className={cn(
+                                "absolute left-1/2 top-1/2 h-4 w-px -translate-x-1/2 -translate-y-1/2",
+                                resizing ? "bg-primary" : "bg-border",
+                            )}
+                        />
+                    </button>
+                ) : null}
+            </div>
+        );
+    }
+
+    function renderDesktopHeaderCell(
+        column: TableColumnPreference,
+        className: string,
+        label: React.ReactNode,
+    ) {
+        return (
+            <th
+                key={column.id}
+                data-column-id={column.id}
+                style={getDesktopColumnStyle(column.id, { header: true })}
+                className={getDesktopHeaderClassName(column.id, className)}
+            >
+                {renderDesktopHeaderLabel(column, label)}
+            </th>
+        );
+    }
+
     function renderDesktopHeader(column: TableColumnPreference) {
         switch (column.id) {
             case "name":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("klien")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("klien"));
             case "row_number":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "w-16 px-4 py-4 font-medium text-muted-foreground text-center")}>No.</th>;
+                return renderDesktopHeaderCell(column, "w-16 px-4 py-4 font-medium text-muted-foreground text-center", "No.");
             case "event_type":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{tb("eventTypeLabel")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", tb("eventTypeLabel"));
             case "total_price":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("hargaTotal")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("hargaTotal"));
             case "package_price":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("hargaPaket")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("hargaPaket"));
             case "addon":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("addOn")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("addOn"));
             case "dp_paid":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("dpDibayar")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("dpDibayar"));
             case "discount":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("diskon")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("diskon"));
             case "remaining":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("sisa")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("sisa"));
             case "status":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("status")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("status"));
             case "actions":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "min-w-[420px] px-4 py-4 font-medium text-muted-foreground text-right")}>{t("aksi")}</th>;
+                return renderDesktopHeaderCell(column, "min-w-[420px] px-4 py-4 font-medium text-muted-foreground text-right", t("aksi"));
             default:
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{column.label}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", column.label);
         }
     }
 
@@ -1148,36 +1234,36 @@ export default function FinancePage() {
         switch (column.id) {
             case "name":
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 max-w-[180px]")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 max-w-[180px]")}>
                         <div className="font-medium truncate">{booking.client_name}</div>
                         <div className="text-xs text-muted-foreground truncate">{booking.booking_code} · {booking.service_label || booking.services?.name || "-"}</div>
                     </td>
                 );
             case "row_number":
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-4 text-center text-sm text-muted-foreground")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-4 text-center text-sm text-muted-foreground")}>
                         {rowNumber}
                     </td>
                 );
             case "event_type":
-                return <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 max-w-[180px] truncate text-muted-foreground")} title={booking.event_type || "-"}>{booking.event_type || "-"}</td>;
+                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 max-w-[180px] truncate text-muted-foreground")} title={booking.event_type || "-"}>{booking.event_type || "-"}</td>;
             case "total_price":
-                return <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap font-medium")}>{formatCurrency(finalTotal)}</td>;
+                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap font-medium")}>{formatCurrency(finalTotal)}</td>;
             case "package_price":
-                return <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>{formatCurrency(packagePrice)}</td>;
+                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>{formatCurrency(packagePrice)}</td>;
             case "addon":
-                return <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>{formatCurrency(addonTotal)}</td>;
+                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>{formatCurrency(addonTotal)}</td>;
             case "dp_paid":
-                return <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap font-medium")}>{formatCurrency(booking.dp_paid)}</td>;
+                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap font-medium")}>{formatCurrency(booking.dp_paid)}</td>;
             case "discount":
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
                         {discountAmount > 0 ? `- ${formatCurrency(discountAmount)}` : formatCurrency(0)}
                     </td>
                 );
             case "remaining":
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap font-medium")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap font-medium")}>
                         <span className={remaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}>
                             {formatCurrency(remaining)}
                         </span>
@@ -1186,7 +1272,7 @@ export default function FinancePage() {
             case "status":
                 if (isCancelledBooking(booking)) {
                     return (
-                        <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
+                        <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
                             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${booking.dp_refund_amount > 0
                                 ? "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
                                 : "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400"
@@ -1197,7 +1283,7 @@ export default function FinancePage() {
                     );
                 }
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
                         <button
                             onClick={() => booking.is_fully_paid ? handleMarkUnpaid(booking.id) : handleMarkPaid(booking.id)}
                             disabled={!canWriteBookings}
@@ -1213,7 +1299,7 @@ export default function FinancePage() {
                 );
             case "actions":
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[420px] px-4 py-4 text-right")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[420px] px-4 py-4 text-right")}>
                         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap pr-1">
                             <Link href={`/bookings/${booking.id}`}>
                                 <ActionIconButton tone="slate" title={tf("detailBooking")}>
@@ -1429,7 +1515,7 @@ export default function FinancePage() {
                 );
             default:
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 max-w-[180px] truncate text-muted-foreground")} title={getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" })}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 max-w-[180px] truncate text-muted-foreground")} title={getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" })}>
                         {getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" })}
                     </td>
                 );

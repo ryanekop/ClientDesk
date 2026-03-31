@@ -11,6 +11,7 @@ import { useTranslations } from "next-intl";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
 import { useStickyTableColumns } from "@/components/ui/use-sticky-table-columns";
+import { useResizableTableColumns } from "@/components/ui/use-resizable-table-columns";
 import { FilterMultiSelect } from "@/components/ui/filter-multi-select";
 import {
     PageHeader,
@@ -72,6 +73,14 @@ const TEAM_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ]);
+const TEAM_NON_RESIZABLE_COLUMN_IDS = ["row_number", "actions"];
+const TEAM_COLUMN_MIN_WIDTHS: Record<string, number> = {
+    name: 180,
+    role: 128,
+    tags: 160,
+    whatsapp: 145,
+    status: 116,
+};
 const TEAM_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:team:items_per_page";
 const TEAM_FILTER_STORAGE_PREFIX = "clientdesk:team:filters";
 const TEAM_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
@@ -594,6 +603,18 @@ export default function TeamPage() {
         getStickyColumnStyle,
         getStickyColumnClassName,
     } = useStickyTableColumns(orderedVisibleColumns);
+    const {
+        getColumnWidthStyle,
+        getResizeHandleProps,
+        isColumnResizable,
+        isColumnBeingResized,
+    } = useResizableTableColumns({
+        menuKey: "team",
+        userId: currentUserId,
+        columns: orderedVisibleColumns,
+        nonResizableColumnIds: TEAM_NON_RESIZABLE_COLUMN_IDS,
+        minWidthByColumnId: TEAM_COLUMN_MIN_WIDTHS,
+    });
     const getDesktopHeaderClassName = React.useCallback(
         (columnId: string, className: string) =>
             cn(className, getStickyColumnClassName(columnId, { header: true })),
@@ -603,6 +624,19 @@ export default function TeamPage() {
         (columnId: string, className: string) =>
             cn(className, getStickyColumnClassName(columnId)),
         [getStickyColumnClassName],
+    );
+    const getDesktopColumnStyle = React.useCallback(
+        (columnId: string, options?: { header?: boolean }) => {
+            const stickyStyle = getStickyColumnStyle(columnId, options);
+            const widthStyle = getColumnWidthStyle(columnId);
+
+            if (stickyStyle && widthStyle) {
+                return { ...widthStyle, ...stickyStyle };
+            }
+
+            return widthStyle || stickyStyle;
+        },
+        [getColumnWidthStyle, getStickyColumnStyle],
     );
     const statusFilterOptions = React.useMemo(
         () =>
@@ -672,22 +706,70 @@ export default function TeamPage() {
         setColumnManagerOpen(false);
     }
 
+    function renderDesktopHeaderLabel(column: TableColumnPreference, label: React.ReactNode) {
+        const resizeHandleProps = getResizeHandleProps(column.id);
+        const resizable = isColumnResizable(column.id);
+        const resizing = isColumnBeingResized(column.id);
+
+        return (
+            <div className={cn("relative flex items-center", resizable && "pr-3")}>
+                <span>{label}</span>
+                {resizeHandleProps ? (
+                    <button
+                        type="button"
+                        aria-label={`Resize ${column.label}`}
+                        title="Geser untuk ubah lebar kolom"
+                        className={cn(
+                            "absolute -right-2 top-1/2 h-7 w-4 -translate-y-1/2 touch-none select-none cursor-col-resize rounded transition-colors",
+                            resizing ? "bg-primary/15" : "hover:bg-muted/80",
+                        )}
+                        onPointerDown={resizeHandleProps.onPointerDown}
+                    >
+                        <span
+                            className={cn(
+                                "absolute left-1/2 top-1/2 h-4 w-px -translate-x-1/2 -translate-y-1/2",
+                                resizing ? "bg-primary" : "bg-border",
+                            )}
+                        />
+                    </button>
+                ) : null}
+            </div>
+        );
+    }
+
+    function renderDesktopHeaderCell(
+        column: TableColumnPreference,
+        className: string,
+        label: React.ReactNode,
+    ) {
+        return (
+            <th
+                key={column.id}
+                data-column-id={column.id}
+                style={getDesktopColumnStyle(column.id, { header: true })}
+                className={getDesktopHeaderClassName(column.id, className)}
+            >
+                {renderDesktopHeaderLabel(column, label)}
+            </th>
+        );
+    }
+
     function renderDesktopHeader(column: TableColumnPreference) {
         switch (column.id) {
             case "name":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("nama")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("nama"));
             case "row_number":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "w-16 px-4 py-4 font-medium text-muted-foreground text-center")}>No.</th>;
+                return renderDesktopHeaderCell(column, "w-16 px-4 py-4 font-medium text-muted-foreground text-center", "No.");
             case "role":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("peran")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("peran"));
             case "tags":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("tags")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("tags"));
             case "whatsapp":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("whatsapp")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("whatsapp"));
             case "status":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "px-6 py-4 font-medium text-muted-foreground")}>{t("status")}</th>;
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("status"));
             case "actions":
-                return <th key={column.id} data-column-id={column.id} style={getStickyColumnStyle(column.id, { header: true })} className={getDesktopHeaderClassName(column.id, "min-w-[120px] px-4 py-4 font-medium text-muted-foreground text-right")}>{t("aksi")}</th>;
+                return renderDesktopHeaderCell(column, "min-w-[120px] px-4 py-4 font-medium text-muted-foreground text-right", t("aksi"));
             default:
                 return null;
         }
@@ -701,7 +783,7 @@ export default function TeamPage() {
         switch (column.id) {
             case "name":
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
                         <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium text-sm shrink-0">
                                 {member.name.charAt(0).toUpperCase()}
@@ -712,13 +794,13 @@ export default function TeamPage() {
                 );
             case "row_number":
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-4 text-center text-sm text-muted-foreground")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-4 text-center text-sm text-muted-foreground")}>
                         {rowNumber}
                     </td>
                 );
             case "role":
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                             {member.role}
                         </span>
@@ -726,7 +808,7 @@ export default function TeamPage() {
                 );
             case "tags":
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4")}>
                         {member.tags.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                                 {member.tags.map((tag, i) => (
@@ -739,10 +821,10 @@ export default function TeamPage() {
                     </td>
                 );
             case "whatsapp":
-                return <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>{member.whatsapp_number || "-"}</td>;
+                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>{member.whatsapp_number || "-"}</td>;
             case "status":
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
                         <button
                             onClick={() => handleToggleStatus(member)}
                             className={`text-xs font-medium px-2 py-0.5 rounded-full cursor-pointer transition-colors ${member.status === "active"
@@ -756,7 +838,7 @@ export default function TeamPage() {
                 );
             case "actions":
                 return (
-                    <td key={column.id} style={getStickyColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[120px] px-4 py-4 whitespace-nowrap text-right")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[120px] px-4 py-4 whitespace-nowrap text-right")}>
                         <div className="flex items-center justify-end gap-2.5 pr-2">
                             <ActionIconButton tone="green" title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)}>
                                 <MessageCircle className="w-4 h-4" />
