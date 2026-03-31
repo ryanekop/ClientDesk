@@ -70,7 +70,11 @@ import {
 import { CardListSkeleton } from "@/components/ui/data-skeletons";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
-import { normalizeCityCode, type CityReferenceItem } from "@/lib/city-references";
+import {
+  buildCityDisplayName,
+  normalizeCityCode,
+  type CityReferenceItem,
+} from "@/lib/city-references";
 
 type Service = {
   id: string;
@@ -90,6 +94,12 @@ type Service = {
 
 type ServiceGroupKey = "main" | "addon";
 
+type ServiceCityScopeSummary = {
+  isAllCities: boolean;
+  visibleLabels: string[];
+  hiddenCount: number;
+};
+
 type ServicesPageMetadata = {
   eventTypeOptions: string[];
   usedEventTypes: string[];
@@ -101,6 +111,11 @@ const SERVICE_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const SERVICE_DEFAULT_ITEMS_PER_PAGE = 10;
 const SERVICE_ITEMS_PER_PAGE_STORAGE_PREFIX =
   "clientdesk:services:itemsPerPage";
+const ALL_CITIES_SCOPE_SUMMARY: ServiceCityScopeSummary = {
+  isAllCities: true,
+  visibleLabels: [],
+  hiddenCount: 0,
+};
 
 function normalizeServiceItemsPerPage(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
@@ -213,12 +228,14 @@ function ServiceDragHandle({
 
 function SortableServiceRow({
   service,
+  cityScopeSummary,
   formatCurrency,
   durationLabel,
   onMoveUp,
   onMoveDown,
 }: {
   service: Service;
+  cityScopeSummary: ServiceCityScopeSummary;
   formatCurrency: (n: number) => string;
   durationLabel: string | null;
   onMoveUp: () => void;
@@ -269,6 +286,29 @@ function SortableServiceRow({
                   {service.description}
                 </p>
               ) : null}
+              <div className="mt-2 flex flex-wrap gap-1">
+                {cityScopeSummary.isAllCities ? (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    Semua Kota/Kabupaten
+                  </span>
+                ) : (
+                  <>
+                    {cityScopeSummary.visibleLabels.map((label) => (
+                      <span
+                        key={label}
+                        className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] text-rose-700 dark:bg-rose-500/10 dark:text-rose-300"
+                      >
+                        {label}
+                      </span>
+                    ))}
+                    {cityScopeSummary.hiddenCount > 0 ? (
+                      <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
+                        +{cityScopeSummary.hiddenCount}
+                      </span>
+                    ) : null}
+                  </>
+                )}
+              </div>
             </div>
             <div className="shrink-0 text-right">
               <div className="text-sm font-bold">{formatCurrency(service.price)}</div>
@@ -354,6 +394,7 @@ function SectionDivider({
 
 function ServiceCard({
   service,
+  cityScopeSummary,
   formatCurrency,
   durationLabel,
   onEdit,
@@ -364,6 +405,7 @@ function ServiceCard({
   onMoveDown,
 }: {
   service: Service;
+  cityScopeSummary: ServiceCityScopeSummary;
   formatCurrency: (n: number) => string;
   durationLabel: string | null;
   onEdit: () => void;
@@ -423,6 +465,30 @@ function ServiceCard({
           ))}
         </div>
       ) : null}
+
+      <div className="mt-1 flex flex-wrap gap-1">
+        {cityScopeSummary.isAllCities ? (
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            Semua Kota/Kabupaten
+          </span>
+        ) : (
+          <>
+            {cityScopeSummary.visibleLabels.map((label) => (
+              <span
+                key={label}
+                className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] text-rose-700 dark:bg-rose-500/10 dark:text-rose-300"
+              >
+                {label}
+              </span>
+            ))}
+            {cityScopeSummary.hiddenCount > 0 ? (
+              <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
+                +{cityScopeSummary.hiddenCount}
+              </span>
+            ) : null}
+          </>
+        )}
+      </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <div className="text-xl font-bold">{formatCurrency(service.price)}</div>
@@ -1250,6 +1316,42 @@ export default function ServicesPage() {
     [ts],
   );
 
+  const cityDisplayNameByCode = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    cityOptions.forEach((city) => {
+      const cityCode = normalizeCityCode(city.city_code);
+      if (!cityCode) return;
+      map[cityCode] = buildCityDisplayName(city);
+    });
+    return map;
+  }, [cityOptions]);
+
+  const cityScopeSummaryByServiceId = React.useMemo(() => {
+    const summaryMap: Record<string, ServiceCityScopeSummary> = {};
+
+    Object.entries(serviceCityCodesByServiceId).forEach(([serviceId, cityCodes]) => {
+      const normalizedCityCodes = Array.from(
+        new Set(cityCodes.map((code) => normalizeCityCode(code)).filter(Boolean)),
+      );
+
+      if (normalizedCityCodes.length === 0) {
+        return;
+      }
+
+      const labels = normalizedCityCodes.map(
+        (cityCode) => cityDisplayNameByCode[cityCode] || `Kode ${cityCode}`,
+      );
+
+      summaryMap[serviceId] = {
+        isAllCities: false,
+        visibleLabels: labels.slice(0, 2),
+        hiddenCount: Math.max(0, labels.length - 2),
+      };
+    });
+
+    return summaryMap;
+  }, [cityDisplayNameByCode, serviceCityCodesByServiceId]);
+
   React.useEffect(() => {
     setMainPage(1);
     setAddonPage(1);
@@ -1603,6 +1705,10 @@ export default function ServicesPage() {
                       <SortableServiceRow
                         key={service.id}
                         service={service}
+                        cityScopeSummary={
+                          cityScopeSummaryByServiceId[service.id] ||
+                          ALL_CITIES_SCOPE_SUMMARY
+                        }
                         formatCurrency={formatCurrency}
                         durationLabel={formatDuration(service)}
                         onMoveUp={() => handleMove(service, "up")}
@@ -1640,6 +1746,10 @@ export default function ServicesPage() {
                       <SortableServiceRow
                         key={service.id}
                         service={service}
+                        cityScopeSummary={
+                          cityScopeSummaryByServiceId[service.id] ||
+                          ALL_CITIES_SCOPE_SUMMARY
+                        }
                         formatCurrency={formatCurrency}
                         durationLabel={formatDuration(service)}
                         onMoveUp={() => handleMove(service, "up")}
@@ -1689,6 +1799,10 @@ export default function ServicesPage() {
                   <ServiceCard
                     key={service.id}
                     service={service}
+                    cityScopeSummary={
+                      cityScopeSummaryByServiceId[service.id] ||
+                      ALL_CITIES_SCOPE_SUMMARY
+                    }
                     formatCurrency={formatCurrency}
                     durationLabel={formatDuration(service)}
                     onEdit={() => openEditDialog(service)}
@@ -1741,6 +1855,10 @@ export default function ServicesPage() {
                   <ServiceCard
                     key={service.id}
                     service={service}
+                    cityScopeSummary={
+                      cityScopeSummaryByServiceId[service.id] ||
+                      ALL_CITIES_SCOPE_SUMMARY
+                    }
                     formatCurrency={formatCurrency}
                     durationLabel={formatDuration(service)}
                     onEdit={() => openEditDialog(service)}
