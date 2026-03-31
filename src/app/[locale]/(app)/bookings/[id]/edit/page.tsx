@@ -867,14 +867,30 @@ export default function EditBookingPage() {
         );
     };
     React.useEffect(() => {
-        setSelectedServiceIds((prev) =>
-            prev.filter((id) => mainServices.some((service) => service.id === id)),
-        );
+        const availableMainIds = new Set(mainServices.map((service) => service.id));
+        setSelectedServiceIds((prev) => {
+            const next = prev.filter((id) => availableMainIds.has(id));
+            if (
+                next.length === prev.length &&
+                next.every((serviceId, index) => serviceId === prev[index])
+            ) {
+                return prev;
+            }
+            return next;
+        });
     }, [mainServices]);
     React.useEffect(() => {
-        setSelectedAddonIds((prev) =>
-            prev.filter((id) => addonServices.some((service) => service.id === id)),
-        );
+        const availableAddonIds = new Set(addonServices.map((service) => service.id));
+        setSelectedAddonIds((prev) => {
+            const next = prev.filter((id) => availableAddonIds.has(id));
+            if (
+                next.length === prev.length &&
+                next.every((serviceId, index) => serviceId === prev[index])
+            ) {
+                return prev;
+            }
+            return next;
+        });
     }, [addonServices]);
     React.useEffect(() => {
         if (!statusOptions.includes(status)) {

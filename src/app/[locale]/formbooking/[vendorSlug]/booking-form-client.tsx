@@ -1418,34 +1418,42 @@ export function BookingFormClient({
     setTermsAccepted(false);
     setTermsViewedOnce(false);
   }, [hasTerms]);
-  const filteredServices = !eventType || !normalizedSelectedCityCode
-    ? []
-    : showAllActivePackages
-      ? sortedServices.filter(
-          (service) =>
-            !service.is_addon &&
-            isServiceAvailableForCity(service, normalizedSelectedCityCode),
-        )
-      : sortedServices.filter(
-          (service) =>
-            !service.is_addon &&
-            isServiceAvailableForEventType(service, eventType) &&
-            isServiceAvailableForCity(service, normalizedSelectedCityCode),
-        );
-  const addonServices = !eventType || !normalizedSelectedCityCode
-    ? []
-    : showAllActivePackages
-      ? sortedServices.filter(
-          (service) =>
-            service.is_addon &&
-            isServiceAvailableForCity(service, normalizedSelectedCityCode),
-        )
-      : sortedServices.filter(
-          (service) =>
-            service.is_addon &&
-            isServiceAvailableForEventType(service, eventType) &&
-            isServiceAvailableForCity(service, normalizedSelectedCityCode),
-        );
+  const filteredServices = React.useMemo(
+    () =>
+      !eventType || !normalizedSelectedCityCode
+        ? []
+        : showAllActivePackages
+          ? sortedServices.filter(
+              (service) =>
+                !service.is_addon &&
+                isServiceAvailableForCity(service, normalizedSelectedCityCode),
+            )
+          : sortedServices.filter(
+              (service) =>
+                !service.is_addon &&
+                isServiceAvailableForEventType(service, eventType) &&
+                isServiceAvailableForCity(service, normalizedSelectedCityCode),
+            ),
+    [eventType, normalizedSelectedCityCode, showAllActivePackages, sortedServices],
+  );
+  const addonServices = React.useMemo(
+    () =>
+      !eventType || !normalizedSelectedCityCode
+        ? []
+        : showAllActivePackages
+          ? sortedServices.filter(
+              (service) =>
+                service.is_addon &&
+                isServiceAvailableForCity(service, normalizedSelectedCityCode),
+            )
+          : sortedServices.filter(
+              (service) =>
+                service.is_addon &&
+                isServiceAvailableForEventType(service, eventType) &&
+                isServiceAvailableForCity(service, normalizedSelectedCityCode),
+            ),
+    [eventType, normalizedSelectedCityCode, showAllActivePackages, sortedServices],
+  );
   const searchedMainServices = React.useMemo(() => {
     const query = packageSearchQuery.trim().toLowerCase();
     if (!query) return filteredServices;
@@ -1479,9 +1487,13 @@ export function BookingFormClient({
 
   React.useEffect(() => {
     const availableMainIds = new Set(filteredServices.map((service) => service.id));
-    setSelectedServiceIds((prev) =>
-      prev.filter((serviceId) => availableMainIds.has(serviceId)),
-    );
+    setSelectedServiceIds((prev) => {
+      const next = prev.filter((serviceId) => availableMainIds.has(serviceId));
+      if (next.length === prev.length && next.every((serviceId, index) => serviceId === prev[index])) {
+        return prev;
+      }
+      return next;
+    });
   }, [filteredServices]);
 
   React.useEffect(() => {
@@ -1490,7 +1502,16 @@ export function BookingFormClient({
       const next = new Set(
         Array.from(prev).filter((serviceId) => availableAddonIds.has(serviceId)),
       );
-      if (next.size === prev.size) return prev;
+      if (next.size === prev.size) {
+        let unchanged = true;
+        for (const serviceId of prev) {
+          if (!next.has(serviceId)) {
+            unchanged = false;
+            break;
+          }
+        }
+        if (unchanged) return prev;
+      }
       return next;
     });
   }, [addonServices]);

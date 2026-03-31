@@ -536,11 +536,29 @@ export default function NewBookingPage() {
     );
     React.useEffect(() => {
         const availableMainIds = new Set(mainServices.map((service) => service.id));
-        setSelectedServiceIds((prev) => prev.filter((serviceId) => availableMainIds.has(serviceId)));
+        setSelectedServiceIds((prev) => {
+            const next = prev.filter((serviceId) => availableMainIds.has(serviceId));
+            if (
+                next.length === prev.length &&
+                next.every((serviceId, index) => serviceId === prev[index])
+            ) {
+                return prev;
+            }
+            return next;
+        });
     }, [mainServices]);
     React.useEffect(() => {
         const availableAddonIds = new Set(addonServices.map((service) => service.id));
-        setSelectedAddonIds((prev) => prev.filter((serviceId) => availableAddonIds.has(serviceId)));
+        setSelectedAddonIds((prev) => {
+            const next = prev.filter((serviceId) => availableAddonIds.has(serviceId));
+            if (
+                next.length === prev.length &&
+                next.every((serviceId, index) => serviceId === prev[index])
+            ) {
+                return prev;
+            }
+            return next;
+        });
     }, [addonServices]);
     const selectedServiceSelections = React.useMemo<BookingServiceSelection[]>(
         () => [
