@@ -1710,14 +1710,14 @@ export default function ServicesPage() {
                   <Button
                     type="submit"
                     disabled={isCreatingService}
-                    className="gap-2"
+                    className="gap-2 bg-foreground px-8 text-background hover:bg-foreground/90"
                   >
                     {isCreatingService ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <Save className="h-4 w-4" />
                     )}
-                    {t("simpan")}
+                    Simpan Perubahan
                   </Button>
                 </DialogFooter>
               </form>
@@ -2234,14 +2234,14 @@ export default function ServicesPage() {
                 <Button
                   type="submit"
                   disabled={isUpdatingService}
-                  className="gap-2"
+                  className="gap-2 bg-foreground px-8 text-background hover:bg-foreground/90"
                 >
                   {isUpdatingService ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Save className="h-4 w-4" />
                   )}
-                  {t("perbarui")}
+                  Simpan Perubahan
                 </Button>
               </DialogFooter>
             </form>
