@@ -2582,16 +2582,16 @@ export function BookingFormClient({
         {/* Vendor Header */}
         <div className="text-center space-y-3">
           <div className="w-20 h-20 bg-background border-2 rounded-full mx-auto flex items-center justify-center font-bold text-2xl shadow-sm overflow-hidden">
-            {effectiveVendor.invoice_logo_url ? (
-              <img
-                src={effectiveVendor.invoice_logo_url}
-                alt="Logo"
-                className="w-full h-full object-contain p-1"
-              />
-            ) : effectiveVendor.avatar_url ? (
+            {effectiveVendor.avatar_url ? (
               <img
                 src={effectiveVendor.avatar_url}
                 alt="Avatar"
+                className="w-full h-full object-cover"
+              />
+            ) : effectiveVendor.invoice_logo_url ? (
+              <img
+                src={effectiveVendor.invoice_logo_url}
+                alt="Logo"
                 className="w-full h-full object-cover"
               />
             ) : (

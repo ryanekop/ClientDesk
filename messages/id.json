@@ -1152,6 +1152,7 @@
         "deleteQrisSuccess": "QRIS berhasil dihapus.",
         "clickToUploadQris": "Klik untuk upload QRIS",
         "connectDriveToUploadQris": "Hubungkan Google Drive untuk upload QRIS",
+        "qrisDriveNotConnectedWarning": "Hubungkan Google Drive dulu sebelum upload QRIS.",
         "qrisUploadFormatHint": "Format gambar PNG / JPG. Akan tampil di form booking publik.",
         "summaryLabel": "Ringkasan",
         "summaryNoActiveMethod": "belum ada metode aktif",

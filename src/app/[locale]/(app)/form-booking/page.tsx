@@ -9,6 +9,8 @@ import {
   Copy,
   ClipboardCheck,
   Loader2,
+  AlertTriangle,
+  X,
   Percent,
   Palette,
   List,
@@ -285,6 +287,9 @@ export default function FormBookingPage() {
   const [qrisDeleting, setQrisDeleting] = React.useState(false);
   const [saveMessageTone, setSaveMessageTone] = React.useState<"success" | "error">("success");
   const { showSuccessToast, successToastNode } = useSuccessToast();
+  const [warningToastMessage, setWarningToastMessage] = React.useState("");
+  const [warningToastVisible, setWarningToastVisible] = React.useState(false);
+  const warningToastTimerRef = React.useRef<number | null>(null);
 
   const [iframeKey, setIframeKey] = React.useState(0);
   const [mobileTab, setMobileTab] = React.useState<"settings" | "preview">(
@@ -294,6 +299,31 @@ export default function FormBookingPage() {
   const [siteUrl, setSiteUrl] = React.useState("");
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
   const qrisInputRef = React.useRef<HTMLInputElement>(null);
+
+  const clearWarningToastTimer = React.useCallback(() => {
+    if (warningToastTimerRef.current !== null) {
+      window.clearTimeout(warningToastTimerRef.current);
+      warningToastTimerRef.current = null;
+    }
+  }, []);
+
+  const closeWarningToast = React.useCallback(() => {
+    clearWarningToastTimer();
+    setWarningToastVisible(false);
+  }, [clearWarningToastTimer]);
+
+  const showWarningToast = React.useCallback(
+    (message: string) => {
+      clearWarningToastTimer();
+      setWarningToastMessage(message);
+      setWarningToastVisible(true);
+      warningToastTimerRef.current = window.setTimeout(() => {
+        setWarningToastVisible(false);
+        warningToastTimerRef.current = null;
+      }, 3200);
+    },
+    [clearWarningToastTimer],
+  );
 
   const tenantDomain = (tenant.domain || "").trim().toLowerCase();
   const isMainTenantDomain = isMainClientDeskDomain(tenantDomain);
@@ -459,6 +489,12 @@ export default function FormBookingPage() {
   React.useEffect(() => {
     setSiteUrl(window.location.origin);
   }, [supabase]);
+
+  React.useEffect(() => {
+    return () => {
+      clearWarningToastTimer();
+    };
+  }, [clearWarningToastTimer]);
 
   React.useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -1052,6 +1088,12 @@ export default function FormBookingPage() {
   async function handleQrisFileChange(
     event: React.ChangeEvent<HTMLInputElement>,
   ) {
+    if (!isDriveConnected) {
+      showWarningToast(t("qrisDriveNotConnectedWarning"));
+      if (qrisInputRef.current) qrisInputRef.current.value = "";
+      return;
+    }
+
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -1083,6 +1125,14 @@ export default function FormBookingPage() {
       if (qrisInputRef.current) qrisInputRef.current.value = "";
       setQrisUploading(false);
     }
+  }
+
+  function handleQrisUploadAttempt() {
+    if (!isDriveConnected) {
+      showWarningToast(t("qrisDriveNotConnectedWarning"));
+      return;
+    }
+    qrisInputRef.current?.click();
   }
 
   async function handleDeleteQris() {
@@ -1174,6 +1224,33 @@ export default function FormBookingPage() {
   return (
     <div className="space-y-6">
       {successToastNode}
+      {warningToastVisible ? (
+        <div
+          className="pointer-events-none fixed inset-x-4 z-50 sm:left-auto sm:right-4 sm:w-[24rem]"
+          style={{
+            top: "calc(env(safe-area-inset-top, 0px) + var(--global-announcement-height, 0px) + var(--dashboard-topbar-height, 0px) + 16px)",
+          }}
+        >
+          <div
+            className="pointer-events-auto flex w-full items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3.5 text-sm font-medium text-amber-900 shadow-[0_10px_28px_-14px_rgba(245,158,11,0.6)] sm:max-w-sm"
+            role="status"
+            aria-live="polite"
+          >
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+            <p className="min-w-0 flex-1 break-words leading-5">
+              {warningToastMessage}
+            </p>
+            <button
+              type="button"
+              className="shrink-0 rounded p-0.5 text-amber-700 transition-colors hover:bg-amber-100 hover:text-amber-900"
+              onClick={closeWarningToast}
+              aria-label="Close warning"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div>
         <h2 className="text-2xl font-bold tracking-tight">
           Form Booking Publik
@@ -1577,8 +1654,8 @@ export default function FormBookingPage() {
                           <Button
                             variant="outline"
                             type="button"
-                            onClick={() => qrisInputRef.current?.click()}
-                            disabled={!isDriveConnected || qrisUploading}
+                            onClick={handleQrisUploadAttempt}
+                            disabled={qrisUploading}
                             className="gap-1.5"
                           >
                             {qrisUploading ? (
@@ -1607,8 +1684,8 @@ export default function FormBookingPage() {
                     ) : (
                       <button
                         type="button"
-                        onClick={() => isDriveConnected && qrisInputRef.current?.click()}
-                        disabled={!isDriveConnected || qrisUploading}
+                        onClick={handleQrisUploadAttempt}
+                        disabled={qrisUploading}
                         className={`w-full rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
                           isDriveConnected
                             ? "border-input hover:border-primary/50 hover:bg-muted/30 cursor-pointer"

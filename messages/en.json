@@ -1152,6 +1152,7 @@
         "deleteQrisSuccess": "QRIS deleted successfully.",
         "clickToUploadQris": "Click to upload QRIS",
         "connectDriveToUploadQris": "Connect Google Drive to upload QRIS",
+        "qrisDriveNotConnectedWarning": "Connect Google Drive first before uploading QRIS.",
         "qrisUploadFormatHint": "PNG / JPG image format. It will be shown on the public booking form.",
         "summaryLabel": "Summary",
         "summaryNoActiveMethod": "no active methods yet",
