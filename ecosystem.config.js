@@ -9,8 +9,8 @@ module.exports = {
         NODE_ENV: "production",
         HOSTNAME: "0.0.0.0",
       },
-      // Restart jika memory melebihi 512MB
-      max_memory_restart: "512M",
+      // Restart jika memory melebihi 1GB
+      max_memory_restart: "1G",
       // Auto restart jika crash
       autorestart: true,
       // Tunggu 3 detik sebelum restart

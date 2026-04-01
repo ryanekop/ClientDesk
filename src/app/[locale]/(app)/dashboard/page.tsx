@@ -26,6 +26,7 @@ import {
 import { getTranslations, getLocale } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import type { ChangelogEntry } from "@/lib/changelog";
+import { redirect } from "next/navigation";
 import {
   getNetVerifiedRevenueAmount,
   getRemainingFinalPayment,
@@ -40,6 +41,9 @@ export default async function DashboardPage() {
     getTranslations("Dashboard"),
     getLocale(),
   ]);
+  if (!user) {
+    redirect(`/${locale}/login`);
+  }
 
   const now = new Date();
   const startOfMonth = `${now.getFullYear()}-${String(
@@ -58,7 +62,7 @@ export default async function DashboardPage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, studio_name")
-    .eq("id", user!.id)
+    .eq("id", user.id)
     .single();
   // Dashboard data + changelog are fetched in parallel to keep the page snappy.
   const [
@@ -73,18 +77,18 @@ export default async function DashboardPage() {
     supabase
       .from("bookings")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user!.id)
+      .eq("user_id", user.id)
       .neq("status", "Batal"),
     supabase
       .from("bookings")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user!.id)
+      .eq("user_id", user.id)
       .gte("booking_date", startOfMonth)
       .neq("status", "Batal"),
     supabase
       .from("bookings")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user!.id)
+      .eq("user_id", user.id)
       .gte("session_date", todayStart)
       .lt("session_date", todayEnd)
       .neq("status", "Batal"),
@@ -93,7 +97,7 @@ export default async function DashboardPage() {
       .select(
         "id, client_name, booking_code, booking_date, session_date, status, total_price, created_at, services(name)",
       )
-      .eq("user_id", user!.id)
+      .eq("user_id", user.id)
       .neq("status", "Batal")
       .order("booking_date", { ascending: false })
       .order("created_at", { ascending: false })
@@ -103,7 +107,7 @@ export default async function DashboardPage() {
       .select(
         "id, client_name, booking_code, session_date, location, status, services(name)",
       )
-      .eq("user_id", user!.id)
+      .eq("user_id", user.id)
       .gte("session_date", now.toISOString())
       .neq("status", "Batal")
       .order("session_date", { ascending: true })
@@ -114,7 +118,7 @@ export default async function DashboardPage() {
       .select(
         "booking_date, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, created_at, status, client_status, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at",
       )
-      .eq("user_id", user!.id),
+      .eq("user_id", user.id),
     supabase
       .from("changelog")
       .select("id, version, title, description, badge, published_at")
