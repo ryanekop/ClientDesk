@@ -1754,9 +1754,9 @@ export default function ServicesPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Kota / Kabupaten</label>
+                  <label className="text-sm font-medium">Kota / Kabupaten (Wisuda)</label>
                   <p className="-mt-1 text-[11px] text-muted-foreground">
-                    Bisa pilih lebih dari satu. Kosongkan jika paket berlaku untuk semua kota/kabupaten.
+                    Berlaku untuk event Wisuda. Bisa pilih lebih dari satu. Kosongkan jika paket berlaku untuk semua kota/kabupaten.
                   </p>
                   <CityMultiSelect
                     options={cityOptions}
@@ -2286,9 +2286,9 @@ export default function ServicesPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Kota / Kabupaten</label>
+                <label className="text-sm font-medium">Kota / Kabupaten (Wisuda)</label>
                 <p className="-mt-1 text-[11px] text-muted-foreground">
-                  Bisa pilih lebih dari satu. Kosongkan jika paket berlaku untuk semua kota/kabupaten.
+                  Berlaku untuk event Wisuda. Bisa pilih lebih dari satu. Kosongkan jika paket berlaku untuk semua kota/kabupaten.
                 </p>
                 <CityMultiSelect
                   options={cityOptions}
