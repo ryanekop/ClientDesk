@@ -52,6 +52,7 @@ import {
 import { buildBookingWhatsAppTemplateVars } from "@/lib/booking-whatsapp-template-vars";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
 import {
+    areTableColumnPreferencesEqual,
     lockBoundaryColumns,
     mergeTableColumnPreferences,
     updateTableColumnPreferenceMap,
@@ -1753,15 +1754,11 @@ export default function BookingsPage() {
         [columns],
     );
     const {
-        tableRef,
-        getStickyColumnStyle,
-        getStickyColumnClassName,
-    } = useStickyTableColumns(orderedVisibleColumns);
-    const {
         getColumnWidthStyle,
         getResizeHandleProps,
         isColumnResizable,
         isColumnBeingResized,
+        isResizing,
         resetColumnWidths,
     } = useResizableTableColumns({
         menuKey: "bookings",
@@ -1769,6 +1766,14 @@ export default function BookingsPage() {
         columns: orderedVisibleColumns,
         nonResizableColumnIds: BOOKING_NON_RESIZABLE_COLUMN_IDS,
         minWidthByColumnId: BOOKING_COLUMN_MIN_WIDTHS,
+    });
+    const {
+        tableRef,
+        getStickyColumnStyle,
+        getStickyColumnClassName,
+    } = useStickyTableColumns(orderedVisibleColumns, {
+        enabled: !columnManagerOpen,
+        isResizing,
     });
     const getDesktopHeaderClassName = React.useCallback(
         (columnId: string, className: string) =>
@@ -1801,9 +1806,14 @@ export default function BookingsPage() {
             BASE_BOOKING_COLUMNS[BASE_BOOKING_COLUMNS.length - 1],
         ]);
         setColumns((current) =>
-            applyBookingColumnLabelNormalization(
-                mergeTableColumnPreferences(nextDefaults, current),
-            ),
+            {
+                const nextColumns = applyBookingColumnLabelNormalization(
+                    mergeTableColumnPreferences(nextDefaults, current),
+                );
+                return areTableColumnPreferencesEqual(current, nextColumns)
+                    ? current
+                    : nextColumns;
+            },
         );
     }, [applyBookingColumnLabelNormalization, formSectionsByEventType, metadataRows]);
 
@@ -2311,7 +2321,7 @@ export default function BookingsPage() {
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-visible hidden md:block">
                 <div className="relative overflow-x-auto overflow-y-visible">
-                    <table ref={tableRef} className="min-w-[1400px] w-full border-separate border-spacing-0 text-left text-sm">
+                    <table ref={tableRef} className="min-w-full w-max border-separate border-spacing-0 text-left text-sm">
                         <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
                                 {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}

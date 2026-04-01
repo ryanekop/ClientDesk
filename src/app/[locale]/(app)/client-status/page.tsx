@@ -22,6 +22,7 @@ import { TableColumnManager } from "@/components/ui/table-column-manager";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterSingleSelect } from "@/components/ui/filter-single-select";
 import {
+    areTableColumnPreferencesEqual,
     lockBoundaryColumns,
     mergeTableColumnPreferences,
     updateTableColumnPreferenceMap,
@@ -328,7 +329,12 @@ export default function ClientStatusPage() {
             ...buildBookingMetadataColumns(metadataRows, formSectionsByEventType),
             BASE_CLIENT_STATUS_COLUMNS[BASE_CLIENT_STATUS_COLUMNS.length - 1],
         ]);
-        setColumns((current) => mergeTableColumnPreferences(nextDefaults, current));
+        setColumns((current) => {
+            const nextColumns = mergeTableColumnPreferences(nextDefaults, current);
+            return areTableColumnPreferencesEqual(current, nextColumns)
+                ? current
+                : nextColumns;
+        });
     }, [formSectionsByEventType, metadataRows]);
 
     async function updateStatus(
@@ -536,15 +542,11 @@ export default function ClientStatusPage() {
         [columns],
     );
     const {
-        tableRef,
-        getStickyColumnStyle,
-        getStickyColumnClassName,
-    } = useStickyTableColumns(orderedVisibleColumns);
-    const {
         getColumnWidthStyle,
         getResizeHandleProps,
         isColumnResizable,
         isColumnBeingResized,
+        isResizing,
         resetColumnWidths,
     } = useResizableTableColumns({
         menuKey: "client_status",
@@ -552,6 +554,14 @@ export default function ClientStatusPage() {
         columns: orderedVisibleColumns,
         nonResizableColumnIds: CLIENT_STATUS_NON_RESIZABLE_COLUMN_IDS,
         minWidthByColumnId: CLIENT_STATUS_COLUMN_MIN_WIDTHS,
+    });
+    const {
+        tableRef,
+        getStickyColumnStyle,
+        getStickyColumnClassName,
+    } = useStickyTableColumns(orderedVisibleColumns, {
+        enabled: !columnManagerOpen,
+        isResizing,
     });
     const getDesktopHeaderClassName = React.useCallback(
         (columnId: string, className: string) =>
@@ -946,7 +956,7 @@ export default function ClientStatusPage() {
             {/* Desktop Table */}
             <div className="rounded-xl border bg-card shadow-sm overflow-hidden hidden md:block">
                 <div className="relative overflow-x-auto">
-                    <table ref={tableRef} className="min-w-[900px] w-full border-separate border-spacing-0 text-left text-sm">
+                    <table ref={tableRef} className="min-w-full w-max border-separate border-spacing-0 text-left text-sm">
                         <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
                                 {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}

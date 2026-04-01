@@ -92,10 +92,20 @@ export function useResizableTableColumns({
   );
   const widthByColumnIdRef = React.useRef(widthByColumnId);
   const loadedStorageKeyRef = React.useRef<string | null>(null);
+  const activePointerIdRef = React.useRef<number | null>(null);
+  const cleanupResizeRef = React.useRef<(() => void) | null>(null);
 
   React.useEffect(() => {
     widthByColumnIdRef.current = widthByColumnId;
   }, [widthByColumnId]);
+
+  React.useEffect(
+    () => () => {
+      cleanupResizeRef.current?.();
+      cleanupResizeRef.current = null;
+    },
+    [],
+  );
 
   const normalizeMap = React.useCallback(
     (raw: unknown) =>
@@ -213,6 +223,8 @@ export function useResizableTableColumns({
 
       event.preventDefault();
       event.stopPropagation();
+      cleanupResizeRef.current?.();
+      cleanupResizeRef.current = null;
 
       const headerCell =
         event.currentTarget.closest("th[data-column-id]") ||
@@ -232,12 +244,13 @@ export function useResizableTableColumns({
       document.body.style.userSelect = "none";
       setActiveResizeColumnId(columnId);
       const pointerId = event.pointerId;
-      if (event.currentTarget.hasPointerCapture?.(pointerId) === false) {
-        event.currentTarget.setPointerCapture?.(pointerId);
-      }
+      activePointerIdRef.current = pointerId;
+      event.currentTarget.setPointerCapture?.(pointerId);
 
       const handlePointerMove = (moveEvent: PointerEvent) => {
-        if (moveEvent.pointerId !== pointerId) return;
+        if (activePointerIdRef.current !== pointerId || moveEvent.pointerId !== pointerId) {
+          return;
+        }
         const deltaX = moveEvent.clientX - startX;
         const nextWidth = Math.round(clamp(startWidth + deltaX, minWidth, maxWidth));
         setWidthByColumnId((current) => {
@@ -246,17 +259,31 @@ export function useResizableTableColumns({
         });
       };
 
+      let didCleanup = false;
       const cleanup = (cleanupEvent?: PointerEvent) => {
-        if (cleanupEvent && cleanupEvent.pointerId !== pointerId) return;
+        if (didCleanup) return;
+        if (
+          cleanupEvent &&
+          activePointerIdRef.current !== cleanupEvent.pointerId &&
+          cleanupEvent.pointerId !== pointerId
+        ) {
+          return;
+        }
+        didCleanup = true;
+        activePointerIdRef.current = null;
         document.body.style.cursor = previousCursor;
         document.body.style.userSelect = previousUserSelect;
         setActiveResizeColumnId((current) => (current === columnId ? null : current));
-        event.currentTarget.releasePointerCapture?.(pointerId);
+        cleanupResizeRef.current = null;
+        if (event.currentTarget.hasPointerCapture?.(pointerId)) {
+          event.currentTarget.releasePointerCapture?.(pointerId);
+        }
         window.removeEventListener("pointermove", handlePointerMove);
         window.removeEventListener("pointerup", cleanup);
         window.removeEventListener("pointercancel", cleanup);
       };
 
+      cleanupResizeRef.current = () => cleanup();
       window.addEventListener("pointermove", handlePointerMove);
       window.addEventListener("pointerup", cleanup);
       window.addEventListener("pointercancel", cleanup);
@@ -295,6 +322,7 @@ export function useResizableTableColumns({
     [activeResizeColumnId],
   );
   const resetColumnWidths = React.useCallback(() => {
+    cleanupResizeRef.current?.();
     setActiveResizeColumnId(null);
     setWidthByColumnId({});
   }, []);
@@ -304,6 +332,7 @@ export function useResizableTableColumns({
     getResizeHandleProps,
     isColumnResizable,
     isColumnBeingResized,
+    isResizing: activeResizeColumnId !== null,
     resetColumnWidths,
   };
 }

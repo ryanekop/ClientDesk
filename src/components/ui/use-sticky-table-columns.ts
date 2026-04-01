@@ -10,6 +10,11 @@ type StickyColumnConfig = {
   isEdge: boolean;
 };
 
+type UseStickyTableColumnsOptions = {
+  enabled?: boolean;
+  isResizing?: boolean;
+};
+
 function areWidthMapsEqual(
   current: Record<string, number>,
   next: Record<string, number>,
@@ -25,24 +30,43 @@ function toStableWidth(value: number) {
   return Math.round(value);
 }
 
-export function useStickyTableColumns(columns: TableColumnPreference[]) {
+export function useStickyTableColumns(
+  columns: TableColumnPreference[],
+  options?: UseStickyTableColumnsOptions,
+) {
   const tableRef = React.useRef<HTMLTableElement | null>(null);
   const [widths, setWidths] = React.useState<Record<string, number>>({});
-  const columnsKey = React.useMemo(
+  const enabled = options?.enabled ?? true;
+  const isResizing = options?.isResizing ?? false;
+  const pinnedColumnIds = React.useMemo(
     () =>
       columns
-        .map((column) => `${column.id}:${column.visible}:${column.pin ?? "none"}`)
-        .join("|"),
+        .filter((column) => column.visible && (column.pin === "left" || column.pin === "right"))
+        .map((column) => column.id),
     [columns],
+  );
+  const columnsKey = React.useMemo(
+    () =>
+      pinnedColumnIds
+        .map((columnId) => {
+          const column = columns.find((item) => item.id === columnId);
+          return `${columnId}:${column?.pin ?? "none"}`;
+        })
+        .join("|"),
+    [columns, pinnedColumnIds],
   );
 
   React.useLayoutEffect(() => {
     const table = tableRef.current;
-    if (!table) return;
+    if (!table || !enabled || isResizing || pinnedColumnIds.length === 0) return;
 
-    const headerCells = Array.from(
-      table.querySelectorAll<HTMLTableCellElement>("thead [data-column-id]"),
-    );
+    const headerCells = pinnedColumnIds
+      .map((columnId) =>
+        table.querySelector<HTMLTableCellElement>(
+          `thead [data-column-id="${CSS.escape(columnId)}"]`,
+        ),
+      )
+      .filter((cell): cell is HTMLTableCellElement => Boolean(cell));
     if (headerCells.length === 0) return;
 
     const updateWidths = () => {
@@ -50,7 +74,7 @@ export function useStickyTableColumns(columns: TableColumnPreference[]) {
       headerCells.forEach((cell) => {
         const columnId = cell.dataset.columnId;
         if (!columnId) return;
-        next[columnId] = toStableWidth(cell.getBoundingClientRect().width);
+        next[columnId] = toStableWidth(cell.offsetWidth);
       });
       setWidths((current) => (areWidthMapsEqual(current, next) ? current : next));
     };
@@ -82,7 +106,7 @@ export function useStickyTableColumns(columns: TableColumnPreference[]) {
         window.cancelAnimationFrame(frameId);
       }
     };
-  }, [columnsKey]);
+  }, [columnsKey, enabled, isResizing, pinnedColumnIds]);
 
   const stickyColumns = React.useMemo(() => {
     const leftPinned = columns.filter(

@@ -106,6 +106,26 @@ export function normalizeTableColumnPreferences(
   ) as Partial<TableColumnPreferenceMap>;
 }
 
+export function areTableColumnPreferencesEqual(
+  left: TableColumnPreference[],
+  right: TableColumnPreference[],
+) {
+  if (left.length !== right.length) return false;
+
+  return left.every((column, index) => {
+    const candidate = right[index];
+    if (!candidate) return false;
+
+    return (
+      column.id === candidate.id &&
+      column.label === candidate.label &&
+      column.visible === candidate.visible &&
+      (column.locked === true) === (candidate.locked === true) &&
+      (column.pin ?? null) === (candidate.pin ?? null)
+    );
+  });
+}
+
 export function mergeTableColumnPreferences(
   defaults: TableColumnPreference[],
   saved: TableColumnPreference[] | undefined,

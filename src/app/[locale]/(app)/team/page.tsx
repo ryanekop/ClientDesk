@@ -600,15 +600,11 @@ export default function TeamPage() {
         [columns],
     );
     const {
-        tableRef,
-        getStickyColumnStyle,
-        getStickyColumnClassName,
-    } = useStickyTableColumns(orderedVisibleColumns);
-    const {
         getColumnWidthStyle,
         getResizeHandleProps,
         isColumnResizable,
         isColumnBeingResized,
+        isResizing,
         resetColumnWidths,
     } = useResizableTableColumns({
         menuKey: "team",
@@ -616,6 +612,14 @@ export default function TeamPage() {
         columns: orderedVisibleColumns,
         nonResizableColumnIds: TEAM_NON_RESIZABLE_COLUMN_IDS,
         minWidthByColumnId: TEAM_COLUMN_MIN_WIDTHS,
+    });
+    const {
+        tableRef,
+        getStickyColumnStyle,
+        getStickyColumnClassName,
+    } = useStickyTableColumns(orderedVisibleColumns, {
+        enabled: !columnManagerOpen,
+        isResizing,
     });
     const getDesktopHeaderClassName = React.useCallback(
         (columnId: string, className: string) =>
@@ -1024,7 +1028,7 @@ export default function TeamPage() {
                     </div>
                     <div className="hidden md:block rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
                         <div className="relative overflow-x-auto">
-                            <table ref={tableRef} className="min-w-[860px] w-full border-separate border-spacing-0 text-left text-sm">
+                            <table ref={tableRef} className="min-w-full w-max border-separate border-spacing-0 text-left text-sm">
                                 <thead className="text-xs uppercase bg-card border-b">
                                     <tr>
                                         {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
@@ -1114,7 +1118,7 @@ export default function TeamPage() {
                     {/* Desktop Table */}
                     <div className="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden hidden md:block">
                         <div className="relative overflow-x-auto">
-                            <table ref={tableRef} className="min-w-[860px] w-full border-separate border-spacing-0 text-left text-sm">
+                            <table ref={tableRef} className="min-w-full w-max border-separate border-spacing-0 text-left text-sm">
                                 <thead className="text-xs uppercase bg-card border-b">
                                     <tr>
                                         {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}

@@ -215,12 +215,12 @@ export function TableColumnManager({
   triggerClassName,
 }: TableColumnManagerProps) {
   const [activeColumnId, setActiveColumnId] = React.useState<string | null>(null);
-  const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
+    if (!open) {
+      setActiveColumnId(null);
+    }
+  }, [open]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -312,34 +312,34 @@ export function TableColumnManager({
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
 
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={() => setActiveColumnId(null)}
-          >
-            <SortableContext
-              items={columns.map((column) => column.id)}
-              strategy={verticalListSortingStrategy}
+          {open ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setActiveColumnId(null)}
             >
-              <div className="space-y-2 py-2">
-                {columns.map((column) => (
-                  <SortableColumnItem
-                    key={column.id}
-                    column={column}
-                    description={getColumnDescription(column)}
-                    onTogglePin={togglePin}
-                    onToggleVisibility={toggleVisibility}
-                  />
-                ))}
-              </div>
-            </SortableContext>
+              <SortableContext
+                items={columns.map((column) => column.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2 py-2">
+                  {columns.map((column) => (
+                    <SortableColumnItem
+                      key={column.id}
+                      column={column}
+                      description={getColumnDescription(column)}
+                      onTogglePin={togglePin}
+                      onToggleVisibility={toggleVisibility}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
 
-            {mounted
-              ? createPortal(
-                  <DragOverlay>
-                    {activeColumn ? (
+              {activeColumn && typeof document !== "undefined"
+                ? createPortal(
+                    <DragOverlay>
                       <div className="z-[9999] rounded-xl border border-primary bg-card px-4 py-3 shadow-2xl ring-1 ring-primary/10">
                         <div className="flex items-center gap-3">
                           <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-background text-muted-foreground">
@@ -353,12 +353,12 @@ export function TableColumnManager({
                           </div>
                         </div>
                       </div>
-                    ) : null}
-                  </DragOverlay>,
-                  document.body,
-                )
-              : null}
-          </DndContext>
+                    </DragOverlay>,
+                    document.body,
+                  )
+                : null}
+            </DndContext>
+          ) : null}
 
           <DialogFooter className="sm:justify-between gap-2">
             {onResetWidths ? (
