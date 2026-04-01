@@ -25,6 +25,19 @@ function normalizeTableColumnPin(value: unknown): TableColumnPin {
   return null;
 }
 
+function dedupeTableColumnPreferences(columns: TableColumnPreference[]) {
+  const seen = new Set<string>();
+  const result: TableColumnPreference[] = [];
+
+  columns.forEach((column) => {
+    if (seen.has(column.id)) return;
+    seen.add(column.id);
+    result.push(column);
+  });
+
+  return result;
+}
+
 export function isBoundaryTableColumnId(columnId: string) {
   return columnId === "name" || columnId === "actions";
 }
@@ -96,9 +109,9 @@ export function normalizeTableColumnPreferences(
       Array.isArray(value)
         ? value.reduce<TableColumnPreference[]>((acc, item) => {
             const normalized = normalizeTableColumnPreferenceItem(item);
-            if (normalized) {
-              acc.push(normalized);
-            }
+            if (!normalized) return acc;
+            if (acc.some((existing) => existing.id === normalized.id)) return acc;
+            acc.push(normalized);
             return acc;
           }, [])
         : [],
@@ -130,10 +143,12 @@ export function mergeTableColumnPreferences(
   defaults: TableColumnPreference[],
   saved: TableColumnPreference[] | undefined,
 ): TableColumnPreference[] {
-  if (!saved || saved.length === 0) return lockBoundaryColumns(defaults);
+  const normalizedDefaults = dedupeTableColumnPreferences(defaults);
+  if (!saved || saved.length === 0) return lockBoundaryColumns(normalizedDefaults);
 
-  const defaultMap = new Map(defaults.map((item) => [item.id, item]));
-  const ordered = saved.reduce<TableColumnPreference[]>((acc, item) => {
+  const normalizedSaved = dedupeTableColumnPreferences(saved);
+  const defaultMap = new Map(normalizedDefaults.map((item) => [item.id, item]));
+  const ordered = normalizedSaved.reduce<TableColumnPreference[]>((acc, item) => {
       const fallback = defaultMap.get(item.id);
       if (!fallback) return acc;
       const savedPin = normalizeTableColumnPin(item.pin);
@@ -150,10 +165,10 @@ export function mergeTableColumnPreferences(
   const merged = [...ordered];
   const existingIds = new Set(merged.map((item) => item.id));
 
-  defaults.forEach((item, index) => {
+  normalizedDefaults.forEach((item, index) => {
     if (existingIds.has(item.id)) return;
 
-    const nextExistingDefault = defaults
+    const nextExistingDefault = normalizedDefaults
       .slice(index + 1)
       .find((candidate) => existingIds.has(candidate.id));
 
@@ -180,17 +195,18 @@ export function mergeTableColumnPreferences(
 export function lockBoundaryColumns(
   columns: TableColumnPreference[],
 ): TableColumnPreference[] {
-  if (columns.length === 0) return columns;
+  const dedupedColumns = dedupeTableColumnPreferences(columns);
+  if (dedupedColumns.length === 0) return dedupedColumns;
 
-  const leadingFixed = columns.find((column) => column.id === "row_number");
+  const leadingFixed = dedupedColumns.find((column) => column.id === "row_number");
   const first =
-    columns.find((column) => column.id === "name") ||
-    columns.find((column) => column.id !== "row_number") ||
-    columns[0];
+    dedupedColumns.find((column) => column.id === "name") ||
+    dedupedColumns.find((column) => column.id !== "row_number") ||
+    dedupedColumns[0];
   const last =
-    columns.find((column) => column.id === "actions") ||
-    columns[columns.length - 1];
-  const middle = columns.filter((column) => {
+    dedupedColumns.find((column) => column.id === "actions") ||
+    dedupedColumns[dedupedColumns.length - 1];
+  const middle = dedupedColumns.filter((column) => {
     if (column.id === first.id || column.id === last.id) return false;
     if (leadingFixed && column.id === leadingFixed.id) return false;
     return true;

@@ -7,6 +7,7 @@ import { AppCheckbox } from "@/components/ui/app-checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -80,6 +81,11 @@ export function DashboardChangelogPopup({
                 {locale === "en" ? "What’s new in Client Desk" : "Log perubahan terbaru"}
               </DialogTitle>
             </div>
+            <DialogDescription className="sr-only">
+              {locale === "en"
+                ? "Latest release notes and updates for this version."
+                : "Ringkasan perubahan terbaru untuk versi ini."}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto pr-1">

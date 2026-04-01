@@ -612,6 +612,7 @@ export default function TeamPage() {
         cancelActiveResize,
         resetColumnWidths,
     } = useResizableTableColumns({
+        enabled: !columnManagerOpen,
         menuKey: "team",
         userId: currentUserId,
         columns: orderedVisibleColumns,
@@ -719,7 +720,11 @@ export default function TeamPage() {
             .update({ table_column_preferences: payload })
             .eq("id", user.id);
         await invalidateProfilePublicCache();
-        setColumns(nextColumns);
+        setColumns((current) =>
+            areTableColumnPreferencesEqual(current, nextColumns)
+                ? current
+                : nextColumns,
+        );
         setSavingColumns(false);
         setColumnManagerOpen(false);
     }

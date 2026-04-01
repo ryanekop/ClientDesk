@@ -671,7 +671,11 @@ export default function BookingsPage() {
             .update({ table_column_preferences: payload })
             .eq("id", user.id);
         await invalidateProfilePublicCache();
-        setColumns(normalizedNextColumns);
+        setColumns((current) =>
+            areTableColumnPreferencesEqual(current, normalizedNextColumns)
+                ? current
+                : normalizedNextColumns,
+        );
         setSavingColumns(false);
         setColumnManagerOpen(false);
     }
@@ -1765,6 +1769,7 @@ export default function BookingsPage() {
         cancelActiveResize,
         resetColumnWidths,
     } = useResizableTableColumns({
+        enabled: !columnManagerOpen,
         menuKey: "bookings",
         userId: currentUserId,
         columns: orderedVisibleColumns,

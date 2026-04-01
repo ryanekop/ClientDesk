@@ -743,7 +743,11 @@ export default function FinancePage() {
             .update({ table_column_preferences: payload })
             .eq("id", user.id);
         await invalidateProfilePublicCache();
-        setColumns(nextColumns);
+        setColumns((current) =>
+            areTableColumnPreferencesEqual(current, nextColumns)
+                ? current
+                : nextColumns,
+        );
         setSavingColumns(false);
         setColumnManagerOpen(false);
     }

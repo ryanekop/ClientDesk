@@ -553,6 +553,7 @@ export default function ClientStatusPage() {
         cancelActiveResize,
         resetColumnWidths,
     } = useResizableTableColumns({
+        enabled: !columnManagerOpen,
         menuKey: "client_status",
         userId: currentUserId,
         columns: orderedVisibleColumns,
@@ -636,7 +637,11 @@ export default function ClientStatusPage() {
             .from("profiles")
             .update({ table_column_preferences: payload })
             .eq("id", user.id);
-        setColumns(nextColumns);
+        setColumns((current) =>
+            areTableColumnPreferencesEqual(current, nextColumns)
+                ? current
+                : nextColumns,
+        );
         setSavingColumns(false);
         setColumnManagerOpen(false);
     }

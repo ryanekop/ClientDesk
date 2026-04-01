@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import type { TableMenuKey, TableColumnPreference } from "@/lib/table-column-prefs";
 
 type UseResizableTableColumnsOptions = {
+  enabled?: boolean;
   menuKey: TableMenuKey;
   userId: string | null;
   columns: TableColumnPreference[];
@@ -67,6 +68,7 @@ function areWidthMapsEqual(
 }
 
 export function useResizableTableColumns({
+  enabled = true,
   menuKey,
   userId,
   columns,
@@ -106,6 +108,11 @@ export function useResizableTableColumns({
     },
     [],
   );
+
+  React.useEffect(() => {
+    if (enabled) return;
+    cleanupResizeRef.current?.();
+  }, [enabled]);
 
   const normalizeMap = React.useCallback(
     (raw: unknown) =>
@@ -212,12 +219,15 @@ export function useResizableTableColumns({
   );
   const isColumnResizable = React.useCallback(
     (columnId: string) =>
-      columns.some((column) => column.id === columnId) && !nonResizableSet.has(columnId),
-    [columns, nonResizableSet],
+      enabled &&
+      columns.some((column) => column.id === columnId) &&
+      !nonResizableSet.has(columnId),
+    [columns, enabled, nonResizableSet],
   );
 
   const startResize = React.useCallback(
     (columnId: string, event: React.PointerEvent<HTMLElement>) => {
+      if (!enabled) return;
       if (!isColumnResizable(columnId)) return;
       if (event.pointerType !== "touch" && event.button !== 0) return;
       const handleElement = event.currentTarget as HTMLElement;
@@ -308,7 +318,7 @@ export function useResizableTableColumns({
       window.addEventListener("pointerup", cleanup);
       window.addEventListener("pointercancel", cleanup);
     },
-    [getMaxWidth, getMinWidth, isColumnResizable],
+    [enabled, getMaxWidth, getMinWidth, isColumnResizable],
   );
 
   const getColumnWidthStyle = React.useCallback(
@@ -354,7 +364,7 @@ export function useResizableTableColumns({
     getResizeHandleProps,
     isColumnResizable,
     isColumnBeingResized,
-    isResizing: activeResizeColumnId !== null,
+    isResizing: enabled && activeResizeColumnId !== null,
     cancelActiveResize,
     resetColumnWidths,
   };

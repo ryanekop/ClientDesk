@@ -41,10 +41,18 @@ export function useStickyTableColumns(
   const enabled = options?.enabled ?? true;
   const isResizing = options?.isResizing ?? false;
   const pinnedColumnIds = React.useMemo(
-    () =>
-      columns
-        .filter((column) => column.visible && (column.pin === "left" || column.pin === "right"))
-        .map((column) => column.id),
+    () => {
+      const seen = new Set<string>();
+      const pinnedIds: string[] = [];
+      columns.forEach((column) => {
+        if (!column.visible) return;
+        if (column.pin !== "left" && column.pin !== "right") return;
+        if (seen.has(column.id)) return;
+        seen.add(column.id);
+        pinnedIds.push(column.id);
+      });
+      return pinnedIds;
+    },
     [columns],
   );
   const columnsKey = React.useMemo(

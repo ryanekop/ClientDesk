@@ -52,7 +52,7 @@ export function DashboardCharts({
       <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
         <h3 className="font-semibold text-sm mb-3">{t("pemasukan30")}</h3>
         <div className="h-[220px] min-h-[220px] w-full min-w-0">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
             <AreaChart
               data={dailyData}
               margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
@@ -129,7 +129,7 @@ export function DashboardCharts({
       <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
         <h3 className="font-semibold text-sm mb-3">{t("pemasukanBulanan")}</h3>
         <div className="h-[220px] min-h-[220px] w-full min-w-0">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
             <BarChart
               data={monthlyData}
               margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
