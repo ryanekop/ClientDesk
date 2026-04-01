@@ -242,12 +242,12 @@ export function getMultiSessionTemplateTokens(
     ? (key: string) => `{${key}}`
     : (key: string) => `{{${key}}}`;
   const keys =
-    format === "drive"
-      ? MULTI_SESSION_TEMPLATE_KEYS
-      : [
+    format === "whatsapp"
+      ? [
           ...MULTI_SESSION_TEMPLATE_KEYS,
           ...MULTI_SESSION_WHATSAPP_ONLY_TEMPLATE_KEYS,
-        ];
+        ]
+      : MULTI_SESSION_TEMPLATE_KEYS;
   return keys.map((key) => wrap(key));
 }
 

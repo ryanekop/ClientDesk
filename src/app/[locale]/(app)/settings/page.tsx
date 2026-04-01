@@ -2587,7 +2587,10 @@ export default function SettingsPage() {
   const currentDriveFormat = driveFolderFormats[selectedDriveEventType] || "";
   const calendarTemplateVariables = Array.from(
     new Set([
-      ...getCalendarTemplateVariables(selectedCalendarEventType),
+      ...getCalendarTemplateVariables(
+        selectedCalendarEventType,
+        activeCalendarDescriptionMode,
+      ),
       ...getCustomFieldTemplateTokens(
         formSectionsByEventType[selectedCalendarEventType] ||
           formSectionsByEventType.Umum ||

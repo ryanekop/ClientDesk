@@ -1,7 +1,6 @@
 import {
     buildExtraFieldTemplateVars,
     getEventExtraFieldTemplateTokens,
-    getMultiSessionTemplateTokens,
     buildMultiSessionTemplateVars,
 } from "@/utils/form-extra-fields";
 import { parseSessionDateParts } from "@/utils/format-date";
@@ -93,6 +92,27 @@ export const CALENDAR_TEMPLATE_VARIABLES = [
     "{{location_maps_url}}",
     "{{detail_location}}",
     "{{notes}}",
+] as const;
+
+const WEDDING_SPLIT_CALENDAR_TEMPLATE_VARIABLES = [
+    "{{akad_location}}",
+    "{{akad_date}}",
+    "{{akad_time}}",
+    "{{resepsi_location}}",
+    "{{resepsi_date}}",
+    "{{resepsi_time}}",
+    "{{resepsi_maps_url}}",
+] as const;
+
+const WISUDA_SPLIT_CALENDAR_TEMPLATE_VARIABLES = [
+    "{{wisuda_session_1_location}}",
+    "{{wisuda_session_1_date}}",
+    "{{wisuda_session_1_time}}",
+    "{{wisuda_session_1_maps_url}}",
+    "{{wisuda_session_2_location}}",
+    "{{wisuda_session_2_date}}",
+    "{{wisuda_session_2_time}}",
+    "{{wisuda_session_2_maps_url}}",
 ] as const;
 
 export const DRIVE_TEMPLATE_VARIABLES = [
@@ -293,11 +313,30 @@ export function resolveTemplateByEventType(
     return eventSpecific || normalized.Umum?.trim() || fallback;
 }
 
-export function getCalendarTemplateVariables(eventType: string | null | undefined): string[] {
+function getCalendarSplitTemplateVariables(
+    eventType: string | null | undefined,
+    mode: GoogleCalendarTemplateMode = "normal",
+) {
+    if (normalizeGoogleCalendarTemplateMode(mode) !== "split") return [];
+
+    const normalizedEventType = normalizeTemplateEventTypeName(eventType);
+    if (normalizedEventType === "Wedding") {
+        return [...WEDDING_SPLIT_CALENDAR_TEMPLATE_VARIABLES];
+    }
+    if (normalizedEventType === "Wisuda") {
+        return [...WISUDA_SPLIT_CALENDAR_TEMPLATE_VARIABLES];
+    }
+    return [];
+}
+
+export function getCalendarTemplateVariables(
+    eventType: string | null | undefined,
+    mode: GoogleCalendarTemplateMode = "normal",
+): string[] {
     return Array.from(
         new Set([
             ...CALENDAR_TEMPLATE_VARIABLES,
-            ...getMultiSessionTemplateTokens("calendar"),
+            ...getCalendarSplitTemplateVariables(eventType, mode),
             ...getEventExtraFieldTemplateTokens(eventType, "calendar"),
         ]),
     );
