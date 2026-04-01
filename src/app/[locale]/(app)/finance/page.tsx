@@ -463,12 +463,15 @@ export default function FinancePage() {
                 unpaidCount: 0,
                 monthlyRevenueTotal: 0,
             });
-            setColumns(
-                mergeTableColumnPreferences(
+            setColumns((current) => {
+                const nextColumns = mergeTableColumnPreferences(
                     nextColumnDefaults,
                     metadata?.tableColumnPreferences || undefined,
-                ),
-            );
+                );
+                return areTableColumnPreferencesEqual(current, nextColumns)
+                    ? current
+                    : nextColumns;
+            });
             setHasLoadedFinanceSuccessfully(true);
         } catch (error) {
             console.error("[FinancePage] Failed to fetch finance page", error);
@@ -697,11 +700,12 @@ export default function FinancePage() {
         [getColumnWidthStyle, getStickyColumnStyle],
     );
     const handleColumnManagerOpenChange = React.useCallback((nextOpen: boolean) => {
-        if (nextOpen) {
-            cancelActiveResize();
-        }
         setColumnManagerOpen(nextOpen);
-    }, [cancelActiveResize]);
+    }, []);
+    React.useEffect(() => {
+        if (!columnManagerOpen) return;
+        cancelActiveResize();
+    }, [cancelActiveResize, columnManagerOpen]);
 
     React.useEffect(() => {
         const nextDefaults = lockBoundaryColumns([

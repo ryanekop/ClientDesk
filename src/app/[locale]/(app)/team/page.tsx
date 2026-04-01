@@ -18,6 +18,7 @@ import {
     PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME,
 } from "@/components/ui/page-header";
 import {
+    areTableColumnPreferencesEqual,
     lockBoundaryColumns,
     mergeTableColumnPreferences,
     updateTableColumnPreferenceMap,
@@ -313,12 +314,15 @@ export default function TeamPage() {
             setAvailableTags(response.metadata?.tags || []);
             setAvailableRoles(response.metadata?.roles || []);
             setAvailableStatuses(response.metadata?.statuses || []);
-            setColumns(
-                mergeTableColumnPreferences(
+            setColumns((current) => {
+                const nextColumns = mergeTableColumnPreferences(
                     TEAM_COLUMN_DEFAULTS,
                     response.metadata?.tableColumnPreferences || undefined,
-                ),
-            );
+                );
+                return areTableColumnPreferencesEqual(current, nextColumns)
+                    ? current
+                    : nextColumns;
+            });
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -646,11 +650,12 @@ export default function TeamPage() {
         [getColumnWidthStyle, getStickyColumnStyle],
     );
     const handleColumnManagerOpenChange = React.useCallback((nextOpen: boolean) => {
-        if (nextOpen) {
-            cancelActiveResize();
-        }
         setColumnManagerOpen(nextOpen);
-    }, [cancelActiveResize]);
+    }, []);
+    React.useEffect(() => {
+        if (!columnManagerOpen) return;
+        cancelActiveResize();
+    }, [cancelActiveResize, columnManagerOpen]);
     const statusFilterOptions = React.useMemo(
         () =>
             availableStatuses.map((status) => ({

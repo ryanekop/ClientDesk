@@ -65,6 +65,26 @@ type TableColumnManagerProps = {
   triggerClassName?: string;
 };
 
+function sanitizeColumns(columns: TableColumnPreference[]) {
+  const uniqueColumns: TableColumnPreference[] = [];
+  const seen = new Set<string>();
+  const duplicateIds: string[] = [];
+
+  columns.forEach((column) => {
+    if (seen.has(column.id)) {
+      duplicateIds.push(column.id);
+      return;
+    }
+    seen.add(column.id);
+    uniqueColumns.push(column);
+  });
+
+  return {
+    columns: uniqueColumns,
+    duplicateIds,
+  };
+}
+
 function getColumnDescription(column: TableColumnPreference) {
   const isPinned = column.pin === "left" || column.pin === "right";
 
@@ -214,12 +234,33 @@ export function TableColumnManager({
   triggerClassName,
 }: TableColumnManagerProps) {
   const [activeColumnId, setActiveColumnId] = React.useState<string | null>(null);
+  const hasWarnedDuplicateIdsRef = React.useRef(false);
+  const { columns: sanitizedColumns, duplicateIds } = React.useMemo(
+    () => sanitizeColumns(columns),
+    [columns],
+  );
 
   React.useEffect(() => {
     if (!open) {
       setActiveColumnId(null);
     }
   }, [open]);
+
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    if (hasWarnedDuplicateIdsRef.current) return;
+    if (duplicateIds.length === 0) return;
+
+    hasWarnedDuplicateIdsRef.current = true;
+    const uniqueDuplicateIds = Array.from(new Set(duplicateIds));
+    console.warn(
+      `[TableColumnManager] Duplicate column ids detected. Using first occurrence for DnD safety.`,
+      {
+        title,
+        duplicateIds: uniqueDuplicateIds,
+      },
+    );
+  }, [duplicateIds, title]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -235,7 +276,7 @@ export function TableColumnManager({
 
   function toggleVisibility(id: string) {
     onChange(
-      columns.map((column) =>
+      sanitizedColumns.map((column) =>
         column.id === id && canToggleTableColumnVisibility(column)
           ? { ...column, visible: !column.visible }
           : column,
@@ -245,7 +286,7 @@ export function TableColumnManager({
 
   function togglePin(id: string) {
     onChange(
-      columns.map((column) =>
+      sanitizedColumns.map((column) =>
         column.id === id && canToggleTableColumnPin(column)
           ? {
               ...column,
@@ -272,22 +313,28 @@ export function TableColumnManager({
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const sourceIndex = columns.findIndex((column) => column.id === active.id);
-    const targetIndex = columns.findIndex((column) => column.id === over.id);
+    const sourceIndex = sanitizedColumns.findIndex(
+      (column) => column.id === active.id,
+    );
+    const targetIndex = sanitizedColumns.findIndex(
+      (column) => column.id === over.id,
+    );
     if (sourceIndex < 0 || targetIndex < 0) return;
     if (
-      !canReorderTableColumn(columns[sourceIndex]) ||
-      !canReorderTableColumn(columns[targetIndex])
+      !canReorderTableColumn(sanitizedColumns[sourceIndex]) ||
+      !canReorderTableColumn(sanitizedColumns[targetIndex])
     ) {
       return;
     }
-    if (columns[sourceIndex]?.pin !== columns[targetIndex]?.pin) return;
+    if (sanitizedColumns[sourceIndex]?.pin !== sanitizedColumns[targetIndex]?.pin) {
+      return;
+    }
 
-    onChange(arrayMove(columns, sourceIndex, targetIndex));
+    onChange(arrayMove(sanitizedColumns, sourceIndex, targetIndex));
   }
 
   const activeColumn =
-    columns.find((column) => column.id === activeColumnId) || null;
+    sanitizedColumns.find((column) => column.id === activeColumnId) || null;
 
   return (
     <>
@@ -316,11 +363,11 @@ export function TableColumnManager({
               onDragCancel={() => setActiveColumnId(null)}
             >
               <SortableContext
-                items={columns.map((column) => column.id)}
+                items={sanitizedColumns.map((column) => column.id)}
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-2 py-2">
-                  {columns.map((column) => (
+                  {sanitizedColumns.map((column) => (
                     <SortableColumnItem
                       key={column.id}
                       column={column}

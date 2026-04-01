@@ -36,6 +36,8 @@ export function useStickyTableColumns(
 ) {
   const tableRef = React.useRef<HTMLTableElement | null>(null);
   const [widths, setWidths] = React.useState<Record<string, number>>({});
+  const widthsRef = React.useRef(widths);
+  const lastMeasuredWidthsRef = React.useRef<Record<string, number>>({});
   const enabled = options?.enabled ?? true;
   const isResizing = options?.isResizing ?? false;
   const pinnedColumnIds = React.useMemo(
@@ -56,9 +58,14 @@ export function useStickyTableColumns(
     [columns, pinnedColumnIds],
   );
 
+  React.useEffect(() => {
+    widthsRef.current = widths;
+  }, [widths]);
+
   React.useLayoutEffect(() => {
     const table = tableRef.current;
     if (!table || !enabled || isResizing || pinnedColumnIds.length === 0) return;
+    let isSuspended = false;
 
     const headerCells = pinnedColumnIds
       .map((columnId) =>
@@ -70,12 +77,16 @@ export function useStickyTableColumns(
     if (headerCells.length === 0) return;
 
     const updateWidths = () => {
+      if (isSuspended || !enabled || isResizing) return;
       const next: Record<string, number> = {};
       headerCells.forEach((cell) => {
         const columnId = cell.dataset.columnId;
         if (!columnId) return;
         next[columnId] = toStableWidth(cell.offsetWidth);
       });
+      if (areWidthMapsEqual(lastMeasuredWidthsRef.current, next)) return;
+      lastMeasuredWidthsRef.current = next;
+      if (areWidthMapsEqual(widthsRef.current, next)) return;
       setWidths((current) => (areWidthMapsEqual(current, next) ? current : next));
     };
 
@@ -87,9 +98,11 @@ export function useStickyTableColumns(
 
     let frameId: number | null = null;
     const scheduleUpdate = () => {
+      if (isSuspended) return;
       if (frameId !== null) return;
       frameId = window.requestAnimationFrame(() => {
         frameId = null;
+        if (isSuspended) return;
         updateWidths();
       });
     };
@@ -101,6 +114,7 @@ export function useStickyTableColumns(
     headerCells.forEach((cell) => observer.observe(cell));
 
     return () => {
+      isSuspended = true;
       observer.disconnect();
       if (frameId !== null) {
         window.cancelAnimationFrame(frameId);

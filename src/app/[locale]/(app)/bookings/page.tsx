@@ -616,14 +616,17 @@ export default function BookingsPage() {
             setFormSectionsByEventType(metadata?.formSectionsByEventType || {});
             setMetadataRows(metadata?.metadataRows || []);
             setExtraFieldRows(metadata?.extraFieldRows || []);
-            setColumns(
-                applyBookingColumnLabelNormalization(
+            setColumns((current) => {
+                const nextColumns = applyBookingColumnLabelNormalization(
                     mergeTableColumnPreferences(
                         nextColumnDefaults,
                         metadata?.tableColumnPreferences || undefined,
                     ),
-                ),
-            );
+                );
+                return areTableColumnPreferencesEqual(current, nextColumns)
+                    ? current
+                    : nextColumns;
+            });
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -1800,11 +1803,12 @@ export default function BookingsPage() {
         [getColumnWidthStyle, getStickyColumnStyle],
     );
     const handleColumnManagerOpenChange = React.useCallback((nextOpen: boolean) => {
-        if (nextOpen) {
-            cancelActiveResize();
-        }
         setColumnManagerOpen(nextOpen);
-    }, [cancelActiveResize]);
+    }, []);
+    React.useEffect(() => {
+        if (!columnManagerOpen) return;
+        cancelActiveResize();
+    }, [cancelActiveResize, columnManagerOpen]);
 
     React.useEffect(() => {
         const nextDefaults = lockBoundaryColumns([

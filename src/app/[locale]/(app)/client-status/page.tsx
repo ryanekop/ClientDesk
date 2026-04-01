@@ -257,12 +257,15 @@ export default function ClientStatusPage() {
                 ),
                 BASE_CLIENT_STATUS_COLUMNS[BASE_CLIENT_STATUS_COLUMNS.length - 1],
             ]);
-            setColumns(
-                mergeTableColumnPreferences(
+            setColumns((current) => {
+                const nextColumns = mergeTableColumnPreferences(
                     nextColumnDefaults,
                     response.metadata?.tableColumnPreferences || undefined,
-                ),
-            );
+                );
+                return areTableColumnPreferencesEqual(current, nextColumns)
+                    ? current
+                    : nextColumns;
+            });
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -608,11 +611,12 @@ export default function ClientStatusPage() {
         isRefreshing: refreshing,
     }), [currentPage, itemsPerPage, totalItems, loading, refreshing]);
     const handleColumnManagerOpenChange = React.useCallback((nextOpen: boolean) => {
-        if (nextOpen) {
-            cancelActiveResize();
-        }
         setColumnManagerOpen(nextOpen);
-    }, [cancelActiveResize]);
+    }, []);
+    React.useEffect(() => {
+        if (!columnManagerOpen) return;
+        cancelActiveResize();
+    }, [cancelActiveResize, columnManagerOpen]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();
