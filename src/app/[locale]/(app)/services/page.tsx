@@ -139,6 +139,33 @@ function normalizeServiceItemsPerPage(value: unknown) {
     : SERVICE_DEFAULT_ITEMS_PER_PAGE;
 }
 
+function parseRupiahNumber(value: FormDataEntryValue | string | null | undefined) {
+  const raw = typeof value === "string" ? value : String(value || "");
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return 0;
+  const parsed = Number(digits);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(Math.trunc(parsed), 0);
+}
+
+function parseOptionalRupiahNumber(
+  value: FormDataEntryValue | string | null | undefined,
+) {
+  const raw = typeof value === "string" ? value : String(value || "");
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  const parsed = Number(digits);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(Math.trunc(parsed), 0);
+}
+
+function formatRupiahInput(value: string | number | null | undefined) {
+  const raw = typeof value === "number" ? String(value) : String(value || "");
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  return new Intl.NumberFormat("id-ID").format(Number(digits));
+}
+
 function getCityCodesFromFormData(formData: FormData) {
   return Array.from(
     new Set(
@@ -311,7 +338,7 @@ function SortableServiceRow({
                 </span>
               </div>
               {service.description ? (
-                <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                <p className="mt-1 text-xs text-muted-foreground whitespace-pre-line break-words">
                   {service.description}
                 </p>
               ) : null}
@@ -468,7 +495,7 @@ function ServiceCard({
             />
           </div>
           {service.description ? (
-            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+            <p className="mt-1 text-sm text-muted-foreground whitespace-pre-line break-words">
               {service.description}
             </p>
           ) : null}
@@ -642,9 +669,13 @@ export default function ServicesPage() {
   const [addIsAddon, setAddIsAddon] = React.useState(false);
   const [addAffectsSchedule, setAddAffectsSchedule] = React.useState(true);
   const [addColorInput, setAddColorInput] = React.useState("#000000");
+  const [addPriceInput, setAddPriceInput] = React.useState("");
+  const [addOriginalPriceInput, setAddOriginalPriceInput] = React.useState("");
   const [editIsAddon, setEditIsAddon] = React.useState(false);
   const [editAffectsSchedule, setEditAffectsSchedule] = React.useState(true);
   const [editColorInput, setEditColorInput] = React.useState("#000000");
+  const [editPriceInput, setEditPriceInput] = React.useState("");
+  const [editOriginalPriceInput, setEditOriginalPriceInput] = React.useState("");
   const [mainPage, setMainPage] = React.useState(1);
   const [addonPage, setAddonPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(
@@ -1052,6 +1083,8 @@ export default function ServicesPage() {
       setAddAffectsSchedule(true);
       setAddCityCodes([]);
       setAddColorInput(profileBrandColor);
+      setAddPriceInput("");
+      setAddOriginalPriceInput("");
     }
   }, [isAddOpen, profileBrandColor]);
 
@@ -1099,6 +1132,10 @@ export default function ServicesPage() {
       const isPublic = formData.get("is_public") === "on";
       const affectsSchedule = !isAddon || formData.get("affects_schedule") === "on";
       const cityCodes = getCityCodesFromFormData(formData);
+      const price = parseRupiahNumber(formData.get("price"));
+      const originalPrice = parseOptionalRupiahNumber(
+        formData.get("original_price"),
+      );
       const { count } = await supabase
         .from("services")
         .select("id", { count: "exact", head: true })
@@ -1117,8 +1154,8 @@ export default function ServicesPage() {
             profileBrandColor,
             "#000000",
           ),
-          price: parseFloat(formData.get("price") as string) || 0,
-          original_price: parseFloat(formData.get("original_price") as string) || null,
+          price,
+          original_price: originalPrice,
           duration_minutes:
             parseInt((formData.get("duration_hours") as string) || "0", 10) * 60 +
             parseInt((formData.get("duration_mins") as string) || "0", 10),
@@ -1172,6 +1209,10 @@ export default function ServicesPage() {
       const nextAffectsSchedule =
         !nextIsAddon || formData.get("affects_schedule") === "on";
       const cityCodes = getCityCodesFromFormData(formData);
+      const price = parseRupiahNumber(formData.get("price"));
+      const originalPrice = parseOptionalRupiahNumber(
+        formData.get("original_price"),
+      );
       const previousGroupKey = getServiceGroupKey(editingService);
       const nextGroupKey: ServiceGroupKey = nextIsAddon ? "addon" : "main";
       const nextSortOrder =
@@ -1195,8 +1236,8 @@ export default function ServicesPage() {
             editingService.color,
             profileBrandColor,
           ),
-          price: parseFloat(formData.get("price") as string) || 0,
-          original_price: parseFloat(formData.get("original_price") as string) || null,
+          price,
+          original_price: originalPrice,
           duration_minutes:
             parseInt((formData.get("duration_hours") as string) || "0", 10) * 60 +
             parseInt((formData.get("duration_mins") as string) || "0", 10),
@@ -1290,6 +1331,8 @@ export default function ServicesPage() {
     setEditAffectsSchedule(service.affects_schedule !== false);
     setEditCityCodes(serviceCityCodesByServiceId[service.id] || []);
     setEditColorInput(resolveHexColor(service.color, profileBrandColor));
+    setEditPriceInput(formatRupiahInput(service.price));
+    setEditOriginalPriceInput(formatRupiahInput(service.original_price || ""));
     setIsEditOpen(true);
   }
 
@@ -1573,11 +1616,14 @@ export default function ServicesPage() {
                   <label className="text-sm font-medium">{t("harga")}</label>
                   <input
                     name="price"
-                    type="number"
-                    min="0"
-                    step="1000"
+                    type="text"
+                    inputMode="numeric"
                     required
-                    placeholder="2500000"
+                    value={addPriceInput}
+                    onChange={(event) =>
+                      setAddPriceInput(formatRupiahInput(event.target.value))
+                    }
+                    placeholder="2.500.000"
                     className="placeholder:text-muted-foreground h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 md:text-sm"
                   />
                 </div>
@@ -1590,10 +1636,15 @@ export default function ServicesPage() {
                   </label>
                   <input
                     name="original_price"
-                    type="number"
-                    min="0"
-                    step="1000"
-                    placeholder="3500000"
+                    type="text"
+                    inputMode="numeric"
+                    value={addOriginalPriceInput}
+                    onChange={(event) =>
+                      setAddOriginalPriceInput(
+                        formatRupiahInput(event.target.value),
+                      )
+                    }
+                    placeholder="3.500.000"
                     className="placeholder:text-muted-foreground h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 md:text-sm"
                   />
                 </div>
@@ -2034,6 +2085,8 @@ export default function ServicesPage() {
             setEditAffectsSchedule(true);
             setEditCityCodes([]);
             setEditColorInput(profileBrandColor);
+            setEditPriceInput("");
+            setEditOriginalPriceInput("");
           }
         }}
       >
@@ -2098,11 +2151,13 @@ export default function ServicesPage() {
                 <label className="text-sm font-medium">{t("harga")}</label>
                 <input
                   name="price"
-                  type="number"
-                  min="0"
-                  step="1000"
+                  type="text"
+                  inputMode="numeric"
                   required
-                  defaultValue={editingService.price}
+                  value={editPriceInput}
+                  onChange={(event) =>
+                    setEditPriceInput(formatRupiahInput(event.target.value))
+                  }
                   className="placeholder:text-muted-foreground h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 md:text-sm"
                 />
               </div>
@@ -2115,10 +2170,14 @@ export default function ServicesPage() {
                 </label>
                 <input
                   name="original_price"
-                  type="number"
-                  min="0"
-                  step="1000"
-                  defaultValue={editingService.original_price || ""}
+                  type="text"
+                  inputMode="numeric"
+                  value={editOriginalPriceInput}
+                  onChange={(event) =>
+                    setEditOriginalPriceInput(
+                      formatRupiahInput(event.target.value),
+                    )
+                  }
                   className="placeholder:text-muted-foreground h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 md:text-sm"
                 />
               </div>

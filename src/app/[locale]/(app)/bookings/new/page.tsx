@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2, CheckCircle2, Search } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2, CheckCircle2, Search, List, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -318,6 +318,8 @@ export default function NewBookingPage() {
     const [defaultServiceColor, setDefaultServiceColor] = React.useState("#000000");
     const [packageDialogOpen, setPackageDialogOpen] = React.useState(false);
     const [addonDialogOpen, setAddonDialogOpen] = React.useState(false);
+    const [packageViewMode, setPackageViewMode] = React.useState<"list" | "grid">("list");
+    const [addonViewMode, setAddonViewMode] = React.useState<"list" | "grid">("list");
     const [packageSearchQuery, setPackageSearchQuery] = React.useState("");
     const [addonSearchQuery, setAddonSearchQuery] = React.useState("");
     const [selectedFreelancerIds, setSelectedFreelancerIds] = React.useState<string[]>([]);
@@ -1821,7 +1823,7 @@ export default function NewBookingPage() {
                                                 <div className="min-w-0">
                                                     <p className="text-sm font-medium">{service.name}</p>
                                                     {service.description ? (
-                                                        <p className="text-xs text-muted-foreground">{service.description}</p>
+                                                        <p className="text-xs text-muted-foreground whitespace-pre-line break-words">{service.description}</p>
                                                     ) : null}
                                                 </div>
                                                 <div className="shrink-0 text-right">
@@ -1879,7 +1881,7 @@ export default function NewBookingPage() {
                                                 <div className="min-w-0">
                                                     <p className="font-medium">{addon.name}</p>
                                                     {addon.description ? (
-                                                        <p className="text-[11px] text-muted-foreground truncate">
+                                                        <p className="text-[11px] text-muted-foreground whitespace-pre-line break-words">
                                                             {addon.description}
                                                         </p>
                                                     ) : null}
@@ -2176,21 +2178,58 @@ export default function NewBookingPage() {
                                 className={cn(inputClass, "pl-9")}
                             />
                         </div>
-                        <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+                        <div className="flex items-center justify-end gap-1">
+                            <button
+                                type="button"
+                                onClick={() => setPackageViewMode("list")}
+                                className={cn(
+                                    "inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+                                    packageViewMode === "list"
+                                        ? "border-foreground bg-foreground/5 text-foreground"
+                                        : "border-input text-muted-foreground hover:bg-muted/60",
+                                )}
+                                title="Tampilan baris"
+                                aria-label="Tampilan baris"
+                            >
+                                <List className="h-4 w-4" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPackageViewMode("grid")}
+                                className={cn(
+                                    "inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+                                    packageViewMode === "grid"
+                                        ? "border-foreground bg-foreground/5 text-foreground"
+                                        : "border-input text-muted-foreground hover:bg-muted/60",
+                                )}
+                                title="Tampilan kotak"
+                                aria-label="Tampilan kotak"
+                            >
+                                <LayoutGrid className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div
+                            className={cn(
+                                "max-h-[55vh] overflow-y-auto pr-1",
+                                packageViewMode === "grid"
+                                    ? "grid grid-cols-1 gap-2 sm:grid-cols-2"
+                                    : "space-y-2",
+                            )}
+                        >
                             {isCityScopedEvent && !normalizedSelectedCityCode ? (
-                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                <div className={cn("rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground", packageViewMode === "grid" ? "sm:col-span-2" : "")}>
                                     Pilih kota/kabupaten dulu untuk melihat paket.
                                 </div>
                             ) : !eventType ? (
-                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                <div className={cn("rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground", packageViewMode === "grid" ? "sm:col-span-2" : "")}>
                                     Pilih tipe acara dulu untuk melihat paket.
                                 </div>
                             ) : mainServices.length === 0 ? (
-                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                <div className={cn("rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground", packageViewMode === "grid" ? "sm:col-span-2" : "")}>
                                     Belum ada paket untuk tipe acara ini.
                                 </div>
                             ) : searchedMainServices.length === 0 ? (
-                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                <div className={cn("rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground", packageViewMode === "grid" ? "sm:col-span-2" : "")}>
                                     Tidak ada hasil pencarian paket.
                                 </div>
                             ) : (
@@ -2206,7 +2245,7 @@ export default function NewBookingPage() {
                                             key={service.id}
                                             type="button"
                                             onClick={() => toggleService(service.id)}
-                                            className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer hover:opacity-95 ${selected ? "shadow-sm" : ""}`}
+                                            className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer hover:opacity-95 ${selected ? "shadow-sm" : ""} ${packageViewMode === "grid" ? "h-full" : ""}`}
                                             style={{
                                                 backgroundColor: tone.backgroundColor,
                                                 borderColor: tone.borderColor,
@@ -2227,7 +2266,7 @@ export default function NewBookingPage() {
                                                 <div className="min-w-0">
                                                     <p className="text-sm font-medium">{service.name}</p>
                                                     {service.description ? (
-                                                        <p className="text-[11px] text-muted-foreground">
+                                                        <p className="text-[11px] text-muted-foreground whitespace-pre-line break-words">
                                                             {service.description}
                                                         </p>
                                                     ) : null}
@@ -2276,21 +2315,58 @@ export default function NewBookingPage() {
                                 className={cn(inputClass, "pl-9")}
                             />
                         </div>
-                        <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+                        <div className="flex items-center justify-end gap-1">
+                            <button
+                                type="button"
+                                onClick={() => setAddonViewMode("list")}
+                                className={cn(
+                                    "inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+                                    addonViewMode === "list"
+                                        ? "border-foreground bg-foreground/5 text-foreground"
+                                        : "border-input text-muted-foreground hover:bg-muted/60",
+                                )}
+                                title="Tampilan baris"
+                                aria-label="Tampilan baris"
+                            >
+                                <List className="h-4 w-4" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAddonViewMode("grid")}
+                                className={cn(
+                                    "inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+                                    addonViewMode === "grid"
+                                        ? "border-foreground bg-foreground/5 text-foreground"
+                                        : "border-input text-muted-foreground hover:bg-muted/60",
+                                )}
+                                title="Tampilan kotak"
+                                aria-label="Tampilan kotak"
+                            >
+                                <LayoutGrid className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div
+                            className={cn(
+                                "max-h-[55vh] overflow-y-auto pr-1",
+                                addonViewMode === "grid"
+                                    ? "grid grid-cols-1 gap-2 sm:grid-cols-2"
+                                    : "space-y-2",
+                            )}
+                        >
                             {isCityScopedEvent && !normalizedSelectedCityCode ? (
-                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                <div className={cn("rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground", addonViewMode === "grid" ? "sm:col-span-2" : "")}>
                                     Pilih kota/kabupaten dulu untuk melihat add-on.
                                 </div>
                             ) : !eventType ? (
-                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                <div className={cn("rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground", addonViewMode === "grid" ? "sm:col-span-2" : "")}>
                                     Pilih tipe acara dulu untuk melihat add-on.
                                 </div>
                             ) : addonServices.length === 0 ? (
-                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                <div className={cn("rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground", addonViewMode === "grid" ? "sm:col-span-2" : "")}>
                                     Belum ada add-on untuk tipe acara ini.
                                 </div>
                             ) : searchedAddonServices.length === 0 ? (
-                                <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                                <div className={cn("rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground", addonViewMode === "grid" ? "sm:col-span-2" : "")}>
                                     Tidak ada hasil pencarian add-on.
                                 </div>
                             ) : (
@@ -2306,7 +2382,7 @@ export default function NewBookingPage() {
                                             key={addon.id}
                                             type="button"
                                             onClick={() => toggleAddon(addon.id)}
-                                            className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer hover:opacity-95 ${selected ? "shadow-sm" : ""}`}
+                                            className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer hover:opacity-95 ${selected ? "shadow-sm" : ""} ${addonViewMode === "grid" ? "h-full" : ""}`}
                                             style={{
                                                 backgroundColor: tone.backgroundColor,
                                                 borderColor: tone.borderColor,
@@ -2327,7 +2403,7 @@ export default function NewBookingPage() {
                                                 <div className="min-w-0">
                                                     <p className="text-sm font-medium">{addon.name}</p>
                                                     {addon.description ? (
-                                                        <p className="text-[11px] text-muted-foreground">
+                                                        <p className="text-[11px] text-muted-foreground whitespace-pre-line break-words">
                                                             {addon.description}
                                                         </p>
                                                     ) : null}

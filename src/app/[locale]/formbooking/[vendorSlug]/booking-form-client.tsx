@@ -9,6 +9,8 @@ import {
   MapPin,
   MessageCircle,
   FileText,
+  List,
+  LayoutGrid,
 } from "lucide-react";
 import {
   LocationAutocomplete,
@@ -463,6 +465,8 @@ export function BookingFormClient({
   const [termsViewedOnce, setTermsViewedOnce] = React.useState(false);
   const [packageDialogOpen, setPackageDialogOpen] = React.useState(false);
   const [addonDialogOpen, setAddonDialogOpen] = React.useState(false);
+  const [packageViewMode, setPackageViewMode] = React.useState<"list" | "grid">("list");
+  const [addonViewMode, setAddonViewMode] = React.useState<"list" | "grid">("list");
   const [packageSearchQuery, setPackageSearchQuery] = React.useState("");
   const [addonSearchQuery, setAddonSearchQuery] = React.useState("");
   const [error, setError] = React.useState("");
@@ -2209,7 +2213,7 @@ export function BookingFormClient({
                       <div className="min-w-0">
                         <p className="text-sm font-medium">{service.name}</p>
                         {service.description ? (
-                          <p className="text-xs text-muted-foreground">{service.description}</p>
+                          <p className="text-xs text-muted-foreground whitespace-pre-line break-words">{service.description}</p>
                         ) : null}
                       </div>
                       {!shouldHideServicePrices ? (
@@ -2282,7 +2286,7 @@ export function BookingFormClient({
                       <div className="min-w-0">
                         <p className="font-medium">{addon.name}</p>
                         {addon.description ? (
-                          <p className="text-[11px] text-muted-foreground truncate">
+                          <p className="text-[11px] text-muted-foreground whitespace-pre-line break-words">
                             {addon.description}
                           </p>
                         ) : null}
@@ -2713,17 +2717,51 @@ export function BookingFormClient({
                 placeholder={t("searchPackagePlaceholder")}
                 className={inputClass}
               />
-              <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+              <div className="flex items-center justify-end gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPackageViewMode("list")}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
+                    packageViewMode === "list"
+                      ? "border-foreground bg-foreground/5 text-foreground"
+                      : "border-input text-muted-foreground hover:bg-muted/60"
+                  }`}
+                  title="Tampilan baris"
+                  aria-label="Tampilan baris"
+                >
+                  <List className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPackageViewMode("grid")}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
+                    packageViewMode === "grid"
+                      ? "border-foreground bg-foreground/5 text-foreground"
+                      : "border-input text-muted-foreground hover:bg-muted/60"
+                  }`}
+                  title="Tampilan kotak"
+                  aria-label="Tampilan kotak"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+              </div>
+              <div
+                className={`max-h-[55vh] overflow-y-auto pr-1 ${
+                  packageViewMode === "grid"
+                    ? "grid grid-cols-1 gap-2 sm:grid-cols-2"
+                    : "space-y-2"
+                }`}
+              >
                 {isCityScopedEvent && !normalizedSelectedCityCode ? (
-                  <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                  <div className={`rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground ${packageViewMode === "grid" ? "sm:col-span-2" : ""}`}>
                     Pilih kota/kabupaten dulu untuk melihat paket.
                   </div>
                 ) : filteredServices.length === 0 ? (
-                  <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                  <div className={`rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground ${packageViewMode === "grid" ? "sm:col-span-2" : ""}`}>
                     Belum ada paket untuk tipe acara ini.
                   </div>
                 ) : searchedMainServices.length === 0 ? (
-                  <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                  <div className={`rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground ${packageViewMode === "grid" ? "sm:col-span-2" : ""}`}>
                     {t("noPackageSearchResults")}
                   </div>
                 ) : (
@@ -2739,7 +2777,7 @@ export function BookingFormClient({
                         key={service.id}
                         type="button"
                         onClick={() => handleServiceChange(service.id)}
-                        className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer hover:opacity-95 ${selected ? "shadow-sm" : ""}`}
+                        className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer hover:opacity-95 ${selected ? "shadow-sm" : ""} ${packageViewMode === "grid" ? "h-full" : ""}`}
                         style={{
                           backgroundColor: tone.backgroundColor,
                           borderColor: tone.borderColor,
@@ -2762,7 +2800,7 @@ export function BookingFormClient({
                           <div className="min-w-0">
                             <p className="text-sm font-medium">{service.name}</p>
                             {service.description ? (
-                              <p className="text-[11px] text-muted-foreground">
+                              <p className="text-[11px] text-muted-foreground whitespace-pre-line break-words">
                                 {service.description}
                               </p>
                             ) : null}
@@ -2817,17 +2855,51 @@ export function BookingFormClient({
                 placeholder={t("searchAddonPlaceholder")}
                 className={inputClass}
               />
-              <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+              <div className="flex items-center justify-end gap-1">
+                <button
+                  type="button"
+                  onClick={() => setAddonViewMode("list")}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
+                    addonViewMode === "list"
+                      ? "border-foreground bg-foreground/5 text-foreground"
+                      : "border-input text-muted-foreground hover:bg-muted/60"
+                  }`}
+                  title="Tampilan baris"
+                  aria-label="Tampilan baris"
+                >
+                  <List className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddonViewMode("grid")}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${
+                    addonViewMode === "grid"
+                      ? "border-foreground bg-foreground/5 text-foreground"
+                      : "border-input text-muted-foreground hover:bg-muted/60"
+                  }`}
+                  title="Tampilan kotak"
+                  aria-label="Tampilan kotak"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+              </div>
+              <div
+                className={`max-h-[55vh] overflow-y-auto pr-1 ${
+                  addonViewMode === "grid"
+                    ? "grid grid-cols-1 gap-2 sm:grid-cols-2"
+                    : "space-y-2"
+                }`}
+              >
                 {isCityScopedEvent && !normalizedSelectedCityCode ? (
-                  <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                  <div className={`rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground ${addonViewMode === "grid" ? "sm:col-span-2" : ""}`}>
                     Pilih kota/kabupaten dulu untuk melihat add-on.
                   </div>
                 ) : addonServices.length === 0 ? (
-                  <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                  <div className={`rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground ${addonViewMode === "grid" ? "sm:col-span-2" : ""}`}>
                     Belum ada add-on untuk tipe acara ini.
                   </div>
                 ) : searchedAddonServices.length === 0 ? (
-                  <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
+                  <div className={`rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground ${addonViewMode === "grid" ? "sm:col-span-2" : ""}`}>
                     {t("noAddonSearchResults")}
                   </div>
                 ) : (
@@ -2843,7 +2915,7 @@ export function BookingFormClient({
                         key={addon.id}
                         type="button"
                         onClick={() => handleAddonToggle(addon.id)}
-                        className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer hover:opacity-95 ${selected ? "shadow-sm" : ""}`}
+                        className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer hover:opacity-95 ${selected ? "shadow-sm" : ""} ${addonViewMode === "grid" ? "h-full" : ""}`}
                         style={{
                           backgroundColor: tone.backgroundColor,
                           borderColor: tone.borderColor,
@@ -2866,7 +2938,7 @@ export function BookingFormClient({
                           <div className="min-w-0">
                             <p className="text-sm font-medium">{addon.name}</p>
                             {addon.description ? (
-                              <p className="text-[11px] text-muted-foreground">
+                              <p className="text-[11px] text-muted-foreground whitespace-pre-line break-words">
                                 {addon.description}
                               </p>
                             ) : null}
