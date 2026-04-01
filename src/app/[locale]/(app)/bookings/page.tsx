@@ -1759,6 +1759,7 @@ export default function BookingsPage() {
         isColumnResizable,
         isColumnBeingResized,
         isResizing,
+        cancelActiveResize,
         resetColumnWidths,
     } = useResizableTableColumns({
         menuKey: "bookings",
@@ -1798,6 +1799,12 @@ export default function BookingsPage() {
         },
         [getColumnWidthStyle, getStickyColumnStyle],
     );
+    const handleColumnManagerOpenChange = React.useCallback((nextOpen: boolean) => {
+        if (nextOpen) {
+            cancelActiveResize();
+        }
+        setColumnManagerOpen(nextOpen);
+    }, [cancelActiveResize]);
 
     React.useEffect(() => {
         const nextDefaults = lockBoundaryColumns([
@@ -1935,7 +1942,7 @@ export default function BookingsPage() {
                             description={tb("columnManagerDescription")}
                             columns={columns}
                             open={columnManagerOpen}
-                            onOpenChange={setColumnManagerOpen}
+                            onOpenChange={handleColumnManagerOpenChange}
                             onChange={setColumns}
                             onSave={() => saveColumnPreferences(columns)}
                             onResetWidths={() => handleResetColumnWidths()}

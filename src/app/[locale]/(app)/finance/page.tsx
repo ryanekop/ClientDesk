@@ -656,6 +656,7 @@ export default function FinancePage() {
         isColumnResizable,
         isColumnBeingResized,
         isResizing,
+        cancelActiveResize,
         resetColumnWidths,
     } = useResizableTableColumns({
         menuKey: "finance",
@@ -695,6 +696,12 @@ export default function FinancePage() {
         },
         [getColumnWidthStyle, getStickyColumnStyle],
     );
+    const handleColumnManagerOpenChange = React.useCallback((nextOpen: boolean) => {
+        if (nextOpen) {
+            cancelActiveResize();
+        }
+        setColumnManagerOpen(nextOpen);
+    }, [cancelActiveResize]);
 
     React.useEffect(() => {
         const nextDefaults = lockBoundaryColumns([
@@ -1822,7 +1829,7 @@ export default function FinancePage() {
                             description="Atur kolom yang tampil di tabel keuangan. Kolom Nama dan Aksi selalu tampil, serta lock-nya bisa diaktifkan atau dimatikan."
                             columns={columns}
                             open={columnManagerOpen}
-                            onOpenChange={setColumnManagerOpen}
+                            onOpenChange={handleColumnManagerOpenChange}
                             onChange={setColumns}
                             onSave={() => saveColumnPreferences(columns)}
                             onResetWidths={() => handleResetColumnWidths()}
@@ -1913,7 +1920,7 @@ export default function FinancePage() {
                         type="button"
                         variant="outline"
                         className="w-full gap-2"
-                        onClick={() => setColumnManagerOpen(true)}
+                        onClick={() => handleColumnManagerOpenChange(true)}
                     >
                         <Settings2 className="w-4 h-4" />
                         Kelola Kolom

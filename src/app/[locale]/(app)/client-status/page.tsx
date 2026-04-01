@@ -547,6 +547,7 @@ export default function ClientStatusPage() {
         isColumnResizable,
         isColumnBeingResized,
         isResizing,
+        cancelActiveResize,
         resetColumnWidths,
     } = useResizableTableColumns({
         menuKey: "client_status",
@@ -606,6 +607,12 @@ export default function ClientStatusPage() {
         isLoading: loading,
         isRefreshing: refreshing,
     }), [currentPage, itemsPerPage, totalItems, loading, refreshing]);
+    const handleColumnManagerOpenChange = React.useCallback((nextOpen: boolean) => {
+        if (nextOpen) {
+            cancelActiveResize();
+        }
+        setColumnManagerOpen(nextOpen);
+    }, [cancelActiveResize]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -836,7 +843,7 @@ export default function ClientStatusPage() {
                         description="Atur kolom yang tampil di tabel status booking. Kolom Nama dan Aksi selalu tampil, serta lock-nya bisa diaktifkan atau dimatikan."
                         columns={columns}
                         open={columnManagerOpen}
-                        onOpenChange={setColumnManagerOpen}
+                        onOpenChange={handleColumnManagerOpenChange}
                         onChange={setColumns}
                         onSave={() => saveColumnPreferences(columns)}
                         onResetWidths={() => handleResetColumnWidths()}

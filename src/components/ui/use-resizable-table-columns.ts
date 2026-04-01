@@ -220,6 +220,7 @@ export function useResizableTableColumns({
     (columnId: string, event: React.PointerEvent<HTMLElement>) => {
       if (!isColumnResizable(columnId)) return;
       if (event.pointerType !== "touch" && event.button !== 0) return;
+      const handleElement = event.currentTarget as HTMLElement;
 
       event.preventDefault();
       event.stopPropagation();
@@ -245,7 +246,16 @@ export function useResizableTableColumns({
       setActiveResizeColumnId(columnId);
       const pointerId = event.pointerId;
       activePointerIdRef.current = pointerId;
-      event.currentTarget.setPointerCapture?.(pointerId);
+      if (
+        handleElement?.isConnected &&
+        typeof handleElement.setPointerCapture === "function"
+      ) {
+        try {
+          handleElement.setPointerCapture(pointerId);
+        } catch {
+          // Ignore pointer capture failures; resize still works via window listeners.
+        }
+      }
 
       const handlePointerMove = (moveEvent: PointerEvent) => {
         if (activePointerIdRef.current !== pointerId || moveEvent.pointerId !== pointerId) {
@@ -270,17 +280,27 @@ export function useResizableTableColumns({
           return;
         }
         didCleanup = true;
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", cleanup);
+        window.removeEventListener("pointercancel", cleanup);
+        cleanupResizeRef.current = null;
         activePointerIdRef.current = null;
         document.body.style.cursor = previousCursor;
         document.body.style.userSelect = previousUserSelect;
         setActiveResizeColumnId((current) => (current === columnId ? null : current));
-        cleanupResizeRef.current = null;
-        if (event.currentTarget.hasPointerCapture?.(pointerId)) {
-          event.currentTarget.releasePointerCapture?.(pointerId);
+        if (
+          handleElement?.isConnected &&
+          typeof handleElement.hasPointerCapture === "function" &&
+          typeof handleElement.releasePointerCapture === "function"
+        ) {
+          try {
+            if (handleElement.hasPointerCapture(pointerId)) {
+              handleElement.releasePointerCapture(pointerId);
+            }
+          } catch {
+            // Ignore release failures when node/pointer lifecycle already ended.
+          }
         }
-        window.removeEventListener("pointermove", handlePointerMove);
-        window.removeEventListener("pointerup", cleanup);
-        window.removeEventListener("pointercancel", cleanup);
       };
 
       cleanupResizeRef.current = () => cleanup();
@@ -321,11 +341,13 @@ export function useResizableTableColumns({
     (columnId: string) => activeResizeColumnId === columnId,
     [activeResizeColumnId],
   );
-  const resetColumnWidths = React.useCallback(() => {
+  const cancelActiveResize = React.useCallback(() => {
     cleanupResizeRef.current?.();
-    setActiveResizeColumnId(null);
-    setWidthByColumnId({});
   }, []);
+  const resetColumnWidths = React.useCallback(() => {
+    cancelActiveResize();
+    setWidthByColumnId({});
+  }, [cancelActiveResize]);
 
   return {
     getColumnWidthStyle,
@@ -333,6 +355,7 @@ export function useResizableTableColumns({
     isColumnResizable,
     isColumnBeingResized,
     isResizing: activeResizeColumnId !== null,
+    cancelActiveResize,
     resetColumnWidths,
   };
 }

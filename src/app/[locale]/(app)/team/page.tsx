@@ -605,6 +605,7 @@ export default function TeamPage() {
         isColumnResizable,
         isColumnBeingResized,
         isResizing,
+        cancelActiveResize,
         resetColumnWidths,
     } = useResizableTableColumns({
         menuKey: "team",
@@ -644,6 +645,12 @@ export default function TeamPage() {
         },
         [getColumnWidthStyle, getStickyColumnStyle],
     );
+    const handleColumnManagerOpenChange = React.useCallback((nextOpen: boolean) => {
+        if (nextOpen) {
+            cancelActiveResize();
+        }
+        setColumnManagerOpen(nextOpen);
+    }, [cancelActiveResize]);
     const statusFilterOptions = React.useMemo(
         () =>
             availableStatuses.map((status) => ({
@@ -950,7 +957,7 @@ export default function TeamPage() {
                                 description="Atur kolom yang tampil di tabel tim atau freelance. Kolom Nama dan Aksi selalu tampil, serta lock-nya bisa diaktifkan atau dimatikan."
                                 columns={columns}
                                 open={columnManagerOpen}
-                                onOpenChange={setColumnManagerOpen}
+                                onOpenChange={handleColumnManagerOpenChange}
                                 onChange={setColumns}
                                 onSave={() => saveColumnPreferences(columns)}
                                 onResetWidths={() => handleResetColumnWidths()}
