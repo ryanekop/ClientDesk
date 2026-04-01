@@ -41,6 +41,7 @@
 !supabase_migration_studio_address.sql
 !supabase_migration_city_scopes_and_city_references.sql
 !supabase_migration_service_color.sql
+!supabase_migration_changelog_v165.sql
 *.sh
 
 # debug
