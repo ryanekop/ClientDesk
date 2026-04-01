@@ -672,6 +672,7 @@ export default function SettingsPage() {
   const supabase = createClient();
   const t = useTranslations("Settings");
   const tp = useTranslations("SettingsPage");
+  const currentYear = String(new Date().getFullYear());
   const locale = useLocale();
   const tenant = useTenant();
   const builtInEventTypes = React.useMemo(() => getBuiltInEventTypes(), []);
@@ -3789,7 +3790,9 @@ export default function SettingsPage() {
                         <input
                           value={newDriveSegment}
                           onChange={(e) => setNewDriveSegment(e.target.value)}
-                          placeholder={tp("driveSegmentExamplePlaceholder")}
+                          placeholder={tp("driveSegmentExamplePlaceholder", {
+                            year: currentYear,
+                          })}
                           className={inputClass}
                         />
                         <Button
