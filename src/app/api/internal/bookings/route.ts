@@ -28,6 +28,7 @@ type BookingRow = {
   booking_code: string;
   client_name: string;
   client_whatsapp: string | null;
+  instagram?: string | null;
   booking_date: string | null;
   session_date: string | null;
   status: string;
@@ -50,6 +51,7 @@ type BookingRow = {
   services: {
     id?: string;
     name: string;
+    color?: string | null;
     price?: number;
     duration_minutes?: number | null;
     affects_schedule?: boolean | null;
@@ -79,6 +81,8 @@ type BookingMetadataResponse = {
   queueTriggerStatus?: string;
   dpVerifyTriggerStatus?: string;
   defaultWaTarget?: "client" | "freelancer";
+  bookingTableColorEnabled?: boolean;
+  financeTableColorEnabled?: boolean;
   packages?: string[];
   freelancerNames?: string[];
   availableEventTypes?: string[];
@@ -204,23 +208,26 @@ function readMetadataRows(value: unknown) {
     : [];
 }
 
-type ServiceScheduleMetadata = {
+type ServiceListingMetadata = {
   duration_minutes: number | null;
   affects_schedule: boolean | null;
+  color: string | null;
 };
 
-function hasMissingServiceScheduleMetadata(selection: BookingServiceSelection) {
+function hasMissingServiceListingMetadata(selection: BookingServiceSelection) {
   return (
     selection.service.duration_minutes === null ||
     typeof selection.service.duration_minutes === "undefined" ||
     selection.service.affects_schedule === null ||
-    typeof selection.service.affects_schedule === "undefined"
+    typeof selection.service.affects_schedule === "undefined" ||
+    selection.service.color === null ||
+    typeof selection.service.color === "undefined"
   );
 }
 
-function mergeServiceScheduleMetadata(
+function mergeServiceListingMetadata(
   selection: BookingServiceSelection,
-  serviceMetadataById: Map<string, ServiceScheduleMetadata>,
+  serviceMetadataById: Map<string, ServiceListingMetadata>,
 ) {
   const serviceId = selection.service.id;
   const metadata = serviceId ? serviceMetadataById.get(serviceId) : undefined;
@@ -234,10 +241,15 @@ function mergeServiceScheduleMetadata(
     typeof selection.service.affects_schedule === "boolean"
       ? selection.service.affects_schedule
       : metadata.affects_schedule;
+  const nextColor =
+    typeof selection.service.color === "string" && selection.service.color.trim().length > 0
+      ? selection.service.color
+      : metadata.color;
 
   if (
     nextDuration === selection.service.duration_minutes &&
-    nextAffectsSchedule === selection.service.affects_schedule
+    nextAffectsSchedule === selection.service.affects_schedule &&
+    nextColor === selection.service.color
   ) {
     return selection;
   }
@@ -248,13 +260,14 @@ function mergeServiceScheduleMetadata(
       ...selection.service,
       duration_minutes: nextDuration,
       affects_schedule: nextAffectsSchedule,
+      color: nextColor,
     },
   };
 }
 
-function mergeLegacyServiceScheduleMetadata(
+function mergeLegacyServiceListingMetadata(
   service: BookingRow["services"],
-  serviceMetadataById: Map<string, ServiceScheduleMetadata>,
+  serviceMetadataById: Map<string, ServiceListingMetadata>,
 ) {
   if (!service || !service.id) return service;
   const metadata = serviceMetadataById.get(service.id);
@@ -268,10 +281,15 @@ function mergeLegacyServiceScheduleMetadata(
     typeof service.affects_schedule === "boolean"
       ? service.affects_schedule
       : metadata.affects_schedule;
+  const nextColor =
+    typeof service.color === "string" && service.color.trim().length > 0
+      ? service.color
+      : metadata.color;
 
   if (
     nextDuration === service.duration_minutes &&
-    nextAffectsSchedule === service.affects_schedule
+    nextAffectsSchedule === service.affects_schedule &&
+    nextColor === service.color
   ) {
     return service;
   }
@@ -280,11 +298,12 @@ function mergeLegacyServiceScheduleMetadata(
     ...service,
     duration_minutes: nextDuration,
     affects_schedule: nextAffectsSchedule,
+    color: nextColor,
   };
 }
 
 export async function GET(request: NextRequest) {
-  const { errorResponse, supabase } = await requireRouteUser();
+  const { errorResponse, supabase, user } = await requireRouteUser();
   if (errorResponse) {
     return errorResponse;
   }
@@ -330,7 +349,14 @@ export async function GET(request: NextRequest) {
       p_event_type_filter: singleEventTypeFilter,
     })
     : Promise.resolve({ data: null, error: null });
-  const [initialPageResult, metadataResult] = await Promise.all([
+  const profileSettingsPromise = includeMetadata && user?.id
+    ? supabase
+      .from("profiles")
+      .select("booking_table_color_enabled, finance_table_color_enabled")
+      .eq("id", user.id)
+      .maybeSingle()
+    : Promise.resolve({ data: null, error: null });
+  const [initialPageResult, metadataResult, profileSettingsResult] = await Promise.all([
     supabase.rpc("cd_get_bookings_page", {
       ...basePageRpcArgs,
       p_status_filters: statusFilters,
@@ -341,6 +367,7 @@ export async function GET(request: NextRequest) {
       p_time_zone: timeZone,
     }),
     metadataPromise,
+    profileSettingsPromise,
   ]);
   let pageResult = initialPageResult;
 
@@ -423,30 +450,30 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  const serviceIdsMissingScheduleMetadata = new Set<string>();
+  const serviceIdsMissingListingMetadata = new Set<string>();
   normalizedBookings.forEach((booking) => {
     (booking.service_selections || []).forEach((selection) => {
       if (!selection.service.id) return;
-      if (!hasMissingServiceScheduleMetadata(selection)) return;
-      serviceIdsMissingScheduleMetadata.add(selection.service.id);
+      if (!hasMissingServiceListingMetadata(selection)) return;
+      serviceIdsMissingListingMetadata.add(selection.service.id);
     });
   });
 
   let bookings = normalizedBookings;
 
-  if (serviceIdsMissingScheduleMetadata.size > 0) {
+  if (serviceIdsMissingListingMetadata.size > 0) {
     const { data: serviceRows, error: serviceRowsError } = await supabase
       .from("services")
-      .select("id, duration_minutes, affects_schedule")
-      .in("id", Array.from(serviceIdsMissingScheduleMetadata));
+      .select("id, duration_minutes, affects_schedule, color")
+      .in("id", Array.from(serviceIdsMissingListingMetadata));
 
     if (serviceRowsError) {
       console.error(
-        "Failed to enrich booking service schedule metadata:",
+        "Failed to enrich booking service listing metadata:",
         serviceRowsError.message,
       );
     } else {
-      const serviceMetadataById = new Map<string, ServiceScheduleMetadata>();
+      const serviceMetadataById = new Map<string, ServiceListingMetadata>();
       (serviceRows || []).forEach((item) => {
         if (!item || typeof item.id !== "string") return;
         serviceMetadataById.set(item.id, {
@@ -458,21 +485,33 @@ export async function GET(request: NextRequest) {
             typeof item.affects_schedule === "boolean"
               ? item.affects_schedule
               : null,
+          color: typeof item.color === "string" ? item.color : null,
         });
       });
 
       bookings = normalizedBookings.map((booking) => ({
         ...booking,
-        services: mergeLegacyServiceScheduleMetadata(
+        services: mergeLegacyServiceListingMetadata(
           booking.services,
           serviceMetadataById,
         ),
         service_selections: (booking.service_selections || []).map((selection) =>
-          mergeServiceScheduleMetadata(selection, serviceMetadataById),
+          mergeServiceListingMetadata(selection, serviceMetadataById),
         ),
       }));
     }
   }
+
+  if (includeMetadata && profileSettingsResult.error) {
+    console.warn(
+      "[Bookings API] Failed to load booking color settings from profile:",
+      profileSettingsResult.error.message,
+    );
+  }
+  const bookingTableColorEnabled =
+    profileSettingsResult.data?.booking_table_color_enabled === true;
+  const financeTableColorEnabled =
+    profileSettingsResult.data?.finance_table_color_enabled === true;
 
   return NextResponse.json({
     items: bookings,
@@ -493,6 +532,8 @@ export async function GET(request: NextRequest) {
               : "",
           defaultWaTarget:
             metadataData?.defaultWaTarget === "freelancer" ? "freelancer" : "client",
+          bookingTableColorEnabled,
+          financeTableColorEnabled,
           packages: readStringArray(metadataData?.packages),
           freelancerNames: readStringArray(metadataData?.freelancerNames),
           availableEventTypes: readStringArray(metadataData?.availableEventTypes),

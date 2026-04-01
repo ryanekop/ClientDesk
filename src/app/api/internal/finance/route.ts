@@ -22,6 +22,7 @@ type BookingFinance = {
   booking_code: string;
   client_name: string;
   client_whatsapp: string | null;
+  instagram?: string | null;
   total_price: number;
   dp_paid: number;
   dp_verified_amount: number;
@@ -47,7 +48,13 @@ type BookingFinance = {
   final_payment_proof_url: string | null;
   final_payment_proof_drive_file_id: string | null;
   extra_fields?: Record<string, unknown> | null;
-  services: { id?: string; name: string; price: number; is_addon?: boolean | null } | null;
+  services: {
+    id?: string;
+    name: string;
+    color?: string | null;
+    price: number;
+    is_addon?: boolean | null;
+  } | null;
   booking_services?: unknown[];
   service_selections?: BookingServiceSelection[];
   service_label?: string;
@@ -69,6 +76,8 @@ type FinanceMetadataResponse = {
     event_type?: string | null;
     extra_fields?: Record<string, unknown> | null;
   }>;
+  bookingTableColorEnabled?: boolean;
+  financeTableColorEnabled?: boolean;
   summary?: {
     totalRevenue?: number;
     totalPending?: number;
@@ -203,6 +212,61 @@ function readSummary(value: unknown) {
   };
 }
 
+type ServiceColorMetadata = {
+  color: string | null;
+};
+
+function hasMissingServiceColor(selection: BookingServiceSelection) {
+  return (
+    selection.service.color === null ||
+    typeof selection.service.color === "undefined" ||
+    selection.service.color.trim().length === 0
+  );
+}
+
+function mergeServiceColorSelection(
+  selection: BookingServiceSelection,
+  serviceMetadataById: Map<string, ServiceColorMetadata>,
+) {
+  const serviceId = selection.service.id;
+  const metadata = serviceId ? serviceMetadataById.get(serviceId) : undefined;
+  if (!metadata) return selection;
+
+  const nextColor =
+    typeof selection.service.color === "string" && selection.service.color.trim().length > 0
+      ? selection.service.color
+      : metadata.color;
+  if (nextColor === selection.service.color) return selection;
+
+  return {
+    ...selection,
+    service: {
+      ...selection.service,
+      color: nextColor,
+    },
+  };
+}
+
+function mergeLegacyServiceColor(
+  service: BookingFinance["services"],
+  serviceMetadataById: Map<string, ServiceColorMetadata>,
+) {
+  if (!service || !service.id) return service;
+  const metadata = serviceMetadataById.get(service.id);
+  if (!metadata) return service;
+
+  const nextColor =
+    typeof service.color === "string" && service.color.trim().length > 0
+      ? service.color
+      : metadata.color;
+  if (nextColor === service.color) return service;
+
+  return {
+    ...service,
+    color: nextColor,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const { errorResponse, supabase, user } = await requireRouteUser();
   if (errorResponse) {
@@ -256,9 +320,17 @@ export async function GET(request: NextRequest) {
   const metadataPromise = includeMetadata
     ? supabase.rpc("cd_get_finance_metadata")
     : Promise.resolve({ data: null, error: null });
-  const [initialPageResult, metadataResult] = await Promise.all([
+  const profileSettingsPromise = includeMetadata && user?.id
+    ? supabase
+      .from("profiles")
+      .select("booking_table_color_enabled, finance_table_color_enabled")
+      .eq("id", user.id)
+      .maybeSingle()
+    : Promise.resolve({ data: null, error: null });
+  const [initialPageResult, metadataResult, profileSettingsResult] = await Promise.all([
     supabase.rpc("cd_get_finance_page", pageRpcArgs),
     metadataPromise,
+    profileSettingsPromise,
   ]);
   let pageResult = initialPageResult;
 
@@ -323,7 +395,7 @@ export async function GET(request: NextRequest) {
       : getBookingStatusOptions(DEFAULT_CLIENT_STATUSES);
   const fallbackInitialStatus = resolvedBookingStatusOptions[0] || "Pending";
 
-  const bookings = (Array.isArray(pageData?.items) ? pageData.items : []).map((booking) => {
+  const normalizedBookings = (Array.isArray(pageData?.items) ? pageData.items : []).map((booking) => {
     const legacyService = normalizeLegacyServiceRecord(booking.services);
     const serviceSelections = normalizeBookingServiceSelections(
       booking.booking_services,
@@ -353,6 +425,58 @@ export async function GET(request: NextRequest) {
     };
   });
 
+  const serviceIdsMissingColor = new Set<string>();
+  normalizedBookings.forEach((booking) => {
+    (booking.service_selections || []).forEach((selection) => {
+      if (!selection.service.id) return;
+      if (!hasMissingServiceColor(selection)) return;
+      serviceIdsMissingColor.add(selection.service.id);
+    });
+  });
+
+  let bookings = normalizedBookings;
+
+  if (serviceIdsMissingColor.size > 0) {
+    const { data: serviceRows, error: serviceRowsError } = await supabase
+      .from("services")
+      .select("id, color")
+      .in("id", Array.from(serviceIdsMissingColor));
+
+    if (serviceRowsError) {
+      console.error(
+        "[Finance API] Failed to enrich service colors:",
+        serviceRowsError.message,
+      );
+    } else {
+      const serviceMetadataById = new Map<string, ServiceColorMetadata>();
+      (serviceRows || []).forEach((item) => {
+        if (!item || typeof item.id !== "string") return;
+        serviceMetadataById.set(item.id, {
+          color: typeof item.color === "string" ? item.color : null,
+        });
+      });
+
+      bookings = normalizedBookings.map((booking) => ({
+        ...booking,
+        services: mergeLegacyServiceColor(booking.services, serviceMetadataById),
+        service_selections: (booking.service_selections || []).map((selection) =>
+          mergeServiceColorSelection(selection, serviceMetadataById),
+        ),
+      }));
+    }
+  }
+
+  if (includeMetadata && profileSettingsResult.error) {
+    console.warn(
+      "[Finance API] Failed to load table color settings from profile:",
+      profileSettingsResult.error.message,
+    );
+  }
+  const bookingTableColorEnabled =
+    profileSettingsResult.data?.booking_table_color_enabled === true;
+  const financeTableColorEnabled =
+    profileSettingsResult.data?.finance_table_color_enabled === true;
+
   return NextResponse.json({
     items: bookings,
     totalItems: Number(pageData?.totalItems) || 0,
@@ -371,6 +495,8 @@ export async function GET(request: NextRequest) {
               ? metadataData.formSectionsByEventType
               : {},
           metadataRows: readMetadataRows(metadataData?.metadataRows),
+          bookingTableColorEnabled,
+          financeTableColorEnabled,
           summary: readSummary(metadataData?.summary),
         },
       }

@@ -1343,6 +1343,7 @@ export async function POST(request: NextRequest) {
                         }),
                         clientName: normalizedClientName,
                         clientWhatsapp: normalizedClientWhatsapp || null,
+                        instagram: instagram || null,
                         sessionDate: resolvedSessionDate || null,
                         location: location ?? null,
                         locationLat: normalizedLocationLat,

@@ -20,6 +20,7 @@ import {
   type GoogleCalendarDateTime,
 } from "@/utils/google/template";
 import { deleteCalendarEvent, upsertCalendarEvent } from "@/utils/google/calendar";
+import { buildInstagramTemplateVars } from "@/utils/instagram-template-vars";
 import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
 import { resolveBookingTemplateMode } from "@/lib/booking-template-mode";
 
@@ -39,6 +40,7 @@ type CalendarBookingConfig = {
   bookingDetailLink?: string | null;
   clientName: string;
   clientWhatsapp?: string | null;
+  instagram?: string | null;
   freelancerNames?: string[] | null;
   sessionDate: string | null;
   location?: string | null;
@@ -127,6 +129,7 @@ export async function syncBookingCalendarEvent({
   const freelanceLabel = formatBookingFreelancerNames(
     Array.isArray(booking.freelancerNames) ? booking.freelancerNames : [],
   );
+  const instagramVars = buildInstagramTemplateVars(booking.instagram);
 
   for (let index = 0; index < sessions.length; index++) {
     const session = sessions[index];
@@ -147,6 +150,7 @@ export async function syncBookingCalendarEvent({
       {
         client_name: booking.clientName,
         client_whatsapp: booking.clientWhatsapp || "-",
+        ...instagramVars,
         freelance: freelanceLabel,
         service_name: serviceName,
         event_type: booking.eventType || "-",

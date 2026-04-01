@@ -69,6 +69,7 @@ import {
   resolvePreferredLocation,
   type LocationCoordinates,
 } from "@/utils/location";
+import { buildInstagramTemplateVars } from "@/utils/instagram-template-vars";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
 import {
   SPECIAL_LINK_EXPIRED_ERROR_CODE,
@@ -1259,6 +1260,7 @@ export function BookingFormClient({
         ? fillWhatsAppTemplate(resultData.bookingConfirmTemplate || "", {
             client_name: clientName || "-",
             client_whatsapp: clientWhatsapp,
+            ...buildInstagramTemplateVars(instagram),
             booking_code: resultData.bookingCode || "-",
             session_date: dateStr,
             service_name: svcName,

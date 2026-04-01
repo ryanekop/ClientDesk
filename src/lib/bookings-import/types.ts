@@ -89,6 +89,8 @@ export type NormalizedImportRow = {
   rawExternalImportId: string;
   externalImportId: string;
   clientName: string;
+  clientWhatsapp: string | null;
+  instagram: string | null;
   eventType: string;
   status: string;
   sessionDate: string | null;

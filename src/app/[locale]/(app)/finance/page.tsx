@@ -78,12 +78,14 @@ import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
 import { buildBookingWhatsAppTemplateVars } from "@/lib/booking-whatsapp-template-vars";
 import { useMoneyVisibility } from "@/hooks/use-money-visibility";
+import { normalizeHexColor, withAlpha } from "@/lib/service-colors";
 
 type BookingFinance = {
     id: string;
     booking_code: string;
     client_name: string;
     client_whatsapp: string | null;
+    instagram?: string | null;
     total_price: number;
     dp_paid: number;
     dp_verified_amount: number;
@@ -174,6 +176,8 @@ type FinancePageMetadata = {
     bookingStatusOptions: string[];
     packageOptions: string[];
     availableEventTypes: string[];
+    bookingTableColorEnabled: boolean;
+    financeTableColorEnabled: boolean;
     tableColumnPreferences: TableColumnPreference[] | null;
     formSectionsByEventType: Record<string, FormLayoutItem[]>;
     metadataRows: Array<{
@@ -262,6 +266,15 @@ function arraysAreEqual(a: string[], b: string[]) {
     return a.every((value, index) => value === b[index]);
 }
 
+function getPrimaryMainServiceColor(
+    serviceSelections?: BookingServiceSelection[],
+) {
+    const mainSelection = (serviceSelections || []).find(
+        (selection) => selection.kind === "main",
+    );
+    return normalizeHexColor(mainSelection?.service?.color);
+}
+
 export default function FinancePage() {
     const supabase = createClient();
     const t = useTranslations("Finance");
@@ -286,6 +299,7 @@ export default function FinancePage() {
     const [bookingStatusOptions, setBookingStatusOptions] = React.useState<string[]>(
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
     );
+    const [financeTableColorEnabled, setFinanceTableColorEnabled] = React.useState(false);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
@@ -480,6 +494,7 @@ export default function FinancePage() {
                 setBookingStatusOptions(metadata.bookingStatusOptions || getBookingStatusOptions(DEFAULT_CLIENT_STATUSES));
                 setPackageOptions(metadata.packageOptions || []);
                 setAvailableEventTypes(metadata.availableEventTypes || []);
+                setFinanceTableColorEnabled(metadata.financeTableColorEnabled === true);
                 setStudioName(metadata.studioName || "");
                 setFormSectionsByEventType(metadata.formSectionsByEventType || {});
                 setMetadataRows(metadata.metadataRows || []);
@@ -1017,6 +1032,7 @@ export default function FinancePage() {
                 booking: {
                     client_name: booking.client_name,
                     client_whatsapp: booking.client_whatsapp || "-",
+                    instagram: booking.instagram || null,
                     booking_code: booking.booking_code,
                     session_date: booking.session_date,
                     total_price: booking.total_price,
@@ -1066,6 +1082,7 @@ export default function FinancePage() {
                 booking: {
                     client_name: booking.client_name,
                     client_whatsapp: booking.client_whatsapp || "-",
+                    instagram: booking.instagram || null,
                     booking_code: booking.booking_code,
                     session_date: booking.session_date,
                     total_price: booking.total_price,
@@ -2158,8 +2175,21 @@ export default function FinancePage() {
                     const packagePrice = getPackagePrice(b, initialBreakdown);
                     const addonTotal = getAddonTotal(b, initialBreakdown);
                     const discountAmount = getDiscountAmount(b, initialBreakdown);
+                    const serviceColor = financeTableColorEnabled
+                        ? getPrimaryMainServiceColor(b.service_selections)
+                        : null;
+                    const mobileCardStyle = serviceColor
+                        ? ({
+                            backgroundColor: withAlpha(serviceColor, 0.095),
+                            borderColor: withAlpha(serviceColor, 0.34),
+                        } as React.CSSProperties)
+                        : undefined;
                     return (
-                        <div key={b.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+                        <div
+                            key={b.id}
+                            className="rounded-xl border bg-card shadow-sm p-4 space-y-3"
+                            style={mobileCardStyle}
+                        >
                             <div className="flex items-start justify-between">
                                 <div>
                                     <p className="font-semibold">{b.client_name}</p>
@@ -2374,10 +2404,27 @@ export default function FinancePage() {
                                     const packagePrice = getPackagePrice(b, initialBreakdown);
                                     const addonTotal = getAddonTotal(b, initialBreakdown);
                                     const discountAmount = getDiscountAmount(b, initialBreakdown);
+                                    const serviceColor = financeTableColorEnabled
+                                        ? getPrimaryMainServiceColor(b.service_selections)
+                                        : null;
                                     const rowNumber =
                                         (currentPage - 1) * itemsPerPage + rowIndex + 1;
                                     return (
-                                        <tr key={b.id} className="group hover:bg-muted/60 dark:hover:bg-white/12 transition-colors">
+                                        <tr
+                                            key={b.id}
+                                            className={
+                                                serviceColor
+                                                    ? "group transition-colors"
+                                                    : "group hover:bg-muted/60 dark:hover:bg-white/12 transition-colors"
+                                            }
+                                            style={
+                                                serviceColor
+                                                    ? ({
+                                                        backgroundColor: withAlpha(serviceColor, 0.075),
+                                                    } as React.CSSProperties)
+                                                    : undefined
+                                            }
+                                        >
                                             {orderedVisibleColumns.map((column) =>
                                                 renderDesktopCell(
                                                     b,

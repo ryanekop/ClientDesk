@@ -43,6 +43,7 @@ type BookingData = {
   trackingUuid: string | null;
   clientName: string;
   clientWhatsapp: string | null;
+  instagram: string | null;
   sessionDate: string | null;
   eventType: string | null;
   totalPrice: number;
@@ -406,6 +407,7 @@ export default function SettlementClient({
         booking: {
           client_name: booking.clientName,
           client_whatsapp: booking.clientWhatsapp || "-",
+          instagram: booking.instagram,
           booking_code: booking.bookingCode,
           session_date: booking.sessionDate,
           event_type: booking.eventType,

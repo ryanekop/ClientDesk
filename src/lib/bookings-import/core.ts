@@ -37,6 +37,8 @@ export const IMPORT_MAX_ROWS = 500;
 export const IMPORT_COLUMNS = {
   externalImportId: "external_import_id",
   clientName: "client_name",
+  clientWhatsapp: "client_whatsapp",
+  instagram: "instagram",
   eventType: "event_type",
   mainServices: "main_services",
   mainServiceIds: "main_service_ids",
@@ -220,6 +222,8 @@ function normalizeEventTypeInput(value: unknown, eventTypes: string[]): string |
 function getTemplateHeaders(context: ImportContext): string[] {
   const baseHeaders = [
     IMPORT_COLUMNS.clientName,
+    IMPORT_COLUMNS.clientWhatsapp,
+    IMPORT_COLUMNS.instagram,
     IMPORT_COLUMNS.eventType,
     IMPORT_COLUMNS.mainServices,
     IMPORT_COLUMNS.mainServiceIds,
@@ -320,6 +324,8 @@ function buildTemplateSampleRows(
   const row1 = {
     ...baseRow,
     [IMPORT_COLUMNS.clientName]: "CONTOH - Nama Klien Reguler",
+    [IMPORT_COLUMNS.clientWhatsapp]: "081234567890",
+    [IMPORT_COLUMNS.instagram]: "@klien.reguler",
     [IMPORT_COLUMNS.eventType]: nonWeddingEventType,
     [IMPORT_COLUMNS.mainServices]: nonWeddingMainService?.name || "",
     [IMPORT_COLUMNS.mainServiceIds]: "",
@@ -364,6 +370,8 @@ function buildTemplateSampleRows(
     const row2 = {
       ...baseRow,
       [IMPORT_COLUMNS.clientName]: "CONTOH - Nama Klien Wedding",
+      [IMPORT_COLUMNS.clientWhatsapp]: "081298765432",
+      [IMPORT_COLUMNS.instagram]: "@klien.wedding",
       [IMPORT_COLUMNS.eventType]: weddingEventType,
       [IMPORT_COLUMNS.mainServices]: weddingMainService?.name || "",
       [IMPORT_COLUMNS.mainServiceIds]: "",
@@ -409,6 +417,8 @@ function buildTemplateSampleRows(
     const row3 = {
       ...baseRow,
       [IMPORT_COLUMNS.clientName]: "CONTOH - Nama Klien Wisuda Split",
+      [IMPORT_COLUMNS.clientWhatsapp]: "081377788899",
+      [IMPORT_COLUMNS.instagram]: "@klien.wisuda",
       [IMPORT_COLUMNS.eventType]: wisudaEventType,
       [IMPORT_COLUMNS.mainServices]: wisudaMainService?.name || "",
       [IMPORT_COLUMNS.mainServiceIds]: "",
@@ -829,16 +839,17 @@ export function buildTemplateWorkbookBuffer(context: ImportContext): Buffer {
   const guideRows = [
     ["Batch Import Excel v2 - Guide"],
     ["1. Wajib isi: client_name, event_type, dp_paid, dan salah satu main_services/main_service_ids."],
-    ["2. Date format: YYYY-MM-DD atau YYYY-MM-DDTHH:mm (timezone Asia/Jakarta)."],
-    ["3. Untuk Wedding: isi session_date ATAU isi lengkap akad_date + resepsi_date."],
-    ["4. Untuk Wisuda: isi session_date ATAU isi lengkap wisuda_session_1_date + wisuda_session_2_date."],
-    ["5. Gunakan pemisah | atau koma untuk multi-value (services/addons/freelancers)."],
-    ["6. Mapping Name + ID fallback: isi nama untuk mudah dibaca, pakai ID bila ada nama ganda."],
-    ["7. Kolom dynamic: extra.<key> untuk built-in extra fields, cf.<id> untuk custom fields."],
-    ["8. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
-    ["9. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
-    ["10. Batas maksimum 500 baris per file .xlsx."],
-    ["11. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
+    ["2. Kolom opsional: client_whatsapp, instagram (boleh kosong)."],
+    ["3. Date format: YYYY-MM-DD atau YYYY-MM-DDTHH:mm (timezone Asia/Jakarta)."],
+    ["4. Untuk Wedding: isi session_date ATAU isi lengkap akad_date + resepsi_date."],
+    ["5. Untuk Wisuda: isi session_date ATAU isi lengkap wisuda_session_1_date + wisuda_session_2_date."],
+    ["6. Gunakan pemisah | atau koma untuk multi-value (services/addons/freelancers)."],
+    ["7. Mapping Name + ID fallback: isi nama untuk mudah dibaca, pakai ID bila ada nama ganda."],
+    ["8. Kolom dynamic: extra.<key> untuk built-in extra fields, cf.<id> untuk custom fields."],
+    ["9. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
+    ["10. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
+    ["11. Batas maksimum 500 baris per file .xlsx."],
+    ["12. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
   ];
   const guideSheet = XLSX.utils.aoa_to_sheet(guideRows);
   guideSheet["!cols"] = [{ wch: 140 }];
@@ -1155,6 +1166,8 @@ function buildEmptyNormalizedRow(rowNumber: number): NormalizedImportRow {
     rawExternalImportId: "",
     externalImportId: "",
     clientName: "",
+    clientWhatsapp: null,
+    instagram: null,
     eventType: "",
     status: "",
     sessionDate: null,
@@ -1285,6 +1298,10 @@ function validateOneRow(input: {
   if (!normalized.clientName) {
     pushIssue(normalized, "error", "client_name wajib diisi.");
   }
+  normalized.clientWhatsapp = normalizeNullableText(
+    input.row[IMPORT_COLUMNS.clientWhatsapp],
+  );
+  normalized.instagram = normalizeNullableText(input.row[IMPORT_COLUMNS.instagram]);
 
   const resolvedEventType = normalizeEventTypeInput(
     input.row[IMPORT_COLUMNS.eventType],

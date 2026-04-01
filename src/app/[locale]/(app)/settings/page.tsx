@@ -135,6 +135,9 @@ type Profile = {
   dp_verify_trigger_status?: string | null;
   final_invoice_visible_from_status?: string | null;
   tracking_file_links_visible_from_status?: string | null;
+  default_wa_target?: "client" | "freelancer" | null;
+  booking_table_color_enabled?: boolean | null;
+  finance_table_color_enabled?: boolean | null;
   form_event_types?: string[] | null;
   custom_event_types?: string[] | null;
   drive_folder_structure_map?: Record<string, string[]> | null;
@@ -315,6 +318,8 @@ const WISUDA_SPLIT_WHATSAPP_HINTS = [
 const variableHints: Record<string, string[]> = {
   whatsapp_client: [
     "{{client_name}}",
+    "{{instagram}}",
+    "{{instagram_link}}",
     "{{booking_code}}",
     "{{session_date}}",
     ...BOOKING_WHATSAPP_TIME_VARIABLES,
@@ -332,6 +337,8 @@ const variableHints: Record<string, string[]> = {
   ],
   whatsapp_booking_confirm: [
     "{{client_name}}",
+    "{{instagram}}",
+    "{{instagram_link}}",
     "{{booking_code}}",
     "{{session_date}}",
     "{{service_name}}",
@@ -344,6 +351,8 @@ const variableHints: Record<string, string[]> = {
   ],
   whatsapp_settlement_client: [
     "{{client_name}}",
+    "{{instagram}}",
+    "{{instagram_link}}",
     "{{booking_code}}",
     "{{session_date}}",
     "{{service_name}}",
@@ -361,6 +370,8 @@ const variableHints: Record<string, string[]> = {
   ],
   whatsapp_settlement_confirm: [
     "{{client_name}}",
+    "{{instagram}}",
+    "{{instagram_link}}",
     "{{booking_code}}",
     "{{service_name}}",
     "{{session_date}}",
@@ -374,6 +385,8 @@ const variableHints: Record<string, string[]> = {
   whatsapp_freelancer: [
     "{{freelancer_name}}",
     "{{client_name}}",
+    "{{instagram}}",
+    "{{instagram_link}}",
     "{{client_whatsapp}}",
     "{{booking_code}}",
     "{{session_date}}",
@@ -477,6 +490,8 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "queue_trigger_status",
   "dp_verify_trigger_status",
   "default_wa_target",
+  "booking_table_color_enabled",
+  "finance_table_color_enabled",
   "final_invoice_visible_from_status",
   "tracking_file_links_visible_from_status",
   "form_event_types",
@@ -808,6 +823,10 @@ export default function SettingsPage() {
   const [defaultWaTarget, setDefaultWaTarget] = React.useState<
     "client" | "freelancer"
   >("client");
+  const [bookingTableColorEnabled, setBookingTableColorEnabled] =
+    React.useState(false);
+  const [financeTableColorEnabled, setFinanceTableColorEnabled] =
+    React.useState(false);
 
   // Calendar event format
   const [calendarEventFormats, setCalendarEventFormats] = React.useState<
@@ -1393,6 +1412,12 @@ export default function SettingsPage() {
     if ((prof as any)?.default_wa_target) {
       setDefaultWaTarget((prof as any).default_wa_target);
     }
+    setBookingTableColorEnabled(
+      Boolean((prof as any)?.booking_table_color_enabled),
+    );
+    setFinanceTableColorEnabled(
+      Boolean((prof as any)?.finance_table_color_enabled),
+    );
     const savedWa = prof?.whatsapp_number || "";
     const matchedCode = COUNTRY_CODES.find((c) => savedWa.startsWith(c.code));
     if (matchedCode) {
@@ -1664,7 +1689,6 @@ export default function SettingsPage() {
         studio_address: studioAddress.trim() ? studioAddress.trim() : null,
         whatsapp_number: waNumber ? `${countryCode}${waNumber}` : null,
         vendor_slug: slug || null,
-        default_wa_target: defaultWaTarget,
       });
 
       setVendorSlug(slug);
@@ -1674,6 +1698,29 @@ export default function SettingsPage() {
       void fetchAll(true);
     } catch (error) {
       console.error("Settings save error:", error);
+      setSavedMsg(tp("failedSave"));
+      setTimeout(() => setSavedMsg(""), 3000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveBookingListSettings() {
+    if (!profile) return;
+    setSaving(true);
+
+    try {
+      await saveProfilePatch({
+        default_wa_target: defaultWaTarget,
+        booking_table_color_enabled: bookingTableColorEnabled,
+        finance_table_color_enabled: financeTableColorEnabled,
+      });
+      setSavedMsg(settingsSavedMessage);
+      showSettingsSavedToast();
+      setTimeout(() => setSavedMsg(""), 3000);
+      void fetchAll(true);
+    } catch (error) {
+      console.error("Booking list settings save error:", error);
       setSavedMsg(tp("failedSave"));
       setTimeout(() => setSavedMsg(""), 3000);
     } finally {
@@ -2398,6 +2445,7 @@ export default function SettingsPage() {
   const tabs = [
     { key: "umum", label: tp("tabGeneral") },
     { key: "template", label: tp("tabTemplates") },
+    { key: "daftar-booking", label: tp("tabBookingList") },
     { key: "status", label: tp("tabStatus") },
     { key: "jenis-acara", label: tp("tabEventTypes") },
     { key: "google", label: tp("tabGoogle") },
@@ -2449,6 +2497,8 @@ export default function SettingsPage() {
     freelancer_name: "Andi",
     freelance: "Andi, Bima",
     client_whatsapp: "+628123456789",
+    instagram: "@budiwedding",
+    instagram_link: "https://instagram.com/budiwedding",
     event_type: selectedEventType,
     booking_detail_link: "https://clientdesk.ryanekoapp.web.id/id/bookings/booking-id-123",
     day_name: "Rabu",
@@ -2866,7 +2916,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ═══ TAB: Umum ═══ */}
-        {(activeTab === "umum" || activeTab === "google" || activeTab === "fastpik") && (
+        {(activeTab === "umum" || activeTab === "daftar-booking" || activeTab === "google" || activeTab === "fastpik") && (
           <div className="space-y-6">
             {activeTab === "umum" && (
               <>
@@ -3146,36 +3196,90 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* Default WA Target */}
-                <div className="space-y-2 pt-2 border-t">
-                  <label className="text-sm font-medium flex items-center gap-1.5">
-                    <MessageSquare className="w-3.5 h-3.5" />{" "}
-                    {tp("waPrimaryActionLabel")}
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    {tp("waPrimaryActionDesc")}
-                  </p>
-                  <div className="flex rounded-lg border border-input overflow-hidden w-fit">
-                    <button
-                      type="button"
-                      onClick={() => setDefaultWaTarget("client")}
-                      className={`px-4 py-1.5 text-xs font-medium transition-colors cursor-pointer ${defaultWaTarget === "client" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}
-                    >
-                      {tp("waTargetClient")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDefaultWaTarget("freelancer")}
-                      className={`px-4 py-1.5 text-xs font-medium transition-colors cursor-pointer ${defaultWaTarget === "freelancer" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}
-                    >
-                      {tp("waTargetFreelancer")}
-                    </button>
-                  </div>
-                </div>
-
                 </div>
                 </div>
               </>
+            )}
+
+            {activeTab === "daftar-booking" && (
+              <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                <div className="px-6 py-4 border-b">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />{" "}
+                    {tp("bookingListSettingsTitle")}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {tp("bookingListSettingsDesc")}
+                  </p>
+                </div>
+                <div className="p-6 space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-1.5">
+                      <MessageSquare className="w-3.5 h-3.5" />{" "}
+                      {tp("waPrimaryActionLabel")}
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      {tp("waPrimaryActionDesc")}
+                    </p>
+                    <div className="flex rounded-lg border border-input overflow-hidden w-fit">
+                      <button
+                        type="button"
+                        onClick={() => setDefaultWaTarget("client")}
+                        className={`px-4 py-1.5 text-xs font-medium transition-colors cursor-pointer ${defaultWaTarget === "client" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}
+                      >
+                        {tp("waTargetClient")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDefaultWaTarget("freelancer")}
+                        className={`px-4 py-1.5 text-xs font-medium transition-colors cursor-pointer ${defaultWaTarget === "freelancer" ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}
+                      >
+                        {tp("waTargetFreelancer")}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 border-t pt-4">
+                    <label className="flex items-start gap-3 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={bookingTableColorEnabled}
+                        onChange={(event) =>
+                          setBookingTableColorEnabled(event.target.checked)
+                        }
+                        className="mt-0.5 accent-primary"
+                      />
+                      <span>
+                        <span className="font-medium block">
+                          {tp("bookingTableColorToggleLabel")}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {tp("bookingTableColorToggleDesc")}
+                        </span>
+                      </span>
+                    </label>
+
+                    <label className="flex items-start gap-3 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={financeTableColorEnabled}
+                        onChange={(event) =>
+                          setFinanceTableColorEnabled(event.target.checked)
+                        }
+                        className="mt-0.5 accent-primary"
+                      />
+                      <span>
+                        <span className="font-medium block">
+                          {tp("financeTableColorToggleLabel")}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {tp("financeTableColorToggleDesc")}
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             )}
 
             {activeTab === "google" && (
@@ -4029,6 +4133,8 @@ export default function SettingsPage() {
                       ? handleSaveGoogleSettings
                       : activeTab === "fastpik"
                         ? handleSaveFastpikSettings
+                        : activeTab === "daftar-booking"
+                          ? handleSaveBookingListSettings
                         : handleSaveGeneralSettings
                   }
                   className={unifiedSaveButtonClass}

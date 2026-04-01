@@ -1871,6 +1871,7 @@ export default function BookingDetailPage() {
             booking: {
                 client_name: booking.client_name,
                 client_whatsapp: booking.client_whatsapp || "-",
+                instagram: booking.instagram,
                 booking_code: booking.booking_code,
                 session_date: booking.session_date,
                 total_price: booking.total_price,

@@ -3,6 +3,7 @@ export type BookingServiceKind = "main" | "addon";
 export type BookingServiceRecord = {
   id: string;
   name: string;
+  color?: string | null;
   price?: number | null;
   original_price?: number | null;
   description?: string | null;
@@ -24,6 +25,7 @@ export type BookingServiceSelection = {
 type LegacyBookingServiceRecord = {
   id?: string | null;
   name?: string | null;
+  color?: string | null;
   price?: number | null;
   original_price?: number | null;
   description?: string | null;
@@ -88,6 +90,7 @@ export function normalizeLegacyServiceRecord(
   return {
     id: raw.id,
     name: raw.name,
+    color: typeof raw.color === "string" ? raw.color : null,
     price: raw.price ?? null,
     original_price: raw.original_price ?? null,
     description: raw.description ?? null,

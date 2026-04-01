@@ -60,8 +60,8 @@ async function insertOneBooking(
     external_import_id: row.externalImportId,
     client_name: row.clientName,
     event_type: row.eventType,
-    client_whatsapp: null,
-    instagram: null,
+    client_whatsapp: row.clientWhatsapp,
+    instagram: row.instagram,
     session_date: row.sessionDate,
     location: resolvedLocation.location,
     location_lat: resolvedLocation.locationLat,
@@ -233,7 +233,7 @@ async function syncImportedBookings(
   const { data: bookings } = await supabase
     .from("bookings")
     .select(
-      "id, booking_code, client_name, client_whatsapp, session_date, location, location_lat, location_lng, location_detail, notes, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))",
+      "id, booking_code, client_name, client_whatsapp, instagram, session_date, location, location_lat, location_lng, location_detail, notes, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))",
     )
     .eq("user_id", userId)
     .in("id", bookingIds);
@@ -243,6 +243,7 @@ async function syncImportedBookings(
     booking_code: string;
     client_name: string;
     client_whatsapp: string | null;
+    instagram: string | null;
     session_date: string | null;
     location: string | null;
     location_lat: number | null;
@@ -320,6 +321,7 @@ async function syncImportedBookings(
           }),
           clientName: booking.client_name,
           clientWhatsapp: booking.client_whatsapp,
+          instagram: booking.instagram,
           sessionDate: booking.session_date,
           location: booking.location,
           locationLat: booking.location_lat,

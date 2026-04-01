@@ -74,6 +74,7 @@ import {
     buildGoogleMapsQueryUrl,
 } from "@/utils/location";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
+import { normalizeHexColor, withAlpha } from "@/lib/service-colors";
 import {
     isTransitionToCancelled,
     syncGoogleCalendarForStatusTransition,
@@ -93,6 +94,7 @@ type Booking = {
     booking_code: string;
     client_name: string;
     client_whatsapp: string | null;
+    instagram?: string | null;
     booking_date: string | null;
     session_date: string | null;
     status: string;
@@ -207,6 +209,8 @@ type BookingPageMetadata = {
     queueTriggerStatus: string;
     dpVerifyTriggerStatus: string;
     defaultWaTarget: "client" | "freelancer";
+    bookingTableColorEnabled: boolean;
+    financeTableColorEnabled: boolean;
     packages: string[];
     freelancerNames: string[];
     availableEventTypes: string[];
@@ -309,6 +313,15 @@ function parseSortOrderValue(value: unknown): BookingSortOrder {
     return "booking_newest";
 }
 
+function getPrimaryMainServiceColor(
+    serviceSelections?: BookingServiceSelection[],
+) {
+    const mainSelection = (serviceSelections || []).find(
+        (selection) => selection.kind === "main",
+    );
+    return normalizeHexColor(mainSelection?.service?.color);
+}
+
 type SavedTemplate = {
     id: string;
     type: string;
@@ -387,6 +400,7 @@ export default function BookingsPage() {
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
     const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
     const [defaultWaTarget, setDefaultWaTarget] = React.useState<"client" | "freelancer">("client");
+    const [bookingTableColorEnabled, setBookingTableColorEnabled] = React.useState(false);
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_BOOKING_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
@@ -632,6 +646,7 @@ export default function BookingsPage() {
                 setQueueTriggerStatus(metadata.queueTriggerStatus || "Antrian Edit");
                 setDpVerifyTriggerStatus(metadata.dpVerifyTriggerStatus || "");
                 setDefaultWaTarget(metadata.defaultWaTarget || "client");
+                setBookingTableColorEnabled(metadata.bookingTableColorEnabled === true);
                 setPackages(metadata.packages || []);
                 setFreelancerNames(metadata.freelancerNames || []);
                 setAvailableEventTypes(metadata.availableEventTypes || []);
@@ -2289,8 +2304,22 @@ export default function BookingsPage() {
                 ) : queryState.totalItems === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">{tb("noDataFound")}</div>
                 ) : (
-                    filteredBookings.map((booking) => (
-                        <div key={booking.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+                    filteredBookings.map((booking) => {
+                        const serviceColor = bookingTableColorEnabled
+                            ? getPrimaryMainServiceColor(booking.service_selections)
+                            : null;
+                        const mobileCardStyle = serviceColor
+                            ? ({
+                                backgroundColor: withAlpha(serviceColor, 0.095),
+                                borderColor: withAlpha(serviceColor, 0.34),
+                            } as React.CSSProperties)
+                            : undefined;
+                        return (
+                        <div
+                            key={booking.id}
+                            className="rounded-xl border bg-card shadow-sm p-4 space-y-3"
+                            style={mobileCardStyle}
+                        >
                             <div className="flex items-start justify-between">
                                 <div>
                                     <p className="font-semibold">{booking.client_name}</p>
@@ -2347,7 +2376,8 @@ export default function BookingsPage() {
                                 </ActionIconButton>
                             </div>
                         </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
             {!queryState.isLoading && !queryState.isRefreshing && queryState.totalItems > 0 ? (
@@ -2384,8 +2414,25 @@ export default function BookingsPage() {
                                 filteredBookings.map((booking, rowIndex) => {
                                     const rowNumber =
                                         (currentPage - 1) * itemsPerPage + rowIndex + 1;
+                                    const serviceColor = bookingTableColorEnabled
+                                        ? getPrimaryMainServiceColor(booking.service_selections)
+                                        : null;
                                     return (
-                                        <tr key={booking.id} className="hover:bg-muted/55 dark:hover:bg-white/12 transition-colors group">
+                                        <tr
+                                            key={booking.id}
+                                            className={
+                                                serviceColor
+                                                    ? "transition-colors group"
+                                                    : "hover:bg-muted/55 dark:hover:bg-white/12 transition-colors group"
+                                            }
+                                            style={
+                                                serviceColor
+                                                    ? ({
+                                                        backgroundColor: withAlpha(serviceColor, 0.075),
+                                                    } as React.CSSProperties)
+                                                    : undefined
+                                            }
+                                        >
                                             {orderedVisibleColumns.map((column) =>
                                                 renderDesktopCell(booking, column, rowNumber),
                                             )}

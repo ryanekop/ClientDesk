@@ -17,6 +17,7 @@ import {
   buildExtraFieldTemplateVars,
   buildMultiSessionTemplateVars,
 } from "@/utils/form-extra-fields";
+import { buildInstagramTemplateVars } from "@/utils/instagram-template-vars";
 import { buildGoogleMapsUrlOrFallback } from "@/utils/location";
 
 export const BOOKING_WHATSAPP_TIME_VARIABLES = [
@@ -28,6 +29,7 @@ export const BOOKING_WHATSAPP_TIME_VARIABLES = [
 type BookingWhatsAppTemplateBooking = {
   client_name: string;
   client_whatsapp?: string | null;
+  instagram?: string | null;
   booking_code: string;
   session_date?: string | null;
   total_price?: number | null;
@@ -138,10 +140,12 @@ export function buildBookingWhatsAppTemplateVars({
     booking.session_date,
     primarySessionDurationMinutes,
   );
+  const instagramVars = buildInstagramTemplateVars(booking.instagram);
 
   return {
     client_name: booking.client_name,
     client_whatsapp: booking.client_whatsapp || "-",
+    ...instagramVars,
     booking_code: booking.booking_code,
     session_date: sessionDate,
     ...sessionTimeVars,
