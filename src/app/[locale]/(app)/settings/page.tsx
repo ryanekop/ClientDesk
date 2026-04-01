@@ -67,7 +67,6 @@ import { isSplitCapableBookingEventType } from "@/lib/booking-template-mode";
 import {
   getEventExtraFieldPreviewVars,
   getEventExtraFieldTemplateTokens,
-  getMultiSessionTemplateTokens,
 } from "@/utils/form-extra-fields";
 import {
   getCustomFieldPreviewVars,
@@ -289,7 +288,29 @@ const templateHeaderToneByType: Record<string, string> = {
 const DEFAULT_QUEUE_TRIGGER_STATUS = "Antrian Edit";
 const DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS = "Sesi Foto / Acara";
 const DEFAULT_TRACKING_FILE_LINKS_VISIBLE_FROM_STATUS = "Sesi Foto / Acara";
-const MULTI_SESSION_WHATSAPP_VARS = getMultiSessionTemplateTokens("whatsapp");
+const WEDDING_SPLIT_WHATSAPP_HINTS = [
+  "{{akad_location}}",
+  "{{akad_date}}",
+  "{{akad_time}}",
+  "{{resepsi_location}}",
+  "{{resepsi_date}}",
+  "{{resepsi_time}}",
+  "{{resepsi_maps_url}}",
+] as const;
+const WISUDA_SPLIT_WHATSAPP_HINTS = [
+  "{{wisuda_session_1_location}}",
+  "{{wisuda_session_1_date}}",
+  "{{wisuda_session_1_time}}",
+  "{{wisuda_session_1_end_time}}",
+  "{{wisuda_session_1_time_range}}",
+  "{{wisuda_session_1_maps_url}}",
+  "{{wisuda_session_2_location}}",
+  "{{wisuda_session_2_date}}",
+  "{{wisuda_session_2_time}}",
+  "{{wisuda_session_2_end_time}}",
+  "{{wisuda_session_2_time_range}}",
+  "{{wisuda_session_2_maps_url}}",
+] as const;
 
 const variableHints: Record<string, string[]> = {
   whatsapp_client: [
@@ -308,7 +329,6 @@ const variableHints: Record<string, string[]> = {
     "{{notes}}",
     "{{tracking_link}}",
     "{{invoice_url}}",
-    ...MULTI_SESSION_WHATSAPP_VARS,
   ],
   whatsapp_booking_confirm: [
     "{{client_name}}",
@@ -321,7 +341,6 @@ const variableHints: Record<string, string[]> = {
     "{{event_type}}",
     "{{location}}",
     "{{tracking_link}}",
-    ...MULTI_SESSION_WHATSAPP_VARS,
   ],
   whatsapp_settlement_client: [
     "{{client_name}}",
@@ -339,7 +358,6 @@ const variableHints: Record<string, string[]> = {
     "{{tracking_link}}",
     "{{invoice_url}}",
     "{{settlement_link}}",
-    ...MULTI_SESSION_WHATSAPP_VARS,
   ],
   whatsapp_settlement_confirm: [
     "{{client_name}}",
@@ -352,7 +370,6 @@ const variableHints: Record<string, string[]> = {
     "{{studio_name}}",
     "{{invoice_url}}",
     "{{settlement_link}}",
-    ...MULTI_SESSION_WHATSAPP_VARS,
   ],
   whatsapp_freelancer: [
     "{{freelancer_name}}",
@@ -369,7 +386,6 @@ const variableHints: Record<string, string[]> = {
     "{{drive_link}}",
     "{{detail_location}}",
     "{{notes}}",
-    ...MULTI_SESSION_WHATSAPP_VARS,
   ],
   invoice: [
     "{{client_name}}",
@@ -381,7 +397,22 @@ const variableHints: Record<string, string[]> = {
     "{{invoice_url}}",
   ],
 };
-const MULTI_SESSION_WHATSAPP_VAR_SET = new Set(MULTI_SESSION_WHATSAPP_VARS);
+
+function getSplitWhatsAppVariableHints(
+  eventType: string | null | undefined,
+  mode: WhatsAppTemplateMode,
+): string[] {
+  if (mode !== "split") return [];
+
+  const normalizedEventType = normalizeTemplateEventTypeValue(eventType);
+  if (normalizedEventType === "Wedding") {
+    return [...WEDDING_SPLIT_WHATSAPP_HINTS];
+  }
+  if (normalizedEventType === "Wisuda") {
+    return [...WISUDA_SPLIT_WHATSAPP_HINTS];
+  }
+  return [];
+}
 
 function slugify(str: string) {
   return str
@@ -2583,17 +2614,15 @@ export default function SettingsPage() {
       currentLang === "id"
         ? templateContents[contentKey] || ""
         : templateContentsEn[contentKey] || "";
-    const defaultHints = variableHints[tt.value] || [];
-    const modeAwareHints =
-      isEventScoped && activeTemplateMode !== "split"
-        ? defaultHints.filter(
-            (token) => !MULTI_SESSION_WHATSAPP_VAR_SET.has(token),
-          )
-        : defaultHints;
+    const baseHints = variableHints[tt.value] || [];
+    const splitHints = isEventScoped
+      ? getSplitWhatsAppVariableHints(selectedEventType, activeTemplateMode)
+      : [];
     const hints = isEventScoped
       ? Array.from(
           new Set([
-            ...modeAwareHints,
+            ...baseHints,
+            ...splitHints,
             ...getEventExtraFieldTemplateTokens(selectedEventType),
             ...getCustomFieldTemplateTokens(
               formSectionsByEventType[selectedEventType] ||
@@ -2604,7 +2633,7 @@ export default function SettingsPage() {
             ),
           ]),
         )
-      : modeAwareHints;
+      : baseHints;
     const preview = renderPreview(
       content,
       isEventScoped
