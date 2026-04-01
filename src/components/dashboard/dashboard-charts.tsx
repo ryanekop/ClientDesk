@@ -13,6 +13,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { useTranslations } from "next-intl";
+import { useMoneyVisibility } from "@/hooks/use-money-visibility";
 
 export type DailyPoint = { name: string; dateLabel: string; revenue: number };
 export type MonthlyPoint = { name: string; revenue: number };
@@ -27,6 +28,7 @@ export function DashboardCharts({
   monthlyData,
 }: DashboardChartsProps) {
   const t = useTranslations("Dashboard");
+  const { isMoneyVisible } = useMoneyVisibility();
 
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat("id-ID", {
@@ -36,10 +38,13 @@ export function DashboardCharts({
     }).format(n);
 
   const formatShort = (n: number) => {
+    if (!isMoneyVisible) return "•••";
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}${t("jt")}`;
     if (n >= 1_000) return `${(n / 1_000).toFixed(0)}${t("rb")}`;
     return String(n);
   };
+
+  const maskedCurrency = "Rp •••••••";
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
@@ -96,7 +101,10 @@ export function DashboardCharts({
                         {p.dateLabel}
                       </div>
                       <div style={{ color: "var(--foreground)" }}>
-                        {t("pemasukan")}: {formatCurrency(p.revenue)}
+                        {t("pemasukan")}:{" "}
+                        {isMoneyVisible
+                          ? formatCurrency(p.revenue)
+                          : maskedCurrency}
                       </div>
                     </div>
                   );
@@ -147,7 +155,9 @@ export function DashboardCharts({
               />
               <Tooltip
                 formatter={(value: unknown) => [
-                  formatCurrency(Number(value ?? 0)),
+                  isMoneyVisible
+                    ? formatCurrency(Number(value ?? 0))
+                    : maskedCurrency,
                   t("pemasukan"),
                 ]}
                 contentStyle={{

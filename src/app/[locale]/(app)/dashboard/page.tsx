@@ -19,6 +19,10 @@ import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import { UpcomingBookingCard } from "@/components/dashboard/dashboard-widgets";
 import { DashboardChangelogPopup } from "@/components/changelog-modal";
 import { CustomDomainPromo } from "@/components/dashboard/custom-domain-promo";
+import {
+  MaskedCurrencyText,
+  MoneyVisibilityToggle,
+} from "@/components/ui/money-visibility";
 import { getTranslations, getLocale } from "next-intl/server";
 import { Link } from "@/i18n/routing";
 import type { ChangelogEntry } from "@/lib/changelog";
@@ -253,13 +257,6 @@ export default async function DashboardPage() {
     };
   });
 
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(n);
-
   const formatDate = (d: string | null) => {
     if (!d) return "-";
     return formatSessionDate(d, { locale: locale === "en" ? "en" : "id", withDay: false, dateOnly: true });
@@ -290,6 +287,10 @@ export default async function DashboardPage() {
         </h2>
       </div>
 
+      <div className="flex justify-end">
+        <MoneyVisibilityToggle className="h-9 px-3" />
+      </div>
+
       {/* Row 1: 4 Stats Cards */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard
@@ -308,13 +309,13 @@ export default async function DashboardPage() {
         />
         <StatsCard
           title={t("totalPemasukan")}
-          value={formatCurrency(totalRevenue)}
+          value={<MaskedCurrencyText amount={totalRevenue} />}
           icon={<TrendingUp className="w-5 h-5" />}
           colorVariant="green"
         />
         <StatsCard
           title={t("menungguPembayaran")}
-          value={formatCurrency(pendingAmount)}
+          value={<MaskedCurrencyText amount={pendingAmount} />}
           icon={<CreditCard className="w-5 h-5" />}
           colorVariant="red"
         />
@@ -521,7 +522,7 @@ export default async function DashboardPage() {
                       </span>
                     </td>
                     <td className="px-6 py-3 text-sm font-medium text-right hidden sm:table-cell">
-                      {formatCurrency(b.total_price)}
+                      <MaskedCurrencyText amount={b.total_price} />
                     </td>
                   </tr>
                 ))
@@ -542,7 +543,7 @@ function StatsCard({
   colorVariant,
 }: {
   title: string;
-  value: string;
+  value: React.ReactNode;
   subtitle?: string;
   icon: React.ReactNode;
   colorVariant: "blue" | "green" | "red" | "orange";

@@ -7,6 +7,7 @@ import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
+import { MoneyVisibilityToggle } from "@/components/ui/money-visibility";
 import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
 import { createClient } from "@/utils/supabase/client";
 import { useTranslations } from "next-intl";
@@ -76,6 +77,7 @@ import { BookingDateRangePicker } from "@/components/ui/booking-date-range-picke
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
 import { buildBookingWhatsAppTemplateVars } from "@/lib/booking-whatsapp-template-vars";
+import { useMoneyVisibility } from "@/hooks/use-money-visibility";
 
 type BookingFinance = {
     id: string;
@@ -265,6 +267,7 @@ export default function FinancePage() {
     const tb = useTranslations("BookingsPage");
     const tf = useTranslations("FinancePage");
     const locale = useLocale();
+    const { isMoneyVisible } = useMoneyVisibility();
     const [bookings, setBookings] = React.useState<BookingFinance[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [refreshing, setRefreshing] = React.useState(false);
@@ -800,6 +803,9 @@ export default function FinancePage() {
 
     const formatCurrency = (n: number) =>
         new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
+    const maskedCurrencyText = locale === "en" ? "IDR •••••••" : "Rp •••••••";
+    const formatSensitiveCurrency = (amount: number) =>
+        isMoneyVisible ? formatCurrency(amount) : maskedCurrencyText;
     function getSiteUrl() {
         return typeof window !== "undefined" ? window.location.origin : "";
     }
@@ -1280,24 +1286,24 @@ export default function FinancePage() {
             case "event_type":
                 return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 max-w-[180px] truncate text-muted-foreground")} title={booking.event_type || "-"}>{booking.event_type || "-"}</td>;
             case "total_price":
-                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap font-medium")}>{formatCurrency(finalTotal)}</td>;
+                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap font-medium")}>{formatSensitiveCurrency(finalTotal)}</td>;
             case "package_price":
-                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>{formatCurrency(packagePrice)}</td>;
+                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>{formatSensitiveCurrency(packagePrice)}</td>;
             case "addon":
-                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>{formatCurrency(addonTotal)}</td>;
+                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>{formatSensitiveCurrency(addonTotal)}</td>;
             case "dp_paid":
-                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap font-medium")}>{formatCurrency(booking.dp_paid)}</td>;
+                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap font-medium")}>{formatSensitiveCurrency(booking.dp_paid)}</td>;
             case "discount":
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
-                        {discountAmount > 0 ? `- ${formatCurrency(discountAmount)}` : formatCurrency(0)}
+                        {discountAmount > 0 ? `- ${formatSensitiveCurrency(discountAmount)}` : formatSensitiveCurrency(0)}
                     </td>
                 );
             case "remaining":
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap font-medium")}>
                         <span className={remaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}>
-                            {formatCurrency(remaining)}
+                            {formatSensitiveCurrency(remaining)}
                         </span>
                     </td>
                 );
@@ -1567,17 +1573,17 @@ export default function FinancePage() {
             case "event_type":
                 return booking.event_type || "-";
             case "total_price":
-                return formatCurrency(finalTotal);
+                return formatSensitiveCurrency(finalTotal);
             case "package_price":
-                return formatCurrency(packagePrice);
+                return formatSensitiveCurrency(packagePrice);
             case "addon":
-                return formatCurrency(addonTotal);
+                return formatSensitiveCurrency(addonTotal);
             case "dp_paid":
-                return formatCurrency(booking.dp_paid);
+                return formatSensitiveCurrency(booking.dp_paid);
             case "discount":
-                return discountAmount > 0 ? `- ${formatCurrency(discountAmount)}` : formatCurrency(0);
+                return discountAmount > 0 ? `- ${formatSensitiveCurrency(discountAmount)}` : formatSensitiveCurrency(0);
             case "remaining":
-                return formatCurrency(remaining);
+                return formatSensitiveCurrency(remaining);
             case "status":
                 return getFinanceStatusLabel(booking);
             default:
@@ -1820,6 +1826,9 @@ export default function FinancePage() {
             <PageHeader
                 actions={(
                     <>
+                        <MoneyVisibilityToggle
+                            className="hidden w-full md:inline-flex md:w-auto"
+                        />
                         <Button
                             type="button"
                             className="hidden w-full gap-2 md:inline-flex md:w-auto"
@@ -1892,7 +1901,7 @@ export default function FinancePage() {
                             </div>
                             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("totalPemasukan")}</span>
                         </div>
-                        <div className="text-2xl font-bold">{formatCurrency(summary.totalRevenue)}</div>
+                        <div className="text-2xl font-bold">{formatSensitiveCurrency(summary.totalRevenue)}</div>
                         <p className="text-xs text-muted-foreground mt-1">{t("dariSemuaBooking", { count: summary.totalBookings })}</p>
                     </div>
                     <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
@@ -1902,7 +1911,7 @@ export default function FinancePage() {
                             </div>
                             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("monthlyRevenue")}</span>
                         </div>
-                        <div className="text-2xl font-bold">{formatCurrency(summary.monthlyRevenueTotal)}</div>
+                        <div className="text-2xl font-bold">{formatSensitiveCurrency(summary.monthlyRevenueTotal)}</div>
                         <p className="text-xs text-muted-foreground mt-1">{t("monthlyRevenueSubtitle", { month: monthlyRevenueLabel })}</p>
                     </div>
                     <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
@@ -1912,7 +1921,7 @@ export default function FinancePage() {
                             </div>
                             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("sisaTagihan")}</span>
                         </div>
-                        <div className="text-2xl font-bold">{formatCurrency(summary.totalPending)}</div>
+                        <div className="text-2xl font-bold">{formatSensitiveCurrency(summary.totalPending)}</div>
                         <p className="text-xs text-muted-foreground mt-1">{t("dariBookingBelumLunas", { count: summary.unpaidCount })}</p>
                     </div>
                 </div>
@@ -1920,6 +1929,7 @@ export default function FinancePage() {
 
             {showFinanceContent ? (
                 <div className="grid grid-cols-2 gap-2 max-[360px]:grid-cols-1 md:hidden">
+                    <MoneyVisibilityToggle className="w-full" />
                     <Button
                         type="button"
                         variant="outline"
