@@ -118,6 +118,8 @@
         background-color: var(--color-card);
         background-image: none;
         background-clip: padding-box;
+        /* Prevent box-shadow transition inherited from [class*="border"] */
+        transition: none !important;
     }
 
     .sticky-table-cell--header {

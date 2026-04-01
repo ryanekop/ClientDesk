@@ -47,7 +47,6 @@ import {
   canToggleTableColumnPin,
   canToggleTableColumnVisibility,
   isAlwaysVisibleTableColumnId,
-  lockBoundaryColumns,
   type TableColumnPreference,
 } from "@/lib/table-column-prefs";
 
@@ -236,34 +235,30 @@ export function TableColumnManager({
 
   function toggleVisibility(id: string) {
     onChange(
-      lockBoundaryColumns(
-        columns.map((column) =>
-          column.id === id && canToggleTableColumnVisibility(column)
-            ? { ...column, visible: !column.visible }
-            : column,
-        ),
+      columns.map((column) =>
+        column.id === id && canToggleTableColumnVisibility(column)
+          ? { ...column, visible: !column.visible }
+          : column,
       ),
     );
   }
 
   function togglePin(id: string) {
     onChange(
-      lockBoundaryColumns(
-        columns.map((column) =>
-          column.id === id && canToggleTableColumnPin(column)
-            ? {
-                ...column,
-                pin:
-                  column.id === "actions"
-                    ? column.pin === "right"
-                      ? null
-                      : "right"
-                    : column.pin === "left"
-                      ? null
-                      : "left",
-              }
-            : column,
-        ),
+      columns.map((column) =>
+        column.id === id && canToggleTableColumnPin(column)
+          ? {
+              ...column,
+              pin:
+                column.id === "actions"
+                  ? column.pin === "right"
+                    ? null
+                    : "right"
+                  : column.pin === "left"
+                    ? null
+                    : "left",
+            }
+          : column,
       ),
     );
   }
@@ -288,7 +283,7 @@ export function TableColumnManager({
     }
     if (columns[sourceIndex]?.pin !== columns[targetIndex]?.pin) return;
 
-    onChange(lockBoundaryColumns(arrayMove(columns, sourceIndex, targetIndex)));
+    onChange(arrayMove(columns, sourceIndex, targetIndex));
   }
 
   const activeColumn =
