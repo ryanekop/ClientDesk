@@ -21,6 +21,8 @@ type ResizeHandleProps = {
 };
 
 const STORAGE_PREFIX = "clientdesk:table_column_widths";
+const EMPTY_NON_RESIZABLE_COLUMN_IDS: string[] = [];
+const EMPTY_WIDTH_MAP: Record<string, number> = {};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -72,15 +74,19 @@ export function useResizableTableColumns({
   menuKey,
   userId,
   columns,
-  nonResizableColumnIds = [],
-  minWidthByColumnId = {},
-  maxWidthByColumnId = {},
+  nonResizableColumnIds,
+  minWidthByColumnId,
+  maxWidthByColumnId,
   defaultMinWidth = 96,
   defaultMaxWidth = 720,
 }: UseResizableTableColumnsOptions) {
+  const resolvedNonResizableColumnIds =
+    nonResizableColumnIds ?? EMPTY_NON_RESIZABLE_COLUMN_IDS;
+  const resolvedMinWidthByColumnId = minWidthByColumnId ?? EMPTY_WIDTH_MAP;
+  const resolvedMaxWidthByColumnId = maxWidthByColumnId ?? EMPTY_WIDTH_MAP;
   const nonResizableSet = React.useMemo(
-    () => new Set(nonResizableColumnIds),
-    [nonResizableColumnIds],
+    () => new Set(resolvedNonResizableColumnIds),
+    [resolvedNonResizableColumnIds],
   );
   const storageKey = React.useMemo(
     () => (userId ? `${STORAGE_PREFIX}:${menuKey}:${userId}` : null),
@@ -118,17 +124,17 @@ export function useResizableTableColumns({
     (raw: unknown) =>
       normalizeWidthMap(raw, {
         nonResizableColumnIds: nonResizableSet,
-        minWidthByColumnId,
-        maxWidthByColumnId,
+        minWidthByColumnId: resolvedMinWidthByColumnId,
+        maxWidthByColumnId: resolvedMaxWidthByColumnId,
         defaultMinWidth,
         defaultMaxWidth,
       }),
     [
       defaultMaxWidth,
       defaultMinWidth,
-      maxWidthByColumnId,
-      minWidthByColumnId,
       nonResizableSet,
+      resolvedMaxWidthByColumnId,
+      resolvedMinWidthByColumnId,
     ],
   );
 
@@ -186,7 +192,9 @@ export function useResizableTableColumns({
       if (event.key !== storageKey) return;
 
       if (!event.newValue) {
-        setWidthByColumnId({});
+        setWidthByColumnId((current) =>
+          Object.keys(current).length === 0 ? current : {},
+        );
         return;
       }
 
@@ -197,7 +205,9 @@ export function useResizableTableColumns({
           areWidthMapsEqual(current, normalized) ? current : normalized,
         );
       } catch {
-        setWidthByColumnId({});
+        setWidthByColumnId((current) =>
+          Object.keys(current).length === 0 ? current : {},
+        );
       }
     }
 
@@ -207,15 +217,15 @@ export function useResizableTableColumns({
 
   const getMinWidth = React.useCallback(
     (columnId: string) =>
-      Math.max(64, minWidthByColumnId[columnId] ?? defaultMinWidth),
-    [defaultMinWidth, minWidthByColumnId],
+      Math.max(64, resolvedMinWidthByColumnId[columnId] ?? defaultMinWidth),
+    [defaultMinWidth, resolvedMinWidthByColumnId],
   );
   const getMaxWidth = React.useCallback(
     (columnId: string) => {
       const min = getMinWidth(columnId);
-      return Math.max(min, maxWidthByColumnId[columnId] ?? defaultMaxWidth);
+      return Math.max(min, resolvedMaxWidthByColumnId[columnId] ?? defaultMaxWidth);
     },
-    [defaultMaxWidth, getMinWidth, maxWidthByColumnId],
+    [defaultMaxWidth, getMinWidth, resolvedMaxWidthByColumnId],
   );
   const isColumnResizable = React.useCallback(
     (columnId: string) =>

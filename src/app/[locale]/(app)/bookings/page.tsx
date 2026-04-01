@@ -706,7 +706,11 @@ export default function BookingsPage() {
     async function handleResetColumnWidths() {
         setResettingColumnWidths(true);
         try {
+            await new Promise<void>((resolve) =>
+                window.requestAnimationFrame(() => resolve()),
+            );
             resetColumnWidths();
+            setColumnManagerOpen(false);
         } finally {
             setResettingColumnWidths(false);
         }

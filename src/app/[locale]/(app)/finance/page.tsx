@@ -694,6 +694,7 @@ export default function FinancePage() {
         cancelActiveResize,
         resetColumnWidths,
     } = useResizableTableColumns({
+        enabled: !columnManagerOpen,
         menuKey: "finance",
         userId: currentUserId,
         columns: orderedVisibleColumns,
@@ -784,7 +785,11 @@ export default function FinancePage() {
     async function handleResetColumnWidths() {
         setResettingColumnWidths(true);
         try {
+            await new Promise<void>((resolve) =>
+                window.requestAnimationFrame(() => resolve()),
+            );
             resetColumnWidths();
+            setColumnManagerOpen(false);
         } finally {
             setResettingColumnWidths(false);
         }
