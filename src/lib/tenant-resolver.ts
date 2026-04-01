@@ -29,7 +29,19 @@ const DEFAULT_TENANT: TenantConfig = {
 };
 
 const tenantCache = new Map<string, { tenant: TenantConfig; expiry: number }>();
-const CACHE_TTL_MS = 5 * 1000;
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
+const MIN_CACHE_TTL_MS = 1_000;
+const CACHE_TTL_MS = resolveTenantCacheTtlMs();
+
+function resolveTenantCacheTtlMs() {
+  const rawValue = process.env.TENANT_CACHE_TTL_MS;
+  const parsed = rawValue ? Number.parseInt(rawValue, 10) : NaN;
+  if (Number.isFinite(parsed) && parsed >= MIN_CACHE_TTL_MS) {
+    return parsed;
+  }
+
+  return DEFAULT_CACHE_TTL_MS;
+}
 
 type ResolveTenantOptions = {
   bypassCache?: boolean;

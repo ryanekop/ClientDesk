@@ -165,6 +165,7 @@ const FINANCE_FILTER_STORAGE_PREFIX = "clientdesk:finance:filters";
 const FINANCE_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:finance:items_per_page";
 const FINANCE_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const FINANCE_DEFAULT_ITEMS_PER_PAGE = 10;
+const SEARCH_DEBOUNCE_MS = 400;
 type FinanceSortOrder = (typeof FINANCE_SORT_ORDERS)[number];
 type FinanceDateBasis = "booking_date" | "session_date";
 
@@ -273,6 +274,7 @@ export default function FinancePage() {
     const [refreshing, setRefreshing] = React.useState(false);
     const [filter, setFilter] = React.useState<FinanceFilterValue>("all");
     const [searchQuery, setSearchQuery] = React.useState("");
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
     const [packageFilter, setPackageFilter] = React.useState<string[]>([]);
     const [bookingStatusFilter, setBookingStatusFilter] = React.useState<string[]>([]);
     const [eventTypeFilter, setEventTypeFilter] = React.useState<string[]>([]);
@@ -373,6 +375,8 @@ export default function FinancePage() {
         [],
     );
     const hasLoadedFinanceRef = React.useRef(false);
+    const financeMetadataCacheRef = React.useRef<FinancePageMetadata | null>(null);
+    const financeMetadataEventTypeFilterKeyRef = React.useRef("");
 
     const closeDesktopMenus = React.useCallback(() => {
         setInvoiceMenuBookingId(null);
@@ -386,6 +390,7 @@ export default function FinancePage() {
     const resetFilters = React.useCallback(() => {
         setFilter("all");
         setSearchQuery("");
+        setDebouncedSearchQuery("");
         setPackageFilter([]);
         setBookingStatusFilter([]);
         setEventTypeFilter([]);
@@ -394,6 +399,13 @@ export default function FinancePage() {
         setDateBasis("booking_date");
         setSortOrder("booking_newest");
     }, []);
+
+    React.useEffect(() => {
+        const timer = window.setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, SEARCH_DEBOUNCE_MS);
+        return () => window.clearTimeout(timer);
+    }, [searchQuery]);
 
     const fetchTemplates = React.useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -405,7 +417,10 @@ export default function FinancePage() {
         setSavedTemplates((data || []) as { id: string; type: string; name?: string | null; content: string; content_en: string; event_type: string | null }[]);
     }, [supabase]);
 
-    const fetchFinancePage = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
+    const fetchFinancePage = React.useCallback(async (
+        mode: "initial" | "refresh" = "refresh",
+        options?: { forceIncludeMetadata?: boolean },
+    ) => {
         if (!itemsPerPageHydrated || !filtersHydrated) return;
 
         setFinanceLoadError(null);
@@ -419,11 +434,16 @@ export default function FinancePage() {
             const singlePackageFilter = packageFilter[0] || "All";
             const singleBookingStatusFilter = bookingStatusFilter[0] || "All";
             const singleEventTypeFilter = eventTypeFilter[0] || "All";
+            const metadataEventTypeFilterKey = JSON.stringify([...eventTypeFilter].sort());
+            const includeMetadata =
+                options?.forceIncludeMetadata === true ||
+                !financeMetadataCacheRef.current ||
+                financeMetadataEventTypeFilterKeyRef.current !== metadataEventTypeFilterKey;
             const params = new URLSearchParams({
                 page: String(currentPage),
                 perPage: String(itemsPerPage),
                 filter,
-                search: searchQuery,
+                search: debouncedSearchQuery,
                 package: singlePackageFilter,
                 bookingStatus: singleBookingStatusFilter,
                 packageFilters: JSON.stringify(packageFilter),
@@ -435,46 +455,53 @@ export default function FinancePage() {
                 dateBasis,
                 sortOrder,
                 timeZone: browserTimeZone,
+                includeMetadata: includeMetadata ? "1" : "0",
             });
             const response = await fetchPaginatedJson<BookingFinance, FinancePageMetadata>(
                 `/api/internal/finance?${params.toString()}`,
             );
-            const metadata = response.metadata;
-            const nextColumnDefaults = lockBoundaryColumns([
-                ...BASE_FINANCE_COLUMNS.slice(0, -1),
-                ...buildBookingMetadataColumns(
-                    metadata?.metadataRows || [],
-                    metadata?.formSectionsByEventType || {},
-                ),
-                BASE_FINANCE_COLUMNS[BASE_FINANCE_COLUMNS.length - 1],
-            ]);
+            if (response.metadata) {
+                financeMetadataCacheRef.current = response.metadata;
+                financeMetadataEventTypeFilterKeyRef.current = metadataEventTypeFilterKey;
+            }
+            const metadata = response.metadata || financeMetadataCacheRef.current;
 
             setBookings(response.items);
             setTotalItems(response.totalItems);
-            setBookingStatusOptions(metadata?.bookingStatusOptions || getBookingStatusOptions(DEFAULT_CLIENT_STATUSES));
-            setPackageOptions(metadata?.packageOptions || []);
-            setAvailableEventTypes(metadata?.availableEventTypes || []);
-            setStudioName(metadata?.studioName || "");
-            setFormSectionsByEventType(metadata?.formSectionsByEventType || {});
-            setMetadataRows(metadata?.metadataRows || []);
-            setSummary(metadata?.summary || {
-                totalRevenue: 0,
-                totalPending: 0,
-                totalDP: 0,
-                totalBookings: 0,
-                paidCount: 0,
-                unpaidCount: 0,
-                monthlyRevenueTotal: 0,
-            });
-            setColumns((current) => {
-                const nextColumns = mergeTableColumnPreferences(
-                    nextColumnDefaults,
-                    metadata?.tableColumnPreferences || undefined,
-                );
-                return areTableColumnPreferencesEqual(current, nextColumns)
-                    ? current
-                    : nextColumns;
-            });
+            if (metadata) {
+                const nextColumnDefaults = lockBoundaryColumns([
+                    ...BASE_FINANCE_COLUMNS.slice(0, -1),
+                    ...buildBookingMetadataColumns(
+                        metadata.metadataRows || [],
+                        metadata.formSectionsByEventType || {},
+                    ),
+                    BASE_FINANCE_COLUMNS[BASE_FINANCE_COLUMNS.length - 1],
+                ]);
+                setBookingStatusOptions(metadata.bookingStatusOptions || getBookingStatusOptions(DEFAULT_CLIENT_STATUSES));
+                setPackageOptions(metadata.packageOptions || []);
+                setAvailableEventTypes(metadata.availableEventTypes || []);
+                setStudioName(metadata.studioName || "");
+                setFormSectionsByEventType(metadata.formSectionsByEventType || {});
+                setMetadataRows(metadata.metadataRows || []);
+                setSummary(metadata.summary || {
+                    totalRevenue: 0,
+                    totalPending: 0,
+                    totalDP: 0,
+                    totalBookings: 0,
+                    paidCount: 0,
+                    unpaidCount: 0,
+                    monthlyRevenueTotal: 0,
+                });
+                setColumns((current) => {
+                    const nextColumns = mergeTableColumnPreferences(
+                        nextColumnDefaults,
+                        metadata.tableColumnPreferences || undefined,
+                    );
+                    return areTableColumnPreferencesEqual(current, nextColumns)
+                        ? current
+                        : nextColumns;
+                });
+            }
             setHasLoadedFinanceSuccessfully(true);
         } catch (error) {
             console.error("[FinancePage] Failed to fetch finance page", error);
@@ -496,7 +523,7 @@ export default function FinancePage() {
         itemsPerPage,
         itemsPerPageHydrated,
         packageFilter,
-        searchQuery,
+        debouncedSearchQuery,
         sortOrder,
         tf,
     ]);
@@ -537,7 +564,9 @@ export default function FinancePage() {
                 return typeof value === "string" ? value : fallback;
             };
 
-            setSearchQuery(readString("searchQuery", ""));
+            const hydratedSearchQuery = readString("searchQuery", "");
+            setSearchQuery(hydratedSearchQuery);
+            setDebouncedSearchQuery(hydratedSearchQuery);
             setFilter(normalizeFinanceFilterValue(parsed.filter));
             setPackageFilter(parseLegacyOrMultiFilterValue(parsed.packageFilter));
             setBookingStatusFilter(parseLegacyOrMultiFilterValue(parsed.bookingStatusFilter));
@@ -784,7 +813,7 @@ export default function FinancePage() {
             bookingCode: booking.booking_code,
             trackingUuid: booking.tracking_uuid,
         });
-        void fetchFinancePage("refresh");
+        void fetchFinancePage("refresh", { forceIncludeMetadata: true });
     }
 
     async function handleMarkUnpaid(id: string) {
@@ -802,7 +831,7 @@ export default function FinancePage() {
                 trackingUuid: booking.tracking_uuid,
             });
         }
-        void fetchFinancePage("refresh");
+        void fetchFinancePage("refresh", { forceIncludeMetadata: true });
     }
 
     const formatCurrency = (n: number) =>
@@ -1812,7 +1841,7 @@ export default function FinancePage() {
         filter,
         itemsPerPage,
         packageFilter,
-        searchQuery,
+        debouncedSearchQuery,
         sortOrder,
     ]);
 

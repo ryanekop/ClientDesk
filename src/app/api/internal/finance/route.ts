@@ -145,6 +145,14 @@ function parseTimeZone(value: string | null) {
   return trimmed;
 }
 
+function parseIncludeMetadata(value: string | null) {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "0" || normalized === "false") {
+    return false;
+  }
+  return true;
+}
+
 function readRpcObject<T>(value: unknown): T | null {
   if (Array.isArray(value)) {
     const firstItem = value[0];
@@ -220,6 +228,7 @@ export async function GET(request: NextRequest) {
   const dateToFilter = searchParams.get("dateTo")?.trim() || "";
   const dateBasis = parseDateBasis(searchParams.get("dateBasis"));
   const timeZone = parseTimeZone(searchParams.get("timeZone"));
+  const includeMetadata = parseIncludeMetadata(searchParams.get("includeMetadata"));
   const sortOrder = searchParams.get("sortOrder")?.trim() || "booking_newest";
   const exportAll = searchParams.get("export") === "1";
   const pageRpcArgsBase = {
@@ -244,9 +253,12 @@ export async function GET(request: NextRequest) {
     p_sort_order: sortOrder,
   };
 
+  const metadataPromise = includeMetadata
+    ? supabase.rpc("cd_get_finance_metadata")
+    : Promise.resolve({ data: null, error: null });
   const [initialPageResult, metadataResult] = await Promise.all([
     supabase.rpc("cd_get_finance_page", pageRpcArgs),
-    supabase.rpc("cd_get_finance_metadata"),
+    metadataPromise,
   ]);
   let pageResult = initialPageResult;
 
@@ -289,7 +301,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (metadataResult.error) {
+  if (includeMetadata && metadataResult.error) {
     console.error("[Finance API] Failed to load finance metadata", {
       userId: user?.id || null,
       error: metadataResult.error.message,
@@ -301,12 +313,15 @@ export async function GET(request: NextRequest) {
   }
 
   const pageData = readRpcObject<FinancePageRpcResponse>(pageResult.data);
-  const metadataData = readRpcObject<FinanceMetadataResponse>(metadataResult.data);
+  const metadataData = includeMetadata
+    ? readRpcObject<FinanceMetadataResponse>(metadataResult.data)
+    : null;
   const bookingStatusOptions = readStringArray(metadataData?.bookingStatusOptions);
   const resolvedBookingStatusOptions =
     bookingStatusOptions.length > 0
       ? bookingStatusOptions
       : getBookingStatusOptions(DEFAULT_CLIENT_STATUSES);
+  const fallbackInitialStatus = resolvedBookingStatusOptions[0] || "Pending";
 
   const bookings = (Array.isArray(pageData?.items) ? pageData.items : []).map((booking) => {
     const legacyService = normalizeLegacyServiceRecord(booking.services);
@@ -314,11 +329,17 @@ export async function GET(request: NextRequest) {
       booking.booking_services,
       booking.services,
     );
-    const unifiedStatus = resolveUnifiedBookingStatus({
-      status: booking.status,
-      clientStatus: booking.client_status,
-      statuses: resolvedBookingStatusOptions,
-    });
+    const fallbackRawStatus =
+      (typeof booking.client_status === "string" && booking.client_status.trim()) ||
+      (typeof booking.status === "string" && booking.status.trim()) ||
+      fallbackInitialStatus;
+    const unifiedStatus = includeMetadata
+      ? resolveUnifiedBookingStatus({
+        status: booking.status,
+        clientStatus: booking.client_status,
+        statuses: resolvedBookingStatusOptions,
+      })
+      : fallbackRawStatus;
 
     return {
       ...booking,
@@ -335,20 +356,24 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     items: bookings,
     totalItems: Number(pageData?.totalItems) || 0,
-    metadata: {
-      studioName:
-        typeof metadataData?.studioName === "string" ? metadataData.studioName : "",
-      bookingStatusOptions: resolvedBookingStatusOptions,
-      packageOptions: readStringArray(metadataData?.packageOptions),
-      availableEventTypes: readStringArray(metadataData?.availableEventTypes),
-      tableColumnPreferences: metadataData?.tableColumnPreferences ?? null,
-      formSectionsByEventType:
-        metadataData?.formSectionsByEventType &&
-        typeof metadataData.formSectionsByEventType === "object"
-          ? metadataData.formSectionsByEventType
-          : {},
-      metadataRows: readMetadataRows(metadataData?.metadataRows),
-      summary: readSummary(metadataData?.summary),
-    },
+    ...(includeMetadata
+      ? {
+        metadata: {
+          studioName:
+            typeof metadataData?.studioName === "string" ? metadataData.studioName : "",
+          bookingStatusOptions: resolvedBookingStatusOptions,
+          packageOptions: readStringArray(metadataData?.packageOptions),
+          availableEventTypes: readStringArray(metadataData?.availableEventTypes),
+          tableColumnPreferences: metadataData?.tableColumnPreferences ?? null,
+          formSectionsByEventType:
+            metadataData?.formSectionsByEventType &&
+            typeof metadataData.formSectionsByEventType === "object"
+              ? metadataData.formSectionsByEventType
+              : {},
+          metadataRows: readMetadataRows(metadataData?.metadataRows),
+          summary: readSummary(metadataData?.summary),
+        },
+      }
+      : {}),
   });
 }

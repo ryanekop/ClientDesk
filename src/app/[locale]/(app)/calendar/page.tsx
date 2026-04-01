@@ -80,6 +80,20 @@ type GoogleOpenGuardState = {
 };
 
 const FREELANCER_COLORS = ["#8b5cf6", "#ec4899", "#f97316", "#06b6d4", "#84cc16"];
+const CALENDAR_FETCH_BUFFER_DAYS = 21;
+const CALENDAR_SPLIT_GUARD_BUFFER_DAYS = 90;
+const SPLIT_SESSION_DATE_FIELD_KEYS = [
+    "tanggal_akad",
+    "akad_date",
+    "tanggal_resepsi",
+    "resepsi_date",
+    "tanggal_wisuda_1",
+    "wisuda_session_1_date",
+    "wisuda_session1_date",
+    "tanggal_wisuda_2",
+    "wisuda_session_2_date",
+    "wisuda_session2_date",
+] as const;
 const STATUS_VISUAL_PALETTE: StatusVisual[] = [
     {
         eventBackground: "#3b82f6",
@@ -134,6 +148,49 @@ const STATUS_VISUAL_PALETTE: StatusVisual[] = [
 ];
 const DEFAULT_STATUS_OPTIONS = getBookingStatusOptions(DEFAULT_CLIENT_STATUSES);
 
+type CalendarViewportRange = {
+    start: Date;
+    end: Date;
+};
+
+function addDays(date: Date, days: number) {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+}
+
+function normalizeCalendarRange(
+    range: Date[] | { start: Date; end: Date } | Date,
+): CalendarViewportRange | null {
+    if (Array.isArray(range)) {
+        if (range.length === 0) return null;
+        const sorted = [...range].sort((a, b) => a.getTime() - b.getTime());
+        return { start: sorted[0], end: sorted[sorted.length - 1] };
+    }
+
+    if (range instanceof Date) {
+        return { start: range, end: range };
+    }
+
+    if (
+        range &&
+        typeof range === "object" &&
+        range.start instanceof Date &&
+        range.end instanceof Date
+    ) {
+        return {
+            start: range.start <= range.end ? range.start : range.end,
+            end: range.end >= range.start ? range.end : range.start,
+        };
+    }
+
+    return null;
+}
+
+function toIsoDateOnly(date: Date) {
+    return date.toISOString().slice(0, 10);
+}
+
 /* ─── Custom Toolbar ─── */
 function CustomToolbar({ onNavigate, onView, view, label }: ToolbarProps<CalendarEvent, object>) {
     const viewButtons: { key: View; label: string; icon: React.ReactNode }[] = [
@@ -186,6 +243,9 @@ export default function CalendarPage() {
     const locale = useLocale();
     const [events, setEvents] = React.useState<CalendarEvent[]>([]);
     const [loading, setLoading] = React.useState(true);
+    const [calendarView, setCalendarView] = React.useState<View>("month");
+    const [calendarViewportRange, setCalendarViewportRange] =
+        React.useState<CalendarViewportRange | null>(null);
     const [isGoogleConnected, setIsGoogleConnected] = React.useState(false);
     const [syncing, setSyncing] = React.useState(false);
     const [calendarEventFormat, setCalendarEventFormat] = React.useState(DEFAULT_CALENDAR_EVENT_FORMAT);
@@ -457,10 +517,27 @@ export default function CalendarPage() {
         setGoogleOpenGuard(null);
     }, []);
 
+    const handleCalendarRangeChange = React.useCallback(
+        (range: Date[] | { start: Date; end: Date } | Date) => {
+            const normalizedRange = normalizeCalendarRange(range);
+            if (!normalizedRange) return;
+            setCalendarViewportRange((current) => {
+                if (
+                    current &&
+                    current.start.getTime() === normalizedRange.start.getTime() &&
+                    current.end.getTime() === normalizedRange.end.getTime()
+                ) {
+                    return current;
+                }
+                return normalizedRange;
+            });
+        },
+        [],
+    );
+
     React.useEffect(() => {
-        fetchBookings();
-        checkGoogleConnection();
-        fetchFreelancerList();
+        void checkGoogleConnection();
+        void fetchFreelancerList();
 
         const handleMessage = (event: MessageEvent) => {
             if (event.data?.type === "GOOGLE_AUTH_SUCCESS") {
@@ -484,12 +561,12 @@ export default function CalendarPage() {
     }, []);
 
     React.useEffect(() => {
-        fetchBookings();
-    }, [calendarEventFormat, calendarEventFormatMap, studioName]);
+        void fetchBookings();
+    }, [calendarEventFormat, calendarEventFormatMap, studioName, calendarViewportRange]);
 
     // Fetch freelancer calendar events when toggles change
     React.useEffect(() => {
-        fetchFreelancerCalendars();
+        void fetchFreelancerCalendars();
     }, [activeFreelancers]);
 
     async function fetchFreelancerList() {
@@ -561,17 +638,62 @@ export default function CalendarPage() {
 
     async function fetchBookings() {
         setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                setEvents([]);
+                return;
+            }
 
-        const { data } = await supabase
-            .from("bookings")
-            .select("id, booking_code, client_name, session_date, status, location, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, google_calendar_sync_status, google_calendar_sync_error, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))")
-            .eq("user_id", user.id)
-            .neq("status", CANCELLED_BOOKING_STATUS);
+            const fallbackAnchor = new Date();
+            const viewportRange = calendarViewportRange || {
+                start: addDays(fallbackAnchor, -31),
+                end: addDays(fallbackAnchor, 31),
+            };
+            const viewportStart =
+                viewportRange.start.getTime() <= viewportRange.end.getTime()
+                    ? viewportRange.start
+                    : viewportRange.end;
+            const viewportEnd =
+                viewportRange.end.getTime() >= viewportRange.start.getTime()
+                    ? viewportRange.end
+                    : viewportRange.start;
+            const sessionRangeStart = addDays(
+                viewportStart,
+                -CALENDAR_FETCH_BUFFER_DAYS,
+            ).toISOString();
+            const sessionRangeEnd = addDays(
+                viewportEnd,
+                CALENDAR_FETCH_BUFFER_DAYS,
+            ).toISOString();
+            const splitRangeStart = toIsoDateOnly(
+                addDays(viewportStart, -CALENDAR_SPLIT_GUARD_BUFFER_DAYS),
+            );
+            const splitRangeEnd = toIsoDateOnly(
+                addDays(viewportEnd, CALENDAR_SPLIT_GUARD_BUFFER_DAYS),
+            );
+            const rangeClauses = [
+                `and(session_date.gte.${sessionRangeStart},session_date.lte.${sessionRangeEnd})`,
+                ...SPLIT_SESSION_DATE_FIELD_KEYS.map(
+                    (key) =>
+                        `and(extra_fields->>${key}.gte.${splitRangeStart},extra_fields->>${key}.lte.${splitRangeEnd})`,
+                ),
+            ];
 
-        if (data) {
-            const bookingEvents: CalendarEvent[] = data.flatMap((booking: any) => {
+            const { data, error } = await supabase
+                .from("bookings")
+                .select("id, booking_code, client_name, session_date, status, location, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, google_calendar_sync_status, google_calendar_sync_error, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))")
+                .eq("user_id", user.id)
+                .neq("status", CANCELLED_BOOKING_STATUS)
+                .or(rangeClauses.join(","));
+
+            if (error) {
+                console.error("[CalendarPage] Failed to fetch bookings", error);
+                setEvents([]);
+                return;
+            }
+
+            const bookingEvents: CalendarEvent[] = (data || []).flatMap((booking: any) => {
                 const serviceSelections = normalizeBookingServiceSelections(
                     booking.booking_services,
                     booking.services,
@@ -647,8 +769,9 @@ export default function CalendarPage() {
                     (event) => event.status?.toLowerCase() !== CANCELLED_BOOKING_STATUS.toLowerCase(),
                 ),
             );
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     }
 
     function handleConnectGoogle() {
@@ -943,12 +1066,15 @@ export default function CalendarPage() {
                     <Calendar
                         localizer={localizer}
                         events={allEvents}
+                        view={calendarView}
                         startAccessor="start"
                         endAccessor="end"
                         style={{ height: "100%" }}
                         culture="id-ID"
                         eventPropGetter={eventStyleGetter}
                         onSelectEvent={handleSelectEvent}
+                        onView={setCalendarView}
+                        onRangeChange={handleCalendarRangeChange}
                         components={{
                             toolbar: CustomToolbar,
                         }}

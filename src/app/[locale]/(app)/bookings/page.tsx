@@ -178,6 +178,7 @@ const BOOKING_FILTER_STORAGE_PREFIX = "clientdesk:bookings:filters";
 const BOOKING_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:bookings:items_per_page";
 const PAGINATION_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const DEFAULT_ITEMS_PER_PAGE = 10;
+const SEARCH_DEBOUNCE_MS = 400;
 const BOOKING_SORT_ORDERS = [
     "booking_newest",
     "booking_oldest",
@@ -393,6 +394,7 @@ export default function BookingsPage() {
 
     // Filters & Search
     const [searchQuery, setSearchQuery] = React.useState("");
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
     const [statusFilter, setStatusFilter] = React.useState<string[]>([]);
     const [packageFilter, setPackageFilter] = React.useState<string[]>([]);
     const [freelanceFilter, setFreelanceFilter] = React.useState<string[]>([]);
@@ -468,6 +470,8 @@ export default function BookingsPage() {
         setFeedbackDialog({ open: true, message });
     });
     const hasLoadedBookingsRef = React.useRef(false);
+    const bookingMetadataCacheRef = React.useRef<BookingPageMetadata | null>(null);
+    const bookingMetadataEventTypeFilterKeyRef = React.useRef("");
     const invalidateProfilePublicCache = React.useCallback(async () => {
         try {
             await fetch("/api/internal/cache/invalidate", {
@@ -526,8 +530,16 @@ export default function BookingsPage() {
         setDateBasis("booking_date");
         setExtraFieldFilters({});
         setSearchQuery("");
+        setDebouncedSearchQuery("");
         setSortOrder("booking_newest");
     }, []);
+
+    React.useEffect(() => {
+        const timer = window.setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, SEARCH_DEBOUNCE_MS);
+        return () => window.clearTimeout(timer);
+    }, [searchQuery]);
 
     const triggerFastpikAutoSync = React.useCallback(
         async (bookingId: string) => {
@@ -570,10 +582,14 @@ export default function BookingsPage() {
             const singlePackageFilter = packageFilter[0] || "All";
             const singleFreelanceFilter = freelanceFilter[0] || "All";
             const singleEventTypeFilter = eventTypeFilter[0] || "All";
+            const metadataEventTypeFilterKey = JSON.stringify([...eventTypeFilter].sort());
+            const includeMetadata =
+                !bookingMetadataCacheRef.current ||
+                bookingMetadataEventTypeFilterKeyRef.current !== metadataEventTypeFilterKey;
             const params = new URLSearchParams({
                 page: String(currentPage),
                 perPage: String(itemsPerPage),
-                search: searchQuery,
+                search: debouncedSearchQuery,
                 status: singleStatusFilter,
                 package: singlePackageFilter,
                 freelance: singleFreelanceFilter,
@@ -588,45 +604,52 @@ export default function BookingsPage() {
                 timeZone: browserTimeZone,
                 sortOrder,
                 extraFilters: JSON.stringify(extraFieldFilters),
+                includeMetadata: includeMetadata ? "1" : "0",
             });
 
             const response = await fetchPaginatedJson<Booking, BookingPageMetadata>(
                 `/api/internal/bookings?${params.toString()}`,
             );
-            const metadata = response.metadata;
-            const nextColumnDefaults = lockBoundaryColumns([
-                ...BASE_BOOKING_COLUMNS.slice(0, -1),
-                ...buildBookingMetadataColumns(
-                    metadata?.metadataRows || [],
-                    metadata?.formSectionsByEventType || {},
-                ),
-                BASE_BOOKING_COLUMNS[BASE_BOOKING_COLUMNS.length - 1],
-            ]);
+            if (response.metadata) {
+                bookingMetadataCacheRef.current = response.metadata;
+                bookingMetadataEventTypeFilterKeyRef.current = metadataEventTypeFilterKey;
+            }
+            const metadata = response.metadata || bookingMetadataCacheRef.current;
 
             setBookings(response.items);
             setTotalItems(response.totalItems);
-            setStudioName(metadata?.studioName || "");
-            setStatusOpts(metadata?.statusOptions || DEFAULT_STATUS_OPTS);
-            setQueueTriggerStatus(metadata?.queueTriggerStatus || "Antrian Edit");
-            setDpVerifyTriggerStatus(metadata?.dpVerifyTriggerStatus || "");
-            setDefaultWaTarget(metadata?.defaultWaTarget || "client");
-            setPackages(metadata?.packages || []);
-            setFreelancerNames(metadata?.freelancerNames || []);
-            setAvailableEventTypes(metadata?.availableEventTypes || []);
-            setFormSectionsByEventType(metadata?.formSectionsByEventType || {});
-            setMetadataRows(metadata?.metadataRows || []);
-            setExtraFieldRows(metadata?.extraFieldRows || []);
-            setColumns((current) => {
-                const nextColumns = applyBookingColumnLabelNormalization(
-                    mergeTableColumnPreferences(
-                        nextColumnDefaults,
-                        metadata?.tableColumnPreferences || undefined,
+            if (metadata) {
+                const nextColumnDefaults = lockBoundaryColumns([
+                    ...BASE_BOOKING_COLUMNS.slice(0, -1),
+                    ...buildBookingMetadataColumns(
+                        metadata.metadataRows || [],
+                        metadata.formSectionsByEventType || {},
                     ),
-                );
-                return areTableColumnPreferencesEqual(current, nextColumns)
-                    ? current
-                    : nextColumns;
-            });
+                    BASE_BOOKING_COLUMNS[BASE_BOOKING_COLUMNS.length - 1],
+                ]);
+                setStudioName(metadata.studioName || "");
+                setStatusOpts(metadata.statusOptions || DEFAULT_STATUS_OPTS);
+                setQueueTriggerStatus(metadata.queueTriggerStatus || "Antrian Edit");
+                setDpVerifyTriggerStatus(metadata.dpVerifyTriggerStatus || "");
+                setDefaultWaTarget(metadata.defaultWaTarget || "client");
+                setPackages(metadata.packages || []);
+                setFreelancerNames(metadata.freelancerNames || []);
+                setAvailableEventTypes(metadata.availableEventTypes || []);
+                setFormSectionsByEventType(metadata.formSectionsByEventType || {});
+                setMetadataRows(metadata.metadataRows || []);
+                setExtraFieldRows(metadata.extraFieldRows || []);
+                setColumns((current) => {
+                    const nextColumns = applyBookingColumnLabelNormalization(
+                        mergeTableColumnPreferences(
+                            nextColumnDefaults,
+                            metadata.tableColumnPreferences || undefined,
+                        ),
+                    );
+                    return areTableColumnPreferencesEqual(current, nextColumns)
+                        ? current
+                        : nextColumns;
+                });
+            }
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -643,7 +666,7 @@ export default function BookingsPage() {
         itemsPerPage,
         itemsPerPageHydrated,
         packageFilter,
-        searchQuery,
+        debouncedSearchQuery,
         sortOrder,
         statusFilter,
         browserTimeZone,
@@ -722,7 +745,9 @@ export default function BookingsPage() {
                 return typeof value === "string" ? value : fallback;
             };
 
-            setSearchQuery(readString("searchQuery", ""));
+            const hydratedSearchQuery = readString("searchQuery", "");
+            setSearchQuery(hydratedSearchQuery);
+            setDebouncedSearchQuery(hydratedSearchQuery);
             setStatusFilter(parseLegacyOrMultiFilterValue(parsed.statusFilter));
             setPackageFilter(parseLegacyOrMultiFilterValue(parsed.packageFilter));
             setFreelanceFilter(parseLegacyOrMultiFilterValue(parsed.freelanceFilter));
@@ -1747,7 +1772,7 @@ export default function BookingsPage() {
 
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, statusFilter, packageFilter, freelanceFilter, eventTypeFilter, dateFromFilter, dateToFilter, dateBasis, extraFieldFilters, sortOrder, itemsPerPage]);
+    }, [debouncedSearchQuery, statusFilter, packageFilter, freelanceFilter, eventTypeFilter, dateFromFilter, dateToFilter, dateBasis, extraFieldFilters, sortOrder, itemsPerPage]);
 
     React.useEffect(() => {
         const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));

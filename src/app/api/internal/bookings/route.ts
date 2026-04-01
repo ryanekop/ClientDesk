@@ -172,6 +172,14 @@ function parseTimeZone(value: string | null) {
   return trimmed;
 }
 
+function parseIncludeMetadata(value: string | null) {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "0" || normalized === "false") {
+    return false;
+  }
+  return true;
+}
+
 function readRpcObject<T>(value: unknown): T | null {
   if (Array.isArray(value)) {
     const firstItem = value[0];
@@ -296,6 +304,7 @@ export async function GET(request: NextRequest) {
   const dateToFilter = searchParams.get("dateTo")?.trim() || "";
   const dateBasis = parseDateBasis(searchParams.get("dateBasis"));
   const timeZone = parseTimeZone(searchParams.get("timeZone"));
+  const includeMetadata = parseIncludeMetadata(searchParams.get("includeMetadata"));
   const sortOrder = searchParams.get("sortOrder")?.trim() || "booking_newest";
   const exportAll = searchParams.get("export") === "1";
   const extraFieldFilters = parseExtraFilters(searchParams.get("extraFilters"));
@@ -316,6 +325,11 @@ export async function GET(request: NextRequest) {
     p_export_all: exportAll,
   };
 
+  const metadataPromise = includeMetadata
+    ? supabase.rpc("cd_get_bookings_metadata", {
+      p_event_type_filter: singleEventTypeFilter,
+    })
+    : Promise.resolve({ data: null, error: null });
   const [initialPageResult, metadataResult] = await Promise.all([
     supabase.rpc("cd_get_bookings_page", {
       ...basePageRpcArgs,
@@ -326,9 +340,7 @@ export async function GET(request: NextRequest) {
       p_date_basis: dateBasis,
       p_time_zone: timeZone,
     }),
-    supabase.rpc("cd_get_bookings_metadata", {
-      p_event_type_filter: singleEventTypeFilter,
-    }),
+    metadataPromise,
   ]);
   let pageResult = initialPageResult;
 
@@ -354,7 +366,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (metadataResult.error) {
+  if (includeMetadata && metadataResult.error) {
     return NextResponse.json(
       { error: metadataResult.error.message },
       { status: 500 },
@@ -362,12 +374,15 @@ export async function GET(request: NextRequest) {
   }
 
   const pageData = readRpcObject<BookingPageRpcResponse>(pageResult.data);
-  const metadataData = readRpcObject<BookingMetadataResponse>(metadataResult.data);
+  const metadataData = includeMetadata
+    ? readRpcObject<BookingMetadataResponse>(metadataResult.data)
+    : null;
   const statusOptions = readStringArray(metadataData?.statusOptions);
   const resolvedStatusOptions =
     statusOptions.length > 0
       ? statusOptions
       : getBookingStatusOptions(DEFAULT_CLIENT_STATUSES);
+  const fallbackInitialStatus = resolvedStatusOptions[0] || "Pending";
 
   const normalizedBookings = (Array.isArray(pageData?.items) ? pageData.items : []).map((booking) => {
     const junctionFreelancers = (booking.booking_freelance || [])
@@ -378,11 +393,17 @@ export async function GET(request: NextRequest) {
       booking.booking_services,
       booking.services,
     );
-    const syncedStatus = resolveUnifiedBookingStatus({
-      status: booking.status,
-      clientStatus: booking.client_status,
-      statuses: resolvedStatusOptions,
-    });
+    const fallbackRawStatus =
+      (typeof booking.client_status === "string" && booking.client_status.trim()) ||
+      (typeof booking.status === "string" && booking.status.trim()) ||
+      fallbackInitialStatus;
+    const syncedStatus = includeMetadata
+      ? resolveUnifiedBookingStatus({
+        status: booking.status,
+        clientStatus: booking.client_status,
+        statuses: resolvedStatusOptions,
+      })
+      : fallbackRawStatus;
 
     return {
       ...booking,
@@ -456,31 +477,35 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     items: bookings,
     totalItems: Number(pageData?.totalItems) || 0,
-    metadata: {
-      studioName:
-        typeof metadataData?.studioName === "string" ? metadataData.studioName : "",
-      statusOptions: resolvedStatusOptions,
-      queueTriggerStatus:
-        typeof metadataData?.queueTriggerStatus === "string"
-          ? metadataData.queueTriggerStatus
-          : "Antrian Edit",
-      dpVerifyTriggerStatus:
-        typeof metadataData?.dpVerifyTriggerStatus === "string"
-          ? metadataData.dpVerifyTriggerStatus
-          : "",
-      defaultWaTarget:
-        metadataData?.defaultWaTarget === "freelancer" ? "freelancer" : "client",
-      packages: readStringArray(metadataData?.packages),
-      freelancerNames: readStringArray(metadataData?.freelancerNames),
-      availableEventTypes: readStringArray(metadataData?.availableEventTypes),
-      formSectionsByEventType:
-        metadataData?.formSectionsByEventType &&
-        typeof metadataData.formSectionsByEventType === "object"
-          ? metadataData.formSectionsByEventType
-          : {},
-      tableColumnPreferences: metadataData?.tableColumnPreferences ?? null,
-      metadataRows: readMetadataRows(metadataData?.metadataRows),
-      extraFieldRows: readMetadataRows(metadataData?.extraFieldRows),
-    },
+    ...(includeMetadata
+      ? {
+        metadata: {
+          studioName:
+            typeof metadataData?.studioName === "string" ? metadataData.studioName : "",
+          statusOptions: resolvedStatusOptions,
+          queueTriggerStatus:
+            typeof metadataData?.queueTriggerStatus === "string"
+              ? metadataData.queueTriggerStatus
+              : "Antrian Edit",
+          dpVerifyTriggerStatus:
+            typeof metadataData?.dpVerifyTriggerStatus === "string"
+              ? metadataData.dpVerifyTriggerStatus
+              : "",
+          defaultWaTarget:
+            metadataData?.defaultWaTarget === "freelancer" ? "freelancer" : "client",
+          packages: readStringArray(metadataData?.packages),
+          freelancerNames: readStringArray(metadataData?.freelancerNames),
+          availableEventTypes: readStringArray(metadataData?.availableEventTypes),
+          formSectionsByEventType:
+            metadataData?.formSectionsByEventType &&
+            typeof metadataData.formSectionsByEventType === "object"
+              ? metadataData.formSectionsByEventType
+              : {},
+          tableColumnPreferences: metadataData?.tableColumnPreferences ?? null,
+          metadataRows: readMetadataRows(metadataData?.metadataRows),
+          extraFieldRows: readMetadataRows(metadataData?.extraFieldRows),
+        },
+      }
+      : {}),
   });
 }
