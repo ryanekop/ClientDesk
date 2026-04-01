@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { createClient } from "@/utils/supabase/client";
-import { Activity, Copy, ClipboardCheck, ExternalLink, Search } from "lucide-react";
+import { Activity, Copy, ClipboardCheck, ExternalLink, Search, ListOrdered, X } from "lucide-react";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
@@ -21,6 +21,8 @@ import { useTranslations, useLocale } from "next-intl";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterSingleSelect } from "@/components/ui/filter-single-select";
+import { FilterMultiSelect } from "@/components/ui/filter-multi-select";
+import { BookingDateRangePicker } from "@/components/ui/booking-date-range-picker";
 import {
     areTableColumnPreferencesEqual,
     lockBoundaryColumns,
@@ -79,6 +81,8 @@ type ClientStatusPageMetadata = {
     clientStatuses: string[];
     queueTriggerStatus: string;
     dpVerifyTriggerStatus: string;
+    packages: string[];
+    availableEventTypes: string[];
     tableColumnPreferences: TableColumnPreference[] | null;
     formSectionsByEventType: Record<string, FormLayoutItem[]>;
     metadataRows: Array<{
@@ -118,8 +122,29 @@ const CLIENT_STATUS_COLUMN_MIN_WIDTHS: Record<string, number> = {
     queue: 104,
 };
 const CLIENT_STATUS_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:client_status:items_per_page";
+const CLIENT_STATUS_FILTER_STORAGE_PREFIX = "clientdesk:client_status:filters";
 const CLIENT_STATUS_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const CLIENT_STATUS_DEFAULT_ITEMS_PER_PAGE = 10;
+const SEARCH_DEBOUNCE_MS = 400;
+const CLIENT_STATUS_SORT_ORDERS = [
+    "booking_newest",
+    "booking_oldest",
+    "session_newest",
+    "session_oldest",
+] as const;
+type ClientStatusSortOrder = (typeof CLIENT_STATUS_SORT_ORDERS)[number];
+type ClientStatusDateBasis = "booking_date" | "session_date";
+
+type ClientStatusFilterStoragePayload = {
+    searchQuery: string;
+    statusFilter: string[] | string;
+    packageFilter: string[] | string;
+    eventTypeFilter: string[] | string;
+    dateFromFilter: string;
+    dateToFilter: string;
+    dateBasis?: ClientStatusDateBasis;
+    sortOrder: ClientStatusSortOrder;
+};
 
 function normalizeClientStatusItemsPerPage(value: unknown) {
     const parsed = typeof value === "number" ? value : Number(value);
@@ -130,21 +155,91 @@ function normalizeClientStatusItemsPerPage(value: unknown) {
         : CLIENT_STATUS_DEFAULT_ITEMS_PER_PAGE;
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseSortOrderValue(value: unknown): ClientStatusSortOrder {
+    return typeof value === "string" && CLIENT_STATUS_SORT_ORDERS.includes(value as ClientStatusSortOrder)
+        ? (value as ClientStatusSortOrder)
+        : "booking_newest";
+}
+
+function parseDateBasisValue(value: unknown): ClientStatusDateBasis {
+    return value === "session_date" ? "session_date" : "booking_date";
+}
+
+function parseLegacyOrMultiFilterValue(value: unknown) {
+    if (Array.isArray(value)) {
+        const seen = new Set<string>();
+        const normalized: string[] = [];
+        value.forEach((item) => {
+            if (typeof item !== "string") return;
+            const trimmed = item.trim();
+            if (!trimmed || trimmed.toLowerCase() === "all" || seen.has(trimmed)) return;
+            seen.add(trimmed);
+            normalized.push(trimmed);
+        });
+        return normalized;
+    }
+
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed || trimmed.toLowerCase() === "all") return [];
+        return [trimmed];
+    }
+
+    return [] as string[];
+}
+
+function normalizeSelectedFilterValues(values: string[], options: string[]) {
+    const optionSet = new Set(options);
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+
+    for (const item of values) {
+        if (!optionSet.has(item) || seen.has(item)) continue;
+        seen.add(item);
+        normalized.push(item);
+    }
+
+    return normalized;
+}
+
+function arraysAreEqual(a: string[], b: string[]) {
+    if (a.length !== b.length) return false;
+    return a.every((item, index) => item === b[index]);
+}
+
 export default function ClientStatusPage() {
     const supabase = createClient();
     const t = useTranslations("ClientStatus");
-    const locale = useLocale(); const [bookings, setBookings] = React.useState<BookingStatus[]>([]);
+    const tb = useTranslations("BookingsPage");
+    const locale = useLocale();
+    const [bookings, setBookings] = React.useState<BookingStatus[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [refreshing, setRefreshing] = React.useState(false);
-    const [filter, setFilter] = React.useState("");
-    const [search, setSearch] = React.useState("");
+    const [searchQuery, setSearchQuery] = React.useState("");
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState("");
+    const [showFilterPanel, setShowFilterPanel] = React.useState(false);
+    const [statusFilter, setStatusFilter] = React.useState<string[]>([]);
+    const [packageFilter, setPackageFilter] = React.useState<string[]>([]);
+    const [eventTypeFilter, setEventTypeFilter] = React.useState<string[]>([]);
+    const [dateFromFilter, setDateFromFilter] = React.useState("");
+    const [dateToFilter, setDateToFilter] = React.useState("");
+    const [dateBasis, setDateBasis] = React.useState<ClientStatusDateBasis>("booking_date");
+    const [sortOrder, setSortOrder] = React.useState<ClientStatusSortOrder>("booking_newest");
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
     const [savingId, setSavingId] = React.useState<string | null>(null);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
+    const [filtersHydrated, setFiltersHydrated] = React.useState(false);
+    const [browserTimeZone, setBrowserTimeZone] = React.useState("UTC");
     const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
     const [clientStatuses, setClientStatuses] = React.useState<string[]>(DEFAULT_CLIENT_STATUSES);
+    const [packages, setPackages] = React.useState<string[]>([]);
+    const [availableEventTypes, setAvailableEventTypes] = React.useState<string[]>([]);
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
     const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_CLIENT_STATUS_COLUMNS));
@@ -178,6 +273,8 @@ export default function ClientStatusPage() {
         });
     });
     const hasLoadedBookingsRef = React.useRef(false);
+    const clientStatusMetadataCacheRef = React.useRef<ClientStatusPageMetadata | null>(null);
+    const clientStatusMetadataEventTypeFilterKeyRef = React.useRef("");
 
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
@@ -208,6 +305,25 @@ export default function ClientStatusPage() {
         },
         [],
     );
+    const resetFilters = React.useCallback(() => {
+        setSearchQuery("");
+        setDebouncedSearchQuery("");
+        setStatusFilter([]);
+        setPackageFilter([]);
+        setEventTypeFilter([]);
+        setDateFromFilter("");
+        setDateToFilter("");
+        setDateBasis("booking_date");
+        setSortOrder("booking_newest");
+    }, []);
+
+    React.useEffect(() => {
+        if (typeof window === "undefined") return;
+        const nextTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (nextTimeZone && nextTimeZone.trim()) {
+            setBrowserTimeZone(nextTimeZone);
+        }
+    }, []);
 
     const statusColors = React.useMemo(() => {
         const map: Record<string, string> = {};
@@ -215,8 +331,16 @@ export default function ClientStatusPage() {
         map[CANCELLED_BOOKING_STATUS] = "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400";
         return map;
     }, [clientStatuses]);
+
+    React.useEffect(() => {
+        const timer = window.setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, SEARCH_DEBOUNCE_MS);
+        return () => window.clearTimeout(timer);
+    }, [searchQuery]);
+
     const fetchBookingsPage = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
-        if (!itemsPerPageHydrated) return;
+        if (!itemsPerPageHydrated || !filtersHydrated) return;
 
         if (mode === "initial") {
             setLoading(true);
@@ -225,52 +349,88 @@ export default function ClientStatusPage() {
         }
 
         try {
+            const singleStatusFilter = statusFilter[0] || "All";
+            const singlePackageFilter = packageFilter[0] || "All";
+            const singleEventTypeFilter = eventTypeFilter[0] || "All";
+            const metadataEventTypeFilterKey = JSON.stringify([...eventTypeFilter].sort());
+            const includeMetadata =
+                !clientStatusMetadataCacheRef.current ||
+                clientStatusMetadataEventTypeFilterKeyRef.current !== metadataEventTypeFilterKey;
             const params = new URLSearchParams({
                 page: String(currentPage),
                 perPage: String(itemsPerPage),
+                search: debouncedSearchQuery,
+                status: singleStatusFilter,
+                package: singlePackageFilter,
+                eventType: singleEventTypeFilter,
+                statusFilters: JSON.stringify(statusFilter),
+                packageFilters: JSON.stringify(packageFilter),
+                eventTypeFilters: JSON.stringify(eventTypeFilter),
+                dateFrom: dateFromFilter,
+                dateTo: dateToFilter,
+                dateBasis,
+                sortOrder,
+                timeZone: browserTimeZone,
+                includeMetadata: includeMetadata ? "1" : "0",
             });
-
-            if (search.trim()) {
-                params.set("search", search.trim());
-            }
-
-            if (filter) {
-                params.set("status", filter);
-            }
 
             const response = await fetchPaginatedJson<BookingStatus, ClientStatusPageMetadata>(
                 `/api/internal/client-status?${params.toString()}`,
             );
+            if (response.metadata) {
+                clientStatusMetadataCacheRef.current = response.metadata;
+                clientStatusMetadataEventTypeFilterKeyRef.current = metadataEventTypeFilterKey;
+            }
+            const metadata = response.metadata || clientStatusMetadataCacheRef.current;
+
             setBookings(response.items);
             setTotalItems(response.totalItems);
-            setClientStatuses(response.metadata?.clientStatuses || DEFAULT_CLIENT_STATUSES);
-            setQueueTriggerStatus(response.metadata?.queueTriggerStatus || "Antrian Edit");
-            setDpVerifyTriggerStatus(response.metadata?.dpVerifyTriggerStatus || "");
-            setFormSectionsByEventType(response.metadata?.formSectionsByEventType || {});
-            setMetadataRows(response.metadata?.metadataRows || []);
+            if (metadata) {
+                setClientStatuses(metadata.clientStatuses || DEFAULT_CLIENT_STATUSES);
+                setQueueTriggerStatus(metadata.queueTriggerStatus || "Antrian Edit");
+                setDpVerifyTriggerStatus(metadata.dpVerifyTriggerStatus || "");
+                setPackages(metadata.packages || []);
+                setAvailableEventTypes(metadata.availableEventTypes || []);
+                setFormSectionsByEventType(metadata.formSectionsByEventType || {});
+                setMetadataRows(metadata.metadataRows || []);
 
-            const nextColumnDefaults = lockBoundaryColumns([
-                ...BASE_CLIENT_STATUS_COLUMNS.slice(0, -1),
-                ...buildBookingMetadataColumns(
-                    response.metadata?.metadataRows || [],
-                    response.metadata?.formSectionsByEventType || {},
-                ),
-                BASE_CLIENT_STATUS_COLUMNS[BASE_CLIENT_STATUS_COLUMNS.length - 1],
-            ]);
-            setColumns((current) => {
-                const nextColumns = mergeTableColumnPreferences(
-                    nextColumnDefaults,
-                    response.metadata?.tableColumnPreferences || undefined,
-                );
-                return areTableColumnPreferencesEqual(current, nextColumns)
-                    ? current
-                    : nextColumns;
-            });
+                const nextColumnDefaults = lockBoundaryColumns([
+                    ...BASE_CLIENT_STATUS_COLUMNS.slice(0, -1),
+                    ...buildBookingMetadataColumns(
+                        metadata.metadataRows || [],
+                        metadata.formSectionsByEventType || {},
+                    ),
+                    BASE_CLIENT_STATUS_COLUMNS[BASE_CLIENT_STATUS_COLUMNS.length - 1],
+                ]);
+                setColumns((current) => {
+                    const nextColumns = mergeTableColumnPreferences(
+                        nextColumnDefaults,
+                        metadata.tableColumnPreferences || undefined,
+                    );
+                    return areTableColumnPreferencesEqual(current, nextColumns)
+                        ? current
+                        : nextColumns;
+                });
+            }
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [currentPage, filter, itemsPerPage, itemsPerPageHydrated, search]);
+    }, [
+        browserTimeZone,
+        currentPage,
+        dateBasis,
+        dateFromFilter,
+        dateToFilter,
+        debouncedSearchQuery,
+        eventTypeFilter,
+        filtersHydrated,
+        itemsPerPage,
+        itemsPerPageHydrated,
+        packageFilter,
+        sortOrder,
+        statusFilter,
+    ]);
 
     React.useEffect(() => {
         async function hydrateCurrentUser() {
@@ -282,11 +442,11 @@ export default function ClientStatusPage() {
     }, [supabase]);
 
     React.useEffect(() => {
-        if (!itemsPerPageHydrated) return;
+        if (!itemsPerPageHydrated || !filtersHydrated) return;
         const mode = hasLoadedBookingsRef.current ? "refresh" : "initial";
         hasLoadedBookingsRef.current = true;
         void fetchBookingsPage(mode);
-    }, [fetchBookingsPage, itemsPerPageHydrated]);
+    }, [fetchBookingsPage, filtersHydrated, itemsPerPageHydrated]);
 
     React.useEffect(() => {
         if (!currentUserId) {
@@ -305,6 +465,48 @@ export default function ClientStatusPage() {
     }, [currentUserId]);
 
     React.useEffect(() => {
+        if (!currentUserId) {
+            setFiltersHydrated(false);
+            return;
+        }
+
+        setFiltersHydrated(false);
+        const storageKey = `${CLIENT_STATUS_FILTER_STORAGE_PREFIX}:${currentUserId}`;
+        try {
+            const raw = window.localStorage.getItem(storageKey);
+            if (!raw) {
+                resetFilters();
+                return;
+            }
+
+            const parsed = JSON.parse(raw) as unknown;
+            if (!isObjectRecord(parsed)) {
+                resetFilters();
+                return;
+            }
+
+            const readString = (key: string, fallback = "") => {
+                const value = parsed[key];
+                return typeof value === "string" ? value : fallback;
+            };
+
+            setSearchQuery(readString("searchQuery", ""));
+            setDebouncedSearchQuery(readString("searchQuery", ""));
+            setStatusFilter(parseLegacyOrMultiFilterValue(parsed.statusFilter));
+            setPackageFilter(parseLegacyOrMultiFilterValue(parsed.packageFilter));
+            setEventTypeFilter(parseLegacyOrMultiFilterValue(parsed.eventTypeFilter));
+            setDateFromFilter(readString("dateFromFilter", ""));
+            setDateToFilter(readString("dateToFilter", ""));
+            setDateBasis(parseDateBasisValue(parsed.dateBasis));
+            setSortOrder(parseSortOrderValue(parsed.sortOrder));
+        } catch {
+            resetFilters();
+        } finally {
+            setFiltersHydrated(true);
+        }
+    }, [currentUserId, resetFilters]);
+
+    React.useEffect(() => {
         if (!currentUserId || !itemsPerPageHydrated) return;
         const storageKey = `${CLIENT_STATUS_ITEMS_PER_PAGE_STORAGE_PREFIX}:${currentUserId}`;
         try {
@@ -313,6 +515,37 @@ export default function ClientStatusPage() {
             // Ignore storage write failures.
         }
     }, [currentUserId, itemsPerPage, itemsPerPageHydrated]);
+
+    React.useEffect(() => {
+        if (!currentUserId || !filtersHydrated) return;
+        const storageKey = `${CLIENT_STATUS_FILTER_STORAGE_PREFIX}:${currentUserId}`;
+        const payload: ClientStatusFilterStoragePayload = {
+            searchQuery,
+            statusFilter,
+            packageFilter,
+            eventTypeFilter,
+            dateFromFilter,
+            dateToFilter,
+            dateBasis,
+            sortOrder,
+        };
+        try {
+            window.localStorage.setItem(storageKey, JSON.stringify(payload));
+        } catch {
+            // Ignore storage write failures.
+        }
+    }, [
+        currentUserId,
+        dateBasis,
+        dateFromFilter,
+        dateToFilter,
+        eventTypeFilter,
+        filtersHydrated,
+        packageFilter,
+        searchQuery,
+        sortOrder,
+        statusFilter,
+    ]);
 
     React.useEffect(() => {
         if (!currentUserId) return;
@@ -327,6 +560,41 @@ export default function ClientStatusPage() {
     }, [currentUserId]);
 
     React.useEffect(() => {
+        if (!currentUserId) return;
+        const storageKey = `${CLIENT_STATUS_FILTER_STORAGE_PREFIX}:${currentUserId}`;
+        function handleStorage(event: StorageEvent) {
+            if (event.storageArea !== window.localStorage) return;
+            if (event.key !== storageKey) return;
+            if (!event.newValue) {
+                resetFilters();
+                return;
+            }
+
+            try {
+                const parsed = JSON.parse(event.newValue) as unknown;
+                if (!isObjectRecord(parsed)) return;
+                const readString = (key: string, fallback = "") => {
+                    const value = parsed[key];
+                    return typeof value === "string" ? value : fallback;
+                };
+                setSearchQuery(readString("searchQuery", ""));
+                setDebouncedSearchQuery(readString("searchQuery", ""));
+                setStatusFilter(parseLegacyOrMultiFilterValue(parsed.statusFilter));
+                setPackageFilter(parseLegacyOrMultiFilterValue(parsed.packageFilter));
+                setEventTypeFilter(parseLegacyOrMultiFilterValue(parsed.eventTypeFilter));
+                setDateFromFilter(readString("dateFromFilter", ""));
+                setDateToFilter(readString("dateToFilter", ""));
+                setDateBasis(parseDateBasisValue(parsed.dateBasis));
+                setSortOrder(parseSortOrderValue(parsed.sortOrder));
+            } catch {
+                // Ignore malformed payload.
+            }
+        }
+        window.addEventListener("storage", handleStorage);
+        return () => window.removeEventListener("storage", handleStorage);
+    }, [currentUserId, resetFilters]);
+
+    React.useEffect(() => {
         const nextDefaults = lockBoundaryColumns([
             ...BASE_CLIENT_STATUS_COLUMNS.slice(0, -1),
             ...buildBookingMetadataColumns(metadataRows, formSectionsByEventType),
@@ -339,6 +607,42 @@ export default function ClientStatusPage() {
                 : nextColumns;
         });
     }, [formSectionsByEventType, metadataRows]);
+
+    React.useEffect(() => {
+        if (loading) return;
+
+        const normalizedStatusFilter = normalizeSelectedFilterValues(
+            statusFilter,
+            clientStatuses,
+        );
+        if (!arraysAreEqual(normalizedStatusFilter, statusFilter)) {
+            setStatusFilter(normalizedStatusFilter);
+        }
+
+        const normalizedPackageFilter = normalizeSelectedFilterValues(
+            packageFilter,
+            packages,
+        );
+        if (!arraysAreEqual(normalizedPackageFilter, packageFilter)) {
+            setPackageFilter(normalizedPackageFilter);
+        }
+
+        const normalizedEventTypeFilter = normalizeSelectedFilterValues(
+            eventTypeFilter,
+            availableEventTypes,
+        );
+        if (!arraysAreEqual(normalizedEventTypeFilter, eventTypeFilter)) {
+            setEventTypeFilter(normalizedEventTypeFilter);
+        }
+    }, [
+        availableEventTypes,
+        clientStatuses,
+        eventTypeFilter,
+        loading,
+        packageFilter,
+        packages,
+        statusFilter,
+    ]);
 
     async function updateStatus(
         id: string,
@@ -531,7 +835,17 @@ export default function ClientStatusPage() {
 
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [filter, search, itemsPerPage]);
+    }, [
+        dateBasis,
+        dateFromFilter,
+        dateToFilter,
+        debouncedSearchQuery,
+        eventTypeFilter,
+        itemsPerPage,
+        packageFilter,
+        sortOrder,
+        statusFilter,
+    ]);
 
     React.useEffect(() => {
         const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
@@ -595,15 +909,49 @@ export default function ClientStatusPage() {
         () => getBookingStatusOptions(clientStatuses),
         [clientStatuses],
     );
-    const topStatusFilterOptions = React.useMemo(
-        () => [{ value: "", label: "Semua" }, ...statusOptions.map((status) => ({ value: status, label: status }))],
-        [statusOptions],
-    );
     const statusSelectOptions = React.useMemo(
         () => [{ value: "", label: t("belumDiset") }, ...statusOptions.map((status) => ({ value: status, label: status }))],
         [statusOptions, t],
     );
-    const hasActiveFilters = Boolean(filter) || search.trim().length > 0;
+    const sortOptions = React.useMemo(
+        () => [
+            { value: "booking_newest", label: tb("sortBookingDateNewest") },
+            { value: "booking_oldest", label: tb("sortBookingDateOldest") },
+            { value: "session_newest", label: tb("sortSessionDateNearest") },
+            { value: "session_oldest", label: tb("sortSessionDateFarthest") },
+        ],
+        [tb],
+    );
+    const sortPlaceholder = sortOptions[0]?.label || tb("sortMenuTitle");
+    const dateBasisOptions = React.useMemo(
+        () => [
+            { value: "booking_date", label: tb("dateBasisBookingDate") },
+            { value: "session_date", label: tb("dateBasisSessionDate") },
+        ],
+        [tb],
+    );
+    const statusFilterOptions = React.useMemo(
+        () => clientStatuses.map((status) => ({ value: status, label: status })),
+        [clientStatuses],
+    );
+    const packageFilterOptions = React.useMemo(
+        () => packages.map((packageName) => ({ value: packageName, label: packageName })),
+        [packages],
+    );
+    const eventTypeFilterOptions = React.useMemo(
+        () => availableEventTypes.map((eventType) => ({ value: eventType, label: eventType })),
+        [availableEventTypes],
+    );
+    const multiCountSuffix = locale === "en" ? "selected" : "dipilih";
+    const hasActiveFilters =
+        statusFilter.length > 0 ||
+        packageFilter.length > 0 ||
+        eventTypeFilter.length > 0 ||
+        Boolean(dateFromFilter) ||
+        Boolean(dateToFilter) ||
+        dateBasis !== "booking_date" ||
+        Boolean(searchQuery) ||
+        sortOrder !== "booking_newest";
     const queryState = React.useMemo<PaginatedQueryState>(() => ({
         page: currentPage,
         perPage: itemsPerPage,
@@ -766,6 +1114,7 @@ export default function ClientStatusPage() {
                             className="inline-block w-[172px] align-middle"
                             triggerClassName={inlineStatusTriggerClass}
                             mobileTitle="Status"
+                            usePortalDesktopMenu
                         />
                         {booking.client_status && (
                             <span className={`ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusColors[booking.client_status] || "bg-muted text-muted-foreground"}`}>
@@ -841,7 +1190,6 @@ export default function ClientStatusPage() {
         }
     }
 
-    const topFilterTriggerClass = "h-10 rounded-lg bg-background px-3 py-2 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
     const inlineStatusTriggerClass = "h-8 rounded-md bg-background px-2 py-1 text-xs shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
     const inputClass = "h-8 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] w-16 text-center";
 
@@ -875,25 +1223,143 @@ export default function ClientStatusPage() {
             </PageHeader>
 
             {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <input
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder={t("cariPlaceholder")}
-                        className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                    />
+            <div className="space-y-3 sm:space-y-4">
+                <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="relative min-w-0 flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <input
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder={t("cariPlaceholder")}
+                            className="h-9 w-full rounded-md border border-input bg-background/50 pl-9 pr-3 text-sm shadow-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-input bg-background/50 px-0 text-sm hover:bg-muted/30 sm:w-auto sm:gap-2 sm:px-3"
+                        onClick={() => setShowFilterPanel((prev) => !prev)}
+                        aria-label="Filter"
+                    >
+                        <ListOrdered className="w-4 h-4" />
+                        <span className="hidden sm:inline">Filter</span>
+                    </button>
+                    <div className="hidden sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+                        <FilterSingleSelect
+                            value={sortOrder}
+                            onChange={(nextValue) => setSortOrder(parseSortOrderValue(nextValue))}
+                            options={sortOptions}
+                            placeholder={sortPlaceholder}
+                            className="w-[300px] md:w-[340px] lg:w-[360px]"
+                            mobileTitle={tb("sortMenuTitle")}
+                        />
+                        {hasActiveFilters && (
+                            <button
+                                type="button"
+                                onClick={resetFilters}
+                                className="h-9 px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                                <X className="w-3.5 h-3.5" /> Reset
+                            </button>
+                        )}
+                    </div>
                 </div>
-                <FilterSingleSelect
-                    value={filter}
-                    onChange={setFilter}
-                    options={topStatusFilterOptions}
-                    placeholder="Semua"
-                    className="w-full sm:w-[220px]"
-                    triggerClassName={topFilterTriggerClass}
-                    mobileTitle="Status"
-                />
+                <div className="flex w-full flex-col gap-2 sm:hidden">
+                    <FilterSingleSelect
+                        value={sortOrder}
+                        onChange={(nextValue) => setSortOrder(parseSortOrderValue(nextValue))}
+                        options={sortOptions}
+                        placeholder={sortPlaceholder}
+                        className="w-full"
+                        mobileTitle={tb("sortMenuTitle")}
+                    />
+                    {hasActiveFilters && (
+                        <button
+                            type="button"
+                            onClick={resetFilters}
+                            className="h-9 w-full px-3 rounded-md border border-input bg-background/50 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                            <X className="w-3.5 h-3.5" /> Reset
+                        </button>
+                    )}
+                </div>
+                {showFilterPanel && (
+                    <div className="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{tb("dateRangeLabel")}</label>
+                                <BookingDateRangePicker
+                                    value={{ from: dateFromFilter, to: dateToFilter }}
+                                    onApply={({ from, to }) => {
+                                        setDateFromFilter(from);
+                                        setDateToFilter(to);
+                                    }}
+                                    onClear={() => {
+                                        setDateFromFilter("");
+                                        setDateToFilter("");
+                                    }}
+                                    locale={locale === "en" ? "en" : "id"}
+                                    placeholder={tb("dateRangePlaceholder")}
+                                    applyLabel={tb("apply")}
+                                    clearLabel={tb("clear")}
+                                    startLabel={tb("start")}
+                                    endLabel={tb("end")}
+                                    mobileTitle={tb("dateRangePickerTitle")}
+                                    className="w-full"
+                                />
+                            </div>
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{tb("dateBasisLabel")}</label>
+                                <FilterSingleSelect
+                                    value={dateBasis}
+                                    onChange={(nextValue) => setDateBasis(parseDateBasisValue(nextValue))}
+                                    options={dateBasisOptions}
+                                    placeholder={dateBasisOptions[0]?.label || tb("dateBasisBookingDate")}
+                                    className="w-full"
+                                    mobileTitle={tb("dateBasisLabel")}
+                                />
+                            </div>
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">{tb("eventTypeLabel")}</label>
+                                <FilterMultiSelect
+                                    values={eventTypeFilter}
+                                    onChange={setEventTypeFilter}
+                                    options={eventTypeFilterOptions}
+                                    placeholder={tb("allEventTypes")}
+                                    allLabel={tb("allEventTypes")}
+                                    countSuffix={multiCountSuffix}
+                                    className="w-full"
+                                    mobileTitle={tb("eventTypeLabel")}
+                                />
+                            </div>
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Status</label>
+                                <FilterMultiSelect
+                                    values={statusFilter}
+                                    onChange={setStatusFilter}
+                                    options={statusFilterOptions}
+                                    placeholder={tb("allStatus")}
+                                    allLabel={tb("allStatus")}
+                                    countSuffix={multiCountSuffix}
+                                    className="w-full"
+                                    mobileTitle="Status"
+                                />
+                            </div>
+                            <div className="space-y-1.5 md:space-y-0 md:flex md:items-center md:gap-4">
+                                <label className="text-xs font-medium text-muted-foreground md:w-24 md:shrink-0">Paket</label>
+                                <FilterMultiSelect
+                                    values={packageFilter}
+                                    onChange={setPackageFilter}
+                                    options={packageFilterOptions}
+                                    placeholder={tb("allPackages")}
+                                    allLabel={tb("allPackages")}
+                                    countSuffix={multiCountSuffix}
+                                    className="w-full"
+                                    mobileTitle="Paket"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Mobile Cards */}
@@ -938,6 +1404,7 @@ export default function ClientStatusPage() {
                                     className="flex-1"
                                     triggerClassName={inlineStatusTriggerClass}
                                     mobileTitle="Status"
+                                    usePortalDesktopMenu
                                 />
                             </div>
                             <div className="flex items-center gap-3">

@@ -226,7 +226,7 @@ export function lockBoundaryColumns(
       ...leadingFixed,
       locked: leadingFixed.locked === true,
       visible: leadingFixed.visible !== false,
-      pin: null,
+      pin: "left",
     });
   }
 

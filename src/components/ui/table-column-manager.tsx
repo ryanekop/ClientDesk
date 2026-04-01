@@ -128,6 +128,8 @@ function SortableColumnItem({
     id: column.id,
     disabled: !canReorder,
   });
+  const isLockedVisual =
+    column.locked === true || column.pin === "left" || column.pin === "right";
   const style = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
@@ -185,7 +187,7 @@ function SortableColumnItem({
                 : "Kunci kolom saat digeser"
           }
         >
-          {column.pin === "left" || column.pin === "right" ? (
+          {isLockedVisual ? (
             <Lock className="h-4 w-4" />
           ) : (
             <LockOpen className="h-4 w-4" />

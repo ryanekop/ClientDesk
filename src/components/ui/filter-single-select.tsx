@@ -22,9 +22,11 @@ type FilterSingleSelectProps = {
   menuClassName?: string;
   mobileTitle?: string;
   disabled?: boolean;
+  usePortalDesktopMenu?: boolean;
 };
 
 const MOBILE_BREAKPOINT = "(max-width: 767px)";
+const VIEWPORT_PADDING = 8;
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState(false);
@@ -57,10 +59,23 @@ export function FilterSingleSelect({
   menuClassName,
   mobileTitle,
   disabled,
+  usePortalDesktopMenu = false,
 }: FilterSingleSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [mounted, setMounted] = React.useState(false);
+  const [desktopMenuPosition, setDesktopMenuPosition] = React.useState<{
+    top: number;
+    left: number;
+    width: number;
+    ready: boolean;
+  }>({
+    top: 0,
+    left: 0,
+    width: 0,
+    ready: false,
+  });
   const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const desktopMenuRef = React.useRef<HTMLDivElement | null>(null);
   const isMobile = useIsMobile();
 
   React.useEffect(() => {
@@ -74,6 +89,7 @@ export function FilterSingleSelect({
     function handleOutsideClick(event: MouseEvent) {
       const target = event.target as Node | null;
       if (target && rootRef.current?.contains(target)) return;
+      if (target && desktopMenuRef.current?.contains(target)) return;
       setOpen(false);
     }
 
@@ -82,6 +98,85 @@ export function FilterSingleSelect({
       document.removeEventListener("mousedown", handleOutsideClick);
     };
   }, [open, isMobile]);
+
+  React.useLayoutEffect(() => {
+    if (!open || isMobile || !mounted || !usePortalDesktopMenu) return;
+    const anchorEl = rootRef.current;
+    if (!anchorEl) return;
+
+    let rafId = 0;
+
+    const updatePosition = () => {
+      const menuEl = desktopMenuRef.current;
+      if (!menuEl || !anchorEl) return;
+
+      const anchorRect = anchorEl.getBoundingClientRect();
+      const menuRect = menuEl.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      const width = anchorRect.width;
+      let left = anchorRect.left;
+      left = Math.max(
+        VIEWPORT_PADDING,
+        Math.min(left, viewportWidth - width - VIEWPORT_PADDING),
+      );
+
+      const canOpenUp =
+        anchorRect.top - 6 - menuRect.height >= VIEWPORT_PADDING;
+      const shouldOpenUp =
+        anchorRect.bottom + 6 + menuRect.height >
+          viewportHeight - VIEWPORT_PADDING && canOpenUp;
+      let top = shouldOpenUp
+        ? anchorRect.top - 6 - menuRect.height
+        : anchorRect.bottom + 6;
+      top = Math.max(
+        VIEWPORT_PADDING,
+        Math.min(top, viewportHeight - menuRect.height - VIEWPORT_PADDING),
+      );
+
+      setDesktopMenuPosition((current) => {
+        if (
+          current.ready &&
+          current.top === top &&
+          current.left === left &&
+          current.width === width
+        ) {
+          return current;
+        }
+        return { top, left, width, ready: true };
+      });
+    };
+
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(rafId);
+      rafId = window.requestAnimationFrame(updatePosition);
+    };
+
+    scheduleUpdate();
+    window.addEventListener("resize", scheduleUpdate, { passive: true });
+    window.addEventListener("scroll", scheduleUpdate, {
+      passive: true,
+      capture: true,
+    });
+
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(scheduleUpdate)
+        : null;
+    if (observer) {
+      observer.observe(anchorEl);
+      if (desktopMenuRef.current) observer.observe(desktopMenuRef.current);
+    }
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("scroll", scheduleUpdate, true);
+      observer?.disconnect();
+      setDesktopMenuPosition((current) => ({ ...current, ready: false }));
+    };
+  }, [isMobile, mounted, open, usePortalDesktopMenu]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -177,11 +272,37 @@ export function FilterSingleSelect({
         </span>
       </button>
 
-      {open && !isMobile ? (
-        <div className="absolute left-0 top-[calc(100%+0.35rem)] z-[125] w-full rounded-md border bg-popover shadow-lg">
+      {open && !isMobile && !usePortalDesktopMenu ? (
+        <div
+          ref={desktopMenuRef}
+          className="absolute left-0 top-[calc(100%+0.35rem)] z-[125] w-full rounded-md border bg-popover shadow-lg"
+        >
           {optionButtons}
         </div>
       ) : null}
+
+      {mounted && open && !isMobile && usePortalDesktopMenu
+        ? createPortal(
+            <div
+              ref={desktopMenuRef}
+              className={cn(
+                "fixed z-[160] rounded-md border bg-popover shadow-lg transition-[opacity,transform] duration-150 ease-out",
+                desktopMenuPosition.ready
+                  ? "pointer-events-auto opacity-100 scale-100"
+                  : "pointer-events-none opacity-0 scale-95",
+              )}
+              style={{
+                top: desktopMenuPosition.top,
+                left: desktopMenuPosition.left,
+                width: desktopMenuPosition.width,
+                transformOrigin: "top left",
+              }}
+            >
+              {optionButtons}
+            </div>,
+            document.body,
+          )
+        : null}
 
       {mounted && isMobile
         ? createPortal(

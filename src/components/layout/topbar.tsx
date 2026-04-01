@@ -167,7 +167,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   return (
     <>
     {/* Topbar stays at top-0 here; announcement offset is already handled by DashboardLayout container. */}
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between shadow-[0_1px_5px_rgba(0,0,0,0.02)] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
+    <header className="sticky top-0 z-[45] flex h-16 items-center justify-between shadow-[0_1px_5px_rgba(0,0,0,0.02)] bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
@@ -225,7 +225,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
           </button>
 
           <div
-            className={`absolute right-0 top-full mt-2 w-56 rounded-lg border bg-card shadow-lg z-50 overflow-hidden transition-all duration-200 ease-out origin-top-right ${
+            className={`absolute right-0 top-full mt-2 w-56 rounded-lg border bg-card shadow-lg z-[60] overflow-hidden transition-all duration-200 ease-out origin-top-right ${
               profileOpen
                 ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
                 : "opacity-0 scale-95 -translate-y-1 pointer-events-none"

@@ -1467,6 +1467,7 @@ export function BookingFormClient({
   }, [isCityScopedEvent, selectedCityCode]);
 
   React.useEffect(() => {
+    if (isSpecialOfferActive && packageLocked) return;
     const availableMainIds = new Set(filteredServices.map((service) => service.id));
     setSelectedServiceIds((prev) => {
       const next = prev.filter((serviceId) => availableMainIds.has(serviceId));
@@ -1475,9 +1476,10 @@ export function BookingFormClient({
       }
       return next;
     });
-  }, [filteredServices]);
+  }, [filteredServices, isSpecialOfferActive, packageLocked]);
 
   React.useEffect(() => {
+    if (isSpecialOfferActive && addonLocked) return;
     const availableAddonIds = new Set(addonServices.map((service) => service.id));
     setSelectedAddons((prev) => {
       const next = new Set(
@@ -1495,7 +1497,7 @@ export function BookingFormClient({
       }
       return next;
     });
-  }, [addonServices]);
+  }, [addonLocked, addonServices, isSpecialOfferActive]);
 
   const selectedAddonTotal = selectedAddonServices.reduce(
     (sum, service) => sum + service.price,
