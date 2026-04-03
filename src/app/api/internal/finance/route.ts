@@ -98,14 +98,22 @@ function parsePositiveInt(value: string | null, fallback: number) {
   return Math.floor(parsed);
 }
 
+function normalizeTextFilterValue(value: unknown) {
+  if (typeof value !== "string") return "";
+  return value.replace(/\\/g, "").trim();
+}
+
 function parseStringListValue(rawValue: string) {
-  const trimmed = rawValue.trim();
+  const trimmed = normalizeTextFilterValue(rawValue);
   if (!trimmed) return [] as string[];
 
   try {
     const parsed = JSON.parse(trimmed) as unknown;
     if (Array.isArray(parsed)) {
-      return parsed.filter((item): item is string => typeof item === "string");
+      return parsed
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => normalizeTextFilterValue(item))
+        .filter((item) => item.length > 0);
     }
   } catch {
     // Fallback to CSV parsing.
@@ -137,11 +145,12 @@ function parseFilterList(
   }
 
   const legacySingleValue = searchParams.get(singleKey)?.trim() || "";
-  if (!legacySingleValue || legacySingleValue.toLowerCase() === "all") {
+  const normalizedSingleValue = normalizeTextFilterValue(legacySingleValue);
+  if (!normalizedSingleValue || normalizedSingleValue.toLowerCase() === "all") {
     return [] as string[];
   }
 
-  return [legacySingleValue];
+  return [normalizedSingleValue];
 }
 
 function parseDateBasis(value: string | null) {
@@ -160,6 +169,10 @@ function parseIncludeMetadata(value: string | null) {
     return false;
   }
   return true;
+}
+
+function isInvalidEscapeStringError(message: string) {
+  return message.toLowerCase().includes("invalid escape string");
 }
 
 function readRpcObject<T>(value: unknown): T | null {
@@ -280,7 +293,7 @@ export async function GET(request: NextRequest) {
     MAX_PER_PAGE,
   );
   const filter = searchParams.get("filter")?.trim() || "all";
-  const searchQuery = searchParams.get("search")?.trim() || "";
+  const searchQuery = normalizeTextFilterValue(searchParams.get("search"));
   const packageFilters = parseFilterList(searchParams, "packageFilters", "package");
   const bookingStatusFilters = parseFilterList(
     searchParams,
@@ -351,6 +364,23 @@ export async function GET(request: NextRequest) {
   }
 
   if (pageResult.error) {
+    if (isInvalidEscapeStringError(pageResult.error.message || "")) {
+      console.error("[Finance API] Invalid escape pattern in search/filter", {
+        userId: user?.id || null,
+        page,
+        perPage,
+        filter,
+        hasSearchQuery: searchQuery.length > 0,
+        packageFilterCount: packageFilters.length,
+        bookingStatusFilterCount: bookingStatusFilters.length,
+        eventTypeFilterCount: eventTypeFilters.length,
+        error: pageResult.error.message,
+      });
+      return NextResponse.json(
+        { error: "Search/filter text contains an unsupported escape pattern." },
+        { status: 400 },
+      );
+    }
     console.error("[Finance API] Failed to load finance page", {
       userId: user?.id || null,
       page,

@@ -105,7 +105,15 @@ CREATE OR REPLACE FUNCTION public.cd_escape_like_query(
 LANGUAGE sql
 IMMUTABLE
 AS $$
-  SELECT replace(replace(replace(COALESCE(p_value, ''), '\\', '\\\\'), '%', '\\%'), '_', '\\_');
+  SELECT replace(
+           replace(
+             replace(COALESCE(p_value, ''), E'\\', E'\\\\'),
+             '%',
+             E'\\%'
+           ),
+           '_',
+           E'\\_'
+         );
 $$;
 
 CREATE OR REPLACE FUNCTION public.cd_text_contains(
@@ -115,7 +123,7 @@ CREATE OR REPLACE FUNCTION public.cd_text_contains(
 LANGUAGE sql
 IMMUTABLE
 AS $$
-  SELECT COALESCE(p_source, '') ILIKE ('%' || public.cd_escape_like_query(COALESCE(p_query, '')) || '%') ESCAPE '\\';
+  SELECT COALESCE(p_source, '') ILIKE ('%' || public.cd_escape_like_query(COALESCE(p_query, '')) || '%') ESCAPE E'\\';
 $$;
 
 CREATE OR REPLACE FUNCTION public.cd_stringify_form_field_value(
