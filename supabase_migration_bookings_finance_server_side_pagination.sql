@@ -799,7 +799,8 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION public.cd_get_bookings_metadata(
-  p_event_type_filter TEXT DEFAULT 'All'
+  p_event_type_filter TEXT DEFAULT 'All',
+  p_table_menu TEXT DEFAULT 'bookings'
 ) RETURNS JSONB
 LANGUAGE sql
 STABLE
@@ -869,7 +870,13 @@ AS $$
       FROM profile_data
     ), '{}'::jsonb),
     'tableColumnPreferences', COALESCE((
-      SELECT table_column_preferences -> 'bookings'
+      SELECT table_column_preferences -> (
+        CASE
+          WHEN lower(COALESCE(NULLIF(btrim(p_table_menu), ''), 'bookings')) = 'client_status'
+            THEN 'client_status'
+          ELSE 'bookings'
+        END
+      )
       FROM profile_data
     ), 'null'::jsonb),
     'metadataRows', COALESCE((
@@ -1605,7 +1612,8 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION public.cd_get_bookings_metadata(
-  p_event_type_filter TEXT DEFAULT 'All'
+  p_event_type_filter TEXT DEFAULT 'All',
+  p_table_menu TEXT DEFAULT 'bookings'
 ) RETURNS JSONB
 LANGUAGE sql
 STABLE
@@ -1674,7 +1682,13 @@ AS $$
       FROM profile_data
     ), '{}'::jsonb),
     'tableColumnPreferences', COALESCE((
-      SELECT table_column_preferences -> 'bookings'
+      SELECT table_column_preferences -> (
+        CASE
+          WHEN lower(COALESCE(NULLIF(btrim(p_table_menu), ''), 'bookings')) = 'client_status'
+            THEN 'client_status'
+          ELSE 'bookings'
+        END
+      )
       FROM profile_data
     ), 'null'::jsonb),
     'metadataRows', COALESCE((

@@ -199,6 +199,20 @@ function isInvalidEscapeStringError(message: string) {
   return message.toLowerCase().includes("invalid escape string");
 }
 
+function isLikelyMissingRpcArgumentError(message: string, argumentName: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes(argumentName.toLowerCase()) &&
+    (
+      normalized.includes("function") ||
+      normalized.includes("parameter") ||
+      normalized.includes("signature") ||
+      normalized.includes("does not exist") ||
+      normalized.includes("could not find")
+    )
+  );
+}
+
 function readRpcObject<T>(value: unknown): T | null {
   if (Array.isArray(value)) {
     const firstItem = value[0];
@@ -362,6 +376,7 @@ export async function GET(request: NextRequest) {
   const metadataPromise = includeMetadata
     ? supabase.rpc("cd_get_bookings_metadata", {
       p_event_type_filter: singleEventTypeFilter,
+      p_table_menu: "bookings",
     })
     : Promise.resolve({ data: null, error: null });
   const profileSettingsPromise = includeMetadata && user?.id
@@ -371,7 +386,7 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle()
     : Promise.resolve({ data: null, error: null });
-  const [initialPageResult, metadataResult, profileSettingsResult] = await Promise.all([
+  const [initialPageResult, initialMetadataResult, profileSettingsResult] = await Promise.all([
     supabase.rpc("cd_get_bookings_page", {
       ...basePageRpcArgs,
       p_status_filters: statusFilters,
@@ -385,6 +400,7 @@ export async function GET(request: NextRequest) {
     profileSettingsPromise,
   ]);
   let pageResult = initialPageResult;
+  let metadataResult = initialMetadataResult;
 
   if (pageResult.error) {
     const message = (pageResult.error.message || "").toLowerCase();
@@ -399,6 +415,16 @@ export async function GET(request: NextRequest) {
     if (isLikelyOldRpcSignature) {
       pageResult = await supabase.rpc("cd_get_bookings_page", basePageRpcArgs);
     }
+  }
+
+  if (
+    includeMetadata &&
+    metadataResult.error &&
+    isLikelyMissingRpcArgumentError(metadataResult.error.message || "", "p_table_menu")
+  ) {
+    metadataResult = await supabase.rpc("cd_get_bookings_metadata", {
+      p_event_type_filter: singleEventTypeFilter,
+    });
   }
 
   if (pageResult.error) {

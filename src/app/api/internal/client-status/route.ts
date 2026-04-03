@@ -104,6 +104,20 @@ function isInvalidEscapeStringError(message: string) {
   return message.toLowerCase().includes("invalid escape string");
 }
 
+function isLikelyMissingRpcArgumentError(message: string, argumentName: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes(argumentName.toLowerCase()) &&
+    (
+      normalized.includes("function") ||
+      normalized.includes("parameter") ||
+      normalized.includes("signature") ||
+      normalized.includes("does not exist") ||
+      normalized.includes("could not find")
+    )
+  );
+}
+
 function readRpcObject<T>(value: unknown): T | null {
   if (Array.isArray(value)) {
     const firstItem = value[0];
@@ -174,7 +188,7 @@ export async function GET(request: NextRequest) {
 
   const profileResult = await supabase
     .from("profiles")
-    .select("custom_client_statuses")
+    .select("custom_client_statuses, table_column_preferences")
     .eq("id", user.id)
     .single();
 
@@ -185,9 +199,13 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const profileStatuses =
-    ((profileResult.data as { custom_client_statuses?: string[] | null } | null)
-      ?.custom_client_statuses || DEFAULT_CLIENT_STATUSES);
+  const profileData = profileResult.data as {
+    custom_client_statuses?: string[] | null;
+    table_column_preferences?: { client_status?: unknown } | null;
+  } | null;
+  const profileStatuses = profileData?.custom_client_statuses || DEFAULT_CLIENT_STATUSES;
+  const profileClientStatusTablePreferences =
+    profileData?.table_column_preferences?.client_status ?? null;
 
   const defaultVisibleStatusFilters = getBookingStatusOptions(profileStatuses).filter(
     (status) => status !== CANCELLED_BOOKING_STATUS,
@@ -243,15 +261,17 @@ export async function GET(request: NextRequest) {
   const metadataPromise = includeMetadata
     ? supabase.rpc("cd_get_bookings_metadata", {
       p_event_type_filter: eventTypeFilters[0] || "All",
+      p_table_menu: "client_status",
     })
     : Promise.resolve({ data: null, error: null });
 
-  const [initialPageResult, metadataResult] = await Promise.all([
+  const [initialPageResult, initialMetadataResult] = await Promise.all([
     supabase.rpc("cd_get_bookings_page", pageRpcArgs),
     metadataPromise,
   ]);
 
   let pageResult = initialPageResult;
+  let metadataResult = initialMetadataResult;
 
   if (pageResult.error) {
     const message = (pageResult.error.message || "").toLowerCase();
@@ -302,6 +322,16 @@ export async function GET(request: NextRequest) {
       { error: pageResult.error.message },
       { status: 500 },
     );
+  }
+
+  if (
+    includeMetadata &&
+    metadataResult.error &&
+    isLikelyMissingRpcArgumentError(metadataResult.error.message || "", "p_table_menu")
+  ) {
+    metadataResult = await supabase.rpc("cd_get_bookings_metadata", {
+      p_event_type_filter: eventTypeFilters[0] || "All",
+    });
   }
 
   if (includeMetadata && metadataResult.error) {
@@ -364,7 +394,10 @@ export async function GET(request: NextRequest) {
       dpVerifyTriggerStatus: metadataData?.dpVerifyTriggerStatus || "",
       packages: readStringArray(metadataData?.packages),
       availableEventTypes: readStringArray(metadataData?.availableEventTypes),
-      tableColumnPreferences: metadataData?.tableColumnPreferences ?? null,
+      tableColumnPreferences:
+        profileClientStatusTablePreferences ??
+        metadataData?.tableColumnPreferences ??
+        null,
       formSectionsByEventType:
         metadataData?.formSectionsByEventType &&
         typeof metadataData.formSectionsByEventType === "object"
