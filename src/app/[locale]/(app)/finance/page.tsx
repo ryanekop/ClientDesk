@@ -809,6 +809,7 @@ export default function FinancePage() {
     }, [formSectionsByEventType, metadataRows]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
+        const normalizedNextColumns = lockBoundaryColumns(nextColumns);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         setSavingColumns(true);
@@ -820,17 +821,23 @@ export default function FinancePage() {
         const payload = updateTableColumnPreferenceMap(
             profile?.table_column_preferences,
             "finance",
-            nextColumns,
+            normalizedNextColumns,
         );
         await supabase
             .from("profiles")
             .update({ table_column_preferences: payload })
             .eq("id", user.id);
         await invalidateProfilePublicCache();
+        if (financeMetadataCacheRef.current) {
+            financeMetadataCacheRef.current = {
+                ...financeMetadataCacheRef.current,
+                tableColumnPreferences: normalizedNextColumns,
+            };
+        }
         setColumns((current) =>
-            areTableColumnPreferencesEqual(current, nextColumns)
+            areTableColumnPreferencesEqual(current, normalizedNextColumns)
                 ? current
-                : nextColumns,
+                : normalizedNextColumns,
         );
         setSavingColumns(false);
         setColumnManagerOpen(false);

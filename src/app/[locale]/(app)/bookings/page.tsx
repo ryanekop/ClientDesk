@@ -720,8 +720,9 @@ export default function BookingsPage() {
     ]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
-        const normalizedNextColumns =
-            applyBookingColumnLabelNormalization(nextColumns);
+        const normalizedNextColumns = applyBookingColumnLabelNormalization(
+            lockBoundaryColumns(nextColumns),
+        );
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         setSavingColumns(true);
@@ -740,6 +741,12 @@ export default function BookingsPage() {
             .update({ table_column_preferences: payload })
             .eq("id", user.id);
         await invalidateProfilePublicCache();
+        if (bookingMetadataCacheRef.current) {
+            bookingMetadataCacheRef.current = {
+                ...bookingMetadataCacheRef.current,
+                tableColumnPreferences: normalizedNextColumns,
+            };
+        }
         setColumns((current) =>
             areTableColumnPreferencesEqual(current, normalizedNextColumns)
                 ? current

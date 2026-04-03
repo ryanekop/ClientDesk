@@ -311,6 +311,17 @@ export default function ClientStatusPage() {
         },
         [],
     );
+    const invalidateProfilePublicCache = React.useCallback(async () => {
+        try {
+            await fetch("/api/internal/cache/invalidate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ scope: "profile" }),
+            });
+        } catch {
+            // Best effort cache invalidation.
+        }
+    }, []);
     const resetFilters = React.useCallback(() => {
         setSearchQuery("");
         setDebouncedSearchQuery("");
@@ -1006,6 +1017,7 @@ export default function ClientStatusPage() {
     }, [cancelActiveResize, columnManagerOpen]);
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
+        const normalizedNextColumns = lockBoundaryColumns(nextColumns);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
         setSavingColumns(true);
@@ -1017,16 +1029,23 @@ export default function ClientStatusPage() {
         const payload = updateTableColumnPreferenceMap(
             profile?.table_column_preferences,
             "client_status",
-            nextColumns,
+            normalizedNextColumns,
         );
         await supabase
             .from("profiles")
             .update({ table_column_preferences: payload })
             .eq("id", user.id);
+        await invalidateProfilePublicCache();
+        if (clientStatusMetadataCacheRef.current) {
+            clientStatusMetadataCacheRef.current = {
+                ...clientStatusMetadataCacheRef.current,
+                tableColumnPreferences: normalizedNextColumns,
+            };
+        }
         setColumns((current) =>
-            areTableColumnPreferencesEqual(current, nextColumns)
+            areTableColumnPreferencesEqual(current, normalizedNextColumns)
                 ? current
-                : nextColumns,
+                : normalizedNextColumns,
         );
         setSavingColumns(false);
         setColumnManagerOpen(false);
