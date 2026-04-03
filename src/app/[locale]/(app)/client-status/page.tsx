@@ -211,6 +211,10 @@ function arraysAreEqual(a: string[], b: string[]) {
     return a.every((item, index) => item === b[index]);
 }
 
+function isAbortError(error: unknown) {
+    return error instanceof Error && error.name === "AbortError";
+}
+
 export default function ClientStatusPage() {
     const supabase = createClient();
     const t = useTranslations("ClientStatus");
@@ -275,6 +279,8 @@ export default function ClientStatusPage() {
     const hasLoadedBookingsRef = React.useRef(false);
     const clientStatusMetadataCacheRef = React.useRef<ClientStatusPageMetadata | null>(null);
     const clientStatusMetadataEventTypeFilterKeyRef = React.useRef("");
+    const activeFetchControllerRef = React.useRef<AbortController | null>(null);
+    const latestFetchRequestIdRef = React.useRef(0);
 
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
@@ -342,6 +348,12 @@ export default function ClientStatusPage() {
     const fetchBookingsPage = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
         if (!itemsPerPageHydrated || !filtersHydrated) return;
 
+        const requestId = latestFetchRequestIdRef.current + 1;
+        latestFetchRequestIdRef.current = requestId;
+        activeFetchControllerRef.current?.abort();
+        const controller = new AbortController();
+        activeFetchControllerRef.current = controller;
+
         if (mode === "initial") {
             setLoading(true);
         } else {
@@ -376,7 +388,14 @@ export default function ClientStatusPage() {
 
             const response = await fetchPaginatedJson<BookingStatus, ClientStatusPageMetadata>(
                 `/api/internal/client-status?${params.toString()}`,
+                { signal: controller.signal },
             );
+            if (
+                controller.signal.aborted ||
+                latestFetchRequestIdRef.current !== requestId
+            ) {
+                return;
+            }
             if (response.metadata) {
                 clientStatusMetadataCacheRef.current = response.metadata;
                 clientStatusMetadataEventTypeFilterKeyRef.current = metadataEventTypeFilterKey;
@@ -412,7 +431,19 @@ export default function ClientStatusPage() {
                         : nextColumns;
                 });
             }
+        } catch (error) {
+            if (isAbortError(error)) {
+                return;
+            }
+            console.error("[ClientStatusPage] Failed to fetch bookings page", error);
         } finally {
+            if (
+                latestFetchRequestIdRef.current === requestId &&
+                activeFetchControllerRef.current === controller
+            ) {
+                activeFetchControllerRef.current = null;
+            }
+            if (latestFetchRequestIdRef.current !== requestId) return;
             setLoading(false);
             setRefreshing(false);
         }
@@ -447,6 +478,13 @@ export default function ClientStatusPage() {
         hasLoadedBookingsRef.current = true;
         void fetchBookingsPage(mode);
     }, [fetchBookingsPage, filtersHydrated, itemsPerPageHydrated]);
+
+    React.useEffect(() => {
+        return () => {
+            activeFetchControllerRef.current?.abort();
+            activeFetchControllerRef.current = null;
+        };
+    }, []);
 
     React.useEffect(() => {
         if (!currentUserId) {

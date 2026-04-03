@@ -302,6 +302,10 @@ function arraysAreEqual(a: string[], b: string[]) {
     return a.every((value, index) => value === b[index]);
 }
 
+function isAbortError(error: unknown) {
+    return error instanceof Error && error.name === "AbortError";
+}
+
 function parseDateBasisValue(value: unknown): BookingDateBasis {
     return value === "session_date" ? "session_date" : "booking_date";
 }
@@ -486,6 +490,8 @@ export default function BookingsPage() {
     const hasLoadedBookingsRef = React.useRef(false);
     const bookingMetadataCacheRef = React.useRef<BookingPageMetadata | null>(null);
     const bookingMetadataEventTypeFilterKeyRef = React.useRef("");
+    const activeFetchControllerRef = React.useRef<AbortController | null>(null);
+    const latestFetchRequestIdRef = React.useRef(0);
     const invalidateProfilePublicCache = React.useCallback(async () => {
         try {
             await fetch("/api/internal/cache/invalidate", {
@@ -585,6 +591,12 @@ export default function BookingsPage() {
     const fetchData = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
         if (!itemsPerPageHydrated || !filtersHydrated) return;
 
+        const requestId = latestFetchRequestIdRef.current + 1;
+        latestFetchRequestIdRef.current = requestId;
+        activeFetchControllerRef.current?.abort();
+        const controller = new AbortController();
+        activeFetchControllerRef.current = controller;
+
         if (mode === "initial") {
             setLoading(true);
         } else {
@@ -623,7 +635,14 @@ export default function BookingsPage() {
 
             const response = await fetchPaginatedJson<Booking, BookingPageMetadata>(
                 `/api/internal/bookings?${params.toString()}`,
+                { signal: controller.signal },
             );
+            if (
+                controller.signal.aborted ||
+                latestFetchRequestIdRef.current !== requestId
+            ) {
+                return;
+            }
             if (response.metadata) {
                 bookingMetadataCacheRef.current = response.metadata;
                 bookingMetadataEventTypeFilterKeyRef.current = metadataEventTypeFilterKey;
@@ -665,7 +684,19 @@ export default function BookingsPage() {
                         : nextColumns;
                 });
             }
+        } catch (error) {
+            if (isAbortError(error)) {
+                return;
+            }
+            console.error("[BookingsPage] Failed to fetch bookings page", error);
         } finally {
+            if (
+                latestFetchRequestIdRef.current === requestId &&
+                activeFetchControllerRef.current === controller
+            ) {
+                activeFetchControllerRef.current = null;
+            }
+            if (latestFetchRequestIdRef.current !== requestId) return;
             setLoading(false);
             setRefreshing(false);
         }
@@ -841,6 +872,13 @@ export default function BookingsPage() {
         hasLoadedBookingsRef.current = true;
         void fetchData(mode);
     }, [fetchData, filtersHydrated, itemsPerPageHydrated]);
+
+    React.useEffect(() => {
+        return () => {
+            activeFetchControllerRef.current?.abort();
+            activeFetchControllerRef.current = null;
+        };
+    }, []);
 
     React.useEffect(() => {
         if (!waMenuBookingId && !copyMenuBookingId && !mobileHeaderActionMenuOpen) return;

@@ -266,6 +266,10 @@ function arraysAreEqual(a: string[], b: string[]) {
     return a.every((value, index) => value === b[index]);
 }
 
+function isAbortError(error: unknown) {
+    return error instanceof Error && error.name === "AbortError";
+}
+
 function getPrimaryMainServiceColor(
     serviceSelections?: BookingServiceSelection[],
 ) {
@@ -391,6 +395,8 @@ export default function FinancePage() {
     const hasLoadedFinanceRef = React.useRef(false);
     const financeMetadataCacheRef = React.useRef<FinancePageMetadata | null>(null);
     const financeMetadataEventTypeFilterKeyRef = React.useRef("");
+    const activeFetchControllerRef = React.useRef<AbortController | null>(null);
+    const latestFetchRequestIdRef = React.useRef(0);
 
     const closeDesktopMenus = React.useCallback(() => {
         setInvoiceMenuBookingId(null);
@@ -437,6 +443,12 @@ export default function FinancePage() {
     ) => {
         if (!itemsPerPageHydrated || !filtersHydrated) return;
 
+        const requestId = latestFetchRequestIdRef.current + 1;
+        latestFetchRequestIdRef.current = requestId;
+        activeFetchControllerRef.current?.abort();
+        const controller = new AbortController();
+        activeFetchControllerRef.current = controller;
+
         setFinanceLoadError(null);
         if (mode === "initial") {
             setLoading(true);
@@ -473,7 +485,14 @@ export default function FinancePage() {
             });
             const response = await fetchPaginatedJson<BookingFinance, FinancePageMetadata>(
                 `/api/internal/finance?${params.toString()}`,
+                { signal: controller.signal },
             );
+            if (
+                controller.signal.aborted ||
+                latestFetchRequestIdRef.current !== requestId
+            ) {
+                return;
+            }
             if (response.metadata) {
                 financeMetadataCacheRef.current = response.metadata;
                 financeMetadataEventTypeFilterKeyRef.current = metadataEventTypeFilterKey;
@@ -519,9 +538,22 @@ export default function FinancePage() {
             }
             setHasLoadedFinanceSuccessfully(true);
         } catch (error) {
+            if (isAbortError(error)) {
+                return;
+            }
+            if (latestFetchRequestIdRef.current !== requestId) {
+                return;
+            }
             console.error("[FinancePage] Failed to fetch finance page", error);
             setFinanceLoadError(tf("failedLoadFinance"));
         } finally {
+            if (
+                latestFetchRequestIdRef.current === requestId &&
+                activeFetchControllerRef.current === controller
+            ) {
+                activeFetchControllerRef.current = null;
+            }
+            if (latestFetchRequestIdRef.current !== requestId) return;
             setLoading(false);
             setRefreshing(false);
         }
@@ -675,6 +707,13 @@ export default function FinancePage() {
         hasLoadedFinanceRef.current = true;
         void fetchFinancePage(mode);
     }, [fetchFinancePage, filtersHydrated, itemsPerPageHydrated]);
+
+    React.useEffect(() => {
+        return () => {
+            activeFetchControllerRef.current?.abort();
+            activeFetchControllerRef.current = null;
+        };
+    }, []);
 
     React.useEffect(() => {
         if (!invoiceMenuBookingId && !copyMenuBookingId && !waMenuBookingId) return;
