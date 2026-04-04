@@ -53,6 +53,12 @@ export function applyClientDeskRememberMeSelection(rememberMe: boolean) {
   );
 }
 
+export function isClientDeskSessionOnlyModeEnabled(): boolean {
+  const localStorage = getSafeLocalStorage();
+  if (!localStorage) return false;
+  return localStorage.getItem(CLIENTDESK_SESSION_ONLY_MODE_KEY) === "true";
+}
+
 export function evaluateClientDeskSessionOnlyState(userId: string): {
   shouldSignOut: boolean;
   sessionOnlyActive: boolean;

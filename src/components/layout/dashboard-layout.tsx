@@ -10,8 +10,10 @@ import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
 import { createClient } from "@/utils/supabase/client";
 import {
+    CLIENTDESK_SESSION_ONLY_MODE_KEY,
     clearClientDeskSessionOnlyState,
     evaluateClientDeskSessionOnlyState,
+    isClientDeskSessionOnlyModeEnabled,
 } from "@/lib/auth/session-only";
 
 interface DashboardLayoutProps {
@@ -24,9 +26,11 @@ export function DashboardLayout({
     bookingWriteAccess,
 }: DashboardLayoutProps) {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+    const supabase = React.useMemo(() => createClient(), []);
     const router = useRouter();
     const locale = useLocale();
     const signingOutRef = React.useRef(false);
+    const isCheckingRef = React.useRef(false);
     const layoutStyle = React.useMemo(
         () =>
             ({
@@ -37,30 +41,83 @@ export function DashboardLayout({
     );
 
     const enforceSessionOnly = React.useCallback(async () => {
-        if (signingOutRef.current) return;
+        if (signingOutRef.current || isCheckingRef.current) return;
+        if (!isClientDeskSessionOnlyModeEnabled()) return;
 
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        isCheckingRef.current = true;
 
-        const { shouldSignOut } = evaluateClientDeskSessionOnlyState(user.id);
-        if (!shouldSignOut) return;
+        try {
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
+            if (!user) return;
 
-        signingOutRef.current = true;
-        clearClientDeskSessionOnlyState();
-        await supabase.auth.signOut();
-        router.replace(`/${locale}/login`);
-    }, [locale, router]);
+            const { shouldSignOut } = evaluateClientDeskSessionOnlyState(user.id);
+            if (!shouldSignOut) return;
+
+            signingOutRef.current = true;
+            clearClientDeskSessionOnlyState();
+            await supabase.auth.signOut();
+            router.replace(`/${locale}/login`);
+        } finally {
+            isCheckingRef.current = false;
+        }
+    }, [locale, router, supabase]);
 
     React.useEffect(() => {
         void enforceSessionOnly();
 
-        const interval = window.setInterval(() => {
+        let interval: number | null = null;
+
+        const stopInterval = () => {
+            if (interval === null) return;
+            window.clearInterval(interval);
+            interval = null;
+        };
+
+        const startInterval = () => {
+            if (interval !== null || !isClientDeskSessionOnlyModeEnabled()) return;
+            interval = window.setInterval(() => {
+                if (!isClientDeskSessionOnlyModeEnabled()) {
+                    stopInterval();
+                    return;
+                }
+                void enforceSessionOnly();
+            }, 300_000);
+        };
+
+        const syncInterval = () => {
+            if (isClientDeskSessionOnlyModeEnabled()) {
+                startInterval();
+            } else {
+                stopInterval();
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState !== "visible") return;
+            syncInterval();
             void enforceSessionOnly();
-        }, 60_000);
+        };
+
+        const handleStorage = (event: StorageEvent) => {
+            if (
+                event.key !== null &&
+                event.key !== CLIENTDESK_SESSION_ONLY_MODE_KEY
+            ) {
+                return;
+            }
+            syncInterval();
+        };
+
+        syncInterval();
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("storage", handleStorage);
 
         return () => {
-            window.clearInterval(interval);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("storage", handleStorage);
+            stopInterval();
         };
     }, [enforceSessionOnly]);
 
