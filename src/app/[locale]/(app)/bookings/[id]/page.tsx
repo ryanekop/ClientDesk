@@ -99,6 +99,7 @@ import {
     UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
+import { FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY } from "@/lib/freelancer-session-assignments";
 
 const EXTRA_FIELD_LABEL_KEYS: Record<string, string> = {
     universitas: "extraFieldLabels.university",
@@ -136,6 +137,7 @@ const HIDDEN_EXTRA_FIELD_KEYS = new Set([
     "addon_names",
     "special_offer",
     "wisuda_session_duration_minutes",
+    FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY,
     UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 ]);

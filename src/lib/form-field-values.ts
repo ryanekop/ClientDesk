@@ -2,6 +2,7 @@ import {
   UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
   UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
+import { FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY } from "@/lib/freelancer-session-assignments";
 
 export type CustomFieldSnapshot = {
   id: string;
@@ -85,7 +86,8 @@ export function extractBuiltInExtraFieldValues(
         ([key]) =>
           key !== "custom_fields" &&
           key !== UNIVERSITY_REFERENCE_EXTRA_KEY &&
-          key !== UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY,
+          key !== UNIVERSITY_ABBREVIATION_DRAFT_EXTRA_KEY &&
+          key !== FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY,
       )
       .map(([key, value]) => [key, stringifyFormFieldValue(value)] as const)
       .filter(([, value]) => value.length > 0),

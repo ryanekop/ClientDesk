@@ -3,6 +3,7 @@ import {
   getExtraFieldDefinitionByKey,
 } from "@/utils/form-extra-fields";
 import { normalizeEventTypeName } from "@/lib/event-type-config";
+import { FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY } from "@/lib/freelancer-session-assignments";
 import {
   isUniversityExtraField,
   UNIVERSITY_EXTRA_FIELD_KEY,
@@ -870,7 +871,11 @@ export function extractBuiltInExtraFieldValues(
 
   return Object.fromEntries(
     Object.entries(raw as Record<string, unknown>)
-      .filter(([key]) => key !== "custom_fields")
+      .filter(
+        ([key]) =>
+          key !== "custom_fields" &&
+          key !== FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY,
+      )
       .map(([key, value]) => [key, stringifyFormFieldValue(value)] as const)
       .filter(([, value]) => value.length > 0),
   ) as Record<string, string>;
