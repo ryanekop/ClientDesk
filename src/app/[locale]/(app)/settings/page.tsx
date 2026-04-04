@@ -3364,7 +3364,7 @@ export default function SettingsPage() {
   return (
     <>
       {successToastNode}
-      <div className="space-y-6 max-w-4xl mx-auto">
+      <div className="space-y-6 max-w-5xl mx-auto">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
           <p className="text-muted-foreground">{t("subtitle")}</p>
@@ -3372,8 +3372,8 @@ export default function SettingsPage() {
 
         {/* Tab Navigation */}
         <div className="border-b">
-          <div className="-mx-1 overflow-x-auto px-1">
-            <div className="flex min-w-max gap-0">
+          <div className="-mx-1 overflow-x-auto px-1 md:mx-0 md:overflow-visible md:px-0">
+            <div className="flex min-w-max gap-0 md:min-w-0 md:flex-wrap">
               {tabs.map((tab) => (
                 <button
                   key={tab.key}
