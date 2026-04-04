@@ -192,7 +192,13 @@ type Service = {
     event_types?: string[] | null;
     city_codes?: string[] | null;
 };
-type Freelance = { id: string; name: string; google_email?: string | null };
+type Freelance = {
+    id: string;
+    name: string;
+    google_email?: string | null;
+    role?: string | null;
+    tags: string[];
+};
 type LocationCoords = { lat: number | null; lng: number | null };
 type ProfileRow = {
     custom_client_statuses?: string[] | null;
@@ -257,6 +263,18 @@ function sanitizePhone(raw: string): string {
 
 function sanitizeDurationInput(value: string) {
     return value.replace(/\D+/g, "");
+}
+
+function normalizeFreelancerTags(value: unknown) {
+    if (!Array.isArray(value)) return [] as string[];
+    const nextTags: string[] = [];
+    for (const item of value) {
+        if (typeof item !== "string") continue;
+        const normalized = item.trim();
+        if (!normalized || nextTags.includes(normalized)) continue;
+        nextTags.push(normalized);
+    }
+    return nextTags;
 }
 
 const WISUDA_SESSION_DURATION_EXTRA_FIELD_KEY =
@@ -417,7 +435,7 @@ export default function NewBookingPage() {
                     .select("id, name, price, original_price, description, color, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types")
                     .eq("user_id", user.id)
                     .eq("is_active", true),
-                supabase.from("freelance").select("id, name, google_email").eq("user_id", user.id).eq("status", "active"),
+                supabase.from("freelance").select("id, name, google_email, role, tags").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("profiles").select("custom_client_statuses, form_sections, form_event_types, custom_event_types, form_brand_color").eq("id", user.id).single(),
                 supabase
                     .from("region_city_references")
@@ -470,7 +488,14 @@ export default function NewBookingPage() {
                     }))
                     .filter((city) => city.city_code),
             );
-            setFreelancers((frees || []) as Freelance[]);
+            const normalizedFreelancers = ((frees || []) as Array<Record<string, unknown>>).map((freelancer) => ({
+                id: String(freelancer.id || ""),
+                name: String(freelancer.name || ""),
+                google_email: typeof freelancer.google_email === "string" ? freelancer.google_email : null,
+                role: typeof freelancer.role === "string" ? freelancer.role : null,
+                tags: normalizeFreelancerTags(freelancer.tags),
+            })).filter((freelancer) => freelancer.id && freelancer.name);
+            setFreelancers(normalizedFreelancers);
             const nextStatusOptions = getBookingStatusOptions(
                 profileRow?.custom_client_statuses as string[] | null | undefined,
             );
@@ -624,7 +649,9 @@ export default function NewBookingPage() {
         const query = freelancerSearchQuery.trim().toLowerCase();
         if (!query) return freelancers;
         return freelancers.filter((freelancer) =>
-            freelancer.name.toLowerCase().includes(query),
+            freelancer.name.toLowerCase().includes(query) ||
+            (freelancer.role || "").toLowerCase().includes(query) ||
+            freelancer.tags.join(" ").toLowerCase().includes(query),
         );
     }, [freelancerSearchQuery, freelancers]);
     const freelancerNameById = React.useMemo(
@@ -954,9 +981,15 @@ export default function NewBookingPage() {
             role: customFreelancerRole || "Photographer",
             whatsapp_number: customFreelancerWa ? `${customFreelancerCountryCode}${customFreelancerWa}`.replace(/[^0-9+]/g, "") : null,
             status: "active",
-        }).select("id, name").single();
+        }).select("id, name, role, tags").single();
         if (!error && data) {
-            const f = data as Freelance;
+            const row = data as Record<string, unknown>;
+            const f: Freelance = {
+                id: String(row.id || ""),
+                name: String(row.name || ""),
+                role: typeof row.role === "string" ? row.role : null,
+                tags: normalizeFreelancerTags(row.tags),
+            };
             setFreelancers(prev => [...prev, f]);
             if (isSplitFreelancerMode) {
                 setFreelancerAssignmentsBySession((prev) => {
@@ -2363,6 +2396,26 @@ export default function NewBookingPage() {
                                                     <p className="text-sm font-medium">
                                                         {freelancer.name}
                                                     </p>
+                                                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                                                        {freelancer.role ? (
+                                                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                                                {freelancer.role}
+                                                            </span>
+                                                        ) : null}
+                                                        {freelancer.tags.slice(0, 2).map((tag) => (
+                                                            <span
+                                                                key={`${freelancer.id}-${tag}`}
+                                                                className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary"
+                                                            >
+                                                                {tag}
+                                                            </span>
+                                                        ))}
+                                                        {freelancer.tags.length > 2 ? (
+                                                            <span className="text-[10px] text-muted-foreground">
+                                                                +{freelancer.tags.length - 2}
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </button>

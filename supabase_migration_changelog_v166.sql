@@ -39,6 +39,27 @@ FROM (
       'Perilaku simpan kolom sekarang diseragamkan di tiga halaman utama, jadi hasilnya lebih stabil dan sesuai pengaturan terakhir Anda.',
       'improvement',
       '2026-04-03T10:03:00Z'
+    ),
+    (
+      '1.6.6',
+      'Sekarang Bisa Duplikat Paket Lebih Cepat',
+      'Di halaman Paket/Layanan sekarang ada tombol Duplikat dengan konfirmasi, jadi Anda bisa copy paket yang mirip tanpa isi ulang dari awal.',
+      'new',
+      '2026-04-04T10:04:00Z'
+    ),
+    (
+      '1.6.6',
+      'Pilih Freelance Sekarang Lebih Mudah Saat Data Banyak',
+      'Pemilihan freelance di form booking admin sekarang pakai popup pencarian (mirip pilih paket), jadi lebih cepat meski anggota tim banyak.',
+      'improvement',
+      '2026-04-04T10:05:00Z'
+    ),
+    (
+      '1.6.6',
+      'Role dan Tag Freelance Kini Langsung Terlihat Saat Memilih',
+      'Saat memilih freelance, Anda bisa langsung lihat peran dan tag di kartu pilihan, termasuk untuk mode per sesi (split) seperti Wisuda.',
+      'improvement',
+      '2026-04-04T10:06:00Z'
     )
 ) AS entry(version, title, description, badge, published_at)
 WHERE NOT EXISTS (
