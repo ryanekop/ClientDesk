@@ -1082,6 +1082,7 @@
         "descPlaceholder": "Deskripsi singkat layanan...",
         "editDesc": "Perubahan akan langsung tersimpan.",
         "deleteConfirm": "Hapus layanan ini? Booking yang sudah terhubung akan kehilangan referensi layanan.",
+        "duplicateConfirm": "Duplikat paket ini?",
         "searchPlaceholder": "Cari nama atau deskripsi layanan...",
         "allCategories": "Semua",
         "noResults": "Tidak ada hasil",
@@ -1099,7 +1100,8 @@
         "emptyAddonTitle": "Belum ada paket add-on",
         "emptyAddonDesc": "Tambahkan add-on jika Anda ingin menawarkan paket tambahan terpisah.",
         "serviceCreatedSuccess": "Layanan berhasil disimpan.",
-        "serviceUpdatedSuccess": "Layanan berhasil diperbarui."
+        "serviceUpdatedSuccess": "Layanan berhasil diperbarui.",
+        "serviceDuplicatedSuccess": "Paket berhasil diduplikasi."
     },
     "TeamPage": {
         "editDesc": "Perubahan akan langsung tersimpan.",

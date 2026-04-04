@@ -38,6 +38,7 @@ import {
   Layers,
   Eye,
   EyeOff,
+  Copy,
   GripVertical,
   MoveVertical,
 } from "lucide-react";
@@ -190,6 +191,22 @@ function compareServices(a: Service, b: Service) {
   if (createdAtDiff !== 0) return createdAtDiff;
 
   return a.name.localeCompare(b.name);
+}
+
+function buildDuplicateServiceName(baseName: string, existingNames: string[]) {
+  const normalizedBase = baseName.trim() || "Paket";
+  const existingNameSet = new Set(
+    existingNames.map((name) => name.trim().toLowerCase()),
+  );
+  const initialCandidate = `${normalizedBase} (Copy)`;
+  if (!existingNameSet.has(initialCandidate.toLowerCase())) {
+    return initialCandidate;
+  }
+  let suffix = 2;
+  while (existingNameSet.has(`${normalizedBase} (Copy ${suffix})`.toLowerCase())) {
+    suffix += 1;
+  }
+  return `${normalizedBase} (Copy ${suffix})`;
 }
 
 function serviceHasEventType(
@@ -457,6 +474,7 @@ function ServiceCard({
   onEdit,
   onToggleActive,
   onTogglePublic,
+  onDuplicate,
   onDelete,
   onMoveUp,
   onMoveDown,
@@ -469,6 +487,7 @@ function ServiceCard({
   onEdit: () => void;
   onToggleActive: () => void;
   onTogglePublic: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -609,6 +628,15 @@ function ServiceCard({
             <EyeOff className="h-4 w-4 text-amber-600" />
           )}
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={onDuplicate}
+          title="Duplikat paket"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </Button>
         <Button variant="outline" size="sm" className="gap-1.5" onClick={onDelete}>
           <Trash2 className="h-3.5 w-3.5 text-red-500" />
         </Button>
@@ -706,6 +734,11 @@ export default function ServicesPage() {
     open: boolean;
     service: Service | null;
   }>({ open: false, service: null });
+  const [duplicateConfirmDialog, setDuplicateConfirmDialog] = React.useState<{
+    open: boolean;
+    service: Service | null;
+  }>({ open: false, service: null });
+  const [isDuplicatingService, setIsDuplicatingService] = React.useState(false);
   const hasLoadedPagedServicesRef = React.useRef(false);
   const { showSuccessToast, successToastNode } = useSuccessToast();
 
@@ -1347,6 +1380,10 @@ export default function ServicesPage() {
     setDeleteConfirmDialog({ open: true, service: currentService });
   }
 
+  function openDuplicateConfirm(service: Service) {
+    setDuplicateConfirmDialog({ open: true, service });
+  }
+
   async function confirmDeleteService() {
     const currentService = deleteConfirmDialog.service;
     if (!currentService) return;
@@ -1363,6 +1400,75 @@ export default function ServicesPage() {
 
     await normalizeGroupAfterMutation(getServiceGroupKey(currentService));
     await refreshVisibleData();
+  }
+
+  async function confirmDuplicateService() {
+    const sourceService = duplicateConfirmDialog.service;
+    if (!sourceService || isDuplicatingService) return;
+
+    setDuplicateConfirmDialog({ open: false, service: null });
+    setIsDuplicatingService(true);
+    try {
+      const userId = await getRequiredUserId();
+      const nextName = buildDuplicateServiceName(
+        sourceService.name,
+        services.map((service) => service.name || ""),
+      );
+      const { count } = await supabase
+        .from("services")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("is_addon", sourceService.is_addon);
+      const nextSortOrder = count || 0;
+      const { data, error } = await supabase
+        .from("services")
+        .insert({
+          user_id: userId,
+          name: nextName,
+          description: sourceService.description,
+          color: sourceService.color,
+          price: sourceService.price,
+          original_price: sourceService.original_price,
+          duration_minutes: sourceService.duration_minutes,
+          is_active: sourceService.is_active,
+          is_addon: sourceService.is_addon,
+          affects_schedule: sourceService.affects_schedule,
+          is_public: sourceService.is_public,
+          sort_order: nextSortOrder,
+          event_types: sourceService.event_types?.length
+            ? sourceService.event_types
+            : null,
+        })
+        .select("id")
+        .single();
+      if (error || !data?.id) {
+        setPageError(error?.message || "Gagal menduplikasi paket.");
+        return;
+      }
+
+      const cityCodes = serviceCityCodesByServiceId[sourceService.id] || [];
+      if (cityCodes.length > 0) {
+        try {
+          await syncServiceCityScopes({
+            userId,
+            serviceId: data.id,
+            cityCodes,
+          });
+        } catch (scopeError) {
+          setPageError(
+            scopeError instanceof Error
+              ? scopeError.message
+              : "Gagal menyimpan scope kota/kabupaten paket.",
+          );
+          return;
+        }
+      }
+
+      await refreshVisibleData();
+      showSuccessToast(ts("serviceDuplicatedSuccess"));
+    } finally {
+      setIsDuplicatingService(false);
+    }
   }
 
   async function handleMove(service: Service, direction: "up" | "down") {
@@ -1993,6 +2099,7 @@ export default function ServicesPage() {
                     onEdit={() => openEditDialog(service)}
                     onToggleActive={() => handleToggleActive(service)}
                     onTogglePublic={() => handleTogglePublic(service)}
+                    onDuplicate={() => openDuplicateConfirm(service)}
                     onDelete={() => handleDelete(service.id)}
                     onMoveUp={() => handleMove(service, "up")}
                     onMoveDown={() => handleMove(service, "down")}
@@ -2050,6 +2157,7 @@ export default function ServicesPage() {
                     onEdit={() => openEditDialog(service)}
                     onToggleActive={() => handleToggleActive(service)}
                     onTogglePublic={() => handleTogglePublic(service)}
+                    onDuplicate={() => openDuplicateConfirm(service)}
                     onDelete={() => handleDelete(service.id)}
                     onMoveUp={() => handleMove(service, "up")}
                     onMoveDown={() => handleMove(service, "down")}
@@ -2335,6 +2443,22 @@ export default function ServicesPage() {
         confirmLabel="Hapus"
         confirmVariant="destructive"
         onConfirm={confirmDeleteService}
+      />
+      <ActionConfirmDialog
+        open={duplicateConfirmDialog.open}
+        onOpenChange={(open) =>
+          setDuplicateConfirmDialog((prev) => ({
+            ...prev,
+            open,
+            service: open ? prev.service : null,
+          }))
+        }
+        title="Konfirmasi"
+        message={ts("duplicateConfirm")}
+        cancelLabel="Batal"
+        confirmLabel={isDuplicatingService ? "Menduplikasi..." : "Duplikat"}
+        onConfirm={confirmDuplicateService}
+        loading={isDuplicatingService}
       />
       {successToastNode}
     </div>

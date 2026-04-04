@@ -322,6 +322,10 @@ export default function NewBookingPage() {
     const [addonViewMode, setAddonViewMode] = React.useState<"list" | "grid">("list");
     const [packageSearchQuery, setPackageSearchQuery] = React.useState("");
     const [addonSearchQuery, setAddonSearchQuery] = React.useState("");
+    const [freelancerDialogOpen, setFreelancerDialogOpen] = React.useState(false);
+    const [freelancerViewMode, setFreelancerViewMode] = React.useState<"list" | "grid">("list");
+    const [freelancerSearchQuery, setFreelancerSearchQuery] = React.useState("");
+    const [activeFreelancerSessionKey, setActiveFreelancerSessionKey] = React.useState<string | null>(null);
     const [selectedFreelancerIds, setSelectedFreelancerIds] = React.useState<string[]>([]);
     const [freelancerAssignmentsBySession, setFreelancerAssignmentsBySession] =
         React.useState<SessionFreelancerAssignments>({});
@@ -584,6 +588,22 @@ export default function NewBookingPage() {
         selectedFreelancerIds,
         validFreelancerIds,
     ]);
+    React.useEffect(() => {
+        if (!isSplitFreelancerMode && activeFreelancerSessionKey) {
+            setActiveFreelancerSessionKey(null);
+            return;
+        }
+        if (
+            activeFreelancerSessionKey &&
+            !splitFreelancerSessionKeys.includes(activeFreelancerSessionKey)
+        ) {
+            setActiveFreelancerSessionKey(null);
+        }
+    }, [
+        activeFreelancerSessionKey,
+        isSplitFreelancerMode,
+        splitFreelancerSessionKeys,
+    ]);
     const searchedMainServices = React.useMemo(() => {
         const query = packageSearchQuery.trim().toLowerCase();
         if (!query) return mainServices;
@@ -600,6 +620,20 @@ export default function NewBookingPage() {
             (service.description || "").toLowerCase().includes(query),
         );
     }, [addonServices, addonSearchQuery]);
+    const searchedFreelancers = React.useMemo(() => {
+        const query = freelancerSearchQuery.trim().toLowerCase();
+        if (!query) return freelancers;
+        return freelancers.filter((freelancer) =>
+            freelancer.name.toLowerCase().includes(query),
+        );
+    }, [freelancerSearchQuery, freelancers]);
+    const freelancerNameById = React.useMemo(
+        () =>
+            new Map(
+                freelancers.map((freelancer) => [freelancer.id, freelancer.name]),
+            ),
+        [freelancers],
+    );
     const selectedMainServices = React.useMemo(
         () => mainServices.filter((service) => selectedServiceIds.includes(service.id)),
         [mainServices, selectedServiceIds],
@@ -859,6 +893,28 @@ export default function NewBookingPage() {
         splitFreelancerSessionKeys,
         validFreelancerIds,
     ]);
+    const openFreelancerDialog = React.useCallback((sessionKey?: string) => {
+        setActiveFreelancerSessionKey(sessionKey || null);
+        setFreelancerSearchQuery("");
+        setFreelancerDialogOpen(true);
+    }, []);
+    const selectedFreelancerIdsForDialog = activeFreelancerSessionKey
+        ? freelancerAssignmentsBySession[activeFreelancerSessionKey] || []
+        : selectedFreelancerIds;
+    const freelancerDialogMaxSelection = activeFreelancerSessionKey
+        ? MAX_FREELANCERS_PER_SESSION
+        : 5;
+    const activeFreelancerSessionLabel = activeFreelancerSessionKey
+        ? SESSION_FREELANCER_LABELS[activeFreelancerSessionKey] ||
+          activeFreelancerSessionKey
+        : null;
+    const toggleFreelancerFromDialog = (freelancerId: string) => {
+        if (activeFreelancerSessionKey) {
+            toggleSessionFreelancer(activeFreelancerSessionKey, freelancerId);
+            return;
+        }
+        toggleFreelancer(freelancerId);
+    };
 
     async function saveCustomService() {
         if (!requireBookingWrite()) return;
@@ -1952,38 +2008,42 @@ export default function NewBookingPage() {
                                             freelancerAssignmentsBySession[sessionKey] || [];
                                         const sessionLabel =
                                             SESSION_FREELANCER_LABELS[sessionKey] || sessionKey;
-
                                         return (
                                             <div key={sessionKey} className="rounded-lg border p-3 space-y-2">
-                                                <p className="text-xs font-semibold text-muted-foreground">
-                                                    {sessionLabel}
-                                                </p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {freelancers.map((freelancer) => (
-                                                        <button
-                                                            key={`${sessionKey}-${freelancer.id}`}
-                                                            type="button"
-                                                            onClick={() =>
-                                                                toggleSessionFreelancer(
-                                                                    sessionKey,
-                                                                    freelancer.id,
-                                                                )
-                                                            }
-                                                            className={cn(
-                                                                "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer",
-                                                                selectedSessionFreelancerIds.includes(freelancer.id)
-                                                                    ? "border-foreground bg-foreground/5 dark:bg-foreground/10 text-foreground"
-                                                                    : "border-input text-muted-foreground hover:bg-muted/50",
-                                                            )}
-                                                        >
-                                                            {freelancer.name}
-                                                        </button>
-                                                    ))}
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <p className="text-xs font-semibold text-muted-foreground">
+                                                        {sessionLabel}
+                                                    </p>
+                                                    <p className="text-[10px] text-muted-foreground">
+                                                        {selectedSessionFreelancerIds.length}/
+                                                        {MAX_FREELANCERS_PER_SESSION} dipilih
+                                                    </p>
                                                 </div>
-                                                <p className="text-[10px] text-muted-foreground">
-                                                    {selectedSessionFreelancerIds.length}/
-                                                    {MAX_FREELANCERS_PER_SESSION} dipilih
-                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        openFreelancerDialog(sessionKey)
+                                                    }
+                                                    className="inline-flex h-8 items-center rounded-lg border px-3 text-xs font-medium transition-colors hover:bg-muted/50 cursor-pointer"
+                                                >
+                                                    Pilih Freelance
+                                                </button>
+                                                {selectedSessionFreelancerIds.length > 0 ? (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {selectedSessionFreelancerIds.map((freelancerId) => (
+                                                            <span
+                                                                key={`${sessionKey}-${freelancerId}`}
+                                                                className="rounded-lg border border-foreground/20 bg-foreground/5 px-2 py-1 text-[11px]"
+                                                            >
+                                                                {freelancerNameById.get(freelancerId) || freelancerId}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-[10px] text-muted-foreground">
+                                                        Belum ada freelance dipilih.
+                                                    </p>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -1997,24 +2057,18 @@ export default function NewBookingPage() {
                                 </button>
                             </div>
                         ) : (
-                            <div className="col-span-full space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground">Freelance (global, max 5)</label>
+                            <div className="col-span-full space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">
+                                    Freelance (global, max 5)
+                                </label>
                                 <div className="flex flex-wrap gap-2">
-                                    {freelancers.map(f => (
-                                        <button
-                                            key={f.id}
-                                            type="button"
-                                            onClick={() => toggleFreelancer(f.id)}
-                                            className={cn(
-                                                "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer",
-                                                selectedFreelancerIds.includes(f.id)
-                                                    ? "border-foreground bg-foreground/5 dark:bg-foreground/10 text-foreground"
-                                                    : "border-input text-muted-foreground hover:bg-muted/50"
-                                            )}
-                                        >
-                                            {f.name}
-                                        </button>
-                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => openFreelancerDialog()}
+                                        className="inline-flex h-8 items-center rounded-lg border px-3 text-xs font-medium transition-colors hover:bg-muted/50 cursor-pointer"
+                                    >
+                                        Pilih Freelance
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => setShowCustomFreelancerPopup(true)}
@@ -2023,9 +2077,25 @@ export default function NewBookingPage() {
                                         ＋ Tambah Baru
                                     </button>
                                 </div>
-                                {selectedFreelancerIds.length > 0 && (
-                                    <p className="text-[10px] text-muted-foreground">{selectedFreelancerIds.length} dipilih</p>
+                                {selectedFreelancerIds.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedFreelancerIds.map((freelancerId) => (
+                                            <span
+                                                key={freelancerId}
+                                                className="rounded-lg border border-foreground/20 bg-foreground/5 px-2 py-1 text-[11px]"
+                                            >
+                                                {freelancerNameById.get(freelancerId) || freelancerId}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-[10px] text-muted-foreground">
+                                        Belum ada freelance dipilih.
+                                    </p>
                                 )}
+                                <p className="text-[10px] text-muted-foreground">
+                                    {selectedFreelancerIds.length}/5 dipilih
+                                </p>
                             </div>
                         )}
                         {sessionCustomItems.length > 0 && (
@@ -2162,6 +2232,160 @@ export default function NewBookingPage() {
                     </Button>
                 </div>
             </form>
+
+            <Dialog
+                open={freelancerDialogOpen}
+                onOpenChange={(open) => {
+                    setFreelancerDialogOpen(open);
+                    if (!open) {
+                        setFreelancerSearchQuery("");
+                        setActiveFreelancerSessionKey(null);
+                    }
+                }}
+            >
+                <DialogContent className="sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {activeFreelancerSessionLabel
+                                ? `Pilih Freelance - ${activeFreelancerSessionLabel}`
+                                : "Pilih Freelance"}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-2">
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <input
+                                value={freelancerSearchQuery}
+                                onChange={(event) => setFreelancerSearchQuery(event.target.value)}
+                                placeholder="Cari freelance..."
+                                className={cn(inputClass, "pl-9")}
+                            />
+                        </div>
+                        <div className="flex items-center justify-end gap-1">
+                            <button
+                                type="button"
+                                onClick={() => setFreelancerViewMode("list")}
+                                className={cn(
+                                    "inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+                                    freelancerViewMode === "list"
+                                        ? "border-foreground bg-foreground/5 text-foreground"
+                                        : "border-input text-muted-foreground hover:bg-muted/60",
+                                )}
+                                title="Tampilan baris"
+                                aria-label="Tampilan baris"
+                            >
+                                <List className="h-4 w-4" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFreelancerViewMode("grid")}
+                                className={cn(
+                                    "inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+                                    freelancerViewMode === "grid"
+                                        ? "border-foreground bg-foreground/5 text-foreground"
+                                        : "border-input text-muted-foreground hover:bg-muted/60",
+                                )}
+                                title="Tampilan kotak"
+                                aria-label="Tampilan kotak"
+                            >
+                                <LayoutGrid className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div
+                            className={cn(
+                                "max-h-[55vh] overflow-y-auto pr-1",
+                                freelancerViewMode === "grid"
+                                    ? "grid grid-cols-1 gap-2 sm:grid-cols-2"
+                                    : "space-y-2",
+                            )}
+                        >
+                            {freelancers.length === 0 ? (
+                                <div
+                                    className={cn(
+                                        "rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground",
+                                        freelancerViewMode === "grid" ? "sm:col-span-2" : "",
+                                    )}
+                                >
+                                    Belum ada freelance aktif.
+                                </div>
+                            ) : searchedFreelancers.length === 0 ? (
+                                <div
+                                    className={cn(
+                                        "rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground",
+                                        freelancerViewMode === "grid" ? "sm:col-span-2" : "",
+                                    )}
+                                >
+                                    Tidak ada hasil pencarian freelance.
+                                </div>
+                            ) : (
+                                searchedFreelancers.map((freelancer) => {
+                                    const selected =
+                                        selectedFreelancerIdsForDialog.includes(
+                                            freelancer.id,
+                                        );
+                                    const limitReached =
+                                        !selected &&
+                                        selectedFreelancerIdsForDialog.length >=
+                                            freelancerDialogMaxSelection;
+                                    return (
+                                        <button
+                                            key={freelancer.id}
+                                            type="button"
+                                            onClick={() =>
+                                                toggleFreelancerFromDialog(freelancer.id)
+                                            }
+                                            disabled={limitReached}
+                                            className={cn(
+                                                "flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all",
+                                                selected
+                                                    ? "border-foreground bg-foreground/5 text-foreground shadow-sm"
+                                                    : "border-input text-foreground hover:bg-muted/40",
+                                                limitReached
+                                                    ? "cursor-not-allowed opacity-60"
+                                                    : "cursor-pointer",
+                                                freelancerViewMode === "grid"
+                                                    ? "h-full"
+                                                    : "",
+                                            )}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <span
+                                                    className={cn(
+                                                        "mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border",
+                                                        selected
+                                                            ? "border-foreground bg-foreground text-background"
+                                                            : "border-input bg-transparent text-transparent",
+                                                    )}
+                                                >
+                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium">
+                                                        {freelancer.name}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs text-muted-foreground">
+                            {selectedFreelancerIdsForDialog.length}/
+                            {freelancerDialogMaxSelection} dipilih
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setFreelancerDialogOpen(false)}
+                            className="inline-flex h-10 items-center justify-center rounded-lg border px-4 text-sm font-medium transition-colors hover:bg-muted cursor-pointer"
+                        >
+                            Selesai
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={packageDialogOpen} onOpenChange={setPackageDialogOpen}>
                 <DialogContent className="sm:max-w-2xl">

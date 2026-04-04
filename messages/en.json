@@ -1082,6 +1082,7 @@
         "descPlaceholder": "Brief description of the service...",
         "editDesc": "Changes will be saved immediately.",
         "deleteConfirm": "Delete this service? Connected bookings will lose the service reference.",
+        "duplicateConfirm": "Duplicate this package?",
         "searchPlaceholder": "Search service name or description...",
         "allCategories": "All",
         "noResults": "No results found",
@@ -1099,7 +1100,8 @@
         "emptyAddonTitle": "No add-on packages yet",
         "emptyAddonDesc": "Add add-ons if you want to offer separate extra packages.",
         "serviceCreatedSuccess": "Service saved successfully.",
-        "serviceUpdatedSuccess": "Service updated successfully."
+        "serviceUpdatedSuccess": "Service updated successfully.",
+        "serviceDuplicatedSuccess": "Package duplicated successfully."
     },
     "TeamPage": {
         "editDesc": "Changes will be saved immediately.",
