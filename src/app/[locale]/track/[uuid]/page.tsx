@@ -25,6 +25,7 @@ import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions"
 import { getTrackBasePayloadCached } from "@/lib/public-track-data";
 import { buildSeoMetadata } from "@/lib/seo-metadata";
 import { getTenantConfig } from "@/lib/tenant-config";
+import { buildSignedInvoicePath } from "@/lib/security/invoice-access";
 
 // Admin client — runs server-side only, never exposed to browser
 const supabaseAdmin = createClient(
@@ -232,6 +233,16 @@ export default async function TrackingPage({ params }: PageProps) {
         queuePosition: booking.queue_position,
         status: booking.status,
         serviceName: (booking.services as { name?: string } | null)?.name || null,
+        invoiceUrlInitial: buildSignedInvoicePath({
+            bookingCode: booking.booking_code,
+            stage: "initial",
+            lang: locale,
+        }),
+        invoiceUrlFinal: buildSignedInvoicePath({
+            bookingCode: booking.booking_code,
+            stage: "final",
+            lang: locale,
+        }),
         fastpikUrl: booking.fastpik_project_link,
         driveUrl: booking.drive_folder_url,
         fastpikLinkDisplayMode: result.fastpikLinkDisplayMode,

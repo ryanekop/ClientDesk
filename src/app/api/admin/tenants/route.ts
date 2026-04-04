@@ -2,20 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { invalidateTenantCache } from "@/lib/tenant-resolver";
 import { normalizeVendorSlug } from "@/lib/booking-url-mode";
+import { buildAdminCorsHeaders, isAdminCorsOriginAllowed } from "@/lib/security/admin-cors";
+import { sanitizeTenantFooterHtml } from "@/utils/tenant-footer";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, x-admin-api-key",
-};
+const ADMIN_CORS_METHODS = "GET, POST, PUT, OPTIONS";
 
-function corsResponse(data: unknown, init?: { status?: number }) {
-  return NextResponse.json(data, { ...init, headers: CORS_HEADERS });
+function corsResponse(request: NextRequest, data: unknown, init?: { status?: number }) {
+  return NextResponse.json(data, {
+    ...init,
+    headers: buildAdminCorsHeaders(request, ADMIN_CORS_METHODS),
+  });
 }
 
 function verifyAdmin(request: NextRequest) {
   const apiKey = request.headers.get("x-admin-api-key");
-  return apiKey && apiKey === process.env.ADMIN_API_KEY;
+  const isValid = Boolean(apiKey && apiKey === process.env.ADMIN_API_KEY);
+  if (!isValid) {
+    const ip = request.headers.get("cf-connecting-ip")
+      || request.headers.get("x-forwarded-for")
+      || request.headers.get("x-real-ip")
+      || "unknown";
+    console.warn(`[Admin API] Unauthorized access attempt on ${request.nextUrl.pathname} from ${ip}`);
+  }
+  return isValid;
 }
 
 function normalizeBookingModePayload(body: Record<string, unknown>) {
@@ -47,13 +56,23 @@ function normalizeBookingModePayload(body: Record<string, unknown>) {
   };
 }
 
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+export async function OPTIONS(request: NextRequest) {
+  if (!isAdminCorsOriginAllowed(request)) {
+    return NextResponse.json(
+      { error: "Origin not allowed" },
+      { status: 403, headers: buildAdminCorsHeaders(request, ADMIN_CORS_METHODS) },
+    );
+  }
+
+  return new NextResponse(null, {
+    status: 204,
+    headers: buildAdminCorsHeaders(request, ADMIN_CORS_METHODS),
+  });
 }
 
 export async function GET(request: NextRequest) {
   if (!verifyAdmin(request)) {
-    return corsResponse({ error: "Unauthorized" }, { status: 401 });
+    return corsResponse(request, { error: "Unauthorized" }, { status: 401 });
   }
 
   const supabase = createServiceClient();
@@ -63,15 +82,15 @@ export async function GET(request: NextRequest) {
     .order("created_at", { ascending: true });
 
   if (error) {
-    return corsResponse({ error: error.message }, { status: 500 });
+    return corsResponse(request, { error: error.message }, { status: 500 });
   }
 
-  return corsResponse(data);
+  return corsResponse(request, data);
 }
 
 export async function POST(request: NextRequest) {
   if (!verifyAdmin(request)) {
-    return corsResponse({ error: "Unauthorized" }, { status: 401 });
+    return corsResponse(request, { error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json();
@@ -88,7 +107,7 @@ export async function POST(request: NextRequest) {
   } = body;
 
   if (!slug || !name) {
-    return corsResponse({ error: "slug and name are required" }, { status: 400 });
+    return corsResponse(request, { error: "slug and name are required" }, { status: 400 });
   }
 
   const supabase = createServiceClient();
@@ -101,7 +120,7 @@ export async function POST(request: NextRequest) {
       logo_url: logo_url || null,
       favicon_url: favicon_url || null,
       primary_color: primary_color || "#7c3aed",
-      footer_text: footer_text || null,
+      footer_text: sanitizeTenantFooterHtml(typeof footer_text === "string" ? footer_text : null),
       disable_booking_slug: disable_booking_slug === true,
       default_booking_vendor_slug:
         normalizeVendorSlug(
@@ -114,23 +133,23 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) {
-    return corsResponse({ error: error.message }, { status: 500 });
+    return corsResponse(request, { error: error.message }, { status: 500 });
   }
 
   invalidateTenantCache();
-  return corsResponse(data, { status: 201 });
+  return corsResponse(request, data, { status: 201 });
 }
 
 export async function PUT(request: NextRequest) {
   if (!verifyAdmin(request)) {
-    return corsResponse({ error: "Unauthorized" }, { status: 401 });
+    return corsResponse(request, { error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json();
   const { id, ...updates } = body;
 
   if (!id) {
-    return corsResponse({ error: "id is required" }, { status: 400 });
+    return corsResponse(request, { error: "id is required" }, { status: 400 });
   }
 
   const {
@@ -145,6 +164,12 @@ export async function PUT(request: NextRequest) {
     if (normalizedDisableBookingSlug === false) {
       updates.default_booking_vendor_slug = null;
     }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "footer_text")) {
+    updates.footer_text = sanitizeTenantFooterHtml(
+      typeof updates.footer_text === "string" ? updates.footer_text : null,
+    );
   }
 
   if (
@@ -169,11 +194,11 @@ export async function PUT(request: NextRequest) {
     .single();
 
   if (error) {
-    return corsResponse({ error: error.message }, { status: 500 });
+    return corsResponse(request, { error: error.message }, { status: 500 });
   }
 
   if (oldTenant?.domain) invalidateTenantCache(oldTenant.domain);
   if (data?.domain) invalidateTenantCache(data.domain);
 
-  return corsResponse(data);
+  return corsResponse(request, data);
 }

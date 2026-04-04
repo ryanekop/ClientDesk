@@ -23,6 +23,16 @@ function toOrigin(candidate: string | null | undefined): string | null {
   }
 }
 
+function parseOriginAllowlist(rawValue: string | null | undefined) {
+  if (!rawValue) return [];
+  return rawValue
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => toOrigin(item))
+    .filter((item): item is string => Boolean(item));
+}
+
 function isInternalHostname(hostname: string): boolean {
   return INTERNAL_HOSTNAMES.has(hostname.trim().toLowerCase());
 }
@@ -53,6 +63,10 @@ export function resolvePublicOrigin(request: Request): string {
   const hostHeader = getFirstHeaderValue(request.headers.get("host"));
   const envSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   const inProduction = process.env.NODE_ENV === "production";
+  const allowlistedOrigins = new Set<string>([
+    ...parseOriginAllowlist(process.env.PUBLIC_ORIGIN_ALLOWLIST),
+    ...(toOrigin(envSiteUrl) ? [toOrigin(envSiteUrl)!] : []),
+  ]);
 
   const fallbackProtocol =
     requestUrl.protocol === "https:" || requestUrl.protocol === "http:"
@@ -73,6 +87,9 @@ export function resolvePublicOrigin(request: Request): string {
     if (inProduction) {
       const hostname = new URL(origin).hostname;
       if (isInternalHostname(hostname)) continue;
+      if (allowlistedOrigins.size > 0 && !allowlistedOrigins.has(origin)) {
+        continue;
+      }
     }
 
     return origin;

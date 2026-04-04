@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getVendorPublicPayloadCached } from "@/lib/public-vendor-data";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
 
 export async function GET(request: NextRequest) {
+  const rateLimitedResponse = enforceRateLimit({
+    request,
+    namespace: "public-get-vendor",
+    maxRequests: 60,
+    windowMs: 60 * 1000,
+  });
+  if (rateLimitedResponse) {
+    return rateLimitedResponse;
+  }
+
   const slug = request.nextUrl.searchParams.get("slug");
   if (!slug) {
     return NextResponse.json(

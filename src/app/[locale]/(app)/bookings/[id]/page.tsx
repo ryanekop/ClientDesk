@@ -88,6 +88,7 @@ import {
     isShowAllPackagesEventType,
     normalizeEventTypeName,
 } from "@/lib/event-type-config";
+import { normalizeSafeExternalUrl } from "@/utils/safe-link";
 import {
     buildEditableSpecialOfferSnapshot,
     computeSpecialOfferTotal,
@@ -377,7 +378,8 @@ function PaymentProofPanel({
     alt: string;
     linkLabel: string;
 }) {
-    const previewSrc = driveFileId ? buildDriveImageUrl(driveFileId) : url;
+    const safeUrl = React.useMemo(() => normalizeSafeExternalUrl(url), [url]);
+    const previewSrc = driveFileId ? buildDriveImageUrl(driveFileId) : safeUrl || undefined;
     const [previewFailed, setPreviewFailed] = React.useState(false);
 
     React.useEffect(() => {
@@ -389,8 +391,8 @@ function PaymentProofPanel({
             <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                 <ImageIcon className="w-4 h-4" /> {title}
             </h3>
-            {!previewFailed ? (
-                <a href={url} target="_blank" rel="noopener noreferrer" className="block">
+            {!previewFailed && safeUrl ? (
+                <a href={safeUrl} target="_blank" rel="noopener noreferrer" className="block">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                         src={previewSrc}
@@ -399,19 +401,26 @@ function PaymentProofPanel({
                         className="max-w-sm w-full rounded-lg border bg-muted/20 shadow-sm"
                     />
                 </a>
-            ) : (
+            ) : safeUrl ? (
                 <a
-                    href={url}
+                    href={safeUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center justify-between gap-3 rounded-xl border bg-muted/20 px-4 py-3 transition-colors hover:bg-muted/40"
                 >
                     <div className="min-w-0">
                         <p className="text-sm font-medium">{linkLabel}</p>
-                        <p className="mt-1 truncate text-xs text-muted-foreground">{url}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">{safeUrl}</p>
                     </div>
                     <ExternalLink className="w-4 h-4 shrink-0 text-muted-foreground" />
                 </a>
+            ) : (
+                <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/20 px-4 py-3">
+                    <div className="min-w-0">
+                        <p className="text-sm font-medium">{linkLabel}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">URL bukti tidak valid.</p>
+                    </div>
+                </div>
             )}
         </div>
     );

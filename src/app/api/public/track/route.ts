@@ -19,6 +19,8 @@ import {
 } from "@/lib/fastpik-live-sync";
 import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import { getTrackBasePayloadCached } from "@/lib/public-track-data";
+import { buildSignedInvoicePath } from "@/lib/security/invoice-access";
+import { enforceRateLimit, withNoStoreHeaders } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +36,16 @@ const supabaseAdmin = createClient(
 );
 
 export async function GET(request: NextRequest) {
+    const rateLimitedResponse = enforceRateLimit({
+        request,
+        namespace: "public-get-track",
+        maxRequests: 60,
+        windowMs: 60 * 1000,
+    });
+    if (rateLimitedResponse) {
+        return withNoStoreHeaders(rateLimitedResponse);
+    }
+
     const uuid = request.nextUrl.searchParams.get("uuid");
     if (!uuid) {
         return NextResponse.json(
@@ -101,6 +113,16 @@ export async function GET(request: NextRequest) {
                 queuePosition: effectiveBooking.queue_position,
                 status: effectiveBooking.status,
                 serviceName: (effectiveBooking.services as { name?: string } | null)?.name || null,
+                invoiceUrlInitial: buildSignedInvoicePath({
+                    bookingCode: effectiveBooking.booking_code,
+                    stage: "initial",
+                    lang: locale,
+                }),
+                invoiceUrlFinal: buildSignedInvoicePath({
+                    bookingCode: effectiveBooking.booking_code,
+                    stage: "final",
+                    lang: locale,
+                }),
                 fastpikUrl: effectiveBooking.fastpik_project_link,
                 driveUrl: effectiveBooking.drive_folder_url,
                 fastpikLinkDisplayMode: profileLinkMode,

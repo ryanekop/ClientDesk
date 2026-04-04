@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { sanitizeTenantFooterHtml } from "@/utils/tenant-footer";
 
 export interface TenantConfig {
   id: string;
@@ -42,7 +43,7 @@ export async function getTenantConfig(): Promise<TenantConfig> {
     logoUrl: headersList.get("x-tenant-logo") || "/icon-192.png",
     faviconUrl: headersList.get("x-tenant-favicon"),
     primaryColor: headersList.get("x-tenant-color") || "#7c3aed",
-    footerText: headersList.get("x-tenant-footer"),
+    footerText: sanitizeTenantFooterHtml(headersList.get("x-tenant-footer")),
     disableBookingSlug:
       headersList.get("x-tenant-disable-booking-slug") === "true",
     defaultBookingVendorSlug:

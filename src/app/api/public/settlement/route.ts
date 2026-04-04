@@ -14,6 +14,10 @@ import {
 } from "@/lib/final-settlement";
 import { uploadPaymentProofToDrive } from "@/lib/payment-proof-drive";
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
+import { securityErrorResponse } from "@/lib/security/error-response";
+import { validatePublicPaymentProofFile } from "@/lib/security/public-upload";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
+import { validateExternalHttpsUrl } from "@/lib/security/url-validation";
 
 type VendorRecord = {
   vendor_slug: string | null;
@@ -37,6 +41,16 @@ const supabaseAdmin = createClient(
 );
 
 export async function POST(request: NextRequest) {
+  const rateLimitedResponse = enforceRateLimit({
+    request,
+    namespace: "public-post-settlement",
+    maxRequests: 10,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (rateLimitedResponse) {
+    return rateLimitedResponse;
+  }
+
   try {
     const contentType = request.headers.get("content-type") || "";
     let trackingUuid = "";
@@ -66,6 +80,30 @@ export async function POST(request: NextRequest) {
       paymentSource = body.paymentSource;
       paymentProofUrl = body.paymentProofUrl;
     }
+
+    if (paymentProofFile) {
+      const fileValidation = validatePublicPaymentProofFile(paymentProofFile);
+      if (!fileValidation.valid) {
+        return securityErrorResponse({
+          message: fileValidation.message,
+          code: fileValidation.code,
+          status: fileValidation.status,
+        });
+      }
+    }
+
+    const paymentProofUrlValidation = validateExternalHttpsUrl(
+      typeof paymentProofUrl === "string" ? paymentProofUrl : null,
+      { allowEmpty: true, maxLength: 2048 },
+    );
+    if (!paymentProofUrlValidation.valid) {
+      return securityErrorResponse({
+        message: paymentProofUrlValidation.error || "URL bukti pembayaran tidak valid.",
+        code: "INVALID_URL",
+        status: 400,
+      });
+    }
+    const normalizedPaymentProofInputUrl = paymentProofUrlValidation.normalizedUrl;
 
     if (!trackingUuid) {
       return NextResponse.json(
@@ -205,7 +243,7 @@ export async function POST(request: NextRequest) {
     let normalizedProofUrl =
       selectedPaymentMethod === "cash" || !proofEnabled
         ? null
-        : paymentProofUrl || null;
+        : normalizedPaymentProofInputUrl || null;
     let proofFileId: string | null = null;
 
     if (proofEnabled && selectedPaymentMethod !== "cash" && paymentProofFile) {

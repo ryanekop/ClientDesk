@@ -70,6 +70,10 @@ import { resolvePublicOrigin } from "@/lib/auth/public-origin";
 import { buildBookingDetailLink } from "@/lib/booking-detail-link";
 import { normalizeCityCode } from "@/lib/city-references";
 import { isCityScopedBookingEventType } from "@/lib/service-availability";
+import { securityErrorResponse } from "@/lib/security/error-response";
+import { validatePublicPaymentProofFile } from "@/lib/security/public-upload";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
+import { validateExternalHttpsUrl } from "@/lib/security/url-validation";
 
 type VendorRecord = {
     id: string;
@@ -379,6 +383,16 @@ class PublicBookingProcessingError extends Error {
 }
 
 export async function POST(request: NextRequest) {
+    const rateLimitedResponse = enforceRateLimit({
+        request,
+        namespace: "public-post-booking",
+        maxRequests: 10,
+        windowMs: 10 * 60 * 1000,
+    });
+    if (rateLimitedResponse) {
+        return rateLimitedResponse;
+    }
+
     try {
         const locale = resolveApiLocale(request);
         const publicOrigin = resolvePublicOrigin(request);
@@ -464,6 +478,30 @@ export async function POST(request: NextRequest) {
             instagram,
             offerToken,
         } = body;
+
+        if (paymentProofFile) {
+            const fileValidation = validatePublicPaymentProofFile(paymentProofFile);
+            if (!fileValidation.valid) {
+                return securityErrorResponse({
+                    message: fileValidation.message,
+                    code: fileValidation.code,
+                    status: fileValidation.status,
+                });
+            }
+        }
+
+        const paymentProofUrlValidation = validateExternalHttpsUrl(
+            typeof paymentProofUrl === "string" ? paymentProofUrl : null,
+            { allowEmpty: true, maxLength: 2048 },
+        );
+        if (!paymentProofUrlValidation.valid) {
+            return securityErrorResponse({
+                message: paymentProofUrlValidation.error || "URL bukti pembayaran tidak valid.",
+                code: "INVALID_URL",
+                status: 400,
+            });
+        }
+        const normalizedPaymentProofInputUrl = paymentProofUrlValidation.normalizedUrl;
 
         const normalizedClientName = (clientName || "").trim() || "Klien";
         const normalizedClientWhatsapp = (clientWhatsapp || "").trim();
@@ -828,7 +866,9 @@ export async function POST(request: NextRequest) {
 
         const proofEnabled = vendor.form_show_proof ?? true;
         const normalizedPaymentProofUrl =
-            selectedPaymentMethod === "cash" || !proofEnabled ? null : paymentProofUrl || null;
+            selectedPaymentMethod === "cash" || !proofEnabled
+                ? null
+                : normalizedPaymentProofInputUrl || null;
 
         if (
             proofEnabled &&

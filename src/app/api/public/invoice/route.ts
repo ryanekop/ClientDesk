@@ -20,6 +20,9 @@ import {
 } from "@/lib/booking-special-offer";
 import { getTenantConfig } from "@/lib/tenant-config";
 import { shouldHideTenantBranding } from "@/lib/tenant-branding";
+import { verifyInvoiceAccessToken } from "@/lib/security/invoice-access";
+import { enforceRateLimit, withNoStoreHeaders } from "@/lib/security/rate-limit";
+import { validateExternalHttpsUrl } from "@/lib/security/url-validation";
 
 export const dynamic = "force-dynamic";
 
@@ -191,8 +194,16 @@ async function resolveInvoiceLogoBytes(source: string) {
     } as const;
   }
 
+  const logoUrlValidation = validateExternalHttpsUrl(trimmed, {
+    allowEmpty: false,
+    maxLength: 2048,
+  });
+  if (!logoUrlValidation.valid || !logoUrlValidation.normalizedUrl) {
+    return null;
+  }
+
   try {
-    const response = await fetch(trimmed, { cache: "no-store" });
+    const response = await fetch(logoUrlValidation.normalizedUrl, { cache: "no-store" });
     if (!response.ok) return null;
     const contentType = (response.headers.get("content-type") || "").toLowerCase();
     if (!contentType.startsWith("image/")) return null;
@@ -214,9 +225,46 @@ async function resolveInvoiceLogoBytes(source: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const code = request.nextUrl.searchParams.get("code");
-  const lang = request.nextUrl.searchParams.get("lang") || "id";
-  const stage = request.nextUrl.searchParams.get("stage") || "initial";
+  const globalRateLimit = enforceRateLimit({
+    request,
+    namespace: "public-get-invoice",
+    maxRequests: 60,
+    windowMs: 60 * 1000,
+  });
+  if (globalRateLimit) {
+    return withNoStoreHeaders(globalRateLimit);
+  }
+
+  const token = request.nextUrl.searchParams.get("token");
+  let code = request.nextUrl.searchParams.get("code");
+  let lang = request.nextUrl.searchParams.get("lang") || "id";
+  let stage = request.nextUrl.searchParams.get("stage") || "initial";
+
+  if (token) {
+    const verificationResult = verifyInvoiceAccessToken(token);
+    if (!verificationResult.valid) {
+      return NextResponse.json(
+        { error: "Token invoice tidak valid atau sudah kedaluwarsa." },
+        { status: 401, headers: NO_STORE_HEADERS },
+      );
+    }
+
+    code = verificationResult.payload.bookingCode;
+    lang = verificationResult.payload.lang;
+    stage = verificationResult.payload.stage;
+  } else {
+    const legacyRateLimit = enforceRateLimit({
+      request,
+      namespace: "public-get-invoice-legacy",
+      maxRequests: 20,
+      windowMs: 60 * 1000,
+      message: "Terlalu banyak percobaan akses invoice. Silakan coba lagi nanti.",
+    });
+    if (legacyRateLimit) {
+      return withNoStoreHeaders(legacyRateLimit);
+    }
+  }
+
   const t = labels[lang] || labels.id;
   const tenant = await getTenantConfig();
   const hideTenantBranding = shouldHideTenantBranding({
@@ -226,7 +274,7 @@ export async function GET(request: NextRequest) {
 
   if (!code) {
     return NextResponse.json(
-      { error: "Booking code required" },
+      { error: "Booking code required", code: "INVALID_URL" },
       { status: 400, headers: NO_STORE_HEADERS },
     );
   }

@@ -2,12 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { normalizeVendorSlug } from "@/lib/booking-url-mode";
 import { invalidatePublicCachesForProfile } from "@/lib/public-cache-invalidation";
+import { buildAdminCorsHeaders, isAdminCorsOriginAllowed } from "@/lib/security/admin-cors";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, x-admin-api-key",
-};
+const ADMIN_CORS_METHODS = "GET, PUT, OPTIONS";
 
 type ProfileAccount = {
   id: string;
@@ -24,13 +21,28 @@ type TenantRow = {
   default_booking_vendor_slug?: string | null;
 };
 
-function corsResponse(data: unknown, init?: { status?: number }) {
-  return NextResponse.json(data, { ...init, headers: CORS_HEADERS });
+function corsResponse(
+  request: NextRequest,
+  data: unknown,
+  init?: { status?: number },
+) {
+  return NextResponse.json(data, {
+    ...init,
+    headers: buildAdminCorsHeaders(request, ADMIN_CORS_METHODS),
+  });
 }
 
 function verifyAdmin(request: NextRequest) {
   const apiKey = request.headers.get("x-admin-api-key");
-  return apiKey && apiKey === process.env.ADMIN_API_KEY;
+  const isValid = Boolean(apiKey && apiKey === process.env.ADMIN_API_KEY);
+  if (!isValid) {
+    const ip = request.headers.get("cf-connecting-ip")
+      || request.headers.get("x-forwarded-for")
+      || request.headers.get("x-real-ip")
+      || "unknown";
+    console.warn(`[Admin API] Unauthorized access attempt on ${request.nextUrl.pathname} from ${ip}`);
+  }
+  return isValid;
 }
 
 async function listAuthUsersEmailById() {
@@ -60,13 +72,23 @@ async function listAuthUsersEmailById() {
   return emailMap;
 }
 
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+export async function OPTIONS(request: NextRequest) {
+  if (!isAdminCorsOriginAllowed(request)) {
+    return NextResponse.json(
+      { error: "Origin not allowed" },
+      { status: 403, headers: buildAdminCorsHeaders(request, ADMIN_CORS_METHODS) },
+    );
+  }
+
+  return new NextResponse(null, {
+    status: 204,
+    headers: buildAdminCorsHeaders(request, ADMIN_CORS_METHODS),
+  });
 }
 
 export async function GET(request: NextRequest) {
   if (!verifyAdmin(request)) {
-    return corsResponse({ error: "Unauthorized" }, { status: 401 });
+    return corsResponse(request, { error: "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -86,7 +108,7 @@ export async function GET(request: NextRequest) {
 
     const { data: profiles, error: profileError } = await profileQuery;
     if (profileError) {
-      return corsResponse({ error: profileError.message }, { status: 500 });
+      return corsResponse(request, { error: profileError.message }, { status: 500 });
     }
 
     const profileRows = (profiles || []) as ProfileAccount[];
@@ -106,7 +128,7 @@ export async function GET(request: NextRequest) {
         .in("id", tenantIds);
 
       if (tenantError) {
-        return corsResponse({ error: tenantError.message }, { status: 500 });
+        return corsResponse(request, { error: tenantError.message }, { status: 500 });
       }
 
       tenantNameMap = new Map(
@@ -143,17 +165,17 @@ export async function GET(request: NextRequest) {
         );
       });
 
-    return corsResponse({ success: true, accounts });
+    return corsResponse(request, { success: true, accounts });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to list tenant accounts";
-    return corsResponse({ error: message }, { status: 500 });
+    return corsResponse(request, { error: message }, { status: 500 });
   }
 }
 
 export async function PUT(request: NextRequest) {
   if (!verifyAdmin(request)) {
-    return corsResponse({ error: "Unauthorized" }, { status: 401 });
+    return corsResponse(request, { error: "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -165,6 +187,7 @@ export async function PUT(request: NextRequest) {
 
     if (!profileId || !tenantId) {
       return corsResponse(
+        request,
         { error: "profile_id and tenant_id are required" },
         { status: 400 },
       );
@@ -178,10 +201,10 @@ export async function PUT(request: NextRequest) {
       .eq("id", tenantId)
       .maybeSingle();
     if (targetTenantError) {
-      return corsResponse({ error: targetTenantError.message }, { status: 500 });
+      return corsResponse(request, { error: targetTenantError.message }, { status: 500 });
     }
     if (!targetTenant) {
-      return corsResponse({ error: "Tenant not found" }, { status: 404 });
+      return corsResponse(request, { error: "Tenant not found" }, { status: 404 });
     }
 
     const { data: targetProfile, error: targetProfileError } = await supabase
@@ -190,10 +213,10 @@ export async function PUT(request: NextRequest) {
       .eq("id", profileId)
       .maybeSingle();
     if (targetProfileError) {
-      return corsResponse({ error: targetProfileError.message }, { status: 500 });
+      return corsResponse(request, { error: targetProfileError.message }, { status: 500 });
     }
     if (!targetProfile) {
-      return corsResponse({ error: "Profile not found" }, { status: 404 });
+      return corsResponse(request, { error: "Profile not found" }, { status: 404 });
     }
 
     const { data: updatedProfile, error: updateError } = await supabase
@@ -204,7 +227,7 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (updateError) {
-      return corsResponse({ error: updateError.message }, { status: 500 });
+      return corsResponse(request, { error: updateError.message }, { status: 500 });
     }
 
     invalidatePublicCachesForProfile({
@@ -227,7 +250,7 @@ export async function PUT(request: NextRequest) {
           .eq("vendor_slug", currentDefaultSlug)
           .maybeSingle();
         if (mappedVendorError) {
-          return corsResponse({ error: mappedVendorError.message }, { status: 500 });
+          return corsResponse(request, { error: mappedVendorError.message }, { status: 500 });
         }
         defaultSlugExists = Boolean(mappedVendor);
       }
@@ -247,7 +270,7 @@ export async function PUT(request: NextRequest) {
               .maybeSingle();
 
           if (firstTenantVendorError) {
-            return corsResponse({ error: firstTenantVendorError.message }, { status: 500 });
+            return corsResponse(request, { error: firstTenantVendorError.message }, { status: 500 });
           }
 
           replacementSlug = normalizeVendorSlug(
@@ -263,12 +286,12 @@ export async function PUT(request: NextRequest) {
           .eq("id", tenantId);
 
         if (syncDefaultSlugError) {
-          return corsResponse({ error: syncDefaultSlugError.message }, { status: 500 });
+          return corsResponse(request, { error: syncDefaultSlugError.message }, { status: 500 });
         }
       }
     }
 
-    return corsResponse({
+    return corsResponse(request, {
       success: true,
       account: {
         ...updatedProfile,
@@ -278,6 +301,6 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update tenant account";
-    return corsResponse({ error: message }, { status: 500 });
+    return corsResponse(request, { error: message }, { status: 500 });
   }
 }

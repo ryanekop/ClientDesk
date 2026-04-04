@@ -79,6 +79,7 @@ import type { PaginatedQueryState } from "@/lib/pagination/types";
 import { buildBookingWhatsAppTemplateVars } from "@/lib/booking-whatsapp-template-vars";
 import { useMoneyVisibility } from "@/hooks/use-money-visibility";
 import { normalizeHexColor, withAlpha } from "@/lib/service-colors";
+import { normalizeSafeExternalUrl } from "@/utils/safe-link";
 
 type BookingFinance = {
     id: string;
@@ -1869,7 +1870,12 @@ export default function FinancePage() {
 
     function openProof(url: string | null) {
         if (!url) return;
-        window.open(url, "_blank");
+        const safeUrl = normalizeSafeExternalUrl(url);
+        if (!safeUrl) {
+            setFeedbackDialog({ open: true, message: tf("failedLoadFinance") });
+            return;
+        }
+        window.open(safeUrl, "_blank");
     }
 
     React.useEffect(() => {

@@ -8,6 +8,7 @@ import {
   normalizeUniversityAbbreviation,
   normalizeUniversityName,
 } from "@/lib/university-references";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
 
 type UniversitySearchRow = {
   id: string;
@@ -34,6 +35,16 @@ function parseLimit(value: string | null) {
 }
 
 export async function GET(request: NextRequest) {
+  const rateLimitedResponse = enforceRateLimit({
+    request,
+    namespace: "public-get-universities",
+    maxRequests: 60,
+    windowMs: 60 * 1000,
+  });
+  if (rateLimitedResponse) {
+    return rateLimitedResponse;
+  }
+
   const rawQuery = request.nextUrl.searchParams.get("q");
   const query = cleanUniversityName(rawQuery || "");
   const exact = request.nextUrl.searchParams.get("exact") === "1";

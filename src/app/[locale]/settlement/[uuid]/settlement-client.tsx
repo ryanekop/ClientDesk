@@ -41,6 +41,8 @@ import { buildBookingWhatsAppTemplateVars } from "@/lib/booking-whatsapp-templat
 type BookingData = {
   bookingCode: string;
   trackingUuid: string | null;
+  invoiceUrlInitial?: string | null;
+  invoiceUrlFinal?: string | null;
   clientName: string;
   clientWhatsapp: string | null;
   instagram: string | null;
@@ -375,9 +377,11 @@ export default function SettlementClient({
   function openAdminWhatsAppConfirmation() {
     if (!normalizedAdminWhatsapp) return;
 
-    const invoiceUrl = `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(
-      booking.bookingCode,
-    )}&lang=${locale}&stage=final`;
+    const invoiceUrl =
+      booking.invoiceUrlFinal ||
+      `${window.location.origin}/api/public/invoice?code=${encodeURIComponent(
+        booking.bookingCode,
+      )}&lang=${locale}&stage=final`;
     const settlementUrl = booking.trackingUuid
       ? `${window.location.origin}/${locale}/settlement/${booking.trackingUuid}`
       : window.location.href;
@@ -463,9 +467,10 @@ export default function SettlementClient({
           <button
             onClick={() =>
               window.open(
-                `/api/public/invoice?code=${encodeURIComponent(
-                  booking.bookingCode,
-                )}&lang=${locale}&stage=final`,
+                booking.invoiceUrlFinal ||
+                  `/api/public/invoice?code=${encodeURIComponent(
+                    booking.bookingCode,
+                  )}&lang=${locale}&stage=final`,
                 "_blank",
               )
             }
@@ -651,9 +656,10 @@ export default function SettlementClient({
           <button
             onClick={() =>
               window.open(
-                `/api/public/invoice?code=${encodeURIComponent(
-                  booking.bookingCode,
-                )}&lang=${locale}&stage=final`,
+                booking.invoiceUrlFinal ||
+                  `/api/public/invoice?code=${encodeURIComponent(
+                    booking.bookingCode,
+                  )}&lang=${locale}&stage=final`,
                 "_blank",
               )
             }

@@ -16,6 +16,7 @@ import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-specia
 import { normalizeBookingServiceSelections } from "@/lib/booking-services";
 import { buildSeoMetadata } from "@/lib/seo-metadata";
 import { getTenantConfig } from "@/lib/tenant-config";
+import { buildSignedInvoicePath } from "@/lib/security/invoice-access";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,7 @@ function isMissingColumnError(message: string | null | undefined) {
   return text.includes("could not find") || text.includes("does not exist");
 }
 
-async function getSettlementData(uuid: string) {
+async function getSettlementData(uuid: string, locale: string) {
   const { data: booking } = await supabaseAdmin
     .from("bookings")
     .select(
@@ -141,6 +142,16 @@ async function getSettlementData(uuid: string) {
     booking: {
       bookingCode: booking.booking_code,
       trackingUuid: booking.tracking_uuid,
+      invoiceUrlInitial: buildSignedInvoicePath({
+        bookingCode: booking.booking_code,
+        stage: "initial",
+        lang: locale,
+      }),
+      invoiceUrlFinal: buildSignedInvoicePath({
+        bookingCode: booking.booking_code,
+        stage: "final",
+        lang: locale,
+      }),
       clientName: booking.client_name,
       clientWhatsapp: booking.client_whatsapp || null,
       instagram: booking.instagram || null,
@@ -201,8 +212,8 @@ async function getSettlementData(uuid: string) {
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { uuid } = await params;
-  const result = await getSettlementData(uuid);
+  const { uuid, locale } = await params;
+  const result = await getSettlementData(uuid, locale);
   const tenant = await getTenantConfig();
 
   if (!result) {
@@ -244,8 +255,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function SettlementPage({ params }: PageProps) {
-  const { uuid } = await params;
-  const result = await getSettlementData(uuid);
+  const { uuid, locale } = await params;
+  const result = await getSettlementData(uuid, locale);
 
   if (!result) {
     return (

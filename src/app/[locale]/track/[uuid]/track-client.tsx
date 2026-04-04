@@ -24,6 +24,8 @@ type BookingData = {
     queuePosition: number | null;
     status: string;
     serviceName: string | null;
+    invoiceUrlInitial?: string | null;
+    invoiceUrlFinal?: string | null;
     fastpikUrl: string | null;
     driveUrl: string | null;
     fastpikLinkDisplayMode: "both" | "prefer_fastpik" | "drive_only";
@@ -465,7 +467,13 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                         <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className={`font-semibold ${booking.isFullyPaid ? "text-green-600" : "text-amber-600"}`}>{booking.isFullyPaid ? `✅ ${t("paid")}` : `⏳ ${t("unpaid")}`}</span></div>
                     </div>
                     <button
-                        onClick={() => window.open(`/api/public/invoice?code=${encodeURIComponent(booking.bookingCode)}`, "_blank")}
+                        onClick={() =>
+                            window.open(
+                                booking.invoiceUrlInitial ||
+                                    `/api/public/invoice?code=${encodeURIComponent(booking.bookingCode)}`,
+                                "_blank",
+                            )
+                        }
                         className="flex items-center gap-2 text-sm text-primary hover:underline cursor-pointer"
                     >
                         <Download className="w-4 h-4" />
@@ -497,7 +505,13 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                         </div>
                         <div className="flex flex-wrap gap-3">
                             <button
-                                onClick={() => window.open(`/api/public/invoice?code=${encodeURIComponent(booking.bookingCode)}&lang=${locale}&stage=final`, "_blank")}
+                                onClick={() =>
+                                    window.open(
+                                        booking.invoiceUrlFinal ||
+                                            `/api/public/invoice?code=${encodeURIComponent(booking.bookingCode)}&lang=${locale}&stage=final`,
+                                        "_blank",
+                                    )
+                                }
                                 className="flex items-center gap-2 text-sm text-primary hover:underline cursor-pointer"
                             >
                                 <Download className="w-4 h-4" />

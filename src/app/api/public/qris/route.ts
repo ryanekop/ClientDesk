@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { buildDriveImageUrl, isLegacyDriveImageUrl } from "@/lib/payment-config";
 import { getDriveFilePublicLinks } from "@/utils/google/drive";
+import { enforceRateLimit } from "@/lib/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,16 @@ async function loadProfileByTrackingUuid(trackingUuid: string) {
 }
 
 export async function GET(request: NextRequest) {
+  const rateLimitedResponse = enforceRateLimit({
+    request,
+    namespace: "public-get-qris",
+    maxRequests: 60,
+    windowMs: 60 * 1000,
+  });
+  if (rateLimitedResponse) {
+    return rateLimitedResponse;
+  }
+
   const vendorSlug = request.nextUrl.searchParams.get("vendorSlug")?.trim() || "";
   const trackingUuid = request.nextUrl.searchParams.get("trackingUuid")?.trim() || "";
 
