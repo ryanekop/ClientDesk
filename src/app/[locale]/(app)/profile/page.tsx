@@ -151,7 +151,7 @@ export default function ProfilePage() {
             .from("subscriptions")
             .select("tier, status, end_date, trial_end_date")
             .eq("user_id", user.id)
-            .single();
+            .maybeSingle();
 
         const [profile, { data: sub }] = await Promise.all([
             loadProfilePromise,

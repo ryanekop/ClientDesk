@@ -45,7 +45,7 @@ export default function PricingPage() {
                 .from('subscriptions')
                 .select('tier, status')
                 .eq('user_id', user.id)
-                .single()
+                .maybeSingle()
             if (sub && sub.status !== 'expired') {
                 setCurrentTier(sub.tier)
             }

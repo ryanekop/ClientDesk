@@ -121,8 +121,8 @@ export function Topbar({ onMenuClick }: TopbarProps) {
           .from("subscriptions")
           .select("tier, status")
           .eq("user_id", user.id)
-          .single();
-        setSubscription(sub);
+          .maybeSingle();
+        setSubscription(sub ?? null);
       }
     }
     fetchUser();

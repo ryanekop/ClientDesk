@@ -1,4 +1,5 @@
 export const CLIENTDESK_SESSION_ONLY_KEY = "clientdesk_session_only";
+export const CLIENTDESK_SESSION_ONLY_MODE_KEY = "clientdesk_session_only_mode";
 export const CLIENTDESK_SESSION_ONLY_USER_KEY = "clientdesk_session_only_user";
 export const CLIENTDESK_SESSION_LOGIN_TIME_KEY = "clientdesk_session_login_time";
 export const CLIENTDESK_SESSION_ONLY_TTL_MS = 2 * 60 * 60 * 1000;
@@ -29,6 +30,7 @@ export function clearClientDeskSessionOnlyState() {
   const sessionStorage = getSafeSessionStorage();
   const localStorage = getSafeLocalStorage();
   sessionStorage?.removeItem(CLIENTDESK_SESSION_ONLY_KEY);
+  localStorage?.removeItem(CLIENTDESK_SESSION_ONLY_MODE_KEY);
   localStorage?.removeItem(CLIENTDESK_SESSION_ONLY_USER_KEY);
   localStorage?.removeItem(CLIENTDESK_SESSION_LOGIN_TIME_KEY);
 }
@@ -43,6 +45,7 @@ export function applyClientDeskRememberMeSelection(rememberMe: boolean) {
     return;
   }
 
+  localStorage.setItem(CLIENTDESK_SESSION_ONLY_MODE_KEY, "true");
   sessionStorage.setItem(CLIENTDESK_SESSION_ONLY_KEY, "true");
   localStorage.setItem(
     CLIENTDESK_SESSION_LOGIN_TIME_KEY,
@@ -62,36 +65,49 @@ export function evaluateClientDeskSessionOnlyState(userId: string): {
 
   const sessionOnlyFlag =
     sessionStorage.getItem(CLIENTDESK_SESSION_ONLY_KEY) === "true";
+  const sessionOnlyModeFlag =
+    localStorage.getItem(CLIENTDESK_SESSION_ONLY_MODE_KEY) === "true";
   const trackedUserId = localStorage.getItem(
     CLIENTDESK_SESSION_ONLY_USER_KEY,
   );
   const loginTimeRaw = localStorage.getItem(
     CLIENTDESK_SESSION_LOGIN_TIME_KEY,
   );
-  const loginTime = Number.parseInt(loginTimeRaw || "0", 10);
-  const hasLoginTime = Number.isFinite(loginTime) && loginTime > 0;
-  const isExpired =
-    hasLoginTime && Date.now() - loginTime > CLIENTDESK_SESSION_ONLY_TTL_MS;
+  if (!sessionOnlyModeFlag) {
+    if (sessionOnlyFlag) {
+      sessionStorage.removeItem(CLIENTDESK_SESSION_ONLY_KEY);
+    }
+    localStorage.removeItem(CLIENTDESK_SESSION_ONLY_USER_KEY);
+    localStorage.removeItem(CLIENTDESK_SESSION_LOGIN_TIME_KEY);
+    return { shouldSignOut: false, sessionOnlyActive: false };
+  }
 
-  if (trackedUserId === userId && (!sessionOnlyFlag || isExpired)) {
+  const now = Date.now();
+  let loginTime = Number.parseInt(loginTimeRaw || "0", 10);
+  let hasLoginTime = Number.isFinite(loginTime) && loginTime > 0;
+
+  // Keep session-only active across tab changes by restoring the tab marker.
+  if (!sessionOnlyFlag) {
+    sessionStorage.setItem(CLIENTDESK_SESSION_ONLY_KEY, "true");
+  }
+
+  if (trackedUserId !== userId) {
+    localStorage.setItem(CLIENTDESK_SESSION_ONLY_USER_KEY, userId);
+    localStorage.setItem(CLIENTDESK_SESSION_LOGIN_TIME_KEY, now.toString());
+    loginTime = now;
+    hasLoginTime = true;
+  } else if (!hasLoginTime) {
+    localStorage.setItem(CLIENTDESK_SESSION_LOGIN_TIME_KEY, now.toString());
+    loginTime = now;
+    hasLoginTime = true;
+  }
+
+  const isExpired =
+    hasLoginTime && now - loginTime > CLIENTDESK_SESSION_ONLY_TTL_MS;
+
+  if (isExpired) {
     return { shouldSignOut: true, sessionOnlyActive: true };
   }
 
-  if (sessionOnlyFlag) {
-    localStorage.setItem(CLIENTDESK_SESSION_ONLY_USER_KEY, userId);
-    if (!hasLoginTime) {
-      localStorage.setItem(
-        CLIENTDESK_SESSION_LOGIN_TIME_KEY,
-        Date.now().toString(),
-      );
-    }
-    return { shouldSignOut: false, sessionOnlyActive: true };
-  }
-
-  if (trackedUserId === userId) {
-    localStorage.removeItem(CLIENTDESK_SESSION_ONLY_USER_KEY);
-    localStorage.removeItem(CLIENTDESK_SESSION_LOGIN_TIME_KEY);
-  }
-
-  return { shouldSignOut: false, sessionOnlyActive: false };
+  return { shouldSignOut: false, sessionOnlyActive: true };
 }
