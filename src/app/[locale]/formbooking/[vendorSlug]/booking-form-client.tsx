@@ -151,6 +151,22 @@ export type Vendor = {
   form_payment_methods: PaymentMethod[];
   qris_image_url: string | null;
   bank_accounts: BankAccount[];
+  seo_meta_title?: string | null;
+  seo_meta_description?: string | null;
+  seo_meta_keywords?: string | null;
+  seo_og_image_url?: string | null;
+  seo_form_meta_title?: string | null;
+  seo_form_meta_description?: string | null;
+  seo_form_meta_keywords?: string | null;
+  seo_form_og_image_url?: string | null;
+  seo_track_meta_title?: string | null;
+  seo_track_meta_description?: string | null;
+  seo_track_meta_keywords?: string | null;
+  seo_track_og_image_url?: string | null;
+  seo_settlement_meta_title?: string | null;
+  seo_settlement_meta_description?: string | null;
+  seo_settlement_meta_keywords?: string | null;
+  seo_settlement_og_image_url?: string | null;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────

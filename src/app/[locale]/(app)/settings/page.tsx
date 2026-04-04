@@ -18,6 +18,7 @@ import {
   Trash2,
   Upload,
   Plus,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -56,6 +57,7 @@ import {
   isGoogleDriveConnected,
 } from "@/utils/google/connection";
 import {
+  fillWhatsAppTemplate,
   getStoredTemplateName,
   getStoredTemplateType,
   resolveTemplateMode,
@@ -165,6 +167,19 @@ type Profile = {
   fastpik_link_display_mode?: FastpikLinkDisplayMode | null;
   fastpik_link_display_mode_booking_detail?: FastpikLinkDisplayMode | null;
   fastpik_link_display_mode_tracking?: FastpikLinkDisplayMode | null;
+  form_greeting?: string | null;
+  seo_meta_title?: string | null;
+  seo_meta_description?: string | null;
+  seo_meta_keywords?: string | null;
+  seo_form_meta_title?: string | null;
+  seo_form_meta_description?: string | null;
+  seo_form_meta_keywords?: string | null;
+  seo_track_meta_title?: string | null;
+  seo_track_meta_description?: string | null;
+  seo_track_meta_keywords?: string | null;
+  seo_settlement_meta_title?: string | null;
+  seo_settlement_meta_description?: string | null;
+  seo_settlement_meta_keywords?: string | null;
 };
 
 type Template = {
@@ -411,6 +426,86 @@ const variableHints: Record<string, string[]> = {
   ],
 };
 
+type SeoSectionKey = "global" | "form" | "track" | "settlement";
+type SeoFieldKey = "metaTitle" | "metaDescription" | "metaKeywords";
+
+type SeoSectionState = {
+  metaTitle: string;
+  metaDescription: string;
+  metaKeywords: string;
+};
+
+type SeoSettingsState = Record<SeoSectionKey, SeoSectionState>;
+type SeoFieldInputElement = HTMLInputElement | HTMLTextAreaElement;
+type SeoFieldRefsState = Record<
+  SeoSectionKey,
+  Record<SeoFieldKey, SeoFieldInputElement | null>
+>;
+type SeoValueSource = "section" | "global" | "dynamicDefault";
+type ResolvedSeoField = {
+  value: string;
+  source: SeoValueSource;
+};
+type ResolvedSeoSectionState = Record<SeoFieldKey, ResolvedSeoField>;
+
+const DEFAULT_SEO_SECTION_STATE: SeoSectionState = {
+  metaTitle: "",
+  metaDescription: "",
+  metaKeywords: "",
+};
+
+function createDefaultSeoSettings(): SeoSettingsState {
+  return {
+    global: { ...DEFAULT_SEO_SECTION_STATE },
+    form: { ...DEFAULT_SEO_SECTION_STATE },
+    track: { ...DEFAULT_SEO_SECTION_STATE },
+    settlement: { ...DEFAULT_SEO_SECTION_STATE },
+  };
+}
+
+const DEFAULT_ACTIVE_SEO_FIELD_BY_SECTION: Record<SeoSectionKey, SeoFieldKey> = {
+  global: "metaTitle",
+  form: "metaTitle",
+  track: "metaTitle",
+  settlement: "metaTitle",
+};
+
+const SEO_VARIABLE_HINTS = [
+  "{{studio_name}}",
+  "{{vendor_slug}}",
+  "{{client_name}}",
+  "{{booking_code}}",
+  "{{status}}",
+  "{{event_type}}",
+  "{{session_date}}",
+  "{{tracking_uuid}}",
+  "{{settlement_uuid}}",
+] as const;
+
+const SEO_DEFAULT_BY_SECTION: Record<SeoSectionKey, SeoSectionState> = {
+  global: {
+    metaTitle: "{{studio_name}}",
+    metaDescription: "Booking sesi foto bersama {{studio_name}}.",
+    metaKeywords: "",
+  },
+  form: {
+    metaTitle: "Form Booking — {{studio_name}}",
+    metaDescription: "Booking sesi foto bersama {{studio_name}}.",
+    metaKeywords: "",
+  },
+  track: {
+    metaTitle: "{{status}} — {{client_name}} — {{booking_code}}",
+    metaDescription:
+      "Tracking booking {{booking_code}} untuk {{client_name}} di {{studio_name}}",
+    metaKeywords: "",
+  },
+  settlement: {
+    metaTitle: "Pelunasan - {{booking_code}}",
+    metaDescription: "Form pelunasan untuk booking {{booking_code}}",
+    metaKeywords: "",
+  },
+};
+
 function getSplitWhatsAppVariableHints(
   eventType: string | null | undefined,
   mode: WhatsAppTemplateMode,
@@ -512,6 +607,19 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "fastpik_link_display_mode",
   "fastpik_link_display_mode_booking_detail",
   "fastpik_link_display_mode_tracking",
+  "form_greeting",
+  "seo_meta_title",
+  "seo_meta_description",
+  "seo_meta_keywords",
+  "seo_form_meta_title",
+  "seo_form_meta_description",
+  "seo_form_meta_keywords",
+  "seo_track_meta_title",
+  "seo_track_meta_description",
+  "seo_track_meta_keywords",
+  "seo_settlement_meta_title",
+  "seo_settlement_meta_description",
+  "seo_settlement_meta_keywords",
 ] as const;
 
 // Google Calendar SVG Logo (official 2020)
@@ -799,6 +907,19 @@ export default function SettingsPage() {
   const [logoLightboxOpen, setLogoLightboxOpen] = React.useState(false);
   const [dragOver, setDragOver] = React.useState(false);
   const logoInputRef = React.useRef<HTMLInputElement>(null);
+  const [seoSettings, setSeoSettings] = React.useState<SeoSettingsState>(
+    createDefaultSeoSettings,
+  );
+  const [formBookingGreeting, setFormBookingGreeting] = React.useState("");
+  const [activeSeoFieldBySection, setActiveSeoFieldBySection] = React.useState<
+    Record<SeoSectionKey, SeoFieldKey>
+  >(DEFAULT_ACTIVE_SEO_FIELD_BY_SECTION);
+  const seoFieldRefs = React.useRef<SeoFieldRefsState>({
+    global: { metaTitle: null, metaDescription: null, metaKeywords: null },
+    form: { metaTitle: null, metaDescription: null, metaKeywords: null },
+    track: { metaTitle: null, metaDescription: null, metaKeywords: null },
+    settlement: { metaTitle: null, metaDescription: null, metaKeywords: null },
+  });
 
   const [statusSaving, setStatusSaving] = React.useState(false);
   const [statusSaved, setStatusSaved] = React.useState(false);
@@ -1334,6 +1455,29 @@ export default function SettingsPage() {
     setIsCalendarConnected(isGoogleCalendarConnected(prof));
     setIsDriveConnected(isGoogleDriveConnected(prof));
     setLogoUrl((prof as any)?.invoice_logo_url || null);
+    setFormBookingGreeting((prof as any)?.form_greeting || "");
+    setSeoSettings({
+      global: {
+        metaTitle: (prof as any)?.seo_meta_title || "",
+        metaDescription: (prof as any)?.seo_meta_description || "",
+        metaKeywords: (prof as any)?.seo_meta_keywords || "",
+      },
+      form: {
+        metaTitle: (prof as any)?.seo_form_meta_title || "",
+        metaDescription: (prof as any)?.seo_form_meta_description || "",
+        metaKeywords: (prof as any)?.seo_form_meta_keywords || "",
+      },
+      track: {
+        metaTitle: (prof as any)?.seo_track_meta_title || "",
+        metaDescription: (prof as any)?.seo_track_meta_description || "",
+        metaKeywords: (prof as any)?.seo_track_meta_keywords || "",
+      },
+      settlement: {
+        metaTitle: (prof as any)?.seo_settlement_meta_title || "",
+        metaDescription: (prof as any)?.seo_settlement_meta_description || "",
+        metaKeywords: (prof as any)?.seo_settlement_meta_keywords || "",
+      },
+    });
     setCalendarEventFormats(
       normalizeTemplateFormatMap(
         (prof as any)?.calendar_event_format_map,
@@ -1699,6 +1843,40 @@ export default function SettingsPage() {
       void fetchAll(true);
     } catch (error) {
       console.error("Settings save error:", error);
+      setSavedMsg(tp("failedSave"));
+      setTimeout(() => setSavedMsg(""), 3000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveSeoSettings() {
+    if (!profile) return;
+    setSaving(true);
+    try {
+      await saveProfilePatch({
+        seo_meta_title: seoSettings.global.metaTitle.trim() || null,
+        seo_meta_description: seoSettings.global.metaDescription.trim() || null,
+        seo_meta_keywords: seoSettings.global.metaKeywords.trim() || null,
+        seo_form_meta_title: seoSettings.form.metaTitle.trim() || null,
+        seo_form_meta_description: seoSettings.form.metaDescription.trim() || null,
+        seo_form_meta_keywords: seoSettings.form.metaKeywords.trim() || null,
+        seo_track_meta_title: seoSettings.track.metaTitle.trim() || null,
+        seo_track_meta_description: seoSettings.track.metaDescription.trim() || null,
+        seo_track_meta_keywords: seoSettings.track.metaKeywords.trim() || null,
+        seo_settlement_meta_title:
+          seoSettings.settlement.metaTitle.trim() || null,
+        seo_settlement_meta_description:
+          seoSettings.settlement.metaDescription.trim() || null,
+        seo_settlement_meta_keywords:
+          seoSettings.settlement.metaKeywords.trim() || null,
+      });
+      setSavedMsg(settingsSavedMessage);
+      showSettingsSavedToast();
+      setTimeout(() => setSavedMsg(""), 3000);
+      void fetchAll(true);
+    } catch (error) {
+      console.error("SEO settings save error:", error);
       setSavedMsg(tp("failedSave"));
       setTimeout(() => setSavedMsg(""), 3000);
     } finally {
@@ -2346,6 +2524,47 @@ export default function SettingsPage() {
     }));
   }
 
+  function updateSeoSection(
+    section: SeoSectionKey,
+    patch: Partial<SeoSectionState>,
+  ) {
+    setSeoSettings((prev) => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        ...patch,
+      },
+    }));
+  }
+
+  function setActiveSeoField(section: SeoSectionKey, field: SeoFieldKey) {
+    setActiveSeoFieldBySection((prev) => ({ ...prev, [section]: field }));
+  }
+
+  function setSeoFieldRef(
+    section: SeoSectionKey,
+    field: SeoFieldKey,
+    node: SeoFieldInputElement | null,
+  ) {
+    seoFieldRefs.current[section][field] = node;
+  }
+
+  function handleInsertSeoVariable(section: SeoSectionKey, token: string) {
+    const activeField = activeSeoFieldBySection[section] || "metaTitle";
+    const fieldRef = {
+      current: seoFieldRefs.current[section][activeField],
+    } as React.RefObject<SeoFieldInputElement | null>;
+    insertIntoInput(
+      fieldRef,
+      token,
+      seoSettings[section][activeField],
+      (value) =>
+        updateSeoSection(section, {
+          [activeField]: value,
+        } as Partial<SeoSectionState>),
+    );
+  }
+
   // Logo handlers
   function handleLogoFileSelected(file: File) {
     if (file.size > 500 * 1024) {
@@ -2445,6 +2664,7 @@ export default function SettingsPage() {
 
   const tabs = [
     { key: "umum", label: tp("tabGeneral") },
+    { key: "seo", label: tp("tabSeo") },
     { key: "template", label: tp("tabTemplates") },
     { key: "daftar-booking", label: tp("tabBookingList") },
     { key: "status", label: tp("tabStatus") },
@@ -2542,6 +2762,82 @@ export default function SettingsPage() {
       /\{\{(\w+)\}\}/g,
       (_, key) => mergedVars[key] || `{{${key}}}`,
     );
+  }
+
+  const seoPreviewVariables: Record<string, string> = {
+    studio_name: studioName || "Memori Studio",
+    vendor_slug: slugPreview,
+    client_name: "Budi",
+    booking_code: "INV-100120250001",
+    status: "Sesi Foto / Acara",
+    event_type: "Wedding",
+    session_date: "15 April 2026",
+    tracking_uuid: "abc123",
+    settlement_uuid: "abc123",
+  };
+
+  function renderSeoTextTemplate(content: string) {
+    if (!content.trim()) return "";
+    return fillWhatsAppTemplate(content, seoPreviewVariables);
+  }
+
+  function getSeoDynamicDefaultBySection(section: SeoSectionKey): SeoSectionState {
+    if (section === "form") {
+      return {
+        ...SEO_DEFAULT_BY_SECTION.form,
+        metaDescription:
+          formBookingGreeting.trim() || SEO_DEFAULT_BY_SECTION.form.metaDescription,
+      };
+    }
+    return SEO_DEFAULT_BY_SECTION[section];
+  }
+
+  function resolveSeoField(
+    section: SeoSectionKey,
+    field: SeoFieldKey,
+  ): ResolvedSeoField {
+    const sectionValue = seoSettings[section][field].trim();
+    if (sectionValue) {
+      return {
+        value: sectionValue,
+        source: "section",
+      };
+    }
+
+    if (section !== "global") {
+      const globalValue = seoSettings.global[field].trim();
+      if (globalValue) {
+        return {
+          value: globalValue,
+          source: "global",
+        };
+      }
+    }
+
+    return {
+      value: getSeoDynamicDefaultBySection(section)[field],
+      source: "dynamicDefault",
+    };
+  }
+
+  function getResolvedSeoSection(section: SeoSectionKey): ResolvedSeoSectionState {
+    return {
+      metaTitle: resolveSeoField(section, "metaTitle"),
+      metaDescription: resolveSeoField(section, "metaDescription"),
+      metaKeywords: resolveSeoField(section, "metaKeywords"),
+    };
+  }
+
+  function getSeoSourceLabel(section: SeoSectionKey, source: SeoValueSource) {
+    if (source === "section") {
+      return section === "global"
+        ? tp("seoSourceGlobalOverride")
+        : tp("seoSourceSectionOverride");
+    }
+    if (source === "global") {
+      return tp("seoSourceGlobalFallback");
+    }
+    return tp("seoSourceDynamicDefault");
   }
 
   const calendarPreviewVars = {
@@ -2889,6 +3185,182 @@ export default function SettingsPage() {
     );
   }
 
+  function renderSeoSectionCard(args: {
+    section: SeoSectionKey;
+    title: string;
+    description: string;
+  }) {
+    const current = seoSettings[args.section];
+    const resolved = getResolvedSeoSection(args.section);
+    const dynamicDefaults = getSeoDynamicDefaultBySection(args.section);
+    const fallbackChainLabel =
+      args.section === "global"
+        ? tp("seoFallbackChainGlobal")
+        : tp("seoFallbackChainSection");
+    const titlePreview = renderSeoTextTemplate(resolved.metaTitle.value).trim();
+    const descriptionPreview = renderSeoTextTemplate(
+      resolved.metaDescription.value,
+    ).trim();
+    const keywordsPreview = renderSeoTextTemplate(resolved.metaKeywords.value)
+      .split(",")
+      .map((keyword) => keyword.trim())
+      .filter((keyword) => keyword.length > 0);
+    const defaultTitlePreview = renderSeoTextTemplate(
+      dynamicDefaults.metaTitle,
+    ).trim();
+    const defaultDescriptionPreview = renderSeoTextTemplate(
+      dynamicDefaults.metaDescription,
+    ).trim();
+    const defaultKeywordsPreview = renderSeoTextTemplate(
+      dynamicDefaults.metaKeywords,
+    )
+      .split(",")
+      .map((keyword) => keyword.trim())
+      .filter((keyword) => keyword.length > 0);
+
+    return (
+      <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+        <div className="px-6 py-4 border-b">
+          <h3 className="font-semibold flex items-center gap-2">
+            <Search className="w-4 h-4" />
+            {args.title}
+          </h3>
+          <p className="text-sm text-muted-foreground">{args.description}</p>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{tp("seoMetaTitleLabel")}</label>
+            <input
+              ref={(node) => setSeoFieldRef(args.section, "metaTitle", node)}
+              onFocus={() => setActiveSeoField(args.section, "metaTitle")}
+              value={current.metaTitle}
+              onChange={(e) =>
+                updateSeoSection(args.section, { metaTitle: e.target.value })
+              }
+              placeholder={tp("seoMetaTitlePlaceholder")}
+              className={inputClass}
+            />
+            <p className="text-xs text-muted-foreground">{tp("seoMetaTitleHint")}</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">
+              {tp("seoMetaDescriptionLabel")}
+            </label>
+            <textarea
+              ref={(node) => setSeoFieldRef(args.section, "metaDescription", node)}
+              onFocus={() => setActiveSeoField(args.section, "metaDescription")}
+              value={current.metaDescription}
+              onChange={(e) =>
+                updateSeoSection(args.section, {
+                  metaDescription: e.target.value,
+                })
+              }
+              rows={3}
+              placeholder={tp("seoMetaDescriptionPlaceholder")}
+              className={textareaClass}
+            />
+            <p className="text-xs text-muted-foreground">
+              {tp("seoMetaDescriptionHint")}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{tp("seoMetaKeywordsLabel")}</label>
+            <input
+              ref={(node) => setSeoFieldRef(args.section, "metaKeywords", node)}
+              onFocus={() => setActiveSeoField(args.section, "metaKeywords")}
+              value={current.metaKeywords}
+              onChange={(e) =>
+                updateSeoSection(args.section, { metaKeywords: e.target.value })
+              }
+              placeholder={tp("seoMetaKeywordsPlaceholder")}
+              className={inputClass}
+            />
+            <p className="text-xs text-muted-foreground">
+              {tp("seoMetaKeywordsHint")}
+            </p>
+          </div>
+
+          <div className="space-y-2 rounded-lg border bg-muted/20 p-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              {tp("seoVariablesLabel")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {tp("seoVariablesClickHint")}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {SEO_VARIABLE_HINTS.map((token) => (
+                <button
+                  key={`${args.section}-${token}`}
+                  type="button"
+                  onClick={() => handleInsertSeoVariable(args.section, token)}
+                  className="text-[11px] px-2 py-1 rounded-md border bg-muted/50 text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+                >
+                  {token}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-md border bg-background/80 px-4 py-3 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">
+              {tp("seoDefaultActiveLabel")}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {fallbackChainLabel}
+            </p>
+            {args.section === "form" && (
+              <p className="text-[11px] text-muted-foreground">
+                {tp("seoFormDescriptionDefaultSource")}
+              </p>
+            )}
+            <p className="text-sm font-semibold text-foreground">
+              {defaultTitlePreview || tp("seoPreviewTitleEmpty")}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {defaultDescriptionPreview || tp("seoPreviewDescriptionEmpty")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {defaultKeywordsPreview.length > 0
+                ? defaultKeywordsPreview.join(" • ")
+                : tp("seoPreviewKeywordsEmpty")}
+            </p>
+          </div>
+
+          <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              {tp("seoPreviewLabel")}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {tp("seoMetaTitleLabel")} -{" "}
+              {getSeoSourceLabel(args.section, resolved.metaTitle.source)}
+            </p>
+            <p className="text-sm font-semibold text-foreground">
+              {titlePreview || tp("seoPreviewTitleEmpty")}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {tp("seoMetaDescriptionLabel")} -{" "}
+              {getSeoSourceLabel(args.section, resolved.metaDescription.source)}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {descriptionPreview || tp("seoPreviewDescriptionEmpty")}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {tp("seoMetaKeywordsLabel")} -{" "}
+              {getSeoSourceLabel(args.section, resolved.metaKeywords.source)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {keywordsPreview.length > 0
+                ? keywordsPreview.join(" • ")
+                : tp("seoPreviewKeywordsEmpty")}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {successToastNode}
@@ -2920,7 +3392,11 @@ export default function SettingsPage() {
         </div>
 
         {/* ═══ TAB: Umum ═══ */}
-        {(activeTab === "umum" || activeTab === "daftar-booking" || activeTab === "google" || activeTab === "fastpik") && (
+        {(activeTab === "umum" ||
+          activeTab === "seo" ||
+          activeTab === "daftar-booking" ||
+          activeTab === "google" ||
+          activeTab === "fastpik") && (
           <div className="space-y-6">
             {activeTab === "umum" && (
               <>
@@ -3202,6 +3678,31 @@ export default function SettingsPage() {
 
                 </div>
                 </div>
+              </>
+            )}
+
+            {activeTab === "seo" && (
+              <>
+                {renderSeoSectionCard({
+                  section: "global",
+                  title: tp("seoGlobalTitle"),
+                  description: tp("seoGlobalDescription"),
+                })}
+                {renderSeoSectionCard({
+                  section: "form",
+                  title: tp("seoFormTitle"),
+                  description: tp("seoFormDescription"),
+                })}
+                {renderSeoSectionCard({
+                  section: "track",
+                  title: tp("seoTrackTitle"),
+                  description: tp("seoTrackDescription"),
+                })}
+                {renderSeoSectionCard({
+                  section: "settlement",
+                  title: tp("seoSettlementTitle"),
+                  description: tp("seoSettlementDescription"),
+                })}
               </>
             )}
 
@@ -4139,6 +4640,8 @@ export default function SettingsPage() {
                       ? handleSaveGoogleSettings
                       : activeTab === "fastpik"
                         ? handleSaveFastpikSettings
+                        : activeTab === "seo"
+                          ? handleSaveSeoSettings
                         : activeTab === "daftar-booking"
                           ? handleSaveBookingListSettings
                         : handleSaveGeneralSettings

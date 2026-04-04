@@ -19,6 +19,7 @@ import {
   normalizeSpecialOfferToken,
 } from "@/lib/booking-special-offer";
 import { getVendorPublicPayloadForTenantCached } from "@/lib/public-vendor-data";
+import { buildSeoMetadata } from "@/lib/seo-metadata";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +128,7 @@ async function resolveSluglessVendor(locale: string) {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { locale } = await params;
   const resolved = await resolveSluglessVendor(locale);
+  const tenant = await getTenantConfig();
   if (resolved.state !== "ready") {
     return {
       title: resolved.copy.title,
@@ -134,12 +136,24 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     };
   }
 
-  return {
-    title: `Form Booking — ${resolved.vendor.studio_name || "Studio"}`,
-    description:
+  const studioName = resolved.vendor.studio_name || "Studio";
+  return buildSeoMetadata({
+    page: "form",
+    profileSeo: resolved.vendor,
+    variables: {
+      studio_name: studioName,
+      vendor_slug: resolved.vendorSlug,
+    },
+    fallbackTitle: `Form Booking — ${studioName}`,
+    fallbackDescription:
       resolved.vendor.form_greeting ||
-      `Booking sesi foto bersama ${resolved.vendor.studio_name || "Studio"}.`,
-  };
+      `Booking sesi foto bersama ${studioName}.`,
+    fallbackImageUrl:
+      resolved.vendor.invoice_logo_url ||
+      resolved.vendor.avatar_url ||
+      tenant.logoUrl ||
+      null,
+  });
 }
 
 export default async function SluglessBookingPage({

@@ -12,6 +12,8 @@ import {
   normalizeSpecialOfferToken,
 } from "@/lib/booking-special-offer";
 import { getVendorPublicPayloadCached } from "@/lib/public-vendor-data";
+import { buildSeoMetadata } from "@/lib/seo-metadata";
+import { getTenantConfig } from "@/lib/tenant-config";
 
 export const dynamic = "force-dynamic";
 
@@ -33,17 +35,26 @@ export async function generateMetadata({
   const { vendorSlug } = await params;
   const vendorPayload = await getVendorPublicPayloadCached(vendorSlug);
   const vendor = vendorPayload?.vendor;
+  const tenant = await getTenantConfig();
 
   if (!vendor) {
     return { title: "Form Booking" };
   }
 
-  return {
-    title: `Form Booking — ${vendor.studio_name || "Studio"}`,
-    description:
-      vendor.form_greeting ||
-      `Booking sesi foto bersama ${vendor.studio_name || "Studio"}.`,
-  };
+  const studioName = vendor.studio_name || "Studio";
+  return buildSeoMetadata({
+    page: "form",
+    profileSeo: vendor,
+    variables: {
+      studio_name: studioName,
+      vendor_slug: vendor.vendor_slug || vendorSlug,
+    },
+    fallbackTitle: `Form Booking — ${studioName}`,
+    fallbackDescription:
+      vendor.form_greeting || `Booking sesi foto bersama ${studioName}.`,
+    fallbackImageUrl:
+      vendor.invoice_logo_url || vendor.avatar_url || tenant.logoUrl || null,
+  });
 }
 
 // ── Page — Server Component ───────────────────────────────────────────────────

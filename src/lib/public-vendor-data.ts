@@ -26,6 +26,22 @@ type VendorProfileRow = {
   min_dp_map: Record<string, number | { mode: string; value: number }> | null;
   avatar_url: string | null;
   invoice_logo_url: string | null;
+  seo_meta_title: string | null;
+  seo_meta_description: string | null;
+  seo_meta_keywords: string | null;
+  seo_og_image_url: string | null;
+  seo_form_meta_title: string | null;
+  seo_form_meta_description: string | null;
+  seo_form_meta_keywords: string | null;
+  seo_form_og_image_url: string | null;
+  seo_track_meta_title: string | null;
+  seo_track_meta_description: string | null;
+  seo_track_meta_keywords: string | null;
+  seo_track_og_image_url: string | null;
+  seo_settlement_meta_title: string | null;
+  seo_settlement_meta_description: string | null;
+  seo_settlement_meta_keywords: string | null;
+  seo_settlement_og_image_url: string | null;
   form_brand_color: string | null;
   form_greeting: string | null;
   form_event_types: string[] | null;
@@ -88,6 +104,22 @@ export type PublicVendorPayload = {
     min_dp_map: Record<string, number | { mode: string; value: number }>;
     avatar_url: string | null;
     invoice_logo_url: string | null;
+    seo_meta_title: string | null;
+    seo_meta_description: string | null;
+    seo_meta_keywords: string | null;
+    seo_og_image_url: string | null;
+    seo_form_meta_title: string | null;
+    seo_form_meta_description: string | null;
+    seo_form_meta_keywords: string | null;
+    seo_form_og_image_url: string | null;
+    seo_track_meta_title: string | null;
+    seo_track_meta_description: string | null;
+    seo_track_meta_keywords: string | null;
+    seo_track_og_image_url: string | null;
+    seo_settlement_meta_title: string | null;
+    seo_settlement_meta_description: string | null;
+    seo_settlement_meta_keywords: string | null;
+    seo_settlement_og_image_url: string | null;
     form_brand_color: string;
     form_greeting: string | null;
     form_event_types: string[] | null;
@@ -115,6 +147,11 @@ export type PublicVendorPayload = {
 
 function normalizeSlug(slug: string | null | undefined) {
   return (slug || "").trim();
+}
+
+function isMissingColumnError(message: string | null | undefined) {
+  const text = (message || "").toLowerCase();
+  return text.includes("could not find") || text.includes("does not exist");
 }
 
 async function fetchVendorStamp(args: {
@@ -150,17 +187,74 @@ async function fetchVendorPayloadById(args: {
   vendorSlugForQris: string;
 }) {
   const supabase = createServiceClient();
-  const { data: vendorRaw } = await supabase
+  const profileSelectBase =
+    "id, vendor_slug, studio_name, whatsapp_number, min_dp_percent, min_dp_map, " +
+    "avatar_url, invoice_logo_url, " +
+    "form_brand_color, form_greeting, " +
+    "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_addons, form_hide_service_prices, form_show_wedding_split, form_show_wisuda_split, form_show_proof, " +
+    "form_terms_enabled, form_terms_agreement_text, form_terms_link_text, form_terms_suffix_text, form_terms_content, " +
+    "form_sections, form_payment_methods, qris_image_url, qris_drive_file_id, bank_accounts";
+  const profileSelectWithSeo =
+    "seo_meta_title, seo_meta_description, seo_meta_keywords, seo_og_image_url, " +
+    "seo_form_meta_title, seo_form_meta_description, seo_form_meta_keywords, seo_form_og_image_url, " +
+    "seo_track_meta_title, seo_track_meta_description, seo_track_meta_keywords, seo_track_og_image_url, " +
+    "seo_settlement_meta_title, seo_settlement_meta_description, seo_settlement_meta_keywords, seo_settlement_og_image_url";
+  const profileSelect = `${profileSelectBase}, ${profileSelectWithSeo}`;
+
+  const { data: vendorWithSeo, error: vendorWithSeoError } = await supabase
     .from("profiles")
-    .select(
-      "id, vendor_slug, studio_name, whatsapp_number, min_dp_percent, min_dp_map, " +
-        "avatar_url, invoice_logo_url, form_brand_color, form_greeting, " +
-        "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_addons, form_hide_service_prices, form_show_wedding_split, form_show_wisuda_split, form_show_proof, " +
-        "form_terms_enabled, form_terms_agreement_text, form_terms_link_text, form_terms_suffix_text, form_terms_content, " +
-        "form_sections, form_payment_methods, qris_image_url, qris_drive_file_id, bank_accounts",
-    )
+    .select(profileSelect)
     .eq("id", args.vendorId)
     .maybeSingle<VendorProfileRow>();
+
+  let vendorRaw = vendorWithSeo;
+  if (!vendorRaw && vendorWithSeoError && isMissingColumnError(vendorWithSeoError.message)) {
+    const { data: vendorLegacy } = await supabase
+      .from("profiles")
+      .select(profileSelectBase)
+      .eq("id", args.vendorId)
+      .maybeSingle<Omit<
+        VendorProfileRow,
+        | "seo_meta_title"
+        | "seo_meta_description"
+        | "seo_meta_keywords"
+        | "seo_og_image_url"
+        | "seo_form_meta_title"
+        | "seo_form_meta_description"
+        | "seo_form_meta_keywords"
+        | "seo_form_og_image_url"
+        | "seo_track_meta_title"
+        | "seo_track_meta_description"
+        | "seo_track_meta_keywords"
+        | "seo_track_og_image_url"
+        | "seo_settlement_meta_title"
+        | "seo_settlement_meta_description"
+        | "seo_settlement_meta_keywords"
+        | "seo_settlement_og_image_url"
+      >>();
+
+    if (vendorLegacy) {
+      vendorRaw = {
+        ...vendorLegacy,
+        seo_meta_title: null,
+        seo_meta_description: null,
+        seo_meta_keywords: null,
+        seo_og_image_url: null,
+        seo_form_meta_title: null,
+        seo_form_meta_description: null,
+        seo_form_meta_keywords: null,
+        seo_form_og_image_url: null,
+        seo_track_meta_title: null,
+        seo_track_meta_description: null,
+        seo_track_meta_keywords: null,
+        seo_track_og_image_url: null,
+        seo_settlement_meta_title: null,
+        seo_settlement_meta_description: null,
+        seo_settlement_meta_keywords: null,
+        seo_settlement_og_image_url: null,
+      };
+    }
+  }
 
   if (!vendorRaw) {
     return null;
@@ -220,6 +314,22 @@ async function fetchVendorPayloadById(args: {
       min_dp_map: vendorRaw.min_dp_map || {},
       avatar_url: vendorRaw.avatar_url ?? null,
       invoice_logo_url: vendorRaw.invoice_logo_url ?? null,
+      seo_meta_title: vendorRaw.seo_meta_title ?? null,
+      seo_meta_description: vendorRaw.seo_meta_description ?? null,
+      seo_meta_keywords: vendorRaw.seo_meta_keywords ?? null,
+      seo_og_image_url: vendorRaw.seo_og_image_url ?? null,
+      seo_form_meta_title: vendorRaw.seo_form_meta_title ?? null,
+      seo_form_meta_description: vendorRaw.seo_form_meta_description ?? null,
+      seo_form_meta_keywords: vendorRaw.seo_form_meta_keywords ?? null,
+      seo_form_og_image_url: vendorRaw.seo_form_og_image_url ?? null,
+      seo_track_meta_title: vendorRaw.seo_track_meta_title ?? null,
+      seo_track_meta_description: vendorRaw.seo_track_meta_description ?? null,
+      seo_track_meta_keywords: vendorRaw.seo_track_meta_keywords ?? null,
+      seo_track_og_image_url: vendorRaw.seo_track_og_image_url ?? null,
+      seo_settlement_meta_title: vendorRaw.seo_settlement_meta_title ?? null,
+      seo_settlement_meta_description: vendorRaw.seo_settlement_meta_description ?? null,
+      seo_settlement_meta_keywords: vendorRaw.seo_settlement_meta_keywords ?? null,
+      seo_settlement_og_image_url: vendorRaw.seo_settlement_og_image_url ?? null,
       form_brand_color: vendorRaw.form_brand_color || "#000000",
       form_greeting: vendorRaw.form_greeting ?? null,
       form_event_types: vendorRaw.form_event_types || null,

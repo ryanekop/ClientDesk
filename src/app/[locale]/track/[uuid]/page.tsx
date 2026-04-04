@@ -23,6 +23,8 @@ import {
 } from "@/lib/fastpik-live-sync";
 import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import { getTrackBasePayloadCached } from "@/lib/public-track-data";
+import { buildSeoMetadata } from "@/lib/seo-metadata";
+import { getTenantConfig } from "@/lib/tenant-config";
 
 // Admin client — runs server-side only, never exposed to browser
 const supabaseAdmin = createClient(
@@ -96,6 +98,14 @@ async function getBookingData(
     return {
         booking: effectiveBooking,
         vendorName: basePayload.vendorName,
+        vendorLogoUrl: basePayload.vendorLogoUrl,
+        vendorAvatarUrl: basePayload.vendorAvatarUrl,
+        seoMetaTitle: basePayload.seoMetaTitle,
+        seoMetaDescription: basePayload.seoMetaDescription,
+        seoMetaKeywords: basePayload.seoMetaKeywords,
+        seoTrackMetaTitle: basePayload.seoTrackMetaTitle,
+        seoTrackMetaDescription: basePayload.seoTrackMetaDescription,
+        seoTrackMetaKeywords: basePayload.seoTrackMetaKeywords,
         customClientStatuses: basePayload.customClientStatuses,
         finalInvoiceVisibleFromStatus: basePayload.finalInvoiceVisibleFromStatus,
         trackingFileLinksVisibleFromStatus: basePayload.trackingFileLinksVisibleFromStatus,
@@ -112,6 +122,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const result = await getBookingData(uuid, locale, {
         skipLiveFastpik: true,
     });
+    const tenant = await getTenantConfig();
 
     if (!result) {
         return { title: "Booking Not Found" };
@@ -123,18 +134,35 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         clientStatus: booking.client_status,
         statuses: result.customClientStatuses,
     });
-    const title = `${status} — ${booking.client_name} — ${booking.booking_code}`;
-    const description = `Tracking booking ${booking.booking_code} untuk ${booking.client_name}${vendorName ? ` di ${vendorName}` : ""}`;
+    const studioName = vendorName || "Studio";
+    const fallbackTitle = `${status} — ${booking.client_name} — ${booking.booking_code}`;
+    const fallbackDescription = `Tracking booking ${booking.booking_code} untuk ${booking.client_name}${vendorName ? ` di ${vendorName}` : ""}`;
 
-    return {
-        title,
-        description,
-        openGraph: {
-            title,
-            description,
-            type: "website",
+    return buildSeoMetadata({
+        page: "track",
+        profileSeo: {
+            seo_meta_title: result.seoMetaTitle,
+            seo_meta_description: result.seoMetaDescription,
+            seo_meta_keywords: result.seoMetaKeywords,
+            seo_track_meta_title: result.seoTrackMetaTitle,
+            seo_track_meta_description: result.seoTrackMetaDescription,
+            seo_track_meta_keywords: result.seoTrackMetaKeywords,
         },
-    };
+        variables: {
+            studio_name: studioName,
+            client_name: booking.client_name || "",
+            booking_code: booking.booking_code || "",
+            status: status || "",
+            event_type: booking.event_type || "",
+            session_date: booking.session_date || "",
+            tracking_uuid: booking.tracking_uuid || uuid,
+            settlement_uuid: booking.tracking_uuid || uuid,
+        },
+        fallbackTitle,
+        fallbackDescription,
+        fallbackImageUrl:
+            result.vendorLogoUrl || result.vendorAvatarUrl || tenant.logoUrl || null,
+    });
 }
 
 // ── Page — Server Component ───────────────────────────────────────────────────

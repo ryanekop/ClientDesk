@@ -50,6 +50,14 @@ export type TrackBookingRow = {
 
 export type TrackProfileRow = {
   studio_name: string | null;
+  avatar_url?: string | null;
+  invoice_logo_url?: string | null;
+  seo_meta_title?: string | null;
+  seo_meta_description?: string | null;
+  seo_meta_keywords?: string | null;
+  seo_track_meta_title?: string | null;
+  seo_track_meta_description?: string | null;
+  seo_track_meta_keywords?: string | null;
   custom_client_statuses: string[] | null;
   final_invoice_visible_from_status: string | null;
   tracking_file_links_visible_from_status?: string | null;
@@ -64,6 +72,14 @@ export type TrackProfileRow = {
 export type TrackBasePayload = {
   booking: TrackBookingRow;
   vendorName: string;
+  vendorLogoUrl: string | null;
+  vendorAvatarUrl: string | null;
+  seoMetaTitle: string | null;
+  seoMetaDescription: string | null;
+  seoMetaKeywords: string | null;
+  seoTrackMetaTitle: string | null;
+  seoTrackMetaDescription: string | null;
+  seoTrackMetaKeywords: string | null;
   customClientStatuses: string[] | null;
   finalInvoiceVisibleFromStatus: string | null;
   trackingFileLinksVisibleFromStatus: string | null;
@@ -115,7 +131,7 @@ async function fetchTrackBasePayload(trackingUuid: string) {
   const { data: profileWithSplitMode, error: profileWithSplitModeError } = await supabase
     .from("profiles")
     .select(
-      "studio_name, custom_client_statuses, final_invoice_visible_from_status, tracking_file_links_visible_from_status, fastpik_link_display_mode, fastpik_link_display_mode_tracking",
+      "studio_name, avatar_url, invoice_logo_url, seo_meta_title, seo_meta_description, seo_meta_keywords, seo_track_meta_title, seo_track_meta_description, seo_track_meta_keywords, custom_client_statuses, final_invoice_visible_from_status, tracking_file_links_visible_from_status, fastpik_link_display_mode, fastpik_link_display_mode_tracking",
     )
     .eq("id", booking.user_id)
     .maybeSingle<TrackProfileRow>();
@@ -135,6 +151,14 @@ async function fetchTrackBasePayload(trackingUuid: string) {
   return {
     booking,
     vendorName: profile?.studio_name || "",
+    vendorLogoUrl: profile?.invoice_logo_url || null,
+    vendorAvatarUrl: profile?.avatar_url || null,
+    seoMetaTitle: profile?.seo_meta_title || null,
+    seoMetaDescription: profile?.seo_meta_description || null,
+    seoMetaKeywords: profile?.seo_meta_keywords || null,
+    seoTrackMetaTitle: profile?.seo_track_meta_title || null,
+    seoTrackMetaDescription: profile?.seo_track_meta_description || null,
+    seoTrackMetaKeywords: profile?.seo_track_meta_keywords || null,
     customClientStatuses: profile?.custom_client_statuses || null,
     finalInvoiceVisibleFromStatus: profile?.final_invoice_visible_from_status || null,
     trackingFileLinksVisibleFromStatus:

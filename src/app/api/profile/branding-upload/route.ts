@@ -4,13 +4,23 @@ import { invalidatePublicCachesForProfile } from "@/lib/public-cache-invalidatio
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/utils/supabase/server";
 
-type BrandingAssetType = "avatar" | "invoice_logo";
+type BrandingAssetType =
+  | "avatar"
+  | "invoice_logo"
+  | "seo_og_global"
+  | "seo_og_form"
+  | "seo_og_track"
+  | "seo_og_settlement";
 
 type ProfileRow = {
   id: string;
   vendor_slug: string | null;
   avatar_url: string | null;
   invoice_logo_url: string | null;
+  seo_og_image_url: string | null;
+  seo_form_og_image_url: string | null;
+  seo_track_og_image_url: string | null;
+  seo_settlement_og_image_url: string | null;
 };
 
 const BRANDING_BUCKET =
@@ -25,16 +35,41 @@ const ALLOWED_MIME_TYPES = [
 const MAX_SIZE_BY_ASSET: Record<BrandingAssetType, number> = {
   avatar: 1024 * 1024,
   invoice_logo: 500 * 1024,
+  seo_og_global: 2 * 1024 * 1024,
+  seo_og_form: 2 * 1024 * 1024,
+  seo_og_track: 2 * 1024 * 1024,
+  seo_og_settlement: 2 * 1024 * 1024,
 };
 
-const PROFILE_FIELD_BY_ASSET: Record<BrandingAssetType, "avatar_url" | "invoice_logo_url"> = {
+const PROFILE_FIELD_BY_ASSET: Record<
+  BrandingAssetType,
+  | "avatar_url"
+  | "invoice_logo_url"
+  | "seo_og_image_url"
+  | "seo_form_og_image_url"
+  | "seo_track_og_image_url"
+  | "seo_settlement_og_image_url"
+> = {
   avatar: "avatar_url",
   invoice_logo: "invoice_logo_url",
+  seo_og_global: "seo_og_image_url",
+  seo_og_form: "seo_form_og_image_url",
+  seo_og_track: "seo_track_og_image_url",
+  seo_og_settlement: "seo_settlement_og_image_url",
 };
 
 function parseAssetType(value: unknown): BrandingAssetType | null {
   if (typeof value !== "string") return null;
-  if (value === "avatar" || value === "invoice_logo") return value;
+  if (
+    value === "avatar" ||
+    value === "invoice_logo" ||
+    value === "seo_og_global" ||
+    value === "seo_og_form" ||
+    value === "seo_og_track" ||
+    value === "seo_og_settlement"
+  ) {
+    return value;
+  }
   return null;
 }
 
@@ -138,9 +173,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const isSeoOgAsset = assetType.startsWith("seo_og_");
     if (assetType === "invoice_logo" && file.type === "image/webp") {
       return NextResponse.json(
         { success: false, error: apiText(request, "invoiceLogoPngJpgOnly") },
+        { status: 400 },
+      );
+    }
+    if (isSeoOgAsset && file.type === "image/webp") {
+      return NextResponse.json(
+        { success: false, error: apiText(request, "seoOgPngJpgOnly") },
         { status: 400 },
       );
     }
@@ -174,7 +216,9 @@ export async function POST(request: NextRequest) {
 
     const { data: profile } = await service
       .from("profiles")
-      .select("id, vendor_slug, avatar_url, invoice_logo_url")
+      .select(
+        "id, vendor_slug, avatar_url, invoice_logo_url, seo_og_image_url, seo_form_og_image_url, seo_track_og_image_url, seo_settlement_og_image_url",
+      )
       .eq("id", user.id)
       .maybeSingle<ProfileRow>();
 
