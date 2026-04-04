@@ -140,7 +140,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 // ── Page — Server Component ───────────────────────────────────────────────────
 export default async function TrackingPage({ params }: PageProps) {
     const { uuid, locale } = await params;
-    const result = await getBookingData(uuid, locale);
+    const result = await getBookingData(uuid, locale, {
+        skipLiveFastpik: true,
+    });
 
     if (!result) {
         return (

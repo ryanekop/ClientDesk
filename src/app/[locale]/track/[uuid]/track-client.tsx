@@ -75,15 +75,60 @@ interface TrackingClientProps {
     customStatuses?: string[] | null;
 }
 
-export default function TrackingClient({ booking, vendorName, customStatuses }: TrackingClientProps) {
+type TrackApiResponse =
+    | {
+          success: true;
+          booking: BookingData;
+      }
+    | {
+          success: false;
+          error?: string;
+      };
+
+export default function TrackingClient({ booking: initialBooking, vendorName, customStatuses }: TrackingClientProps) {
     const t = useTranslations("Track");
     const locale = useLocale();
+    const activeLocale = locale || "id";
     const tenant = useTenant();
     const showPoweredBy = !shouldHideTenantBranding({
         id: tenant.id,
         domain: tenant.domain,
     });
+    const [bookingState, setBookingState] = React.useState(initialBooking);
     const [passwordCopied, setPasswordCopied] = React.useState(false);
+    const booking = bookingState;
+
+    React.useEffect(() => {
+        setBookingState(initialBooking);
+    }, [initialBooking]);
+
+    React.useEffect(() => {
+        const trackingUuid = (initialBooking.trackingUuid || "").trim();
+        if (!trackingUuid) return;
+
+        let cancelled = false;
+
+        async function refreshTrackData() {
+            try {
+                const response = await fetch(
+                    `/api/public/track?uuid=${encodeURIComponent(trackingUuid)}&locale=${encodeURIComponent(activeLocale)}`,
+                    { cache: "no-store" },
+                );
+                if (!response.ok) return;
+                const payload = (await response.json()) as TrackApiResponse;
+                if (!payload.success || cancelled) return;
+                setBookingState(payload.booking);
+            } catch {
+                // Keep server-rendered fallback data when refresh fails.
+            }
+        }
+
+        void refreshTrackData();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeLocale, initialBooking.trackingUuid]);
 
     // Build steps from custom statuses or fallback to defaults
     const steps = React.useMemo(() => {
