@@ -2645,13 +2645,14 @@ export default function SettingsPage() {
     await saveProfilePatch({ invoice_logo_url: null });
     setLogoUrl(null);
   }
+  const previewLocale = locale || "id";
   const siteUrl =
     typeof window !== "undefined"
       ? window.location.origin
-      : "https://clientdesk.ryanekoapp.web.id";
+      : "https://example.com";
   const slugPreview = normalizeVendorSlug(vendorSlug || studioName) || "nama-vendor";
   const sluglessModeActive = isCustomTenantDomain && disableBookingSlug;
-  const localizedFormBasePath = `${siteUrl}/${locale || "id"}/formbooking`;
+  const localizedFormBasePath = `${siteUrl}/${previewLocale}/formbooking`;
   const localizedFormPath = sluglessModeActive
     ? `${localizedFormBasePath}/`
     : `${localizedFormBasePath}/${slugPreview}`;
@@ -2726,7 +2727,7 @@ export default function SettingsPage() {
     instagram: "@budiwedding",
     instagram_link: "https://instagram.com/budiwedding",
     event_type: selectedEventType,
-    booking_detail_link: "https://clientdesk.ryanekoapp.web.id/id/bookings/booking-id-123",
+    booking_detail_link: `${siteUrl}/${previewLocale}/bookings/booking-id-123`,
     day_name: "Rabu",
     location: "Jakarta Convention Center",
     akad_location: "Masjid Raya Jakarta",
@@ -2753,11 +2754,9 @@ export default function SettingsPage() {
     detail_location: "Gedung Utama, Lt. 3, Ruang Ballroom A",
     notes: "Mohon datang 30 menit lebih awal",
     drive_link: "https://drive.google.com/drive/folders/abc123",
-    tracking_link: "https://clientdesk.ryanekoapp.web.id/id/track/abc123",
-    invoice_url:
-      "https://clientdesk.ryanekoapp.web.id/api/public/invoice?code=INV-100120250001",
-    settlement_link:
-      "https://clientdesk.ryanekoapp.web.id/id/settlement/abc123",
+    tracking_link: `${siteUrl}/${previewLocale}/track/abc123`,
+    invoice_url: `${siteUrl}/api/public/invoice?code=INV-100120250001`,
+    settlement_link: `${siteUrl}/${previewLocale}/settlement/abc123`,
   };
 
   function renderPreview(content: string, extraVars?: Record<string, string>) {

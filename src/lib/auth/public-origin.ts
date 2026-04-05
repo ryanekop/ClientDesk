@@ -63,10 +63,11 @@ export function resolvePublicOrigin(request: Request): string {
   const hostHeader = getFirstHeaderValue(request.headers.get("host"));
   const envSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   const inProduction = process.env.NODE_ENV === "production";
-  const allowlistedOrigins = new Set<string>([
-    ...parseOriginAllowlist(process.env.PUBLIC_ORIGIN_ALLOWLIST),
-    ...(toOrigin(envSiteUrl) ? [toOrigin(envSiteUrl)!] : []),
-  ]);
+  const configuredAllowlistedOrigins = parseOriginAllowlist(
+    process.env.PUBLIC_ORIGIN_ALLOWLIST,
+  );
+  const hasExplicitOriginAllowlist = configuredAllowlistedOrigins.length > 0;
+  const allowlistedOrigins = new Set<string>(configuredAllowlistedOrigins);
 
   const fallbackProtocol =
     requestUrl.protocol === "https:" || requestUrl.protocol === "http:"
@@ -76,8 +77,8 @@ export function resolvePublicOrigin(request: Request): string {
   const candidates: Array<string | null | undefined> = [
     forwardedHost ? `${forwardedProto || "https"}://${forwardedHost}` : null,
     hostHeader ? `${forwardedProto || fallbackProtocol}://${hostHeader}` : null,
-    envSiteUrl,
     requestUrl.origin,
+    envSiteUrl,
   ];
 
   for (const candidate of candidates) {
@@ -87,7 +88,7 @@ export function resolvePublicOrigin(request: Request): string {
     if (inProduction) {
       const hostname = new URL(origin).hostname;
       if (isInternalHostname(hostname)) continue;
-      if (allowlistedOrigins.size > 0 && !allowlistedOrigins.has(origin)) {
+      if (hasExplicitOriginAllowlist && !allowlistedOrigins.has(origin)) {
         continue;
       }
     }

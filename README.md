@@ -28,6 +28,13 @@ These env vars control auth-refresh and tenant-cache behavior in middleware:
 - `AUTH_REFRESH_FAIL_OPEN=true`
 - `TENANT_CACHE_TTL_MS=300000`
 
+Public link origin resolution (used by calendar `booking_detail_link` and other public links):
+
+- `NEXT_PUBLIC_SITE_URL=https://...` is fallback origin when request host cannot be resolved safely.
+- `PUBLIC_ORIGIN_ALLOWLIST=https://a.com,https://b.com` is optional strict allowlist.
+- Leave `PUBLIC_ORIGIN_ALLOWLIST` empty to follow current request domain/host (recommended for multi-domain tenant setups).
+- If `PUBLIC_ORIGIN_ALLOWLIST` is set, only listed origins are used for public-link generation in server routes.
+
 Emergency toggle for security headers (set in `.env.local` and redeploy):
 
 - `DISABLE_SECURITY_HEADERS=true` turns OFF all global security headers.
