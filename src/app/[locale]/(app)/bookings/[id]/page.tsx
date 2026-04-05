@@ -1654,18 +1654,26 @@ export default function BookingDetailPage() {
                 fileId?: string | null;
                 folderUrl?: string | null;
             } | null;
-            if (res.ok && result?.success && result.fileUrl) {
+            const uploadedFileUrl =
+                typeof result?.fileUrl === "string" && result.fileUrl.trim()
+                    ? result.fileUrl
+                    : null;
+            const uploadedFolderUrl =
+                typeof result?.folderUrl === "string" && result.folderUrl.trim()
+                    ? result.folderUrl
+                    : null;
+            if (res.ok && result?.success && uploadedFileUrl) {
                 setUploadedFiles(prev => [
                     ...prev,
                     {
                         name: result.fileName || file.name,
-                        url: result.fileUrl,
+                        url: uploadedFileUrl,
                         fileId: result.fileId || undefined,
                     },
                 ]);
                 // Update drive_folder_url if it was set by the API
-                if (!booking.drive_folder_url && result.folderUrl) {
-                    setBooking(prev => prev ? { ...prev, drive_folder_url: result.folderUrl } : prev);
+                if (!booking.drive_folder_url && uploadedFolderUrl) {
+                    setBooking(prev => prev ? { ...prev, drive_folder_url: uploadedFolderUrl } : prev);
                 }
             } else {
                 showFeedback(
