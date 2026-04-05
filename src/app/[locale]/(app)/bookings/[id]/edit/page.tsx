@@ -93,7 +93,12 @@ import {
     filterServicesForBookingSelection,
     isCityScopedBookingEventType,
 } from "@/lib/service-availability";
-import { buildServiceSoftPalette, resolveHexColor } from "@/lib/service-colors";
+import {
+    buildServiceSoftPalette,
+    normalizeHexColor,
+    resolveHexColor,
+    withAlpha,
+} from "@/lib/service-colors";
 import {
     FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY,
     MAX_FREELANCERS_PER_SESSION,
@@ -230,6 +235,18 @@ type ProfileRow = {
     form_event_types?: string[] | null;
     custom_event_types?: unknown;
     form_brand_color?: string | null;
+    team_badge_colors?: unknown;
+};
+
+type BadgeColorMap = Record<string, string>;
+type TeamBadgeColors = {
+    roles: BadgeColorMap;
+    tags: BadgeColorMap;
+};
+
+const DEFAULT_TEAM_BADGE_COLORS: TeamBadgeColors = {
+    roles: {},
+    tags: {},
 };
 
 const EXTRA_FIELD_LABEL_KEYS = {
@@ -336,6 +353,43 @@ function normalizeFreelancerTags(value: unknown) {
     return nextTags;
 }
 
+function normalizeColorRecord(value: unknown): BadgeColorMap {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return {};
+    }
+    const next: BadgeColorMap = {};
+    Object.entries(value as Record<string, unknown>).forEach(([rawKey, rawColor]) => {
+        const key = rawKey.trim();
+        if (!key) return;
+        const normalizedColor = normalizeHexColor(rawColor);
+        if (!normalizedColor) return;
+        next[key] = normalizedColor;
+    });
+    return next;
+}
+
+function normalizeTeamBadgeColors(value: unknown): TeamBadgeColors {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return { ...DEFAULT_TEAM_BADGE_COLORS };
+    }
+    const typed = value as { roles?: unknown; tags?: unknown };
+    return {
+        roles: normalizeColorRecord(typed.roles),
+        tags: normalizeColorRecord(typed.tags),
+    };
+}
+
+function buildBadgeStyle(colorMap: BadgeColorMap, key: string | null | undefined) {
+    if (!key) return undefined;
+    const color = normalizeHexColor(colorMap[key]);
+    if (!color) return undefined;
+    return {
+        color,
+        backgroundColor: withAlpha(color, 0.12),
+        borderColor: withAlpha(color, 0.35),
+    } as React.CSSProperties;
+}
+
 const WISUDA_SESSION_DURATION_EXTRA_FIELD_KEY =
     getWisudaSessionDurationExtraFieldKey();
 
@@ -372,6 +426,7 @@ export default function EditBookingPage() {
     const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
     const [selectedAddonIds, setSelectedAddonIds] = React.useState<string[]>([]);
     const [defaultServiceColor, setDefaultServiceColor] = React.useState("#000000");
+    const [teamBadgeColors, setTeamBadgeColors] = React.useState<TeamBadgeColors>(DEFAULT_TEAM_BADGE_COLORS);
     const [packageDialogOpen, setPackageDialogOpen] = React.useState(false);
     const [addonDialogOpen, setAddonDialogOpen] = React.useState(false);
     const [packageViewMode, setPackageViewMode] = React.useState<"list" | "grid">("list");
@@ -525,7 +580,7 @@ export default function EditBookingPage() {
                 supabase.from("freelance").select("id, name, google_email, role, tags").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
                 supabase.from("booking_services").select("service_id, kind, sort_order").eq("booking_id", id).order("sort_order", { ascending: true }),
-                supabase.from("profiles").select("custom_client_statuses, dp_verify_trigger_status, form_sections, form_event_types, custom_event_types, form_brand_color").eq("id", user.id).single(),
+                supabase.from("profiles").select("custom_client_statuses, dp_verify_trigger_status, form_sections, form_event_types, custom_event_types, form_brand_color, team_badge_colors").eq("id", user.id).single(),
                 supabase
                     .from("region_city_references")
                     .select("city_code, city_name, province_code, province_name")
@@ -558,6 +613,9 @@ export default function EditBookingPage() {
             const profileRow = (prof ?? null) as ProfileRow | null;
             setDefaultServiceColor(
                 resolveHexColor(profileRow?.form_brand_color, "#000000"),
+            );
+            setTeamBadgeColors(
+                normalizeTeamBadgeColors(profileRow?.team_badge_colors),
             );
             const nextStatusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
             setStatusOptions(nextStatusOptions);
@@ -2900,6 +2958,10 @@ export default function EditBookingPage() {
                                         selectedFreelancerIdsForDialog.includes(
                                             freelancer.id,
                                         );
+                                    const roleBadgeStyle = buildBadgeStyle(
+                                        teamBadgeColors.roles,
+                                        freelancer.role,
+                                    );
                                     const limitReached =
                                         !selected &&
                                         selectedFreelancerIdsForDialog.length >=
@@ -2942,18 +3004,34 @@ export default function EditBookingPage() {
                                                     </p>
                                                     <div className="mt-1 flex flex-wrap items-center gap-1">
                                                         {freelancer.role ? (
-                                                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                                            <span
+                                                                style={roleBadgeStyle}
+                                                                className={cn(
+                                                                    "text-[10px] font-medium px-2 py-0.5 rounded-full border",
+                                                                    !roleBadgeStyle && "bg-muted text-muted-foreground border-transparent",
+                                                                )}
+                                                            >
                                                                 {freelancer.role}
                                                             </span>
                                                         ) : null}
-                                                        {freelancer.tags.slice(0, 2).map((tag) => (
-                                                            <span
-                                                                key={`${freelancer.id}-${tag}`}
-                                                                className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary"
-                                                            >
-                                                                {tag}
-                                                            </span>
-                                                        ))}
+                                                        {freelancer.tags.slice(0, 2).map((tag) => {
+                                                            const tagBadgeStyle = buildBadgeStyle(
+                                                                teamBadgeColors.tags,
+                                                                tag,
+                                                            );
+                                                            return (
+                                                                <span
+                                                                    key={`${freelancer.id}-${tag}`}
+                                                                    style={tagBadgeStyle}
+                                                                    className={cn(
+                                                                        "text-[10px] font-medium px-1.5 py-0.5 rounded-full border",
+                                                                        !tagBadgeStyle && "bg-primary/10 text-primary border-transparent",
+                                                                    )}
+                                                                >
+                                                                    {tag}
+                                                                </span>
+                                                            );
+                                                        })}
                                                         {freelancer.tags.length > 2 ? (
                                                             <span className="text-[10px] text-muted-foreground">
                                                                 +{freelancer.tags.length - 2}
