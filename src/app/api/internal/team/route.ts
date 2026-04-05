@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
   let listQuery = supabase
     .from("freelance")
     .select(
-      "id, name, role, whatsapp_number, google_email, status, tags, created_at",
+      "id, name, role, whatsapp_number, google_email, status, tags, pricelist, created_at",
       { count: "exact" },
     )
     .eq("user_id", user.id)
@@ -186,6 +186,10 @@ export async function GET(request: NextRequest) {
       tags: Array.isArray(member.tags)
         ? member.tags.filter((tag): tag is string => typeof tag === "string")
         : [],
+      pricelist:
+        member.pricelist && typeof member.pricelist === "object"
+          ? member.pricelist
+          : null,
     })),
     totalItems: listResult.count || 0,
     metadata: {

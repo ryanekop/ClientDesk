@@ -139,6 +139,8 @@ export type Vendor = {
   form_show_location: boolean;
   form_show_notes: boolean;
   form_show_addons: boolean;
+  form_allow_multiple_packages: boolean;
+  form_allow_multiple_addons: boolean;
   form_hide_service_prices: boolean;
   form_show_wedding_split: boolean;
   form_show_wisuda_split: boolean;
@@ -298,6 +300,8 @@ type PreviewVendorPayload = Partial<
     | "custom_event_types"
     | "form_show_notes"
     | "form_show_addons"
+    | "form_allow_multiple_packages"
+    | "form_allow_multiple_addons"
     | "form_hide_service_prices"
     | "form_show_wedding_split"
     | "form_show_wisuda_split"
@@ -425,6 +429,14 @@ export function BookingFormClient({
         form_event_types: Array.isArray(rawFormEventTypes)
           ? toStringArray(rawFormEventTypes)
           : null,
+        form_allow_multiple_packages:
+          previewVendor?.form_allow_multiple_packages ??
+          vendor.form_allow_multiple_packages ??
+          true,
+        form_allow_multiple_addons:
+          previewVendor?.form_allow_multiple_addons ??
+          vendor.form_allow_multiple_addons ??
+          true,
       };
     },
     [previewVendor, vendor],
@@ -498,6 +510,8 @@ export function BookingFormClient({
   const eventTypeLocked = isSpecialOfferActive && specialOfferRule?.eventTypeLocked === true;
   const packageLocked = isSpecialOfferActive && specialOfferRule?.packageLocked === true;
   const addonLocked = isSpecialOfferActive && specialOfferRule?.addonLocked === true;
+  const allowMultiplePackages = effectiveVendor.form_allow_multiple_packages ?? true;
+  const allowMultipleAddons = effectiveVendor.form_allow_multiple_addons ?? true;
   const shouldHideServicePrices =
     effectiveVendor.form_hide_service_prices === true && !isSpecialOfferActive;
   const accommodationFee = isSpecialOfferActive ? specialOfferRule?.accommodationFee || 0 : 0;
@@ -649,16 +663,24 @@ export function BookingFormClient({
   function handleServiceChange(id: string) {
     if (packageLocked) return;
     setSelectedServiceIds((prev) => {
-      const next = prev.includes(id)
+      if (!allowMultiplePackages) {
+        return prev.includes(id) ? [] : [id];
+      }
+      return prev.includes(id)
         ? prev.filter((serviceId) => serviceId !== id)
         : [...prev, id];
-      return next;
     });
   }
 
   function handleAddonToggle(id: string) {
     if (addonLocked) return;
     setSelectedAddons((prev) => {
+      if (!allowMultipleAddons) {
+        if (prev.has(id)) {
+          return new Set<string>();
+        }
+        return new Set([id]);
+      }
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -1510,6 +1532,20 @@ export function BookingFormClient({
     });
   }, [addonLocked, addonServices, isSpecialOfferActive]);
 
+  React.useEffect(() => {
+    if (packageLocked || allowMultiplePackages) return;
+    setSelectedServiceIds((prev) => (prev.length <= 1 ? prev : [prev[0]]));
+  }, [allowMultiplePackages, packageLocked]);
+
+  React.useEffect(() => {
+    if (addonLocked || allowMultipleAddons) return;
+    setSelectedAddons((prev) => {
+      if (prev.size <= 1) return prev;
+      const first = prev.values().next().value as string | undefined;
+      return first ? new Set([first]) : new Set<string>();
+    });
+  }, [addonLocked, allowMultipleAddons]);
+
   const selectedAddonTotal = selectedAddonServices.reduce(
     (sum, service) => sum + service.price,
     0,
@@ -2196,7 +2232,9 @@ export function BookingFormClient({
                 >
                   <span className="text-left">
                     {selectedMainServices.length > 0
-                      ? `${selectedMainServices.length} paket dipilih`
+                      ? allowMultiplePackages
+                        ? `${selectedMainServices.length} paket dipilih`
+                        : selectedMainServices[0]?.name || "1 paket dipilih"
                       : "Pilih Paket / Layanan"}
                   </span>
                   <span className="text-xs font-medium text-primary">
@@ -2204,6 +2242,11 @@ export function BookingFormClient({
                   </span>
                 </button>
               )}
+              <p className="text-[11px] text-muted-foreground">
+                {allowMultiplePackages
+                  ? "Mode paket: bisa pilih lebih dari satu."
+                  : "Mode paket: hanya bisa pilih satu."}
+              </p>
             </div>
             {selectedMainServices.length > 0 && (
               <div className="space-y-2">
@@ -2271,13 +2314,20 @@ export function BookingFormClient({
             >
               <span className="text-left">
                 {selectedAddonServices.length > 0
-                  ? `${selectedAddonServices.length} add-on dipilih`
+                  ? allowMultipleAddons
+                    ? `${selectedAddonServices.length} add-on dipilih`
+                    : selectedAddonServices[0]?.name || "1 add-on dipilih"
                   : "Pilih Add-on"}
               </span>
               <span className="text-xs font-medium text-primary">
                 {addonLocked ? "Terkunci" : "Buka Daftar"}
               </span>
             </button>
+            <p className="text-[11px] text-muted-foreground">
+              {allowMultipleAddons
+                ? "Mode add-on: bisa pilih lebih dari satu."
+                : "Mode add-on: hanya bisa pilih satu."}
+            </p>
             {selectedAddonServices.length > 0 && (
               <div className="space-y-2">
                 {selectedAddonServices.map((addon) => {
@@ -2720,7 +2770,9 @@ export function BookingFormClient({
             <DialogHeader>
               <DialogTitle>{t("paketLayanan")}</DialogTitle>
               <DialogDescription>
-                Pilih satu atau lebih paket utama sesuai kebutuhan.
+                {allowMultiplePackages
+                  ? "Pilih satu atau lebih paket utama sesuai kebutuhan."
+                  : "Pilih satu paket utama."}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
@@ -2789,7 +2841,12 @@ export function BookingFormClient({
                       <button
                         key={service.id}
                         type="button"
-                        onClick={() => handleServiceChange(service.id)}
+                        onClick={() => {
+                          handleServiceChange(service.id);
+                          if (!allowMultiplePackages && !packageLocked) {
+                            setPackageDialogOpen(false);
+                          }
+                        }}
                         className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer hover:opacity-95 ${selected ? "shadow-sm" : ""} ${packageViewMode === "grid" ? "h-full" : ""}`}
                         style={{
                           backgroundColor: tone.backgroundColor,
@@ -2858,7 +2915,9 @@ export function BookingFormClient({
             <DialogHeader>
               <DialogTitle>Paket Add-on</DialogTitle>
               <DialogDescription>
-                Pilih add-on tambahan, bisa pilih lebih dari satu.
+                {allowMultipleAddons
+                  ? "Pilih add-on tambahan, bisa pilih lebih dari satu."
+                  : "Pilih satu add-on tambahan."}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
@@ -2927,7 +2986,12 @@ export function BookingFormClient({
                       <button
                         key={addon.id}
                         type="button"
-                        onClick={() => handleAddonToggle(addon.id)}
+                        onClick={() => {
+                          handleAddonToggle(addon.id);
+                          if (!allowMultipleAddons && !addonLocked) {
+                            setAddonDialogOpen(false);
+                          }
+                        }}
                         className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all cursor-pointer hover:opacity-95 ${selected ? "shadow-sm" : ""} ${addonViewMode === "grid" ? "h-full" : ""}`}
                         style={{
                           backgroundColor: tone.backgroundColor,

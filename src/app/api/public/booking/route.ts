@@ -95,6 +95,8 @@ type VendorRecord = {
     calendar_event_description_map?: Record<string, string> | null;
     form_payment_methods?: PaymentMethod[] | null;
     form_show_addons?: boolean | null;
+    form_allow_multiple_packages?: boolean | null;
+    form_allow_multiple_addons?: boolean | null;
     form_show_wedding_split?: boolean | null;
     form_show_wisuda_split?: boolean | null;
     form_show_proof?: boolean | null;
@@ -315,6 +317,8 @@ const VENDOR_SELECT_COLUMNS = [
     "calendar_event_description_map",
     "form_payment_methods",
     "form_show_addons",
+    "form_allow_multiple_packages",
+    "form_allow_multiple_addons",
     "form_show_wedding_split",
     "form_show_wisuda_split",
     "form_show_proof",
@@ -919,6 +923,21 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        const allowMultiplePackages = vendor.form_allow_multiple_packages ?? true;
+        if (
+            !allowMultiplePackages &&
+            !specialOfferRule?.packageLocked &&
+            normalizedMainServiceIds.length > 1
+        ) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Paket utama hanya bisa dipilih satu.",
+                },
+                { status: 400 },
+            );
+        }
+
         if (normalizedMainServiceIds.length === 0) {
             const { data: availableMainServices } = await supabaseAdmin
                 .from("services")
@@ -1003,6 +1022,21 @@ export async function POST(request: NextRequest) {
             } else if (addonIds.length === 0 && specialOfferRule.addonServiceIds.length > 0) {
                 addonIds = normalizeUuidList(specialOfferRule.addonServiceIds);
             }
+        }
+
+        const allowMultipleAddons = vendor.form_allow_multiple_addons ?? true;
+        if (
+            !allowMultipleAddons &&
+            !specialOfferRule?.addonLocked &&
+            addonIds.length > 1
+        ) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Add-on hanya bisa dipilih satu.",
+                },
+                { status: 400 },
+            );
         }
 
         const requestedServiceIds = normalizeUuidList([

@@ -417,7 +417,7 @@ export default function ClientStatusPage() {
             setTotalItems(response.totalItems);
             if (metadata) {
                 setClientStatuses(metadata.clientStatuses || DEFAULT_CLIENT_STATUSES);
-                setQueueTriggerStatus(metadata.queueTriggerStatus || "Antrian Edit");
+                setQueueTriggerStatus(metadata.queueTriggerStatus ?? "Antrian Edit");
                 setDpVerifyTriggerStatus(metadata.dpVerifyTriggerStatus || "");
                 setPackages(metadata.packages || []);
                 setAvailableEventTypes(metadata.availableEventTypes || []);

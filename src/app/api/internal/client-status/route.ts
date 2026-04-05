@@ -390,7 +390,10 @@ export async function GET(request: NextRequest) {
       clientStatuses: resolvedStatusOptions.filter(
         (status) => status !== CANCELLED_BOOKING_STATUS,
       ),
-      queueTriggerStatus: metadataData?.queueTriggerStatus || "Antrian Edit",
+      queueTriggerStatus:
+        typeof metadataData?.queueTriggerStatus === "string"
+          ? metadataData.queueTriggerStatus
+          : "Antrian Edit",
       dpVerifyTriggerStatus: metadataData?.dpVerifyTriggerStatus || "",
       packages: readStringArray(metadataData?.packages),
       availableEventTypes: readStringArray(metadataData?.availableEventTypes),

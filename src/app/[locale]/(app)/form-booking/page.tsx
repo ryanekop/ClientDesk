@@ -83,6 +83,8 @@ type PreviewPayload = {
   custom_event_types: string[];
   form_show_notes: boolean;
   form_show_addons: boolean;
+  form_allow_multiple_packages: boolean;
+  form_allow_multiple_addons: boolean;
   form_hide_service_prices: boolean;
   form_show_wedding_split: boolean;
   form_show_wisuda_split: boolean;
@@ -107,6 +109,8 @@ type FormBookingSnapshot = {
   custom_event_types: string[];
   form_show_notes: boolean;
   form_show_addons: boolean;
+  form_allow_multiple_packages: boolean;
+  form_allow_multiple_addons: boolean;
   form_hide_service_prices: boolean;
   form_show_wedding_split: boolean;
   form_show_wisuda_split: boolean;
@@ -128,6 +132,8 @@ const DEFAULTS = {
   eventTypes: ALL_EVENT_TYPES,
   showNotes: true,
   showAddons: true,
+  allowMultiplePackages: true,
+  allowMultipleAddons: true,
   hideServicePrices: false,
   showWeddingSplit: true,
   showWisudaSplit: true,
@@ -152,6 +158,8 @@ function createFormBookingSnapshot({
   customEventTypes,
   showNotes,
   showAddons,
+  allowMultiplePackages,
+  allowMultipleAddons,
   hideServicePrices,
   showWeddingSplit,
   showWisudaSplit,
@@ -174,6 +182,8 @@ function createFormBookingSnapshot({
   customEventTypes: string[];
   showNotes: boolean;
   showAddons: boolean;
+  allowMultiplePackages: boolean;
+  allowMultipleAddons: boolean;
   hideServicePrices: boolean;
   showWeddingSplit: boolean;
   showWisudaSplit: boolean;
@@ -197,6 +207,8 @@ function createFormBookingSnapshot({
     custom_event_types: customEventTypes,
     form_show_notes: showNotes,
     form_show_addons: showAddons,
+    form_allow_multiple_packages: allowMultiplePackages,
+    form_allow_multiple_addons: allowMultipleAddons,
     form_hide_service_prices: hideServicePrices,
     form_show_wedding_split: showWeddingSplit,
     form_show_wisuda_split: showWisudaSplit,
@@ -244,6 +256,12 @@ export default function FormBookingPage() {
   const [customEventTypes, setCustomEventTypes] = React.useState<string[]>([]);
   const [showNotes, setShowNotes] = React.useState(DEFAULTS.showNotes);
   const [showAddons, setShowAddons] = React.useState(DEFAULTS.showAddons);
+  const [allowMultiplePackages, setAllowMultiplePackages] = React.useState(
+    DEFAULTS.allowMultiplePackages,
+  );
+  const [allowMultipleAddons, setAllowMultipleAddons] = React.useState(
+    DEFAULTS.allowMultipleAddons,
+  );
   const [hideServicePrices, setHideServicePrices] = React.useState(
     DEFAULTS.hideServicePrices,
   );
@@ -373,6 +391,8 @@ export default function FormBookingPage() {
       custom_event_types: customEventTypes,
       form_show_notes: showNotes,
       form_show_addons: showAddons,
+      form_allow_multiple_packages: allowMultiplePackages,
+      form_allow_multiple_addons: allowMultipleAddons,
       form_hide_service_prices: hideServicePrices,
       form_show_wedding_split: showWeddingSplit,
       form_show_wisuda_split: showWisudaSplit,
@@ -399,6 +419,8 @@ export default function FormBookingPage() {
       formPaymentMethods,
       showNotes,
       showAddons,
+      allowMultiplePackages,
+      allowMultipleAddons,
       hideServicePrices,
       showWeddingSplit,
       showWisudaSplit,
@@ -423,6 +445,8 @@ export default function FormBookingPage() {
         customEventTypes,
         showNotes,
         showAddons,
+        allowMultiplePackages,
+        allowMultipleAddons,
         hideServicePrices,
         showWeddingSplit,
         showWisudaSplit,
@@ -450,6 +474,8 @@ export default function FormBookingPage() {
       selectedEventTypes,
       showNotes,
       showAddons,
+      allowMultiplePackages,
+      allowMultipleAddons,
       hideServicePrices,
       showWeddingSplit,
       showWisudaSplit,
@@ -602,6 +628,12 @@ export default function FormBookingPage() {
         setFormSectionsByEventType(normalizedSections);
         const loadedShowNotes = p.form_show_notes ?? DEFAULTS.showNotes;
         const loadedShowAddons = (p as Record<string, unknown>).form_show_addons ?? DEFAULTS.showAddons;
+        const loadedAllowMultiplePackages =
+          (p as Record<string, unknown>).form_allow_multiple_packages ??
+          DEFAULTS.allowMultiplePackages;
+        const loadedAllowMultipleAddons =
+          (p as Record<string, unknown>).form_allow_multiple_addons ??
+          DEFAULTS.allowMultipleAddons;
         const loadedHideServicePrices =
           (p as Record<string, unknown>).form_hide_service_prices ??
           DEFAULTS.hideServicePrices;
@@ -651,6 +683,8 @@ export default function FormBookingPage() {
             : DEFAULTS.termsContent;
         setShowNotes(loadedShowNotes);
         setShowAddons(Boolean(loadedShowAddons));
+        setAllowMultiplePackages(Boolean(loadedAllowMultiplePackages));
+        setAllowMultipleAddons(Boolean(loadedAllowMultipleAddons));
         setHideServicePrices(Boolean(loadedHideServicePrices));
         setShowWeddingSplit(Boolean(loadedShowWeddingSplit));
         setShowWisudaSplit(Boolean(loadedShowWisudaSplit));
@@ -684,6 +718,8 @@ export default function FormBookingPage() {
               customEventTypes: loadedCustomEventTypes,
               showNotes: loadedShowNotes,
               showAddons: Boolean(loadedShowAddons),
+              allowMultiplePackages: Boolean(loadedAllowMultiplePackages),
+              allowMultipleAddons: Boolean(loadedAllowMultipleAddons),
               hideServicePrices: Boolean(loadedHideServicePrices),
               showWeddingSplit: Boolean(loadedShowWeddingSplit),
               showWisudaSplit: Boolean(loadedShowWisudaSplit),
@@ -832,6 +868,8 @@ export default function FormBookingPage() {
         form_sections: formSectionsByEventType,
         form_show_notes: showNotes,
         form_show_addons: showAddons,
+        form_allow_multiple_packages: allowMultiplePackages,
+        form_allow_multiple_addons: allowMultipleAddons,
         form_hide_service_prices: hideServicePrices,
         form_show_wedding_split: showWeddingSplit,
         form_show_wisuda_split: showWisudaSplit,
@@ -872,6 +910,8 @@ export default function FormBookingPage() {
           customEventTypes,
           showNotes,
           showAddons,
+          allowMultiplePackages,
+          allowMultipleAddons,
           hideServicePrices,
           showWeddingSplit,
           showWisudaSplit,
@@ -937,6 +977,8 @@ export default function FormBookingPage() {
         form_sections: resetFormSections,
         form_show_notes: DEFAULTS.showNotes,
         form_show_addons: DEFAULTS.showAddons,
+        form_allow_multiple_packages: DEFAULTS.allowMultiplePackages,
+        form_allow_multiple_addons: DEFAULTS.allowMultipleAddons,
         form_hide_service_prices: DEFAULTS.hideServicePrices,
         form_show_wedding_split: DEFAULTS.showWeddingSplit,
         form_show_wisuda_split: DEFAULTS.showWisudaSplit,
@@ -975,6 +1017,8 @@ export default function FormBookingPage() {
     setSelectedDpEventType(resetSelectedEventTypes[0] || "Umum");
     setShowNotes(DEFAULTS.showNotes);
     setShowAddons(DEFAULTS.showAddons);
+    setAllowMultiplePackages(DEFAULTS.allowMultiplePackages);
+    setAllowMultipleAddons(DEFAULTS.allowMultipleAddons);
     setHideServicePrices(DEFAULTS.hideServicePrices);
     setShowWeddingSplit(DEFAULTS.showWeddingSplit);
     setShowWisudaSplit(DEFAULTS.showWisudaSplit);
@@ -1001,6 +1045,8 @@ export default function FormBookingPage() {
         customEventTypes: resetCustomEventTypes,
         showNotes: DEFAULTS.showNotes,
         showAddons: DEFAULTS.showAddons,
+        allowMultiplePackages: DEFAULTS.allowMultiplePackages,
+        allowMultipleAddons: DEFAULTS.allowMultipleAddons,
         hideServicePrices: DEFAULTS.hideServicePrices,
         showWeddingSplit: DEFAULTS.showWeddingSplit,
         showWisudaSplit: DEFAULTS.showWisudaSplit,
@@ -1864,6 +1910,18 @@ export default function FormBookingPage() {
                       label: "Paket Add-on",
                       value: showAddons,
                       setter: setShowAddons,
+                      disabled: false,
+                    },
+                    {
+                      label: "Multiple Pilih Paket Utama",
+                      value: allowMultiplePackages,
+                      setter: setAllowMultiplePackages,
+                      disabled: false,
+                    },
+                    {
+                      label: "Multiple Pilih Add-on",
+                      value: allowMultipleAddons,
+                      setter: setAllowMultipleAddons,
                       disabled: false,
                     },
                     {

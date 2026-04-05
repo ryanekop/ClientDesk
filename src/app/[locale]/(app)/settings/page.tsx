@@ -1533,8 +1533,13 @@ export default function SettingsPage() {
         customClientStatuses,
     );
     setCustomClientStatuses(loadedClientStatuses);
-    if ((prof as any)?.queue_trigger_status) {
-      setQueueTriggerStatus((prof as any).queue_trigger_status);
+    if (Object.prototype.hasOwnProperty.call(prof, "queue_trigger_status")) {
+      const rawQueueTriggerStatus = (prof as any)?.queue_trigger_status;
+      setQueueTriggerStatus(
+        typeof rawQueueTriggerStatus === "string"
+          ? rawQueueTriggerStatus
+          : DEFAULT_QUEUE_TRIGGER_STATUS,
+      );
     }
     setDpVerifyTriggerStatus(
       resolveDpVerifyTriggerStatus(
@@ -4815,7 +4820,7 @@ export default function SettingsPage() {
                     onChange={(e) => setQueueTriggerStatus(e.target.value)}
                     className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
-                    <option value="">(Tidak ada trigger)</option>
+                    <option value="">Off (Tidak ada trigger)</option>
                     {customClientStatuses.map((s) => (
                       <option key={s} value={s}>
                         {s}

@@ -39,7 +39,24 @@ type Freelancer = {
     google_email: string | null;
     status: string;
     tags: string[];
+    pricelist: MemberPricelist | null;
     created_at: string;
+};
+
+type PricelistColumn = {
+    id: string;
+    label: string;
+};
+
+type PricelistItem = {
+    id: string;
+    name: string;
+    prices: Record<string, number>;
+};
+
+type MemberPricelist = {
+    columns: PricelistColumn[];
+    items: PricelistItem[];
 };
 
 type TagInputProps = {
@@ -48,6 +65,12 @@ type TagInputProps = {
     setTags: (tags: string[]) => void;
     input: string;
     setInput: (value: string) => void;
+    inputClass: string;
+};
+
+type PricelistBuilderProps = {
+    value: MemberPricelist;
+    onChange: (next: MemberPricelist) => void;
     inputClass: string;
 };
 
@@ -70,6 +93,7 @@ const TEAM_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
     { id: "name", label: "Nama", visible: true },
     { id: "role", label: "Peran", visible: true },
     { id: "tags", label: "Tags", visible: true },
+    { id: "pricelist_summary", label: "Pricelist", visible: true },
     { id: "whatsapp", label: "Whatsapp", visible: true },
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
@@ -79,6 +103,7 @@ const TEAM_COLUMN_MIN_WIDTHS: Record<string, number> = {
     name: 180,
     role: 128,
     tags: 160,
+    pricelist_summary: 140,
     whatsapp: 145,
     status: 116,
 };
@@ -182,6 +207,113 @@ function mergeTagsWithPendingInput(tags: string[], pendingInput: string) {
     return normalizeTagList([...tags, ...splitTagInput(pendingInput)]);
 }
 
+function createPricelistId(prefix: "col" | "item") {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return `${prefix}_${crypto.randomUUID()}`;
+    }
+    return `${prefix}_${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function createEmptyPricelist(): MemberPricelist {
+    return { columns: [], items: [] };
+}
+
+function formatRupiahNumber(value: number | null | undefined) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "";
+    const normalized = Math.max(0, Math.floor(value));
+    return new Intl.NumberFormat("id-ID").format(normalized);
+}
+
+function parseRupiahNumber(rawValue: string) {
+    const digitsOnly = rawValue.replace(/\D+/g, "");
+    if (!digitsOnly) return 0;
+    const parsed = Number(digitsOnly);
+    if (!Number.isFinite(parsed) || parsed < 0) return 0;
+    return Math.floor(parsed);
+}
+
+function normalizeMemberPricelist(value: unknown): MemberPricelist {
+    if (!value || typeof value !== "object") {
+        return createEmptyPricelist();
+    }
+
+    const rawColumns = Array.isArray((value as { columns?: unknown[] }).columns)
+        ? ((value as { columns: unknown[] }).columns)
+        : [];
+    const columnSeen = new Set<string>();
+    const columns: PricelistColumn[] = [];
+
+    rawColumns.forEach((rawColumn, index) => {
+        if (!rawColumn || typeof rawColumn !== "object") return;
+        const typedColumn = rawColumn as { id?: unknown; label?: unknown };
+        const rawId =
+            typeof typedColumn.id === "string" && typedColumn.id.trim().length > 0
+                ? typedColumn.id.trim()
+                : createPricelistId("col");
+        const id = columnSeen.has(rawId) ? `${rawId}_${index + 1}` : rawId;
+        columnSeen.add(id);
+        columns.push({
+            id,
+            label:
+                typeof typedColumn.label === "string" && typedColumn.label.trim().length > 0
+                    ? typedColumn.label.trim()
+                    : `Kolom ${columns.length + 1}`,
+        });
+    });
+
+    const rawItems = Array.isArray((value as { items?: unknown[] }).items)
+        ? ((value as { items: unknown[] }).items)
+        : [];
+    const itemSeen = new Set<string>();
+    const items: PricelistItem[] = [];
+
+    rawItems.forEach((rawItem, index) => {
+        if (!rawItem || typeof rawItem !== "object") return;
+        const typedItem = rawItem as { id?: unknown; name?: unknown; prices?: unknown };
+        const rawId =
+            typeof typedItem.id === "string" && typedItem.id.trim().length > 0
+                ? typedItem.id.trim()
+                : createPricelistId("item");
+        const id = itemSeen.has(rawId) ? `${rawId}_${index + 1}` : rawId;
+        itemSeen.add(id);
+        const rawPrices =
+            typedItem.prices && typeof typedItem.prices === "object"
+                ? (typedItem.prices as Record<string, unknown>)
+                : {};
+        const prices: Record<string, number> = {};
+        columns.forEach((column) => {
+            const rawPrice = rawPrices[column.id];
+            if (typeof rawPrice === "number" && Number.isFinite(rawPrice)) {
+                prices[column.id] = Math.max(0, Math.floor(rawPrice));
+                return;
+            }
+            if (typeof rawPrice === "string") {
+                prices[column.id] = parseRupiahNumber(rawPrice);
+                return;
+            }
+            prices[column.id] = 0;
+        });
+        items.push({
+            id,
+            name:
+                typeof typedItem.name === "string" && typedItem.name.trim().length > 0
+                    ? typedItem.name.trim()
+                    : `Item ${items.length + 1}`,
+            prices,
+        });
+    });
+
+    return { columns, items };
+}
+
+function getPricelistSummary(pricelist: MemberPricelist | null | undefined) {
+    const normalized = normalizeMemberPricelist(pricelist);
+    if (normalized.columns.length === 0 && normalized.items.length === 0) {
+        return "-";
+    }
+    return `${normalized.items.length} item • ${normalized.columns.length} kolom`;
+}
+
 function TagInput({ label, tags, setTags, input, setInput, inputClass }: TagInputProps) {
     return (
         <div className="space-y-2">
@@ -219,6 +351,204 @@ function TagInput({ label, tags, setTags, input, setInput, inputClass }: TagInpu
     );
 }
 
+function PricelistBuilder({ value, onChange, inputClass }: PricelistBuilderProps) {
+    const addColumn = React.useCallback(() => {
+        const nextColumn: PricelistColumn = {
+            id: createPricelistId("col"),
+            label: `Kolom ${value.columns.length + 1}`,
+        };
+        onChange({
+            columns: [...value.columns, nextColumn],
+            items: value.items.map((item) => ({
+                ...item,
+                prices: { ...item.prices, [nextColumn.id]: 0 },
+            })),
+        });
+    }, [onChange, value.columns, value.items]);
+
+    const updateColumnLabel = React.useCallback((columnId: string, nextLabel: string) => {
+        onChange({
+            ...value,
+            columns: value.columns.map((column) =>
+                column.id === columnId ? { ...column, label: nextLabel } : column,
+            ),
+        });
+    }, [onChange, value]);
+
+    const removeColumn = React.useCallback((columnId: string) => {
+        onChange({
+            columns: value.columns.filter((column) => column.id !== columnId),
+            items: value.items.map((item) => {
+                const nextPrices = { ...item.prices };
+                delete nextPrices[columnId];
+                return { ...item, prices: nextPrices };
+            }),
+        });
+    }, [onChange, value.columns, value.items]);
+
+    const addItem = React.useCallback(() => {
+        const prices = value.columns.reduce<Record<string, number>>((acc, column) => {
+            acc[column.id] = 0;
+            return acc;
+        }, {});
+        onChange({
+            ...value,
+            items: [
+                ...value.items,
+                {
+                    id: createPricelistId("item"),
+                    name: `Item ${value.items.length + 1}`,
+                    prices,
+                },
+            ],
+        });
+    }, [onChange, value]);
+
+    const updateItemName = React.useCallback((itemId: string, nextName: string) => {
+        onChange({
+            ...value,
+            items: value.items.map((item) =>
+                item.id === itemId ? { ...item, name: nextName } : item,
+            ),
+        });
+    }, [onChange, value]);
+
+    const updateItemPrice = React.useCallback((itemId: string, columnId: string, nextRawValue: string) => {
+        const parsedPrice = parseRupiahNumber(nextRawValue);
+        onChange({
+            ...value,
+            items: value.items.map((item) =>
+                item.id === itemId
+                    ? {
+                        ...item,
+                        prices: {
+                            ...item.prices,
+                            [columnId]: parsedPrice,
+                        },
+                    }
+                    : item,
+            ),
+        });
+    }, [onChange, value]);
+
+    const removeItem = React.useCallback((itemId: string) => {
+        onChange({
+            ...value,
+            items: value.items.filter((item) => item.id !== itemId),
+        });
+    }, [onChange, value]);
+
+    return (
+        <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <p className="text-sm font-medium">Pricelist (matrix)</p>
+                    <p className="text-[11px] text-muted-foreground">
+                        Tambah kolom dan item. Harga otomatis format Rupiah (contoh: 700.000).
+                    </p>
+                </div>
+                <div className="flex gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={addColumn}>
+                        + Kolom
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={addItem}>
+                        + Item
+                    </Button>
+                </div>
+            </div>
+
+            {value.columns.length === 0 ? (
+                <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                    Belum ada kolom. Tambahkan minimal 1 kolom (contoh: Video, Foto, Full Day).
+                </p>
+            ) : (
+                <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Kolom Pricelist</p>
+                    <div className="grid gap-2">
+                        {value.columns.map((column) => (
+                            <div key={column.id} className="flex items-center gap-2">
+                                <input
+                                    value={column.label}
+                                    onChange={(event) => updateColumnLabel(column.id, event.target.value)}
+                                    placeholder="Nama kolom"
+                                    className={inputClass}
+                                />
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="shrink-0 text-red-600 hover:text-red-700"
+                                    onClick={() => removeColumn(column.id)}
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {value.items.length === 0 ? (
+                <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                    Belum ada item. Tambah item untuk mengisi harga per kolom.
+                </p>
+            ) : (
+                <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Item Pricelist</p>
+                    <div className="space-y-2">
+                        {value.items.map((item) => (
+                            <div key={item.id} className="space-y-2 rounded-md border bg-background p-3">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        value={item.name}
+                                        onChange={(event) => updateItemName(item.id, event.target.value)}
+                                        placeholder="Nama item (contoh: Video Cinematic)"
+                                        className={inputClass}
+                                    />
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="shrink-0 text-red-600 hover:text-red-700"
+                                        onClick={() => removeItem(item.id)}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                                {value.columns.length > 0 ? (
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        {value.columns.map((column) => (
+                                            <div key={`${item.id}:${column.id}`} className="space-y-1">
+                                                <label className="text-[11px] font-medium text-muted-foreground">
+                                                    {column.label || "Kolom"}
+                                                </label>
+                                                <div className="relative">
+                                                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                                                        Rp
+                                                    </span>
+                                                    <input
+                                                        value={formatRupiahNumber(item.prices[column.id] ?? 0)}
+                                                        onChange={(event) =>
+                                                            updateItemPrice(item.id, column.id, event.target.value)
+                                                        }
+                                                        inputMode="numeric"
+                                                        className={cn(inputClass, "pl-9")}
+                                                        placeholder="0"
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : null}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function TeamPage() {
     const supabase = createClient();
     const t = useTranslations("Team");
@@ -238,6 +568,8 @@ export default function TeamPage() {
     const [editCountryCode, setEditCountryCode] = React.useState("+62");
     const [addTags, setAddTags] = React.useState<string[]>([]);
     const [editTags, setEditTags] = React.useState<string[]>([]);
+    const [addPricelist, setAddPricelist] = React.useState<MemberPricelist>(createEmptyPricelist());
+    const [editPricelist, setEditPricelist] = React.useState<MemberPricelist>(createEmptyPricelist());
     const [tagInput, setTagInput] = React.useState("");
     const [editTagInput, setEditTagInput] = React.useState("");
     const [searchQuery, setSearchQuery] = React.useState("");
@@ -308,6 +640,7 @@ export default function TeamPage() {
                 response.items.map((member) => ({
                     ...member,
                     tags: Array.isArray(member.tags) ? member.tags : [],
+                    pricelist: normalizeMemberPricelist(member.pricelist),
                 })),
             );
             setTotalItems(response.totalItems);
@@ -502,12 +835,14 @@ export default function TeamPage() {
             google_email: formData.get("google_email") as string || null,
             status: "active",
             tags: normalizedTags,
+            pricelist: normalizeMemberPricelist(addPricelist),
         });
 
         if (!error) {
             setIsAddOpen(false);
             setAddTags([]);
             setTagInput("");
+            setAddPricelist(createEmptyPricelist());
             void fetchMembers("refresh");
         }
     }
@@ -527,6 +862,7 @@ export default function TeamPage() {
                 whatsapp_number: fullWa || null,
                 google_email: formData.get("google_email") as string || null,
                 tags: normalizedTags,
+                pricelist: normalizeMemberPricelist(editPricelist),
             })
             .eq("id", editingMember.id);
 
@@ -535,6 +871,7 @@ export default function TeamPage() {
             setEditingMember(null);
             setEditTags([]);
             setEditTagInput("");
+            setEditPricelist(createEmptyPricelist());
             void fetchMembers("refresh");
         }
     }
@@ -800,6 +1137,8 @@ export default function TeamPage() {
                 return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("peran"));
             case "tags":
                 return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("tags"));
+            case "pricelist_summary":
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", "Pricelist");
             case "whatsapp":
                 return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("whatsapp"));
             case "status":
@@ -856,6 +1195,12 @@ export default function TeamPage() {
                         ) : "-"}
                     </td>
                 );
+            case "pricelist_summary":
+                return (
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
+                        {getPricelistSummary(member.pricelist)}
+                    </td>
+                );
             case "whatsapp":
                 return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>{member.whatsapp_number || "-"}</td>;
             case "status":
@@ -882,6 +1227,8 @@ export default function TeamPage() {
                             <ActionIconButton tone="indigo" title="Edit" onClick={() => {
                                 setEditingMember(member);
                                 setEditTags(member.tags || []);
+                                setEditTagInput("");
+                                setEditPricelist(normalizeMemberPricelist(member.pricelist));
                                 const wa = member.whatsapp_number || "";
                                 const match = COUNTRY_CODES.find(c => wa.startsWith(c.code));
                                 setEditCountryCode(match ? match.code : "+62");
@@ -906,6 +1253,8 @@ export default function TeamPage() {
                 return member.role;
             case "tags":
                 return member.tags.length > 0 ? member.tags.join(", ") : "-";
+            case "pricelist_summary":
+                return getPricelistSummary(member.pricelist);
             case "whatsapp":
                 return member.whatsapp_number || "-";
             case "status":
@@ -921,11 +1270,21 @@ export default function TeamPage() {
                 actionsClassName={PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME}
                 actions={(
                     <>
-                        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+                        <Dialog
+                            open={isAddOpen}
+                            onOpenChange={(open) => {
+                                setIsAddOpen(open);
+                                if (!open) {
+                                    setAddTags([]);
+                                    setTagInput("");
+                                    setAddPricelist(createEmptyPricelist());
+                                }
+                            }}
+                        >
                             <DialogTrigger asChild>
                                 <Button className="order-2 w-full lg:order-1 lg:w-auto"><Plus className="w-4 h-4" /> {t("tambah")}</Button>
                             </DialogTrigger>
-                            <DialogContent className="sm:max-w-[500px]">
+                            <DialogContent className="sm:max-w-[780px]">
                                 <DialogHeader>
                                     <DialogTitle>{t("tambahTitle")}</DialogTitle>
                                     <DialogDescription>{t("tambahDesc")}</DialogDescription>
@@ -961,6 +1320,11 @@ export default function TeamPage() {
                                         <input name="google_email" type="email" placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
                                     </div>
                                     <TagInput label={t("tags")} tags={addTags} setTags={setAddTags} input={tagInput} setInput={setTagInput} inputClass={inputClass} />
+                                    <PricelistBuilder
+                                        value={addPricelist}
+                                        onChange={setAddPricelist}
+                                        inputClass={inputClass}
+                                    />
                                     <DialogFooter><Button type="submit">{t("simpan")}</Button></DialogFooter>
                                 </form>
                             </DialogContent>
@@ -1111,6 +1475,8 @@ export default function TeamPage() {
                                     <ActionIconButton tone="indigo" title="Edit" onClick={() => {
                                         setEditingMember(member);
                                         setEditTags(member.tags || []);
+                                        setEditTagInput("");
+                                        setEditPricelist(normalizeMemberPricelist(member.pricelist));
                                         const wa = member.whatsapp_number || "";
                                         const match = COUNTRY_CODES.find(c => wa.startsWith(c.code));
                                         setEditCountryCode(match ? match.code : "+62");
@@ -1166,8 +1532,19 @@ export default function TeamPage() {
             )}
 
             {/* Edit Dialog */}
-            <Dialog open={isEditOpen} onOpenChange={(open) => { setIsEditOpen(open); if (!open) setEditingMember(null); }}>
-                <DialogContent className="sm:max-w-[500px]">
+            <Dialog
+                open={isEditOpen}
+                onOpenChange={(open) => {
+                    setIsEditOpen(open);
+                    if (!open) {
+                        setEditingMember(null);
+                        setEditTags([]);
+                        setEditTagInput("");
+                        setEditPricelist(createEmptyPricelist());
+                    }
+                }}
+            >
+                <DialogContent className="sm:max-w-[780px]">
                     <DialogHeader>
                         <DialogTitle>{t("editTitle")}</DialogTitle>
                         <DialogDescription>{tt("editDesc")}</DialogDescription>
@@ -1208,6 +1585,11 @@ export default function TeamPage() {
                                 <input name="google_email" type="email" defaultValue={editingMember.google_email || ""} placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
                             </div>
                             <TagInput label={t("tags")} tags={editTags} setTags={setEditTags} input={editTagInput} setInput={setEditTagInput} inputClass={inputClass} />
+                            <PricelistBuilder
+                                value={editPricelist}
+                                onChange={setEditPricelist}
+                                inputClass={inputClass}
+                            />
                             <DialogFooter><Button type="submit">{t("perbarui")}</Button></DialogFooter>
                         </form>
                     )}

@@ -49,6 +49,8 @@ type VendorProfileRow = {
   form_show_location: boolean | null;
   form_show_notes: boolean | null;
   form_show_addons: boolean | null;
+  form_allow_multiple_packages: boolean | null;
+  form_allow_multiple_addons: boolean | null;
   form_hide_service_prices: boolean | null;
   form_show_wedding_split: boolean | null;
   form_show_wisuda_split: boolean | null;
@@ -127,6 +129,8 @@ export type PublicVendorPayload = {
     form_show_location: boolean;
     form_show_notes: boolean;
     form_show_addons: boolean;
+    form_allow_multiple_packages: boolean;
+    form_allow_multiple_addons: boolean;
     form_hide_service_prices: boolean;
     form_show_wedding_split: boolean;
     form_show_wisuda_split: boolean;
@@ -191,7 +195,7 @@ async function fetchVendorPayloadById(args: {
     "id, vendor_slug, studio_name, whatsapp_number, min_dp_percent, min_dp_map, " +
     "avatar_url, invoice_logo_url, " +
     "form_brand_color, form_greeting, " +
-    "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_addons, form_hide_service_prices, form_show_wedding_split, form_show_wisuda_split, form_show_proof, " +
+    "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_addons, form_allow_multiple_packages, form_allow_multiple_addons, form_hide_service_prices, form_show_wedding_split, form_show_wisuda_split, form_show_proof, " +
     "form_terms_enabled, form_terms_agreement_text, form_terms_link_text, form_terms_suffix_text, form_terms_content, " +
     "form_sections, form_payment_methods, qris_image_url, qris_drive_file_id, bank_accounts";
   const profileSelectWithSeo =
@@ -337,6 +341,10 @@ async function fetchVendorPayloadById(args: {
       form_show_location: vendorRaw.form_show_location ?? true,
       form_show_notes: vendorRaw.form_show_notes ?? true,
       form_show_addons: vendorRaw.form_show_addons ?? true,
+      form_allow_multiple_packages:
+        vendorRaw.form_allow_multiple_packages ?? true,
+      form_allow_multiple_addons:
+        vendorRaw.form_allow_multiple_addons ?? true,
       form_hide_service_prices: vendorRaw.form_hide_service_prices ?? false,
       form_show_wedding_split: vendorRaw.form_show_wedding_split ?? true,
       form_show_wisuda_split: vendorRaw.form_show_wisuda_split ?? true,

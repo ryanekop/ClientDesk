@@ -45,6 +45,9 @@ export async function GET(request: NextRequest) {
       form_show_location: payload.vendor.form_show_location,
       form_show_notes: payload.vendor.form_show_notes,
       form_show_addons: payload.vendor.form_show_addons,
+      form_allow_multiple_packages:
+        payload.vendor.form_allow_multiple_packages,
+      form_allow_multiple_addons: payload.vendor.form_allow_multiple_addons,
       form_hide_service_prices: payload.vendor.form_hide_service_prices,
       form_show_wedding_split: payload.vendor.form_show_wedding_split,
       form_show_wisuda_split: payload.vendor.form_show_wisuda_split,

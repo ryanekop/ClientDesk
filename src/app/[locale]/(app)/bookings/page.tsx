@@ -662,7 +662,7 @@ export default function BookingsPage() {
                 ]);
                 setStudioName(metadata.studioName || "");
                 setStatusOpts(metadata.statusOptions || DEFAULT_STATUS_OPTS);
-                setQueueTriggerStatus(metadata.queueTriggerStatus || "Antrian Edit");
+                setQueueTriggerStatus(metadata.queueTriggerStatus ?? "Antrian Edit");
                 setDpVerifyTriggerStatus(metadata.dpVerifyTriggerStatus || "");
                 setDefaultWaTarget(metadata.defaultWaTarget || "client");
                 setBookingTableColorEnabled(metadata.bookingTableColorEnabled === true);
