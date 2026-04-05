@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin();
+const DISABLE_SECURITY_HEADERS =
+  process.env.DISABLE_SECURITY_HEADERS?.trim().toLowerCase() === "true";
 
 const SECURITY_HEADERS = [
   {
@@ -69,11 +71,17 @@ const nextConfig: NextConfig = {
     ],
   },
   async headers() {
+    const globalSecurityHeaders = DISABLE_SECURITY_HEADERS
+      ? []
+      : [
+          {
+            source: "/:path*",
+            headers: SECURITY_HEADERS,
+          },
+        ];
+
     return [
-      {
-        source: "/:path*",
-        headers: SECURITY_HEADERS,
-      },
+      ...globalSecurityHeaders,
       {
         source: "/icon-192.png",
         headers: [

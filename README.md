@@ -28,6 +28,13 @@ These env vars control auth-refresh and tenant-cache behavior in middleware:
 - `AUTH_REFRESH_FAIL_OPEN=true`
 - `TENANT_CACHE_TTL_MS=300000`
 
+Emergency toggle for security headers (set in `.env.local` and redeploy):
+
+- `DISABLE_SECURITY_HEADERS=true` turns OFF all global security headers.
+- `DISABLE_SECURITY_HEADERS=false` (or unset) keeps security headers ON (default).
+
+Use `DISABLE_SECURITY_HEADERS=true` only for incident recovery, then switch it back off.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
