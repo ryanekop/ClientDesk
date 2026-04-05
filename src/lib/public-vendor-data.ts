@@ -11,6 +11,9 @@ import {
 import { createServiceClient } from "@/lib/supabase/service";
 import { normalizeCityCode, type CityReferenceItem } from "@/lib/city-references";
 
+const PUBLIC_VENDOR_CACHE_VERSION = "v2";
+const PUBLIC_VENDOR_RECOVERY_CACHE_VERSION = "recovery-v1";
+
 type VendorStampRow = {
   id: string;
   vendor_slug: string | null;
@@ -65,6 +68,68 @@ type VendorProfileRow = {
   qris_image_url: string | null;
   qris_drive_file_id: string | null;
   bank_accounts: unknown[] | null;
+};
+
+type VendorProfileWithoutSeo = Omit<
+  VendorProfileRow,
+  | "seo_meta_title"
+  | "seo_meta_description"
+  | "seo_meta_keywords"
+  | "seo_og_image_url"
+  | "seo_form_meta_title"
+  | "seo_form_meta_description"
+  | "seo_form_meta_keywords"
+  | "seo_form_og_image_url"
+  | "seo_track_meta_title"
+  | "seo_track_meta_description"
+  | "seo_track_meta_keywords"
+  | "seo_track_og_image_url"
+  | "seo_settlement_meta_title"
+  | "seo_settlement_meta_description"
+  | "seo_settlement_meta_keywords"
+  | "seo_settlement_og_image_url"
+>;
+
+type VendorProfileWithoutSeoAndMultiple = Omit<
+  VendorProfileWithoutSeo,
+  "form_allow_multiple_packages" | "form_allow_multiple_addons"
+>;
+
+const EMPTY_SEO_FIELDS: Pick<
+  VendorProfileRow,
+  | "seo_meta_title"
+  | "seo_meta_description"
+  | "seo_meta_keywords"
+  | "seo_og_image_url"
+  | "seo_form_meta_title"
+  | "seo_form_meta_description"
+  | "seo_form_meta_keywords"
+  | "seo_form_og_image_url"
+  | "seo_track_meta_title"
+  | "seo_track_meta_description"
+  | "seo_track_meta_keywords"
+  | "seo_track_og_image_url"
+  | "seo_settlement_meta_title"
+  | "seo_settlement_meta_description"
+  | "seo_settlement_meta_keywords"
+  | "seo_settlement_og_image_url"
+> = {
+  seo_meta_title: null,
+  seo_meta_description: null,
+  seo_meta_keywords: null,
+  seo_og_image_url: null,
+  seo_form_meta_title: null,
+  seo_form_meta_description: null,
+  seo_form_meta_keywords: null,
+  seo_form_og_image_url: null,
+  seo_track_meta_title: null,
+  seo_track_meta_description: null,
+  seo_track_meta_keywords: null,
+  seo_track_og_image_url: null,
+  seo_settlement_meta_title: null,
+  seo_settlement_meta_description: null,
+  seo_settlement_meta_keywords: null,
+  seo_settlement_og_image_url: null,
 };
 
 type VendorServiceRow = {
@@ -204,6 +269,13 @@ async function fetchVendorPayloadById(args: {
     "seo_track_meta_title, seo_track_meta_description, seo_track_meta_keywords, seo_track_og_image_url, " +
     "seo_settlement_meta_title, seo_settlement_meta_description, seo_settlement_meta_keywords, seo_settlement_og_image_url";
   const profileSelect = `${profileSelectBase}, ${profileSelectWithSeo}`;
+  const profileSelectBaseWithoutMultiple =
+    "id, vendor_slug, studio_name, whatsapp_number, min_dp_percent, min_dp_map, " +
+    "avatar_url, invoice_logo_url, " +
+    "form_brand_color, form_greeting, " +
+    "form_event_types, custom_event_types, form_show_location, form_show_notes, form_show_addons, form_hide_service_prices, form_show_wedding_split, form_show_wisuda_split, form_show_proof, " +
+    "form_terms_enabled, form_terms_agreement_text, form_terms_link_text, form_terms_suffix_text, form_terms_content, " +
+    "form_sections, form_payment_methods, qris_image_url, qris_drive_file_id, bank_accounts";
 
   const { data: vendorWithSeo, error: vendorWithSeoError } = await supabase
     .from("profiles")
@@ -213,50 +285,32 @@ async function fetchVendorPayloadById(args: {
 
   let vendorRaw = vendorWithSeo;
   if (!vendorRaw && vendorWithSeoError && isMissingColumnError(vendorWithSeoError.message)) {
-    const { data: vendorLegacy } = await supabase
+    const { data: vendorLegacy, error: vendorLegacyError } = await supabase
       .from("profiles")
       .select(profileSelectBase)
       .eq("id", args.vendorId)
-      .maybeSingle<Omit<
-        VendorProfileRow,
-        | "seo_meta_title"
-        | "seo_meta_description"
-        | "seo_meta_keywords"
-        | "seo_og_image_url"
-        | "seo_form_meta_title"
-        | "seo_form_meta_description"
-        | "seo_form_meta_keywords"
-        | "seo_form_og_image_url"
-        | "seo_track_meta_title"
-        | "seo_track_meta_description"
-        | "seo_track_meta_keywords"
-        | "seo_track_og_image_url"
-        | "seo_settlement_meta_title"
-        | "seo_settlement_meta_description"
-        | "seo_settlement_meta_keywords"
-        | "seo_settlement_og_image_url"
-      >>();
+      .maybeSingle<VendorProfileWithoutSeo>();
 
     if (vendorLegacy) {
       vendorRaw = {
         ...vendorLegacy,
-        seo_meta_title: null,
-        seo_meta_description: null,
-        seo_meta_keywords: null,
-        seo_og_image_url: null,
-        seo_form_meta_title: null,
-        seo_form_meta_description: null,
-        seo_form_meta_keywords: null,
-        seo_form_og_image_url: null,
-        seo_track_meta_title: null,
-        seo_track_meta_description: null,
-        seo_track_meta_keywords: null,
-        seo_track_og_image_url: null,
-        seo_settlement_meta_title: null,
-        seo_settlement_meta_description: null,
-        seo_settlement_meta_keywords: null,
-        seo_settlement_og_image_url: null,
+        ...EMPTY_SEO_FIELDS,
       };
+    } else if (vendorLegacyError && isMissingColumnError(vendorLegacyError.message)) {
+      const { data: vendorLegacyWithoutMultiple } = await supabase
+        .from("profiles")
+        .select(profileSelectBaseWithoutMultiple)
+        .eq("id", args.vendorId)
+        .maybeSingle<VendorProfileWithoutSeoAndMultiple>();
+
+      if (vendorLegacyWithoutMultiple) {
+        vendorRaw = {
+          ...vendorLegacyWithoutMultiple,
+          form_allow_multiple_packages: null,
+          form_allow_multiple_addons: null,
+          ...EMPTY_SEO_FIELDS,
+        };
+      }
     }
   }
 
@@ -386,10 +440,15 @@ async function getVendorPayloadByStamp(stamp: VendorStampRow, tenantId?: string 
   const normalizedSlug = normalizeSlug(stamp.vendor_slug);
   const cacheKey = [
     "public-vendor-payload",
+    PUBLIC_VENDOR_CACHE_VERSION,
     tenantId ? tenantId.trim().toLowerCase() : "global",
     normalizedSlug.toLowerCase(),
     stamp.id,
     stamp.updated_at || "no-updated-at",
+  ];
+  const cacheTags = [
+    buildVendorCacheTag(normalizedSlug),
+    buildVendorUserCacheTag(stamp.id),
   ];
 
   const cached = unstable_cache(
@@ -401,14 +460,29 @@ async function getVendorPayloadByStamp(stamp: VendorStampRow, tenantId?: string 
     cacheKey,
     {
       revalidate: false,
-      tags: [
-        buildVendorCacheTag(normalizedSlug),
-        buildVendorUserCacheTag(stamp.id),
-      ],
+      tags: cacheTags,
     },
   );
 
-  return cached();
+  const payload = await cached();
+  if (payload) {
+    return payload;
+  }
+
+  const recoveryCached = unstable_cache(
+    async () =>
+      fetchVendorPayloadById({
+        vendorId: stamp.id,
+        vendorSlugForQris: normalizedSlug,
+      }),
+    [...cacheKey, PUBLIC_VENDOR_RECOVERY_CACHE_VERSION],
+    {
+      revalidate: false,
+      tags: cacheTags,
+    },
+  );
+
+  return recoveryCached();
 }
 
 export async function getVendorPublicPayloadCached(vendorSlug: string) {
