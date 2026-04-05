@@ -67,8 +67,10 @@ export async function GET(request: NextRequest) {
         booking: cachedBooking,
         vendorName,
         customClientStatuses,
+        queueTriggerStatus,
         finalInvoiceVisibleFromStatus,
         trackingFileLinksVisibleFromStatus,
+        trackingHideQueueNumber,
         fastpikLinkDisplayMode: profileLinkMode,
     } = basePayload;
 
@@ -110,6 +112,8 @@ export async function GET(request: NextRequest) {
                 sessionRows,
                 eventType: effectiveBooking.event_type,
                 clientStatus: effectiveClientStatus,
+                queueTriggerStatus: queueTriggerStatus || "Antrian Edit",
+                trackingHideQueueNumber: Boolean(trackingHideQueueNumber),
                 queuePosition: effectiveBooking.queue_position,
                 status: effectiveBooking.status,
                 serviceName: (effectiveBooking.services as { name?: string } | null)?.name || null,

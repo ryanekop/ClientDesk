@@ -970,6 +970,8 @@
         "finalInvoiceVisibilityDescription": "Pilih status klien pertama saat kartu invoice final mulai ditampilkan di halaman tracking.",
         "fileLinkVisibilityTitle": "Tampilkan Link File Mulai Status",
         "fileLinkVisibilityDescription": "Pilih status klien pertama saat link Google Drive dan Fastpik mulai ditampilkan di halaman tracking.",
+        "hideQueueNumberVisibilityTitle": "Sembunyikan Nomor Antrian di Tracking Publik",
+        "hideQueueNumberVisibilityDescription": "Jika aktif, status Antrian Edit tetap tampil tetapi nomor antrian klien tidak ditampilkan di halaman tracking.",
         "resetToDefaultTitle": "Balik ke Default?",
         "resetToDefaultDescription": "Pengaturan akan dikembalikan ke default.",
         "resetToDefault": "Balik ke Default"

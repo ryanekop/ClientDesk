@@ -134,9 +134,11 @@ type Profile = {
   google_refresh_token?: string | null;
   google_drive_access_token?: string | null;
   google_drive_refresh_token?: string | null;
+  queue_trigger_status?: string | null;
   dp_verify_trigger_status?: string | null;
   final_invoice_visible_from_status?: string | null;
   tracking_file_links_visible_from_status?: string | null;
+  tracking_hide_queue_number?: boolean | null;
   default_wa_target?: "client" | "freelancer" | null;
   booking_table_color_enabled?: boolean | null;
   finance_table_color_enabled?: boolean | null;
@@ -589,6 +591,7 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "finance_table_color_enabled",
   "final_invoice_visible_from_status",
   "tracking_file_links_visible_from_status",
+  "tracking_hide_queue_number",
   "form_event_types",
   "custom_event_types",
   "form_sections",
@@ -940,6 +943,8 @@ export default function SettingsPage() {
     trackingFileLinksVisibleFromStatus,
     setTrackingFileLinksVisibleFromStatus,
   ] = React.useState(DEFAULT_TRACKING_FILE_LINKS_VISIBLE_FROM_STATUS);
+  const [trackingHideQueueNumber, setTrackingHideQueueNumber] =
+    React.useState(false);
 
   // Default WA target
   const [defaultWaTarget, setDefaultWaTarget] = React.useState<
@@ -1559,6 +1564,15 @@ export default function SettingsPage() {
         (prof as any)?.tracking_file_links_visible_from_status,
       ),
     );
+    if (
+      Object.prototype.hasOwnProperty.call(prof, "tracking_hide_queue_number")
+    ) {
+      setTrackingHideQueueNumber(
+        Boolean((prof as any)?.tracking_hide_queue_number),
+      );
+    } else {
+      setTrackingHideQueueNumber(false);
+    }
     if ((prof as any)?.default_wa_target) {
       setDefaultWaTarget((prof as any).default_wa_target);
     }
@@ -2270,6 +2284,7 @@ export default function SettingsPage() {
         final_invoice_visible_from_status: nextVisibleFromStatus,
         tracking_file_links_visible_from_status:
           nextTrackingFileVisibleFromStatus,
+        tracking_hide_queue_number: trackingHideQueueNumber,
       });
       setCustomClientStatuses(normalizedClientStatuses);
       setDpVerifyTriggerStatus(nextDpVerifyTriggerStatus);
@@ -2375,6 +2390,7 @@ export default function SettingsPage() {
     setDpVerifyTriggerStatus(DEFAULT_DP_VERIFY_TRIGGER_STATUS);
     setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
     setTrackingFileLinksVisibleFromStatus(nextTrackingFileVisibleFromStatus);
+    setTrackingHideQueueNumber(false);
 
     await saveProfilePatch({
       custom_statuses: nextClientStatuses,
@@ -2383,6 +2399,7 @@ export default function SettingsPage() {
       dp_verify_trigger_status: DEFAULT_DP_VERIFY_TRIGGER_STATUS || null,
       final_invoice_visible_from_status: nextVisibleFromStatus,
       tracking_file_links_visible_from_status: nextTrackingFileVisibleFromStatus,
+      tracking_hide_queue_number: false,
     });
     setStatusSaved(true);
     showSettingsSavedToast();
@@ -4915,6 +4932,27 @@ export default function SettingsPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
+                  <label className="flex items-start gap-3 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={trackingHideQueueNumber}
+                      onChange={(event) =>
+                        setTrackingHideQueueNumber(event.target.checked)
+                      }
+                      className="mt-0.5 accent-primary"
+                    />
+                    <span>
+                      <span className="font-medium block">
+                        {tp("hideQueueNumberVisibilityTitle")}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {tp("hideQueueNumberVisibilityDescription")}
+                      </span>
+                    </span>
+                  </label>
                 </div>
               </div>
             </div>

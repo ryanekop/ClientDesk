@@ -970,6 +970,8 @@
         "finalInvoiceVisibilityDescription": "Choose the first client status where the final invoice card appears on the tracking page.",
         "fileLinkVisibilityTitle": "File Link Visibility",
         "fileLinkVisibilityDescription": "Choose the first client status where Google Drive and Fastpik links appear on the tracking page.",
+        "hideQueueNumberVisibilityTitle": "Hide Queue Number on Public Tracking",
+        "hideQueueNumberVisibilityDescription": "When enabled, the Edit Queue status still appears, but the client's queue number is hidden on the tracking page.",
         "resetToDefaultTitle": "Reset to Default?",
         "resetToDefaultDescription": "Settings will be restored to defaults.",
         "resetToDefault": "Reset to Default"

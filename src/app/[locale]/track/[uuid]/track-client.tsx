@@ -21,6 +21,8 @@ type BookingData = {
     }>;
     eventType: string | null;
     clientStatus: string | null;
+    queueTriggerStatus: string;
+    trackingHideQueueNumber: boolean;
     queuePosition: number | null;
     status: string;
     serviceName: string | null;
@@ -145,6 +147,11 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
     }, [customStatuses]);
 
     const currentIdx = booking.clientStatus ? steps.findIndex(s => s.key === booking.clientStatus) : -1;
+    const effectiveQueueTriggerStatus =
+        booking.queueTriggerStatus?.trim() || "Antrian Edit";
+    const shouldHideQueueNumber =
+        booking.trackingHideQueueNumber &&
+        booking.clientStatus === effectiveQueueTriggerStatus;
     const dateLocale = locale === "en" ? "en" : "id";
     const scheduleRows = React.useMemo(() => {
         const rows =
@@ -236,7 +243,10 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                             <p className="text-muted-foreground text-sm">{t("code")} <span className="font-semibold text-primary">{booking.bookingCode}</span></p>
                         </div>
                         <div className="flex items-center gap-2">
-                            {booking.queuePosition && booking.queuePosition > 0 && booking.clientStatus !== "Selesai" && (
+                            {booking.queuePosition &&
+                                booking.queuePosition > 0 &&
+                                booking.clientStatus !== "Selesai" &&
+                                !shouldHideQueueNumber && (
                                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
                                     {t("queue")} #{booking.queuePosition}
                                 </span>
@@ -298,7 +308,10 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                             const topActive = idx <= currentIdx;
                             const bottomActive = idx < currentIdx;
                             const stepLabel = step.labelKey ? t(step.labelKey as never) : step.key;
-                            const showQueuePosition = isCurrent && Boolean(booking.queuePosition && booking.queuePosition > 0);
+                            const showQueuePosition =
+                                isCurrent &&
+                                Boolean(booking.queuePosition && booking.queuePosition > 0) &&
+                                !shouldHideQueueNumber;
                             const showInProgress = isCurrent && !isLast;
                             const showCompleted = isPast || (isCurrent && isLast);
 
