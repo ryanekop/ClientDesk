@@ -33,16 +33,15 @@ echo "🚀 Deploying Client Desk..."
 echo "═══════════════════════════════════════════"
 
 echo ""
-echo "📥 [1/5] Syncing latest code from git (mirror mode)..."
+echo "📥 [1/5] Pulling latest code from git..."
 cd "${APP_DIR}"
-# Mirror mode: VPS harus identik dengan origin/main.
-# Perubahan lokal tracked/untracked di dalam repo akan dibuang.
-if [ -n "$(git status --porcelain)" ]; then
-    echo "⚠️  Local changes detected. Forcing sync to origin/main..."
+# Deploy harus selalu mengikuti lockfile dari remote.
+# Jika lockfile lokal kotor, pull bisa gagal.
+if ! git diff --quiet -- package-lock.json package.json; then
+    echo "⚠️  Local package lock changes detected. Restoring package files before pull..."
+    git restore package-lock.json package.json 2>/dev/null || true
 fi
-git fetch origin main
-git reset --hard origin/main
-git clean -fd
+git pull --ff-only origin main
 
 echo ""
 echo "📦 [2/5] Installing dependencies..."
