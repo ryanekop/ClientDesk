@@ -44,6 +44,7 @@
 !supabase_migration_changelog_v165.sql
 !supabase_migration_changelog_v166.sql
 !supabase_migration_fix_cd_text_contains_escape.sql
+!supabase_migration_team_badge_colors_and_pricelist_items_only.sql
 *.sh
 !deploy.sh
 

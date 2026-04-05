@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Edit2, Trash2, Users, MessageCircle, X, Search } from "lucide-react";
+import { Plus, Edit2, Trash2, Users, MessageCircle, X, Search, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
@@ -25,6 +25,11 @@ import {
     type TableColumnPreference,
 } from "@/lib/table-column-prefs";
 import { cn } from "@/lib/utils";
+import {
+    normalizeHexColor,
+    resolveHexColor,
+    withAlpha,
+} from "@/lib/service-colors";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
@@ -43,20 +48,20 @@ type Freelancer = {
     created_at: string;
 };
 
-type PricelistColumn = {
-    id: string;
-    label: string;
-};
-
 type PricelistItem = {
     id: string;
     name: string;
-    prices: Record<string, number>;
+    price: number;
 };
 
 type MemberPricelist = {
-    columns: PricelistColumn[];
     items: PricelistItem[];
+};
+
+type BadgeColorMap = Record<string, string>;
+type TeamBadgeColors = {
+    roles: BadgeColorMap;
+    tags: BadgeColorMap;
 };
 
 type TagInputProps = {
@@ -66,6 +71,7 @@ type TagInputProps = {
     input: string;
     setInput: (value: string) => void;
     inputClass: string;
+    badgeColors: BadgeColorMap;
 };
 
 type PricelistBuilderProps = {
@@ -111,12 +117,20 @@ const TEAM_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:team:items_per_page";
 const TEAM_FILTER_STORAGE_PREFIX = "clientdesk:team:filters";
 const TEAM_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const TEAM_DEFAULT_ITEMS_PER_PAGE = 10;
+const DEFAULT_TEAM_BADGE_COLORS: TeamBadgeColors = {
+    roles: {},
+    tags: {},
+};
 
 type TeamPageMetadata = {
     tags: string[];
     roles: string[];
     statuses: string[];
     tableColumnPreferences: TableColumnPreference[] | null;
+    badgeColors?: {
+        roles?: Record<string, string>;
+        tags?: Record<string, string>;
+    } | null;
 };
 
 type TeamFilterStoragePayload = {
@@ -215,7 +229,7 @@ function createPricelistId(prefix: "col" | "item") {
 }
 
 function createEmptyPricelist(): MemberPricelist {
-    return { columns: [], items: [] };
+    return { items: [] };
 }
 
 function formatRupiahNumber(value: number | null | undefined) {
@@ -236,31 +250,15 @@ function normalizeMemberPricelist(value: unknown): MemberPricelist {
     if (!value || typeof value !== "object") {
         return createEmptyPricelist();
     }
-
-    const rawColumns = Array.isArray((value as { columns?: unknown[] }).columns)
-        ? ((value as { columns: unknown[] }).columns)
-        : [];
-    const columnSeen = new Set<string>();
-    const columns: PricelistColumn[] = [];
-
-    rawColumns.forEach((rawColumn, index) => {
-        if (!rawColumn || typeof rawColumn !== "object") return;
-        const typedColumn = rawColumn as { id?: unknown; label?: unknown };
-        const rawId =
-            typeof typedColumn.id === "string" && typedColumn.id.trim().length > 0
-                ? typedColumn.id.trim()
-                : createPricelistId("col");
-        const id = columnSeen.has(rawId) ? `${rawId}_${index + 1}` : rawId;
-        columnSeen.add(id);
-        columns.push({
-            id,
-            label:
-                typeof typedColumn.label === "string" && typedColumn.label.trim().length > 0
-                    ? typedColumn.label.trim()
-                    : `Kolom ${columns.length + 1}`,
-        });
-    });
-
+    const typed = value as { items?: unknown[]; columns?: unknown[] };
+    const firstColumnId =
+        Array.isArray(typed.columns) &&
+        typed.columns.length > 0 &&
+        typed.columns[0] &&
+        typeof typed.columns[0] === "object" &&
+        typeof (typed.columns[0] as { id?: unknown }).id === "string"
+            ? String((typed.columns[0] as { id: string }).id).trim()
+            : "";
     const rawItems = Array.isArray((value as { items?: unknown[] }).items)
         ? ((value as { items: unknown[] }).items)
         : [];
@@ -269,7 +267,7 @@ function normalizeMemberPricelist(value: unknown): MemberPricelist {
 
     rawItems.forEach((rawItem, index) => {
         if (!rawItem || typeof rawItem !== "object") return;
-        const typedItem = rawItem as { id?: unknown; name?: unknown; prices?: unknown };
+        const typedItem = rawItem as { id?: unknown; name?: unknown; price?: unknown; prices?: unknown };
         const rawId =
             typeof typedItem.id === "string" && typedItem.id.trim().length > 0
                 ? typedItem.id.trim()
@@ -280,41 +278,100 @@ function normalizeMemberPricelist(value: unknown): MemberPricelist {
             typedItem.prices && typeof typedItem.prices === "object"
                 ? (typedItem.prices as Record<string, unknown>)
                 : {};
-        const prices: Record<string, number> = {};
-        columns.forEach((column) => {
-            const rawPrice = rawPrices[column.id];
-            if (typeof rawPrice === "number" && Number.isFinite(rawPrice)) {
-                prices[column.id] = Math.max(0, Math.floor(rawPrice));
-                return;
+        const rawPriceValue = typedItem.price;
+        const firstColumnPrice =
+            firstColumnId && rawPrices[firstColumnId] !== undefined
+                ? rawPrices[firstColumnId]
+                : null;
+        const resolvedPrice = (() => {
+            if (typeof rawPriceValue === "number" && Number.isFinite(rawPriceValue)) {
+                return Math.max(0, Math.floor(rawPriceValue));
             }
-            if (typeof rawPrice === "string") {
-                prices[column.id] = parseRupiahNumber(rawPrice);
-                return;
+            if (typeof rawPriceValue === "string") {
+                return parseRupiahNumber(rawPriceValue);
             }
-            prices[column.id] = 0;
-        });
+            if (typeof firstColumnPrice === "number" && Number.isFinite(firstColumnPrice)) {
+                return Math.max(0, Math.floor(firstColumnPrice));
+            }
+            if (typeof firstColumnPrice === "string") {
+                return parseRupiahNumber(firstColumnPrice);
+            }
+            return 0;
+        })();
         items.push({
             id,
             name:
                 typeof typedItem.name === "string" && typedItem.name.trim().length > 0
                     ? typedItem.name.trim()
                     : `Item ${items.length + 1}`,
-            prices,
+            price: resolvedPrice,
         });
     });
 
-    return { columns, items };
+    return { items };
 }
 
 function getPricelistSummary(pricelist: MemberPricelist | null | undefined) {
     const normalized = normalizeMemberPricelist(pricelist);
-    if (normalized.columns.length === 0 && normalized.items.length === 0) {
+    if (normalized.items.length === 0) {
         return "-";
     }
-    return `${normalized.items.length} item • ${normalized.columns.length} kolom`;
+    return `${normalized.items.length} item`;
 }
 
-function TagInput({ label, tags, setTags, input, setInput, inputClass }: TagInputProps) {
+function normalizeColorRecord(value: unknown): BadgeColorMap {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return {};
+    }
+
+    const next: BadgeColorMap = {};
+    Object.entries(value as Record<string, unknown>).forEach(([rawKey, rawColor]) => {
+        const key = rawKey.trim();
+        if (!key) return;
+        const normalizedColor = normalizeHexColor(rawColor);
+        if (!normalizedColor) return;
+        next[key] = normalizedColor;
+    });
+    return next;
+}
+
+function normalizeTeamBadgeColors(value: unknown): TeamBadgeColors {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return { ...DEFAULT_TEAM_BADGE_COLORS };
+    }
+    const typed = value as { roles?: unknown; tags?: unknown };
+    return {
+        roles: normalizeColorRecord(typed.roles),
+        tags: normalizeColorRecord(typed.tags),
+    };
+}
+
+function areBadgeColorMapsEqual(a: BadgeColorMap, b: BadgeColorMap) {
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) return false;
+    return aKeys.every((key) => b[key] === a[key]);
+}
+
+function areTeamBadgeColorsEqual(a: TeamBadgeColors, b: TeamBadgeColors) {
+    return (
+        areBadgeColorMapsEqual(a.roles, b.roles) &&
+        areBadgeColorMapsEqual(a.tags, b.tags)
+    );
+}
+
+function buildBadgeStyle(colorMap: BadgeColorMap, key: string | null | undefined) {
+    if (!key) return undefined;
+    const color = normalizeHexColor(colorMap[key]);
+    if (!color) return undefined;
+    return {
+        color,
+        backgroundColor: withAlpha(color, 0.12),
+        borderColor: withAlpha(color, 0.35),
+    } as React.CSSProperties;
+}
+
+function TagInput({ label, tags, setTags, input, setInput, inputClass, badgeColors }: TagInputProps) {
     return (
         <div className="space-y-2">
             <label className="text-sm font-medium">{label}</label>
@@ -339,12 +396,22 @@ function TagInput({ label, tags, setTags, input, setInput, inputClass }: TagInpu
             </p>
             {tags.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
-                    {tags.map((tag, i) => (
-                        <span key={i} className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                            {tag}
-                            <button type="button" onClick={() => setTags(tags.filter((_, j) => j !== i))} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
-                        </span>
-                    ))}
+                    {tags.map((tag, i) => {
+                        const badgeStyle = buildBadgeStyle(badgeColors, tag);
+                        return (
+                            <span
+                                key={i}
+                                style={badgeStyle}
+                                className={cn(
+                                    "flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border",
+                                    !badgeStyle && "bg-primary/10 border-transparent text-primary",
+                                )}
+                            >
+                                {tag}
+                                <button type="button" onClick={() => setTags(tags.filter((_, j) => j !== i))} className="hover:text-red-500 cursor-pointer"><X className="w-3 h-3" /></button>
+                            </span>
+                        );
+                    })}
                 </div>
             ) : null}
         </div>
@@ -352,45 +419,7 @@ function TagInput({ label, tags, setTags, input, setInput, inputClass }: TagInpu
 }
 
 function PricelistBuilder({ value, onChange, inputClass }: PricelistBuilderProps) {
-    const addColumn = React.useCallback(() => {
-        const nextColumn: PricelistColumn = {
-            id: createPricelistId("col"),
-            label: `Kolom ${value.columns.length + 1}`,
-        };
-        onChange({
-            columns: [...value.columns, nextColumn],
-            items: value.items.map((item) => ({
-                ...item,
-                prices: { ...item.prices, [nextColumn.id]: 0 },
-            })),
-        });
-    }, [onChange, value.columns, value.items]);
-
-    const updateColumnLabel = React.useCallback((columnId: string, nextLabel: string) => {
-        onChange({
-            ...value,
-            columns: value.columns.map((column) =>
-                column.id === columnId ? { ...column, label: nextLabel } : column,
-            ),
-        });
-    }, [onChange, value]);
-
-    const removeColumn = React.useCallback((columnId: string) => {
-        onChange({
-            columns: value.columns.filter((column) => column.id !== columnId),
-            items: value.items.map((item) => {
-                const nextPrices = { ...item.prices };
-                delete nextPrices[columnId];
-                return { ...item, prices: nextPrices };
-            }),
-        });
-    }, [onChange, value.columns, value.items]);
-
     const addItem = React.useCallback(() => {
-        const prices = value.columns.reduce<Record<string, number>>((acc, column) => {
-            acc[column.id] = 0;
-            return acc;
-        }, {});
         onChange({
             ...value,
             items: [
@@ -398,7 +427,7 @@ function PricelistBuilder({ value, onChange, inputClass }: PricelistBuilderProps
                 {
                     id: createPricelistId("item"),
                     name: `Item ${value.items.length + 1}`,
-                    prices,
+                    price: 0,
                 },
             ],
         });
@@ -413,7 +442,7 @@ function PricelistBuilder({ value, onChange, inputClass }: PricelistBuilderProps
         });
     }, [onChange, value]);
 
-    const updateItemPrice = React.useCallback((itemId: string, columnId: string, nextRawValue: string) => {
+    const updateItemPrice = React.useCallback((itemId: string, nextRawValue: string) => {
         const parsedPrice = parseRupiahNumber(nextRawValue);
         onChange({
             ...value,
@@ -421,10 +450,7 @@ function PricelistBuilder({ value, onChange, inputClass }: PricelistBuilderProps
                 item.id === itemId
                     ? {
                         ...item,
-                        prices: {
-                            ...item.prices,
-                            [columnId]: parsedPrice,
-                        },
+                        price: parsedPrice,
                     }
                     : item,
             ),
@@ -442,55 +468,21 @@ function PricelistBuilder({ value, onChange, inputClass }: PricelistBuilderProps
         <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                    <p className="text-sm font-medium">Pricelist (matrix)</p>
+                    <p className="text-sm font-medium">Pricelist</p>
                     <p className="text-[11px] text-muted-foreground">
-                        Tambah kolom dan item. Harga otomatis format Rupiah (contoh: 700.000).
+                        Tambah item dan isi harga. Harga otomatis format Rupiah (contoh: 700.000).
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <Button type="button" size="sm" variant="outline" onClick={addColumn}>
-                        + Kolom
-                    </Button>
                     <Button type="button" size="sm" variant="outline" onClick={addItem}>
                         + Item
                     </Button>
                 </div>
             </div>
 
-            {value.columns.length === 0 ? (
-                <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                    Belum ada kolom. Tambahkan minimal 1 kolom (contoh: Video, Foto, Full Day).
-                </p>
-            ) : (
-                <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">Kolom Pricelist</p>
-                    <div className="grid gap-2">
-                        {value.columns.map((column) => (
-                            <div key={column.id} className="flex items-center gap-2">
-                                <input
-                                    value={column.label}
-                                    onChange={(event) => updateColumnLabel(column.id, event.target.value)}
-                                    placeholder="Nama kolom"
-                                    className={inputClass}
-                                />
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="shrink-0 text-red-600 hover:text-red-700"
-                                    onClick={() => removeColumn(column.id)}
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
             {value.items.length === 0 ? (
                 <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                    Belum ada item. Tambah item untuk mengisi harga per kolom.
+                    Belum ada item. Tambah item untuk mengisi harga.
                 </p>
             ) : (
                 <div className="space-y-2">
@@ -515,31 +507,25 @@ function PricelistBuilder({ value, onChange, inputClass }: PricelistBuilderProps
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </div>
-                                {value.columns.length > 0 ? (
-                                    <div className="grid gap-2 sm:grid-cols-2">
-                                        {value.columns.map((column) => (
-                                            <div key={`${item.id}:${column.id}`} className="space-y-1">
-                                                <label className="text-[11px] font-medium text-muted-foreground">
-                                                    {column.label || "Kolom"}
-                                                </label>
-                                                <div className="relative">
-                                                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                                                        Rp
-                                                    </span>
-                                                    <input
-                                                        value={formatRupiahNumber(item.prices[column.id] ?? 0)}
-                                                        onChange={(event) =>
-                                                            updateItemPrice(item.id, column.id, event.target.value)
-                                                        }
-                                                        inputMode="numeric"
-                                                        className={cn(inputClass, "pl-9")}
-                                                        placeholder="0"
-                                                    />
-                                                </div>
-                                            </div>
-                                        ))}
+                                <div className="space-y-1">
+                                    <label className="text-[11px] font-medium text-muted-foreground">
+                                        Harga
+                                    </label>
+                                    <div className="relative">
+                                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                                            Rp
+                                        </span>
+                                        <input
+                                            value={formatRupiahNumber(item.price ?? 0)}
+                                            onChange={(event) =>
+                                                updateItemPrice(item.id, event.target.value)
+                                            }
+                                            inputMode="numeric"
+                                            className={cn(inputClass, "pl-9")}
+                                            placeholder="0"
+                                        />
                                     </div>
-                                ) : null}
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -579,6 +565,14 @@ export default function TeamPage() {
     const [availableTags, setAvailableTags] = React.useState<string[]>([]);
     const [availableRoles, setAvailableRoles] = React.useState<string[]>([]);
     const [availableStatuses, setAvailableStatuses] = React.useState<string[]>([]);
+    const [teamBadgeColors, setTeamBadgeColors] = React.useState<TeamBadgeColors>(
+        DEFAULT_TEAM_BADGE_COLORS,
+    );
+    const [badgeColorDialogOpen, setBadgeColorDialogOpen] = React.useState(false);
+    const [badgeColorDraft, setBadgeColorDraft] = React.useState<TeamBadgeColors>(
+        DEFAULT_TEAM_BADGE_COLORS,
+    );
+    const [savingBadgeColors, setSavingBadgeColors] = React.useState(false);
     const [totalItems, setTotalItems] = React.useState(0);
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(TEAM_COLUMN_DEFAULTS);
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
@@ -647,6 +641,10 @@ export default function TeamPage() {
             setAvailableTags(response.metadata?.tags || []);
             setAvailableRoles(response.metadata?.roles || []);
             setAvailableStatuses(response.metadata?.statuses || []);
+            setTeamBadgeColors((current) => {
+                const nextColors = normalizeTeamBadgeColors(response.metadata?.badgeColors);
+                return areTeamBadgeColorsEqual(current, nextColors) ? current : nextColors;
+            });
             setColumns((current) => {
                 const nextColumns = mergeTableColumnPreferences(
                     TEAM_COLUMN_DEFAULTS,
@@ -991,6 +989,10 @@ export default function TeamPage() {
         setColumnManagerOpen(nextOpen);
     }, []);
     React.useEffect(() => {
+        if (!badgeColorDialogOpen) return;
+        setBadgeColorDraft(normalizeTeamBadgeColors(teamBadgeColors));
+    }, [badgeColorDialogOpen, teamBadgeColors]);
+    React.useEffect(() => {
         if (!columnManagerOpen) return;
         cancelActiveResize();
     }, [cancelActiveResize, columnManagerOpen]);
@@ -1037,6 +1039,67 @@ export default function TeamPage() {
         isLoading: loading,
         isRefreshing: refreshing,
     }), [currentPage, itemsPerPage, totalItems, loading, refreshing]);
+    const roleColorLabels = React.useMemo(
+        () =>
+            normalizeTagList([
+                ...roleOptions,
+                ...availableRoles,
+                ...Object.keys(teamBadgeColors.roles),
+                ...members
+                    .map((member) => member.role)
+                    .filter((role): role is string => typeof role === "string" && role.trim().length > 0),
+            ]),
+        [availableRoles, members, teamBadgeColors.roles],
+    );
+    const tagColorLabels = React.useMemo(
+        () =>
+            normalizeTagList([
+                ...availableTags,
+                ...Object.keys(teamBadgeColors.tags),
+                ...members.flatMap((member) => member.tags),
+            ]),
+        [availableTags, members, teamBadgeColors.tags],
+    );
+
+    function updateBadgeColorDraft(
+        type: "roles" | "tags",
+        key: string,
+        rawColor: string,
+    ) {
+        const normalizedKey = key.trim();
+        if (!normalizedKey) return;
+        const normalizedColor = normalizeHexColor(rawColor);
+        setBadgeColorDraft((current) => {
+            const nextMap = { ...current[type] };
+            if (!normalizedColor) {
+                delete nextMap[normalizedKey];
+            } else {
+                nextMap[normalizedKey] = normalizedColor;
+            }
+            return { ...current, [type]: nextMap };
+        });
+    }
+
+    async function saveBadgeColors() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const normalizedPayload = normalizeTeamBadgeColors(badgeColorDraft);
+        setSavingBadgeColors(true);
+        try {
+            const { error } = await supabase
+                .from("profiles")
+                .update({ team_badge_colors: normalizedPayload })
+                .eq("id", user.id);
+
+            if (error) return;
+
+            setTeamBadgeColors(normalizedPayload);
+            setBadgeColorDialogOpen(false);
+            await invalidateProfilePublicCache();
+        } finally {
+            setSavingBadgeColors(false);
+        }
+    }
 
     async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -1174,23 +1237,42 @@ export default function TeamPage() {
                     </td>
                 );
             case "role":
-                return (
-                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                            {member.role}
-                        </span>
-                    </td>
-                );
+                {
+                    const roleStyle = buildBadgeStyle(teamBadgeColors.roles, member.role);
+                    return (
+                        <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
+                            <span
+                                style={roleStyle}
+                                className={cn(
+                                    "text-xs font-medium px-2 py-0.5 rounded-full border",
+                                    !roleStyle && "border-transparent bg-muted text-muted-foreground",
+                                )}
+                            >
+                                {member.role}
+                            </span>
+                        </td>
+                    );
+                }
             case "tags":
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4")}>
                         {member.tags.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
-                                {member.tags.map((tag, i) => (
-                                    <span key={i} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
-                                        {tag}
-                                    </span>
-                                ))}
+                                {member.tags.map((tag, i) => {
+                                    const tagStyle = buildBadgeStyle(teamBadgeColors.tags, tag);
+                                    return (
+                                        <span
+                                            key={i}
+                                            style={tagStyle}
+                                            className={cn(
+                                                "text-[10px] font-medium px-1.5 py-0.5 rounded-full border",
+                                                !tagStyle && "border-transparent bg-primary/10 text-primary",
+                                            )}
+                                        >
+                                            {tag}
+                                        </span>
+                                    );
+                                })}
                             </div>
                         ) : "-"}
                     </td>
@@ -1319,7 +1401,7 @@ export default function TeamPage() {
                                         <label className="text-sm font-medium">Google Email</label>
                                         <input name="google_email" type="email" placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
                                     </div>
-                                    <TagInput label={t("tags")} tags={addTags} setTags={setAddTags} input={tagInput} setInput={setTagInput} inputClass={inputClass} />
+                                    <TagInput label={t("tags")} tags={addTags} setTags={setAddTags} input={tagInput} setInput={setTagInput} inputClass={inputClass} badgeColors={teamBadgeColors.tags} />
                                     <PricelistBuilder
                                         value={addPricelist}
                                         onChange={setAddPricelist}
@@ -1327,6 +1409,153 @@ export default function TeamPage() {
                                     />
                                     <DialogFooter><Button type="submit">{t("simpan")}</Button></DialogFooter>
                                 </form>
+                            </DialogContent>
+                        </Dialog>
+                        <Dialog open={badgeColorDialogOpen} onOpenChange={setBadgeColorDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="outline" className="order-1 w-full lg:w-auto">
+                                    <Palette className="w-4 h-4" />
+                                    Warna Role & Tag
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[720px]">
+                                <DialogHeader>
+                                    <DialogTitle>Warna Role & Tag</DialogTitle>
+                                    <DialogDescription>
+                                        Atur warna global berdasarkan label role dan tag. Warna akan otomatis dipakai di seluruh anggota yang memiliki label sama.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-5 py-2">
+                                    <div className="space-y-2">
+                                        <h4 className="text-sm font-semibold">Role</h4>
+                                        {roleColorLabels.length > 0 ? (
+                                            <div className="space-y-2">
+                                                {roleColorLabels.map((roleLabel) => {
+                                                    const currentColor = resolveHexColor(
+                                                        badgeColorDraft.roles[roleLabel],
+                                                        "#000000",
+                                                    );
+                                                    const previewStyle = buildBadgeStyle(
+                                                        badgeColorDraft.roles,
+                                                        roleLabel,
+                                                    );
+                                                    return (
+                                                        <div key={`role:${roleLabel}`} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
+                                                            <div className="min-w-0 flex-1">
+                                                                <span
+                                                                    style={previewStyle}
+                                                                    className={cn(
+                                                                        "inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+                                                                        !previewStyle && "border-transparent bg-muted text-muted-foreground",
+                                                                    )}
+                                                                >
+                                                                    {roleLabel}
+                                                                </span>
+                                                            </div>
+                                                            <input
+                                                                type="color"
+                                                                value={currentColor}
+                                                                onChange={(event) =>
+                                                                    updateBadgeColorDraft("roles", roleLabel, event.target.value)
+                                                                }
+                                                                className="h-9 w-10 cursor-pointer rounded-md border p-0.5"
+                                                            />
+                                                            <input
+                                                                value={badgeColorDraft.roles[roleLabel] || ""}
+                                                                onChange={(event) =>
+                                                                    updateBadgeColorDraft("roles", roleLabel, event.target.value)
+                                                                }
+                                                                placeholder="#000000"
+                                                                className={cn(inputClass, "h-9 w-28")}
+                                                            />
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                onClick={() => updateBadgeColorDraft("roles", roleLabel, "")}
+                                                            >
+                                                                Reset
+                                                            </Button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                                                Belum ada role untuk diatur warnanya.
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <h4 className="text-sm font-semibold">Tag</h4>
+                                        {tagColorLabels.length > 0 ? (
+                                            <div className="space-y-2">
+                                                {tagColorLabels.map((tagLabel) => {
+                                                    const currentColor = resolveHexColor(
+                                                        badgeColorDraft.tags[tagLabel],
+                                                        "#000000",
+                                                    );
+                                                    const previewStyle = buildBadgeStyle(
+                                                        badgeColorDraft.tags,
+                                                        tagLabel,
+                                                    );
+                                                    return (
+                                                        <div key={`tag:${tagLabel}`} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
+                                                            <div className="min-w-0 flex-1">
+                                                                <span
+                                                                    style={previewStyle}
+                                                                    className={cn(
+                                                                        "inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+                                                                        !previewStyle && "border-transparent bg-primary/10 text-primary",
+                                                                    )}
+                                                                >
+                                                                    {tagLabel}
+                                                                </span>
+                                                            </div>
+                                                            <input
+                                                                type="color"
+                                                                value={currentColor}
+                                                                onChange={(event) =>
+                                                                    updateBadgeColorDraft("tags", tagLabel, event.target.value)
+                                                                }
+                                                                className="h-9 w-10 cursor-pointer rounded-md border p-0.5"
+                                                            />
+                                                            <input
+                                                                value={badgeColorDraft.tags[tagLabel] || ""}
+                                                                onChange={(event) =>
+                                                                    updateBadgeColorDraft("tags", tagLabel, event.target.value)
+                                                                }
+                                                                placeholder="#000000"
+                                                                className={cn(inputClass, "h-9 w-28")}
+                                                            />
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                onClick={() => updateBadgeColorDraft("tags", tagLabel, "")}
+                                                            >
+                                                                Reset
+                                                            </Button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                                                Belum ada tag untuk diatur warnanya.
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setBadgeColorDialogOpen(false)}>
+                                        Batal
+                                    </Button>
+                                    <Button onClick={() => void saveBadgeColors()} disabled={savingBadgeColors}>
+                                        {savingBadgeColors ? "Menyimpan..." : "Simpan Warna"}
+                                    </Button>
+                                </DialogFooter>
                             </DialogContent>
                         </Dialog>
                         {!loading && totalItems > 0 ? (
@@ -1439,7 +1668,9 @@ export default function TeamPage() {
                 <>
                     {/* Mobile Cards */}
                     <div className="md:hidden space-y-3">
-                        {members.map((member) => (
+                        {members.map((member) => {
+                            const roleStyle = buildBadgeStyle(teamBadgeColors.roles, member.role);
+                            return (
                             <div key={member.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium shrink-0">
@@ -1447,7 +1678,15 @@ export default function TeamPage() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="font-semibold">{member.name}</p>
-                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{member.role}</span>
+                                        <span
+                                            style={roleStyle}
+                                            className={cn(
+                                                "text-xs font-medium px-2 py-0.5 rounded-full border",
+                                                !roleStyle && "border-transparent bg-muted text-muted-foreground",
+                                            )}
+                                        >
+                                            {member.role}
+                                        </span>
                                     </div>
                                     <button onClick={() => handleToggleStatus(member)}
                                         className={`text-xs font-medium px-2 py-0.5 rounded-full cursor-pointer ${member.status === "active"
@@ -1462,9 +1701,46 @@ export default function TeamPage() {
                                         .map((column) => (
                                             <div key={column.id} className="flex items-start justify-between gap-3">
                                                 <span className="text-muted-foreground">{column.label}</span>
-                                                <span className="max-w-[180px] truncate text-right text-foreground" title={String(renderMobileValue(member, column) ?? "-")}>
-                                                    {renderMobileValue(member, column)}
-                                                </span>
+                                                {column.id === "role" ? (
+                                                    (() => {
+                                                        const roleStyle = buildBadgeStyle(teamBadgeColors.roles, member.role);
+                                                        return (
+                                                            <span
+                                                                style={roleStyle}
+                                                                className={cn(
+                                                                    "text-xs font-medium px-2 py-0.5 rounded-full border",
+                                                                    !roleStyle && "border-transparent bg-muted text-muted-foreground",
+                                                                )}
+                                                            >
+                                                                {member.role}
+                                                            </span>
+                                                        );
+                                                    })()
+                                                ) : column.id === "tags" ? (
+                                                    <div className="flex max-w-[180px] flex-wrap justify-end gap-1">
+                                                        {member.tags.length > 0 ? member.tags.map((tag, index) => {
+                                                            const tagStyle = buildBadgeStyle(teamBadgeColors.tags, tag);
+                                                            return (
+                                                                <span
+                                                                    key={`${member.id}:${tag}:${index}`}
+                                                                    style={tagStyle}
+                                                                    className={cn(
+                                                                        "text-[10px] font-medium px-1.5 py-0.5 rounded-full border",
+                                                                        !tagStyle && "border-transparent bg-primary/10 text-primary",
+                                                                    )}
+                                                                >
+                                                                    {tag}
+                                                                </span>
+                                                            );
+                                                        }) : (
+                                                            <span className="text-right text-foreground">-</span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="max-w-[180px] truncate text-right text-foreground" title={String(renderMobileValue(member, column) ?? "-")}>
+                                                        {renderMobileValue(member, column)}
+                                                    </span>
+                                                )}
                                             </div>
                                         ))}
                                 </div>
@@ -1489,7 +1765,8 @@ export default function TeamPage() {
                                     </ActionIconButton>
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                     <div className="md:hidden">
                         <TablePagination
@@ -1584,7 +1861,7 @@ export default function TeamPage() {
                                 <label className="text-sm font-medium">Google Email</label>
                                 <input name="google_email" type="email" defaultValue={editingMember.google_email || ""} placeholder={tt("googleEmailPlaceholder")} className={inputClass} />
                             </div>
-                            <TagInput label={t("tags")} tags={editTags} setTags={setEditTags} input={editTagInput} setInput={setEditTagInput} inputClass={inputClass} />
+                            <TagInput label={t("tags")} tags={editTags} setTags={setEditTags} input={editTagInput} setInput={setEditTagInput} inputClass={inputClass} badgeColors={teamBadgeColors.tags} />
                             <PricelistBuilder
                                 value={editPricelist}
                                 onChange={setEditPricelist}

@@ -437,8 +437,12 @@ function PaymentProofManager({
     helperText,
     uploadLabel,
     uploading,
+    deleting,
     canUpload,
+    canDelete,
+    deleteLabel,
     onUpload,
+    onDelete,
     onError,
 }: {
     title: string;
@@ -450,8 +454,12 @@ function PaymentProofManager({
     helperText?: string;
     uploadLabel: string;
     uploading: boolean;
+    deleting?: boolean;
     canUpload: boolean;
+    canDelete?: boolean;
+    deleteLabel?: string;
     onUpload: (file: File) => Promise<boolean>;
+    onDelete?: () => void;
     onError: (message: string) => void;
 }) {
     const tBookingDetail = useTranslations("BookingDetail");
@@ -545,6 +553,21 @@ function PaymentProofManager({
                     alt={alt}
                     linkLabel={linkLabel}
                 />
+                {canDelete && onDelete ? (
+                    <div className="flex justify-end">
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={onDelete}
+                            disabled={deleting}
+                        >
+                            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            {deleteLabel || tBookingDetail("deleteProof")}
+                        </Button>
+                    </div>
+                ) : null}
                 {uploadForm}
             </div>
         );
@@ -680,6 +703,11 @@ export default function BookingDetailPage() {
     }>({ open: false, title: "", message: "" });
     const [proofUploadsEnabled, setProofUploadsEnabled] = React.useState(true);
     const [uploadingProofStage, setUploadingProofStage] = React.useState<BookingProofStage | null>(null);
+    const [deletingProofStage, setDeletingProofStage] = React.useState<BookingProofStage | null>(null);
+    const [deleteProofDialog, setDeleteProofDialog] = React.useState<{
+        open: boolean;
+        stage: BookingProofStage | null;
+    }>({ open: false, stage: null });
     const { canWriteBookings } = useBookingWriteAccess();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const currentDpValue = booking?.dp_paid ?? 0;
@@ -851,6 +879,77 @@ export default function BookingDetailPage() {
             setUploadingProofStage(null);
         }
     }, [booking, requireBookingWrite, showFeedback, showSuccessToast, tBookingDetail, warningTitle]);
+    const requestDeletePaymentProof = React.useCallback((stage: BookingProofStage) => {
+        if (!requireBookingWrite()) return;
+        setDeleteProofDialog({ open: true, stage });
+    }, [requireBookingWrite]);
+    const handleDeletePaymentProof = React.useCallback(async () => {
+        if (!requireBookingWrite()) return;
+        if (!booking || !deleteProofDialog.stage) return;
+
+        const stage = deleteProofDialog.stage;
+        setDeleteProofDialog({ open: false, stage: null });
+        setDeletingProofStage(stage);
+        try {
+            const response = await fetch(
+                `/api/internal/bookings/${booking.id}/payment-proof?stage=${encodeURIComponent(stage)}`,
+                { method: "DELETE" },
+            );
+            const payload = (
+                response.headers.get("content-type")?.includes("application/json")
+                    ? await response.json().catch(() => null)
+                    : null
+            ) as {
+                success?: boolean;
+                error?: string;
+                warning?: string | null;
+            } | null;
+
+            if (!response.ok || payload?.success !== true) {
+                showFeedback(payload?.error || tBookingDetail("failedDeletePaymentProof"), warningTitle);
+                return;
+            }
+
+            setBooking((prev) => {
+                if (!prev) return prev;
+                if (stage === "final") {
+                    return {
+                        ...prev,
+                        final_payment_proof_url: null,
+                        final_payment_proof_drive_file_id: null,
+                    };
+                }
+                return {
+                    ...prev,
+                    payment_proof_url: null,
+                    payment_proof_drive_file_id: null,
+                };
+            });
+
+            if (payload?.warning) {
+                showFeedback(payload.warning, warningTitle);
+                return;
+            }
+
+            showSuccessToast(
+                stage === "final"
+                    ? tBookingDetail("finalProofDeleted")
+                    : tBookingDetail("initialProofDeleted"),
+            );
+        } catch {
+            showFeedback(tBookingDetail("failedDeletePaymentProof"), warningTitle);
+        } finally {
+            setDeletingProofStage(null);
+        }
+    }, [
+        booking,
+        deleteProofDialog.stage,
+        requireBookingWrite,
+        showFeedback,
+        showSuccessToast,
+        tBookingDetail,
+        warningTitle,
+    ]);
 
     const handleSyncFastpikManual = React.useCallback(async () => {
         if (!requireBookingWrite()) return;
@@ -2992,8 +3091,12 @@ export default function BookingDetailPage() {
                     helperText="Upload atau ganti bukti pembayaran awal dari admin."
                     uploadLabel={booking.payment_proof_url ? "Ganti Bukti Awal" : "Upload Bukti Awal"}
                     uploading={uploadingProofStage === "initial"}
+                    deleting={deletingProofStage === "initial"}
                     canUpload={proofUploadsEnabled && canWriteBookings}
+                    canDelete={Boolean(booking.payment_proof_url) && canWriteBookings}
+                    deleteLabel={tBookingDetail("deleteInitialProof")}
                     onUpload={(file) => handleAdminPaymentProofUpload("initial", file)}
+                    onDelete={() => requestDeletePaymentProof("initial")}
                     onError={(message) => showFeedback(message, warningTitle)}
                 />
             )}
@@ -3009,8 +3112,12 @@ export default function BookingDetailPage() {
                     helperText={tBookingDetail("finalPaymentProofHelper")}
                     uploadLabel={booking.final_payment_proof_url ? "Ganti Bukti Final" : "Upload Bukti Final"}
                     uploading={uploadingProofStage === "final"}
+                    deleting={deletingProofStage === "final"}
                     canUpload={proofUploadsEnabled && canWriteBookings}
+                    canDelete={Boolean(booking.final_payment_proof_url) && canWriteBookings}
+                    deleteLabel={tBookingDetail("deleteFinalProof")}
                     onUpload={(file) => handleAdminPaymentProofUpload("final", file)}
+                    onDelete={() => requestDeletePaymentProof("final")}
                     onError={(message) => showFeedback(message, warningTitle)}
                 />
             )}
@@ -3482,6 +3589,31 @@ export default function BookingDetailPage() {
                 title={feedbackDialog.title}
                 message={feedbackDialog.message}
                 confirmLabel="OK"
+            />
+
+            <ActionConfirmDialog
+                open={deleteProofDialog.open}
+                onOpenChange={(open) =>
+                    setDeleteProofDialog((prev) => ({
+                        open,
+                        stage: open ? prev.stage : null,
+                    }))
+                }
+                title={tBookingDetail("deleteProofConfirmTitle")}
+                message={
+                    deleteProofDialog.stage === "final"
+                        ? tBookingDetail("deleteFinalProofConfirmMessage")
+                        : tBookingDetail("deleteInitialProofConfirmMessage")
+                }
+                cancelLabel={tBookingDetail("cancelAction")}
+                confirmLabel={
+                    deletingProofStage
+                        ? tBookingDetail("deletingProof")
+                        : tBookingDetail("confirmDeleteProof")
+                }
+                onConfirm={() => { void handleDeletePaymentProof(); }}
+                confirmVariant="destructive"
+                loading={deletingProofStage !== null}
             />
 
             <ActionConfirmDialog

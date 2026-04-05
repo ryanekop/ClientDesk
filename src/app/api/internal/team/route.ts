@@ -5,6 +5,8 @@ import { requireRouteUser } from "@/lib/pagination/route-user";
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 10;
 const MAX_PER_PAGE = 100;
+const HEX_COLOR_6 = /^#([0-9a-f]{6})$/i;
+const HEX_COLOR_3 = /^#([0-9a-f]{3})$/i;
 
 function parsePositiveInt(value: string | null, fallback: number) {
   const parsed = Number(value);
@@ -65,6 +67,41 @@ function parseFilterList(
   return [legacySingleValue];
 }
 
+function normalizeHexColor(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const prefixed = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+  const shortMatch = prefixed.match(HEX_COLOR_3);
+  if (shortMatch) {
+    const [r, g, b] = shortMatch[1].toUpperCase().split("");
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+
+  const longMatch = prefixed.match(HEX_COLOR_6);
+  if (longMatch) {
+    return `#${longMatch[1].toUpperCase()}`;
+  }
+
+  return null;
+}
+
+function normalizeBadgeColorRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {} as Record<string, string>;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([key, color]) => [key.trim(), normalizeHexColor(color)] as const)
+      .filter(
+        (entry): entry is [string, string] =>
+          entry[0].length > 0 && typeof entry[1] === "string",
+      ),
+  );
+}
+
 export async function GET(request: NextRequest) {
   const { errorResponse, supabase, user } = await requireRouteUser();
   if (errorResponse || !user) {
@@ -117,7 +154,7 @@ export async function GET(request: NextRequest) {
     supabase.from("freelance").select("tags, role, status").eq("user_id", user.id),
     supabase
       .from("profiles")
-      .select("table_column_preferences")
+      .select("table_column_preferences, team_badge_colors")
       .eq("id", user.id)
       .single(),
   ]);
@@ -177,8 +214,23 @@ export async function GET(request: NextRequest) {
     (
       profileResult.data as {
         table_column_preferences?: { team?: unknown } | null;
+        team_badge_colors?: unknown;
       } | null
     )?.table_column_preferences?.team || null;
+  const teamBadgeColorsRaw = (
+    profileResult.data as {
+      team_badge_colors?: unknown;
+    } | null
+  )?.team_badge_colors;
+  const teamBadgeColors =
+    teamBadgeColorsRaw &&
+    typeof teamBadgeColorsRaw === "object" &&
+    !Array.isArray(teamBadgeColorsRaw)
+      ? (teamBadgeColorsRaw as {
+          roles?: unknown;
+          tags?: unknown;
+        })
+      : null;
 
   return NextResponse.json({
     items: (listResult.data || []).map((member) => ({
@@ -197,6 +249,10 @@ export async function GET(request: NextRequest) {
       roles: roleOptions,
       statuses: statusOptions,
       tableColumnPreferences: teamPreferences,
+      badgeColors: {
+        roles: normalizeBadgeColorRecord(teamBadgeColors?.roles),
+        tags: normalizeBadgeColorRecord(teamBadgeColors?.tags),
+      },
     },
   });
 }
