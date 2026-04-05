@@ -1180,6 +1180,7 @@
         "resetSuccess": "Booking form settings reset to default successfully.",
         "urlCopied": "Booking form URL copied.",
         "failedCopyUrl": "Failed to copy booking form URL.",
+        "maxFileSize5mb": "Maximum file size is 5MB.",
         "failedUploadQris": "Failed to upload QRIS.",
         "uploadQrisSuccess": "QRIS uploaded successfully.",
         "failedDeleteQris": "Failed to delete QRIS.",

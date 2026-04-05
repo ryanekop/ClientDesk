@@ -88,6 +88,7 @@ import {
     isShowAllPackagesEventType,
     normalizeEventTypeName,
 } from "@/lib/event-type-config";
+import { MAX_GOOGLE_UPLOAD_BYTES } from "@/lib/security/public-upload";
 import { normalizeSafeExternalUrl } from "@/utils/safe-link";
 import {
     buildEditableSpecialOfferSnapshot,
@@ -476,7 +477,7 @@ function PaymentProofManager({
             return;
         }
 
-        if (nextFile.size > 5 * 1024 * 1024) {
+        if (nextFile.size > MAX_GOOGLE_UPLOAD_BYTES) {
             setFile(null);
             setPreviewUrl(null);
             setResetKey((current) => current + 1);
@@ -799,11 +800,23 @@ export default function BookingDetailPage() {
                 method: "POST",
                 body: formData,
             });
-            const payload = await response.json().catch(() => null);
+            const payload = (
+                response.headers.get("content-type")?.includes("application/json")
+                    ? await response.json().catch(() => null)
+                    : null
+            ) as {
+                success?: boolean;
+                error?: string;
+                code?: string;
+                proofUrl?: string | null;
+                driveFileId?: string | null;
+            } | null;
 
             if (!response.ok || payload?.success !== true) {
                 showFeedback(
-                    payload?.error || tBookingDetail("failedUploadPaymentProof"),
+                    response.status === 413 || payload?.code === "FILE_TOO_LARGE"
+                        ? tBookingDetail("maxFileSize5mb")
+                        : payload?.error || tBookingDetail("failedUploadPaymentProof"),
                     warningTitle,
                 );
                 return false;
@@ -1611,6 +1624,11 @@ export default function BookingDetailPage() {
         if (!requireBookingWrite()) return;
         const file = e.target.files?.[0];
         if (!file || !booking) return;
+        if (file.size > MAX_GOOGLE_UPLOAD_BYTES) {
+            showFeedback(tBookingDetail("maxFileSize5mb"), warningTitle);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            return;
+        }
         setUploadingFile(true);
         try {
             const formData = new FormData();
@@ -1623,15 +1641,38 @@ export default function BookingDetailPage() {
                 method: "POST",
                 body: formData,
             });
-            const result = await res.json();
-            if (result.success && result.fileUrl) {
-                setUploadedFiles(prev => [...prev, { name: result.fileName, url: result.fileUrl, fileId: result.fileId }]);
+            const result = (
+                res.headers.get("content-type")?.includes("application/json")
+                    ? await res.json().catch(() => null)
+                    : null
+            ) as {
+                success?: boolean;
+                error?: string;
+                code?: string;
+                fileUrl?: string | null;
+                fileName?: string;
+                fileId?: string | null;
+                folderUrl?: string | null;
+            } | null;
+            if (res.ok && result?.success && result.fileUrl) {
+                setUploadedFiles(prev => [
+                    ...prev,
+                    {
+                        name: result.fileName || file.name,
+                        url: result.fileUrl,
+                        fileId: result.fileId || undefined,
+                    },
+                ]);
                 // Update drive_folder_url if it was set by the API
                 if (!booking.drive_folder_url && result.folderUrl) {
                     setBooking(prev => prev ? { ...prev, drive_folder_url: result.folderUrl } : prev);
                 }
             } else {
-                showFeedback(result.error || tBookingDetail("failedUploadFile"));
+                showFeedback(
+                    res.status === 413 || result?.code === "FILE_TOO_LARGE"
+                        ? tBookingDetail("maxFileSize5mb")
+                        : result?.error || tBookingDetail("failedUploadFile"),
+                );
             }
         } catch {
             showFeedback(tBookingDetail("failedUploadFile"));

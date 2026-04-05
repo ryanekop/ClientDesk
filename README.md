@@ -35,6 +35,18 @@ Emergency toggle for security headers (set in `.env.local` and redeploy):
 
 Use `DISABLE_SECURITY_HEADERS=true` only for incident recovery, then switch it back off.
 
+## Upload Limit (VPS + Nginx)
+
+App-level limit for Google-related uploads (payment proof, QRIS, client files) is **5MB**.
+
+If you deploy behind Nginx, set proxy body limit above 5MB to avoid multipart overhead false-rejects:
+
+```nginx
+client_max_body_size 8M;
+```
+
+After changing Nginx config, reload/restart Nginx.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

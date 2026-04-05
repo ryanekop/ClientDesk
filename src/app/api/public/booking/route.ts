@@ -65,6 +65,7 @@ import {
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 import { resolveNormalizedLayoutFromStoredSections } from "@/lib/form-sections";
 import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
+import { apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
 import { resolvePublicOrigin } from "@/lib/auth/public-origin";
 import { buildBookingDetailLink } from "@/lib/booking-detail-link";
@@ -480,7 +481,9 @@ export async function POST(request: NextRequest) {
         } = body;
 
         if (paymentProofFile) {
-            const fileValidation = validatePublicPaymentProofFile(paymentProofFile);
+            const fileValidation = validatePublicPaymentProofFile(paymentProofFile, {
+                fileTooLargeMessage: apiText(request, "maxFile5mb"),
+            });
             if (!fileValidation.valid) {
                 return securityErrorResponse({
                     message: fileValidation.message,

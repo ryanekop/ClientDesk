@@ -14,6 +14,7 @@ import {
 } from "@/lib/final-settlement";
 import { uploadPaymentProofToDrive } from "@/lib/payment-proof-drive";
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
+import { apiText } from "@/lib/i18n/api-errors";
 import { securityErrorResponse } from "@/lib/security/error-response";
 import { validatePublicPaymentProofFile } from "@/lib/security/public-upload";
 import { enforceRateLimit } from "@/lib/security/rate-limit";
@@ -82,7 +83,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (paymentProofFile) {
-      const fileValidation = validatePublicPaymentProofFile(paymentProofFile);
+      const fileValidation = validatePublicPaymentProofFile(paymentProofFile, {
+        fileTooLargeMessage: apiText(request, "maxFile5mb"),
+      });
       if (!fileValidation.valid) {
         return securityErrorResponse({
           message: fileValidation.message,

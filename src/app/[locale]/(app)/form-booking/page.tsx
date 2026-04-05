@@ -69,6 +69,7 @@ import {
   isMainClientDeskDomain,
   normalizeVendorSlug,
 } from "@/lib/booking-url-mode";
+import { MAX_GOOGLE_UPLOAD_BYTES } from "@/lib/security/public-upload";
 const ALL_EVENT_TYPES = getBuiltInEventTypes();
 
 type FormSectionsByEventType = Record<string, FormLayoutItem[]>;
@@ -1096,6 +1097,12 @@ export default function FormBookingPage() {
 
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_GOOGLE_UPLOAD_BYTES) {
+      setSavedMsg(t("maxFileSize5mb"));
+      setSaveMessageTone("error");
+      if (qrisInputRef.current) qrisInputRef.current.value = "";
+      return;
+    }
 
     setQrisUploading(true);
     setSaveMessageTone("success");
@@ -1107,10 +1114,25 @@ export default function FormBookingPage() {
         method: "POST",
         body: formData,
       });
-      const result = await res.json();
+      const result = (
+        res.headers.get("content-type")?.includes("application/json")
+          ? await res.json().catch(() => null)
+          : null
+      ) as { success?: boolean; error?: string; code?: string; qrisImageUrl?: string | null } | null;
 
-      if (!result.success) {
-        setSavedMsg(result.error || t("failedUploadQris"));
+      if (!res.ok) {
+        if (res.status === 413 || result?.code === "FILE_TOO_LARGE") {
+          setSavedMsg(t("maxFileSize5mb"));
+          setSaveMessageTone("error");
+          return;
+        }
+        setSavedMsg(result?.error || t("failedUploadQris"));
+        setSaveMessageTone("error");
+        return;
+      }
+
+      if (!result?.success) {
+        setSavedMsg(result?.error || t("failedUploadQris"));
         setSaveMessageTone("error");
         return;
       }

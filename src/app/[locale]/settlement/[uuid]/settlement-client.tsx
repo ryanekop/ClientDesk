@@ -37,6 +37,7 @@ import {
   type BookingServiceSelection,
 } from "@/lib/booking-services";
 import { buildBookingWhatsAppTemplateVars } from "@/lib/booking-whatsapp-template-vars";
+import { MAX_GOOGLE_UPLOAD_BYTES } from "@/lib/security/public-upload";
 
 type BookingData = {
   bookingCode: string;
@@ -291,7 +292,7 @@ export default function SettlementClient({
       setProofPreview(null);
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > MAX_GOOGLE_UPLOAD_BYTES) {
       setError(t("errorFileTooLarge"));
       setProofFile(null);
       setProofPreview(null);
@@ -346,9 +347,23 @@ export default function SettlementClient({
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
-      if (!data.success) {
-        setError(data.error || t("submitFailed"));
+      const data = (
+        res.headers.get("content-type")?.includes("application/json")
+          ? await res.json().catch(() => null)
+          : null
+      ) as { success?: boolean; error?: string; code?: string } | null;
+
+      if (!res.ok) {
+        if (res.status === 413 || data?.code === "FILE_TOO_LARGE") {
+          setError(t("errorFileTooLarge"));
+          return;
+        }
+        setError(data?.error || t("submitFailed"));
+        return;
+      }
+
+      if (!data?.success) {
+        setError(data?.error || t("submitFailed"));
       } else {
         setSubmitted(true);
         setSubmittedPaymentMethod(selectedPaymentMethod);

@@ -1180,6 +1180,7 @@
         "resetSuccess": "Pengaturan form booking berhasil direset ke default.",
         "urlCopied": "URL form booking berhasil disalin.",
         "failedCopyUrl": "Gagal menyalin URL form.",
+        "maxFileSize5mb": "Ukuran file maksimal 5MB.",
         "failedUploadQris": "Gagal upload QRIS.",
         "uploadQrisSuccess": "QRIS berhasil diupload.",
         "failedDeleteQris": "Gagal menghapus QRIS.",

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiText } from "@/lib/i18n/api-errors";
 import { createClient } from "@/utils/supabase/server";
+import { securityErrorResponse } from "@/lib/security/error-response";
+import { isGoogleUploadFileTooLarge } from "@/lib/security/public-upload";
 import {
     buildDriveFileHdUrl,
     deleteFileFromDrive,
@@ -52,6 +54,14 @@ export async function POST(request: NextRequest) {
                 { success: false, error: apiText(request, "qrisFileNotFound") },
                 { status: 400 },
             );
+        }
+
+        if (isGoogleUploadFileTooLarge(file)) {
+            return securityErrorResponse({
+                message: apiText(request, "maxFile5mb"),
+                code: "FILE_TOO_LARGE",
+                status: 413,
+            });
         }
 
         if (!file.type.startsWith("image/")) {

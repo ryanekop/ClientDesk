@@ -103,6 +103,7 @@ import {
   filterServicesForBookingSelection,
   isCityScopedBookingEventType,
 } from "@/lib/service-availability";
+import { MAX_GOOGLE_UPLOAD_BYTES } from "@/lib/security/public-upload";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -184,7 +185,7 @@ const COUNTRY_CODES = [
   { code: "+673", flag: "🇧🇳", name: "Brunei" },
 ];
 
-const PAYMENT_PROOF_MAX_BYTES = 5 * 1024 * 1024;
+const PAYMENT_PROOF_MAX_BYTES = MAX_GOOGLE_UPLOAD_BYTES;
 const PAYMENT_PROOF_IMAGE_COMPRESSION_STEPS = [
   { maxSize: 2200, quality: 0.88 },
   { maxSize: 1800, quality: 0.82 },
@@ -691,11 +692,7 @@ export function BookingFormClient({
     }
 
     if (nextFile.size > PAYMENT_PROOF_MAX_BYTES) {
-      setError(
-        localeCode === "en"
-          ? "File is too large. Please upload an image under 5MB."
-          : "File terlalu besar. Silakan upload gambar di bawah 5MB.",
-      );
+      setError(t("errorFileTooLarge"));
       setProofFile(null);
       setProofPreview(null);
       return;
@@ -1089,11 +1086,7 @@ export function BookingFormClient({
 
       if (!res.ok) {
         if (res.status === 413) {
-          setError(
-            localeCode === "en"
-              ? "Upload failed because the file is too large. Please upload a smaller image."
-              : "Upload gagal karena ukuran file terlalu besar. Silakan upload gambar yang lebih kecil.",
-          );
+          setError(t("errorFileTooLarge"));
           return;
         }
         if (payload?.code === SPECIAL_LINK_EXPIRED_ERROR_CODE) {

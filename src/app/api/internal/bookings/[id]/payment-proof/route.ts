@@ -8,6 +8,8 @@ import { apiText } from "@/lib/i18n/api-errors";
 import { uploadPaymentProofToDrive } from "@/lib/payment-proof-drive";
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 import { requireRouteUser } from "@/lib/pagination/route-user";
+import { securityErrorResponse } from "@/lib/security/error-response";
+import { isGoogleUploadFileTooLarge } from "@/lib/security/public-upload";
 import { deleteFileFromDrive } from "@/utils/google/drive";
 import { clearGoogleDriveConnection } from "@/lib/google-calendar-reauth";
 import {
@@ -15,7 +17,6 @@ import {
   isGoogleInvalidGrantError,
 } from "@/lib/google-oauth-error";
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ACCEPTED_PROOF_TYPES = new Set(["application/pdf"]);
 
 type BookingProofStage = "initial" | "final";
@@ -93,18 +94,20 @@ export async function POST(
       );
     }
 
-    if (fileValue.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { success: false, error: apiText(request, "maxFile5mb") },
-        { status: 400 },
-      );
+    if (isGoogleUploadFileTooLarge(fileValue)) {
+      return securityErrorResponse({
+        message: apiText(request, "maxFile5mb"),
+        code: "FILE_TOO_LARGE",
+        status: 413,
+      });
     }
 
     if (!isAcceptedProofFile(fileValue)) {
-      return NextResponse.json(
-        { success: false, error: apiText(request, "unsupportedProofFormat") },
-        { status: 400 },
-      );
+      return securityErrorResponse({
+        message: apiText(request, "unsupportedProofFormat"),
+        code: "UNSUPPORTED_FILE_TYPE",
+        status: 400,
+      });
     }
 
     const [{ data: booking, error: bookingError }, { data: profile, error: profileError }] =

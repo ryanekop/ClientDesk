@@ -5,6 +5,8 @@ import {
 } from "@/lib/booking-write-access.server";
 import { apiText } from "@/lib/i18n/api-errors";
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
+import { securityErrorResponse } from "@/lib/security/error-response";
+import { isGoogleUploadFileTooLarge } from "@/lib/security/public-upload";
 import { createClient } from "@/utils/supabase/server";
 import { findOrCreateNestedPath, uploadFileToDrive } from "@/utils/google/drive";
 import { buildDriveFolderPathSegments } from "@/lib/drive-folder-structure";
@@ -67,13 +69,22 @@ export async function POST(request: NextRequest) {
         const clientName = formData.get("clientName") as string;
         const bookingCode = formData.get("bookingCode") as string;
         const eventType = formData.get("eventType") as string;
-        const file = formData.get("file") as File;
+        const fileValue = formData.get("file");
 
-        if (!bookingId || !file) {
+        if (!bookingId || !(fileValue instanceof File)) {
             return NextResponse.json(
                 { success: false, error: apiText(request, "missingRequiredData") },
                 { status: 400 },
             );
+        }
+        const file = fileValue;
+
+        if (isGoogleUploadFileTooLarge(file)) {
+            return securityErrorResponse({
+                message: apiText(request, "maxFile5mb"),
+                code: "FILE_TOO_LARGE",
+                status: 413,
+            });
         }
 
         const { data: bookingRecord } = await supabase
