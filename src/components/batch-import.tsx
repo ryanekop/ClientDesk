@@ -30,6 +30,7 @@ import {
   LocationPortalAutocomplete,
   type LocationPortalSelectionMeta,
 } from "@/components/ui/location-portal-autocomplete";
+import { ServiceAutocomplete } from "@/components/ui/service-autocomplete";
 import { UniversityAutocomplete } from "@/components/ui/university-autocomplete";
 import { buildUniversityDisplayName } from "@/lib/university-references";
 import { cn } from "@/lib/utils";
@@ -161,7 +162,13 @@ type BatchColumn = {
   required?: boolean;
   advanced?: boolean;
   internal?: boolean;
-  inputType?: "text" | "university" | "location" | "freelancer";
+  inputType?:
+    | "text"
+    | "university"
+    | "location"
+    | "freelancer"
+    | "serviceMain"
+    | "serviceAddon";
   normalizeMode?: "whatsapp" | "date" | "time";
 };
 
@@ -176,7 +183,13 @@ const TABLE_COLUMNS: BatchColumn[] = [
     normalizeMode: "whatsapp",
   },
   { key: "event_type", label: "Event", required: true, placeholder: "Wedding / Wisuda / ..." },
-  { key: "main_services", label: "Paket Utama", required: true, placeholder: "Nama paket" },
+  {
+    key: "main_services",
+    label: "Paket Utama",
+    required: true,
+    placeholder: "Nama paket",
+    inputType: "serviceMain",
+  },
   {
     key: "extra.universitas",
     label: "Universitas",
@@ -205,7 +218,13 @@ const TABLE_COLUMNS: BatchColumn[] = [
   { key: "location", label: "Lokasi", placeholder: "Lokasi utama", inputType: "location" },
   { key: "dp_paid", label: "DP", required: true, placeholder: "1000000" },
   { key: "status", label: "Status", placeholder: "Default otomatis" , advanced: true },
-  { key: "addon_services", label: "Add-on", placeholder: "Nama addon 1 | addon 2", advanced: true },
+  {
+    key: "addon_services",
+    label: "Add-on",
+    placeholder: "Nama addon 1 | addon 2",
+    advanced: true,
+    inputType: "serviceAddon",
+  },
   {
     key: "freelancers",
     label: "Freelancer",
@@ -844,17 +863,17 @@ export function BatchImportButton({
           resetState();
         }}
       >
-        <DialogContent className="w-[95vw] max-w-[960px] max-h-[92vh] overflow-y-auto overflow-x-hidden">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="w-[95vw] max-w-[960px] max-h-[92vh] min-w-0 overflow-y-auto overflow-x-hidden">
+          <DialogHeader className="w-full max-w-full min-w-0">
+            <DialogTitle className="flex min-w-0 items-center gap-2 break-words">
               <Zap className="w-5 h-5" /> {ui.dialogTitle}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="whitespace-normal break-words">
               {ui.dialogDescription}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex min-w-0 items-center gap-2 py-2">
+          <div className="flex w-full max-w-full min-w-0 items-center gap-2 py-2">
             {steps.map((item, index) => (
               <React.Fragment key={item.key}>
                 <div
@@ -886,17 +905,17 @@ export function BatchImportButton({
             ))}
           </div>
 
-          <div className="space-y-4 min-w-0">
+          <div className="w-full max-w-full min-w-0 space-y-4">
             {fatalError && (
-              <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
+              <div className="flex w-full max-w-full min-w-0 items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>{fatalError}</span>
+                <span className="whitespace-normal break-words">{fatalError}</span>
               </div>
             )}
 
             {step === "upload" && (
               <>
-                <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="flex w-full max-w-full min-w-0 flex-wrap items-center justify-end gap-2">
                   <Button
                     type="button"
                     variant="outline"
@@ -908,22 +927,22 @@ export function BatchImportButton({
                   </Button>
                 </div>
 
-                <div className="rounded-xl border bg-card overflow-hidden min-w-0">
-                  <div className="border-b bg-muted/30 px-4 py-3 text-sm">
+                <div className="w-full max-w-full min-w-0 overflow-hidden rounded-xl border bg-card">
+                  <div className="min-w-0 border-b bg-muted/30 px-4 py-3 text-sm">
                     <p className="font-medium">Batch Mode Tabel</p>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="mt-1 whitespace-normal break-words text-xs text-muted-foreground">
                       Paste langsung dari Excel/Google Sheets ke sel tabel (tanpa header). Sistem otomatis deteksi baris x kolom.
                     </p>
-                    <p className="text-xs text-muted-foreground/80 mt-1">
+                    <p className="mt-1 whitespace-normal break-words text-xs text-muted-foreground/80">
                       Baris terisi: {filledRowCount} • Total baris: {rows.length}
                     </p>
-                    <div className="mt-3 rounded-md border bg-background/80 p-2.5 space-y-1 text-[11px] text-muted-foreground">
+                    <div className="mt-3 space-y-1 rounded-md border bg-background/80 p-2.5 text-[11px] text-muted-foreground">
                       <p className="font-medium text-foreground/90">{ui.guidanceTitle}</p>
-                      <p>{ui.guidanceUniversity}</p>
-                      <p>{ui.guidanceSessionDate}</p>
-                      <p>{ui.guidanceSessionTime}</p>
-                      <p>{ui.guidanceBookingDate}</p>
-                      <p>{ui.guidanceWisudaOnly}</p>
+                      <p className="whitespace-normal break-words">{ui.guidanceUniversity}</p>
+                      <p className="whitespace-normal break-words">{ui.guidanceSessionDate}</p>
+                      <p className="whitespace-normal break-words">{ui.guidanceSessionTime}</p>
+                      <p className="whitespace-normal break-words">{ui.guidanceBookingDate}</p>
+                      <p className="whitespace-normal break-words">{ui.guidanceWisudaOnly}</p>
                     </div>
                   </div>
 
@@ -947,7 +966,34 @@ export function BatchImportButton({
                             <td className="px-3 py-2 text-muted-foreground">{rowIndex + 1}</td>
                             {visibleColumns.map((column, columnIndex) => (
                               <td key={`${rowIndex}-${column.key}`} className="px-3 py-2">
-                                {column.inputType === "university" ? (
+                                {column.inputType === "serviceMain" ||
+                                column.inputType === "serviceAddon" ? (
+                                  <ServiceAutocomplete
+                                    value={row[column.key] || ""}
+                                    onValueChange={(nextValue) =>
+                                      updateCell(rowIndex, column.key, nextValue)
+                                    }
+                                    placeholder={column.placeholder || ""}
+                                    inputClassName="h-8 rounded-md border bg-background px-2 py-1.5 text-xs pr-8"
+                                    containerClassName="w-full"
+                                    group={
+                                      column.inputType === "serviceAddon"
+                                        ? "addon"
+                                        : "main"
+                                    }
+                                    selectionMode={
+                                      column.inputType === "serviceAddon"
+                                        ? "append"
+                                        : "single"
+                                    }
+                                    eventType={row.event_type || ""}
+                                    usePortalMenu
+                                    portalMinWidth={480}
+                                    onPaste={(event) =>
+                                      handlePasteAtCell(event, rowIndex, columnIndex)
+                                    }
+                                  />
+                                ) : column.inputType === "university" ? (
                                   <UniversityAutocomplete
                                     value={row[column.key] || ""}
                                     selectedId={row["extra.universitas_ref_id"] || undefined}
@@ -1063,7 +1109,7 @@ export function BatchImportButton({
                     </table>
                   </div>
 
-                  <div className="p-3 border-t bg-muted/20 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex w-full max-w-full min-w-0 flex-wrap items-center justify-between gap-2 border-t bg-muted/20 p-3">
                     <Button
                       type="button"
                       variant="outline"
@@ -1074,7 +1120,7 @@ export function BatchImportButton({
                       <Plus className="w-4 h-4" /> Tambah Baris
                     </Button>
 
-                    <div className="text-xs text-muted-foreground">
+                    <div className="whitespace-normal break-words text-xs text-muted-foreground">
                       {ui.pasteTipsLabel}
                     </div>
                   </div>
@@ -1084,15 +1130,15 @@ export function BatchImportButton({
 
             {step === "preview" && validation && (
               <>
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
+                <div className="flex w-full max-w-full min-w-0 items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
                   <FileSpreadsheet className="w-4 h-4 text-green-600 shrink-0" />
-                  <span className="flex-1 truncate font-medium">Data batch siap commit</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">Data batch siap commit</span>
                   <span className="text-xs text-muted-foreground shrink-0">
                     {validation.summary.totalRows} {ui.rowsLabel}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="grid w-full max-w-full min-w-0 grid-cols-2 gap-2 text-xs sm:grid-cols-4">
                   <div className="rounded-md border p-2 bg-muted/20">
                     <p className="text-muted-foreground">{ui.statValid}</p>
                     <p className="font-semibold text-green-600">{validation.summary.validRows}</p>
@@ -1111,7 +1157,7 @@ export function BatchImportButton({
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex w-full max-w-full min-w-0 flex-wrap gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1123,20 +1169,20 @@ export function BatchImportButton({
                     <Download className="w-3.5 h-3.5" /> {ui.downloadValidationReportLabel}
                   </Button>
                   {!validation.canCommit && (
-                    <span className="text-xs text-red-600 self-center">
+                    <span className="self-center whitespace-normal break-words text-xs text-red-600">
                       {ui.commitLockedMessage}
                     </span>
                   )}
                   {validation.canCommit && !canCommitBookings && (
-                    <span className="text-xs text-amber-600 self-center">
+                    <span className="self-center whitespace-normal break-words text-xs text-amber-600">
                       {blockedMessage}
                     </span>
                   )}
                 </div>
 
-                <div className="rounded-lg border overflow-hidden">
-                  <div className="overflow-x-auto max-h-[280px]">
-                    <table className="w-full min-w-0 text-xs">
+                <div className="w-full max-w-full min-w-0 overflow-hidden rounded-lg border">
+                  <div className="max-w-full overflow-x-auto overscroll-x-contain max-h-[280px]">
+                    <table className="min-w-max text-xs">
                       <thead className="bg-muted/50 sticky top-0">
                         <tr>
                           <th className="px-3 py-2 text-left font-medium text-muted-foreground">{ui.headerRow}</th>
@@ -1178,13 +1224,13 @@ export function BatchImportButton({
             {step === "confirm" && (
               <>
                 {committing ? (
-                  <div className="flex flex-col items-center justify-center py-10 gap-3">
+                  <div className="flex w-full max-w-full min-w-0 flex-col items-center justify-center gap-3 py-10">
                     <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">{ui.commitProcessingLabel}</p>
                   </div>
                 ) : commitResult ? (
                   <div
-                    className={`p-4 rounded-lg border text-sm ${
+                    className={`w-full max-w-full min-w-0 rounded-lg border p-4 text-sm ${
                       commitResult.success
                         ? "bg-green-50 dark:bg-green-500/5 border-green-200 dark:border-green-500/20"
                         : "bg-red-50 dark:bg-red-500/5 border-red-200 dark:border-red-500/20"
@@ -1219,7 +1265,9 @@ export function BatchImportButton({
                       </p>
                     )}
                     {commitResult.error && (
-                      <p className="mt-2 text-xs text-red-600">{commitResult.error}</p>
+                      <p className="mt-2 whitespace-normal break-words text-xs text-red-600">
+                        {commitResult.error}
+                      </p>
                     )}
                     {commitResult.report && (
                       <div className="mt-3">
@@ -1240,7 +1288,7 @@ export function BatchImportButton({
                     )}
                   </div>
                 ) : (
-                  <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+                  <div className="w-full max-w-full min-w-0 rounded-lg border p-4 text-sm text-muted-foreground">
                     {ui.waitingCommitLabel}
                   </div>
                 )}
@@ -1248,7 +1296,7 @@ export function BatchImportButton({
             )}
           </div>
 
-          <DialogFooter className="gap-2 flex-col-reverse sm:flex-row min-w-0">
+          <DialogFooter className="w-full max-w-full min-w-0 gap-2 flex-col-reverse sm:flex-row">
             {step === "upload" && (
               <>
                 <Button variant="outline" onClick={resetState} className="w-full sm:w-auto">
