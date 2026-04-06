@@ -556,12 +556,12 @@ function MapPickerModal({
 
   return (
     <div
-      className="map-picker-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/60 animate-in fade-in duration-200"
+      className="map-picker-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="map-picker-panel bg-card rounded-xl shadow-2xl w-[90vw] max-w-2xl overflow-hidden">
+      <div className="map-picker-panel bg-card rounded-xl shadow-2xl w-[90vw] max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h3 className="font-semibold text-sm">{mapStrings.modalTitle}</h3>
