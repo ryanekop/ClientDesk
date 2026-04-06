@@ -142,6 +142,12 @@ type BuiltInFieldDefinitionOptions = {
   extraFieldKeys?: string[];
 };
 
+type SessionFieldGroup = "schedule" | "location" | "extra_non_location";
+
+type SessionFieldGroups = Record<SessionFieldGroup, BuiltInFieldDefinition[]>;
+
+type SessionFieldOrderStrategy = "desired" | "legacy_regressed";
+
 function getKnownExtraFieldKeys() {
   return Array.from(
     new Set(
@@ -277,6 +283,13 @@ const DEFAULT_SESSION_FIELDS: BuiltInFieldDefinition[] = [
     sectionId: "session_details",
   },
 ];
+
+const SESSION_NOTES_FIELD: BuiltInFieldDefinition = {
+  builtinId: "notes",
+  label: "Catatan",
+  category: "Sesi",
+  sectionId: "session_details",
+};
 
 const PAYMENT_BUILT_IN_FIELDS: BuiltInFieldDefinition[] = [
   {
@@ -525,6 +538,146 @@ export function getBuiltInSectionDefinition(
   return BUILT_IN_SECTIONS.find((section) => section.sectionId === sectionId);
 }
 
+function getSessionExtraFieldDefinitions(extraFieldKeys: Iterable<string>) {
+  return Array.from(extraFieldKeys)
+    .map((key) => getExtraFieldDefinitionByKey(key))
+    .filter((field): field is NonNullable<typeof field> => Boolean(field));
+}
+
+function toExtraBuiltInFieldDefinition(
+  extraField: NonNullable<ReturnType<typeof getExtraFieldDefinitionByKey>>,
+): BuiltInFieldDefinition {
+  return {
+    builtinId: `extra:${extraField.key}` as BuiltInFieldId,
+    label: extraField.label,
+    category: "Sesi",
+    sectionId: "session_details",
+  };
+}
+
+function getSplitToggleFields(eventType: string): BuiltInFieldDefinition[] {
+  if (eventType === "Wedding") {
+    return WEDDING_BUILT_IN_FIELDS.filter(
+      (field) => field.builtinId === "wedding_split_toggle",
+    );
+  }
+  if (eventType === "Wisuda") {
+    return WISUDA_BUILT_IN_FIELDS.filter(
+      (field) => field.builtinId === "wisuda_split_toggle",
+    );
+  }
+  return [];
+}
+
+function getSplitScheduleFields(eventType: string): BuiltInFieldDefinition[] {
+  if (eventType === "Wedding") {
+    return WEDDING_BUILT_IN_FIELDS.filter(
+      (field) => field.builtinId !== "wedding_split_toggle",
+    );
+  }
+  if (eventType === "Wisuda") {
+    return WISUDA_BUILT_IN_FIELDS.filter(
+      (field) => field.builtinId !== "wisuda_split_toggle",
+    );
+  }
+  return [];
+}
+
+function getLocationFields(eventType: string): BuiltInFieldDefinition[] {
+  if (eventType === "Wedding") {
+    return [
+      {
+        builtinId: "location_detail",
+        label: "Location Details",
+        category: "Sesi",
+        sectionId: "session_details",
+      },
+    ];
+  }
+
+  return [
+    {
+      builtinId: "location",
+      label: "Lokasi",
+      category: "Sesi",
+      sectionId: "session_details",
+    },
+    {
+      builtinId: "location_detail",
+      label: "Location Details",
+      category: "Sesi",
+      sectionId: "session_details",
+    },
+  ];
+}
+
+function buildSessionFieldGroups(
+  eventType: string,
+  extraFieldKeys: Iterable<string>,
+): SessionFieldGroups {
+  const splitScheduleFields = getSplitScheduleFields(eventType);
+  const locationFields = getLocationFields(eventType);
+  const extraFields = getSessionExtraFieldDefinitions(extraFieldKeys);
+  const extraLocationFields = extraFields
+    .filter((field) => field.isLocation)
+    .map(toExtraBuiltInFieldDefinition);
+  const extraNonLocationFields = extraFields
+    .filter((field) => !field.isLocation)
+    .map(toExtraBuiltInFieldDefinition);
+
+  return {
+    schedule: [...splitScheduleFields, ...DEFAULT_SESSION_FIELDS],
+    location: [...locationFields, ...extraLocationFields],
+    extra_non_location: extraNonLocationFields,
+  };
+}
+
+function getSessionBuiltInOrderIds(
+  eventType: string,
+  options: BuiltInFieldDefinitionOptions,
+  strategy: SessionFieldOrderStrategy,
+): BuiltInFieldId[] {
+  const extraFieldKeys = new Set<string>(
+    (EVENT_EXTRA_FIELDS[eventType] || []).map((field) => field.key),
+  );
+  (options.extraFieldKeys || []).forEach((key) => {
+    if (getExtraFieldDefinitionByKey(key)) {
+      extraFieldKeys.add(key);
+    }
+  });
+
+  const sessionFieldGroups = buildSessionFieldGroups(eventType, extraFieldKeys);
+  const splitToggleFields = getSplitToggleFields(eventType);
+  const extraFields = getSessionExtraFieldDefinitions(extraFieldKeys);
+  const extraLocationFields = extraFields
+    .filter((field) => field.isLocation)
+    .map(toExtraBuiltInFieldDefinition);
+  const extraNonLocationFields = extraFields
+    .filter((field) => !field.isLocation)
+    .map(toExtraBuiltInFieldDefinition);
+  const locationBuiltInFields = getLocationFields(eventType);
+  const eventSpecificFields =
+    strategy === "desired"
+      ? [
+          ...locationBuiltInFields,
+          ...extraLocationFields,
+          ...extraNonLocationFields,
+        ]
+      : [
+          ...extraNonLocationFields,
+          ...extraLocationFields,
+          ...locationBuiltInFields,
+        ];
+
+  return [
+    "event_type",
+    ...splitToggleFields.map((field) => field.builtinId),
+    ...sessionFieldGroups.schedule.map((field) => field.builtinId),
+    ...eventSpecificFields.map((field) => field.builtinId),
+    SESSION_NOTES_FIELD.builtinId,
+  ];
+}
+
 export function getBuiltInFieldDefinitions(
   eventType: string,
   options: BuiltInFieldDefinitionOptions = {},
@@ -540,58 +693,28 @@ export function getBuiltInFieldDefinitions(
     }
   });
 
-  const extraFields = Array.from(extraFieldKeys)
-    .map((key) => getExtraFieldDefinitionByKey(key))
-    .filter((field): field is NonNullable<typeof field> => Boolean(field))
-    .map((field) => ({
-      builtinId: `extra:${field.key}` as BuiltInFieldId,
-      label: field.label,
-      category: "Sesi" as const,
-      sectionId: "session_details" as const,
-    }));
-  const locationFields =
-    isWeddingEvent
+  const splitToggleFields = getSplitToggleFields(eventType);
+  const sessionFieldGroups = buildSessionFieldGroups(eventType, extraFieldKeys);
+  const legacyExtraFields = sessionFieldGroups.extra_non_location;
+  const legacyLocationFields = sessionFieldGroups.location;
+  const sessionFields =
+    isWeddingEvent || isWisudaEvent
       ? [
-          {
-            builtinId: "location_detail" as const,
-            label: "Location Details",
-            category: "Sesi" as const,
-            sectionId: "session_details" as const,
-          },
+          ...splitToggleFields,
+          ...sessionFieldGroups.schedule,
+          ...sessionFieldGroups.location,
+          ...sessionFieldGroups.extra_non_location,
         ]
       : [
-          {
-            builtinId: "location" as const,
-            label: "Lokasi",
-            category: "Sesi" as const,
-            sectionId: "session_details" as const,
-          },
-          {
-            builtinId: "location_detail" as const,
-            label: "Location Details",
-            category: "Sesi" as const,
-            sectionId: "session_details" as const,
-          },
+          ...sessionFieldGroups.schedule,
+          ...legacyExtraFields,
+          ...legacyLocationFields,
         ];
-
-  const splitSessionFields = isWeddingEvent
-    ? WEDDING_BUILT_IN_FIELDS
-    : isWisudaEvent
-      ? WISUDA_BUILT_IN_FIELDS
-      : [];
 
   return [
     ...BASE_BUILT_IN_FIELDS,
-    ...splitSessionFields,
-    ...DEFAULT_SESSION_FIELDS,
-    ...extraFields,
-    ...locationFields,
-    {
-      builtinId: "notes",
-      label: "Catatan",
-      category: "Sesi",
-      sectionId: "session_details",
-    },
+    ...sessionFields,
+    SESSION_NOTES_FIELD,
     ...PAYMENT_BUILT_IN_FIELDS,
   ];
 }
@@ -748,6 +871,43 @@ function normalizeCustomSectionItem(item: CustomSectionItem): CustomSectionItem 
   };
 }
 
+function maybeMigrateSessionBuiltInOrder(
+  items: SectionContentItem[],
+  eventType: string,
+  options: BuiltInFieldDefinitionOptions,
+): SectionContentItem[] {
+  const isSplitEvent = eventType === "Wedding" || eventType === "Wisuda";
+  if (!isSplitEvent) return items;
+  if (items.some((item) => item.kind !== "builtin_field")) return items;
+
+  const builtInItems = items as BuiltInFieldItem[];
+  const currentOrderIds = builtInItems.map((item) => item.builtinId);
+  const desiredOrderIds = getSessionBuiltInOrderIds(eventType, options, "desired");
+  const legacyRegressedOrderIds = getSessionBuiltInOrderIds(
+    eventType,
+    options,
+    "legacy_regressed",
+  );
+  const desiredOrderSet = new Set(desiredOrderIds);
+
+  if (currentOrderIds.some((id) => !desiredOrderSet.has(id))) {
+    return items;
+  }
+
+  if (currentOrderIds.join("|") !== legacyRegressedOrderIds.join("|")) {
+    return items;
+  }
+
+  const itemById = new Map(
+    builtInItems.map((item) => [item.builtinId, item] as const),
+  );
+  const reordered = desiredOrderIds
+    .map((builtinId) => itemById.get(builtinId))
+    .filter((item): item is BuiltInFieldItem => Boolean(item));
+
+  return reordered.length === items.length ? reordered : items;
+}
+
 function normalizeNewLayout(
   items: FormLayoutItem[],
   eventType: string,
@@ -811,6 +971,12 @@ function normalizeNewLayout(
     if (seenBuiltIns.has(field.builtinId)) return;
     buckets[field.sectionId].push(createBuiltInFieldItem(field.builtinId));
   });
+
+  buckets.session_details = maybeMigrateSessionBuiltInOrder(
+    buckets.session_details,
+    eventType,
+    builtInOptions,
+  );
 
   return flattenBuckets(buckets);
 }
