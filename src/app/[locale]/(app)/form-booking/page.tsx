@@ -111,6 +111,8 @@ type PreviewPayload = {
   form_payment_methods: PaymentMethod[];
   qris_image_url: string | null;
   bank_accounts: BankAccount[];
+  preview_editor_event_type: string | null;
+  preview_editor_layout_mode: FormLayoutMode | null;
 };
 
 type FormBookingSnapshot = {
@@ -421,6 +423,16 @@ export default function FormBookingPage() {
       form_payment_methods: formPaymentMethods,
       qris_image_url: qrisImageUrl,
       bank_accounts: getValidBankAccounts(bankAccounts),
+      preview_editor_event_type:
+        settingsTab === "customForm" ? selectedCustomFormEventType : null,
+      preview_editor_layout_mode:
+        settingsTab === "customForm"
+          ? isSplitCapableCustomFormEventType(selectedCustomFormEventType)
+            ? selectedCustomFormLayoutMode === "split"
+              ? "split"
+              : "normal"
+            : "normal"
+          : null,
     }),
     [
       bankAccounts,
@@ -441,6 +453,9 @@ export default function FormBookingPage() {
       showWisudaSplit,
       showProof,
       qrisImageUrl,
+      selectedCustomFormEventType,
+      selectedCustomFormLayoutMode,
+      settingsTab,
       termsAgreementText,
       termsContent,
       termsEnabled,

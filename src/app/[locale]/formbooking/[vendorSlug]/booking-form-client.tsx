@@ -450,7 +450,10 @@ type PreviewVendorPayload = Partial<
     | "qris_image_url"
     | "bank_accounts"
   >
->;
+> & {
+  preview_editor_event_type?: string | null;
+  preview_editor_layout_mode?: FormLayoutMode | null;
+};
 
 type PreviewMessage = {
   type: "clientdesk:form-preview-update";
@@ -488,6 +491,18 @@ export function BookingFormClient({
   const previewMode = searchParams.get("preview") === "1";
   const previewStorageKey = searchParams.get("previewKey") || "";
   const [previewVendor, setPreviewVendor] = React.useState<PreviewVendorPayload | null>(null);
+  const previewEditorEventTypeRaw =
+    typeof previewVendor?.preview_editor_event_type === "string"
+      ? previewVendor.preview_editor_event_type.trim()
+      : "";
+  const previewEditorEventType = previewEditorEventTypeRaw
+    ? normalizeEventTypeName(previewEditorEventTypeRaw) || previewEditorEventTypeRaw
+    : "";
+  const previewEditorLayoutMode: FormLayoutMode | null =
+    previewVendor?.preview_editor_layout_mode === "split" ||
+    previewVendor?.preview_editor_layout_mode === "normal"
+      ? previewVendor.preview_editor_layout_mode
+      : null;
 
   React.useEffect(() => {
     if (!previewMode || !previewStorageKey || typeof window === "undefined") return;
@@ -1707,6 +1722,40 @@ export function BookingFormClient({
     );
     return whitelist.length > 0 ? whitelist : availableEventTypes;
   }, [availableEventTypes, eventTypeLocked, specialEventTypes]);
+
+  React.useEffect(() => {
+    if (!previewMode) return;
+    if (!previewEditorEventType || !previewEditorLayoutMode) return;
+    if (!eventTypeOptions.includes(previewEditorEventType)) return;
+
+    if (eventType !== previewEditorEventType) {
+      setEventType(previewEditorEventType);
+      return;
+    }
+
+    if (eventType !== "Wedding" && eventType !== "Wisuda") {
+      if (splitDates) setSplitDates(false);
+      return;
+    }
+
+    const splitAllowed =
+      eventType === "Wedding"
+        ? effectiveVendor.form_show_wedding_split !== false
+        : effectiveVendor.form_show_wisuda_split !== false;
+    const desiredSplit = previewEditorLayoutMode === "split" && splitAllowed;
+    if (splitDates !== desiredSplit) {
+      setSplitDates(desiredSplit);
+    }
+  }, [
+    previewMode,
+    previewEditorEventType,
+    previewEditorLayoutMode,
+    eventTypeOptions,
+    eventType,
+    splitDates,
+    effectiveVendor.form_show_wedding_split,
+    effectiveVendor.form_show_wisuda_split,
+  ]);
   const isCityScopedEvent = React.useMemo(
     () => isCityScopedBookingEventType(eventType),
     [eventType],
