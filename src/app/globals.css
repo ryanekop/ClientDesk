@@ -133,6 +133,17 @@
     .dark .group:hover .sticky-table-cell:not(.sticky-table-cell--header) {
         background-color: color-mix(in oklab, var(--color-card) 62%, var(--color-foreground) 38%);
     }
+
+    /* Reduce paint/composition glitches on some browsers/devices inside map modal UI */
+    .map-picker-panel,
+    .map-picker-gps-button,
+    .map-picker-gps-button-content {
+        isolation: isolate;
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
+    }
 }
 
 @layer base {

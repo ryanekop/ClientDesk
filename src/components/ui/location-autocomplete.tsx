@@ -373,6 +373,10 @@ function MapPickerModal({
     }),
     [t],
   );
+  const useMyLocationLabel =
+    (mapStrings.useMyLocationLabel || "").trim() || "Lokasi Saya";
+  const useMyLocationTitle =
+    (mapStrings.useMyLocationTitle || "").trim() || useMyLocationLabel;
 
   React.useEffect(() => {
     if (!gpsWarning) return;
@@ -552,12 +556,12 @@ function MapPickerModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+      className="map-picker-overlay fixed inset-0 z-[100] flex items-center justify-center bg-black/60 animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-card rounded-xl shadow-2xl w-[90vw] max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="map-picker-panel bg-card rounded-xl shadow-2xl w-[90vw] max-w-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h3 className="font-semibold text-sm">{mapStrings.modalTitle}</h3>
@@ -583,15 +587,17 @@ function MapPickerModal({
               type="button"
               onClick={handleUseCurrentLocation}
               disabled={gpsLoading}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium hover:bg-rose-100 hover:border-rose-300 transition-colors disabled:opacity-60 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-200 dark:hover:bg-rose-900/30"
-              title={mapStrings.useMyLocationTitle}
+              className="map-picker-gps-button inline-flex h-9 min-w-[116px] shrink-0 items-center justify-center rounded-md border border-rose-200 bg-rose-50 px-3 text-rose-700 hover:border-rose-300 hover:bg-rose-100 transition-colors disabled:opacity-60 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-200 dark:hover:bg-rose-900/30"
+              title={useMyLocationTitle}
             >
-              {gpsLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <LocationPointerIcon className="w-3.5 h-3.5" />
-              )}
-              {mapStrings.useMyLocationLabel}
+              <span className="map-picker-gps-button-content inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium leading-none text-current">
+                {gpsLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
+                ) : (
+                  <LocationPointerIcon className="w-3.5 h-3.5 shrink-0" />
+                )}
+                <span className="text-current">{useMyLocationLabel}</span>
+              </span>
             </button>
           </div>
           {gpsWarning && (
