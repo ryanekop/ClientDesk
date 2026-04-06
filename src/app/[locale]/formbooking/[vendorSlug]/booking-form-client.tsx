@@ -1673,12 +1673,16 @@ export function BookingFormClient({
     });
   }, [addonLocked, allowMultipleAddons]);
 
+  const selectedPackageTotal = selectedMainServices.reduce(
+    (sum, service) => sum + service.price,
+    0,
+  );
   const selectedAddonTotal = selectedAddonServices.reduce(
     (sum, service) => sum + service.price,
     0,
   );
   const selectedBookingTotal = computeSpecialOfferTotal({
-    packageTotal: selectedMainServices.reduce((sum, service) => sum + service.price, 0),
+    packageTotal: selectedPackageTotal,
     addonTotal: selectedAddonTotal,
     accommodationFee,
     discountAmount,
@@ -3332,6 +3336,81 @@ export function BookingFormClient({
       ].filter((row) => row.value.length > 0),
     [selectedAddonServices, selectedMainServices, t],
   );
+  const summaryCostRows = React.useMemo(() => {
+    const rows: Array<{
+      id: string;
+      label: string;
+      value: string;
+      tone: "item" | "subtotal" | "adjustment" | "discount" | "total";
+    }> = [];
+
+    selectedMainServices.forEach((service) => {
+      rows.push({
+        id: `package:${service.id}`,
+        label: `${t("summaryCostPackageItem")} • ${service.name}`,
+        value: formatCurrency(service.price),
+        tone: "item",
+      });
+    });
+
+    selectedAddonServices.forEach((service) => {
+      rows.push({
+        id: `addon:${service.id}`,
+        label: `${t("summaryCostAddonItem")} • ${service.name}`,
+        value: `+ ${formatCurrency(service.price)}`,
+        tone: "item",
+      });
+    });
+
+    rows.push({
+      id: "subtotal-package",
+      label: t("summaryCostPackageSubtotal"),
+      value: formatCurrency(selectedPackageTotal),
+      tone: "subtotal",
+    });
+    rows.push({
+      id: "subtotal-addon",
+      label: t("summaryCostAddonSubtotal"),
+      value: formatCurrency(selectedAddonTotal),
+      tone: "subtotal",
+    });
+
+    if (accommodationFee > 0) {
+      rows.push({
+        id: "accommodation-fee",
+        label: t("summaryCostAccommodation"),
+        value: `+ ${formatCurrency(accommodationFee)}`,
+        tone: "adjustment",
+      });
+    }
+
+    if (discountAmount > 0) {
+      rows.push({
+        id: "discount",
+        label: t("summaryCostDiscount"),
+        value: `- ${formatCurrency(discountAmount)}`,
+        tone: "discount",
+      });
+    }
+
+    rows.push({
+      id: "total-booking",
+      label: t("summaryTotal"),
+      value: formatCurrency(selectedBookingTotal),
+      tone: "total",
+    });
+
+    return rows;
+  }, [
+    accommodationFee,
+    discountAmount,
+    selectedAddonServices,
+    selectedAddonTotal,
+    selectedBookingTotal,
+    selectedMainServices,
+    selectedPackageTotal,
+    t,
+  ]);
 
   // ── Success screen ──
 
@@ -3633,9 +3712,40 @@ export function BookingFormClient({
 
                 <div className="space-y-2 border-t pt-3">
                   <h4 className="text-sm font-semibold">{t("summarySectionTotalBooking")}</h4>
-                  <div className="flex items-center justify-between gap-4">
-                    <p className="text-muted-foreground">{t("summaryTotal")}</p>
-                    <p className="text-lg font-semibold">{formatCurrency(selectedBookingTotal)}</p>
+                  <div className="space-y-1.5">
+                    {summaryCostRows.map((row) => (
+                      <div
+                        key={row.id}
+                        className={`flex items-start justify-between gap-4 ${
+                          row.tone === "total"
+                            ? "border-t pt-2 mt-2"
+                            : ""
+                        }`}
+                      >
+                        <p
+                          className={
+                            row.tone === "total"
+                              ? "font-semibold"
+                              : row.tone === "subtotal"
+                                ? "font-medium"
+                                : "text-muted-foreground"
+                          }
+                        >
+                          {row.label}
+                        </p>
+                        <p
+                          className={`text-right ${
+                            row.tone === "total"
+                              ? "text-lg font-semibold"
+                              : row.tone === "discount"
+                                ? "font-medium text-rose-600"
+                                : "font-medium"
+                          }`}
+                        >
+                          {row.value}
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
