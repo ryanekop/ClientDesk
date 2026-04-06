@@ -25,6 +25,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { LocationAutocomplete, type LocationSelectionMeta } from "@/components/ui/location-autocomplete";
+import { UniversityAutocomplete } from "@/components/ui/university-autocomplete";
 import { cn } from "@/lib/utils";
 
 type Step = "upload" | "preview" | "confirm";
@@ -153,28 +155,49 @@ type BatchColumn = {
   placeholder?: string;
   required?: boolean;
   advanced?: boolean;
+  internal?: boolean;
+  inputType?: "text" | "university" | "location";
+  normalizeMode?: "whatsapp" | "date" | "time";
 };
 
 type BatchRow = Record<string, string>;
 
 const TABLE_COLUMNS: BatchColumn[] = [
   { key: "client_name", label: "Nama Klien", required: true, placeholder: "Nama Klien..." },
-  { key: "client_whatsapp", label: "Nomor WA", placeholder: "+628123..." },
+  {
+    key: "client_whatsapp",
+    label: "Nomor WA",
+    placeholder: "+628123...",
+    normalizeMode: "whatsapp",
+  },
   { key: "event_type", label: "Event", required: true, placeholder: "Wedding / Wisuda / ..." },
   { key: "main_services", label: "Paket Utama", required: true, placeholder: "Nama paket" },
   {
     key: "extra.universitas",
     label: "Universitas",
     placeholder: "Contoh: Universitas Indonesia / Universitas Indonesia (UI) / UI",
+    inputType: "university",
   },
-  { key: "session_date", label: "Tanggal Sesi", placeholder: "DD/MM/YYYY atau YYYY-MM-DD" },
-  { key: "session_time", label: "Jam Sesi", placeholder: "HH:mm" },
-  { key: "booking_date", label: "Tanggal Booking", placeholder: "DD/MM/YYYY atau YYYY-MM-DD" },
+  {
+    key: "session_date",
+    label: "Tanggal Sesi",
+    placeholder: "DD/MM/YYYY atau YYYY-MM-DD",
+    normalizeMode: "date",
+  },
+  { key: "session_time", label: "Jam Sesi", placeholder: "HH:mm", normalizeMode: "time" },
+  {
+    key: "booking_date",
+    label: "Tanggal Booking",
+    placeholder: "DD/MM/YYYY atau YYYY-MM-DD",
+    normalizeMode: "date",
+  },
+  { key: "location", label: "Lokasi", placeholder: "Lokasi utama", inputType: "location" },
   { key: "dp_paid", label: "DP", required: true, placeholder: "1000000" },
   { key: "status", label: "Status", placeholder: "Default otomatis" , advanced: true },
   { key: "addon_services", label: "Add-on", placeholder: "Nama addon 1 | addon 2", advanced: true },
   { key: "freelancers", label: "Freelancer", placeholder: "Nama freelance", advanced: true },
-  { key: "location", label: "Lokasi", placeholder: "Lokasi utama", advanced: true },
+  { key: "location_lat", label: "Location Latitude", internal: true, advanced: true },
+  { key: "location_lng", label: "Location Longitude", internal: true, advanced: true },
   { key: "location_detail", label: "Detail Lokasi", placeholder: "Gedung / area", advanced: true },
   { key: "notes", label: "Catatan", placeholder: "Catatan klien", advanced: true },
   { key: "admin_notes", label: "Catatan Admin", placeholder: "Internal", advanced: true },
@@ -297,6 +320,141 @@ function normalizeWhatsappForSubmit(raw: string): string {
   return `+${digits}`;
 }
 
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function isValidDateParts(year: number, month: number, day: number) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  );
+}
+
+function parseExcelSerial(value: number) {
+  if (!Number.isFinite(value)) return null;
+  const epoch = Date.UTC(1899, 11, 30);
+  const millis = Math.round(value * 24 * 60 * 60 * 1000);
+  const parsed = new Date(epoch + millis);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  return {
+    year: parsed.getUTCFullYear(),
+    month: parsed.getUTCMonth() + 1,
+    day: parsed.getUTCDate(),
+    hours: parsed.getUTCHours(),
+    minutes: parsed.getUTCMinutes(),
+  };
+}
+
+function normalizeDateForCell(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return "";
+
+  const token = value.split(/[T\s]+/).filter(Boolean)[0] || value;
+  if (/^\d+(\.\d+)?$/.test(token)) {
+    const numeric = Number(token);
+    if (Number.isFinite(numeric)) {
+      const excel = parseExcelSerial(Math.floor(numeric));
+      if (excel && isValidDateParts(excel.year, excel.month, excel.day)) {
+        return `${excel.year}-${pad2(excel.month)}-${pad2(excel.day)}`;
+      }
+    }
+  }
+
+  const normalized = token.replace(/[.]/g, "-").replace(/\//g, "-");
+  let match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    if (isValidDateParts(year, month, day)) {
+      return `${year}-${pad2(month)}-${pad2(day)}`;
+    }
+    return null;
+  }
+
+  match = normalized.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  if (!isValidDateParts(year, month, day)) return null;
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+function normalizeTimeForCell(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return "";
+
+  if (/^\d+(\.\d+)?$/.test(value)) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric >= 0 && numeric < 1) {
+      const excel = parseExcelSerial(numeric);
+      if (excel) {
+        return `${pad2(excel.hours)}:${pad2(excel.minutes)}`;
+      }
+    }
+    if (Number.isFinite(numeric) && numeric >= 100 && numeric <= 2359) {
+      const token = String(Math.floor(numeric)).padStart(4, "0");
+      const hours = Number(token.slice(0, 2));
+      const minutes = Number(token.slice(2, 4));
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        return `${pad2(hours)}:${pad2(minutes)}`;
+      }
+    }
+  }
+
+  let match = value.match(/^(\d{1,2})[:.](\d{1,2})(?::(\d{1,2}))?$/);
+  if (match) {
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      return `${pad2(hours)}:${pad2(minutes)}`;
+    }
+    return null;
+  }
+
+  match = value.match(/^(\d{3,4})$/);
+  if (!match) return null;
+  const token = match[1].padStart(4, "0");
+  const hours = Number(token.slice(0, 2));
+  const minutes = Number(token.slice(2, 4));
+  if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+    return `${pad2(hours)}:${pad2(minutes)}`;
+  }
+  return null;
+}
+
+function normalizeCellValueByColumn(column: BatchColumn, rawValue: string) {
+  const trimmed = rawValue.trim();
+  if (!column.normalizeMode) return trimmed;
+
+  if (column.normalizeMode === "whatsapp") {
+    return normalizeWhatsappForSubmit(trimmed);
+  }
+  if (column.normalizeMode === "date") {
+    return normalizeDateForCell(trimmed) ?? trimmed;
+  }
+  if (column.normalizeMode === "time") {
+    return normalizeTimeForCell(trimmed) ?? trimmed;
+  }
+  return trimmed;
+}
+
+function parseCoordinateCell(raw: string | undefined) {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function createEmptyRow(): BatchRow {
   const row: BatchRow = {};
   TABLE_COLUMNS.forEach((column) => {
@@ -354,7 +512,7 @@ export function BatchImportButton({
   );
 
   const visibleColumns = React.useMemo(
-    () => TABLE_COLUMNS.filter((column) => showAdvanced || !column.advanced),
+    () => TABLE_COLUMNS.filter((column) => !column.internal && (showAdvanced || !column.advanced)),
     [showAdvanced],
   );
 
@@ -380,7 +538,18 @@ export function BatchImportButton({
     setFatalError(null);
   }
 
-  function updateCell(rowIndex: number, key: string, value: string) {
+  function clearValidationSnapshots() {
+    if (validation) setValidation(null);
+    if (commitResult) setCommitResult(null);
+    if (fatalError) setFatalError(null);
+  }
+
+  function updateCell(
+    rowIndex: number,
+    key: string,
+    value: string,
+    options?: { keepLocationCoordinates?: boolean },
+  ) {
     setRows((prev) => {
       const next = prev.map((row) => ({ ...row }));
       if (!next[rowIndex]) {
@@ -389,12 +558,53 @@ export function BatchImportButton({
         }
       }
       next[rowIndex][key] = value;
+      if (key === "location" && !options?.keepLocationCoordinates) {
+        next[rowIndex].location_lat = "";
+        next[rowIndex].location_lng = "";
+      }
       return next;
     });
 
-    if (validation) setValidation(null);
-    if (commitResult) setCommitResult(null);
-    if (fatalError) setFatalError(null);
+    clearValidationSnapshots();
+  }
+
+  function setLocationCoordinates(
+    rowIndex: number,
+    meta: Pick<LocationSelectionMeta, "lat" | "lng">,
+  ) {
+    setRows((prev) => {
+      const next = prev.map((row) => ({ ...row }));
+      if (!next[rowIndex]) {
+        while (next.length <= rowIndex) {
+          next.push(createEmptyRow());
+        }
+      }
+      if (
+        typeof meta.lat === "number" &&
+        Number.isFinite(meta.lat) &&
+        typeof meta.lng === "number" &&
+        Number.isFinite(meta.lng)
+      ) {
+        next[rowIndex].location_lat = String(meta.lat);
+        next[rowIndex].location_lng = String(meta.lng);
+      } else {
+        next[rowIndex].location_lat = "";
+        next[rowIndex].location_lng = "";
+      }
+      return next;
+    });
+    clearValidationSnapshots();
+  }
+
+  function autoNormalizeCell(
+    rowIndex: number,
+    column: BatchColumn,
+    currentValueOverride?: string,
+  ) {
+    const currentValue = currentValueOverride ?? rows[rowIndex]?.[column.key] ?? "";
+    const normalized = normalizeCellValueByColumn(column, currentValue);
+    if (normalized === currentValue) return;
+    updateCell(rowIndex, column.key, normalized);
   }
 
   function handlePasteAtCell(
@@ -418,16 +628,19 @@ export function BatchImportButton({
         clipboardRow.forEach((cellValue, columnOffset) => {
           const column = visibleColumns[startColumnIndex + columnOffset];
           if (!column) return;
-          next[startRowIndex + rowOffset][column.key] = cellValue.trim();
+          const normalizedValue = normalizeCellValueByColumn(column, cellValue);
+          next[startRowIndex + rowOffset][column.key] = normalizedValue;
+          if (column.key === "location") {
+            next[startRowIndex + rowOffset].location_lat = "";
+            next[startRowIndex + rowOffset].location_lng = "";
+          }
         });
       });
 
       return next;
     });
 
-    if (validation) setValidation(null);
-    if (commitResult) setCommitResult(null);
-    if (fatalError) setFatalError(null);
+    clearValidationSnapshots();
   }
 
   function addRow() {
@@ -440,9 +653,7 @@ export function BatchImportButton({
       const next = prev.filter((_, rowIndex) => rowIndex !== index);
       return next.length > 0 ? next : [createEmptyRow()];
     });
-    if (validation) setValidation(null);
-    if (commitResult) setCommitResult(null);
-    if (fatalError) setFatalError(null);
+    clearValidationSnapshots();
   }
 
   function buildRowsForValidation(): string[][] {
@@ -450,11 +661,10 @@ export function BatchImportButton({
     const dataRows = rows
       .map((row) =>
         headers.map((header) => {
-          const rawValue = (row[header] || "").trim();
-          if (header === "client_whatsapp") {
-            return normalizeWhatsappForSubmit(rawValue);
-          }
-          return rawValue;
+          const column = TABLE_COLUMNS.find((item) => item.key === header);
+          const rawValue = row[header] || "";
+          if (!column) return rawValue.trim();
+          return normalizeCellValueByColumn(column, rawValue);
         }),
       )
       .filter((rowValues) => rowValues.some((item) => item.length > 0));
@@ -698,17 +908,61 @@ export function BatchImportButton({
                             <td className="px-3 py-2 text-muted-foreground">{rowIndex + 1}</td>
                             {visibleColumns.map((column, columnIndex) => (
                               <td key={`${rowIndex}-${column.key}`} className="px-3 py-2">
-                                <input
-                                  value={row[column.key] || ""}
-                                  onChange={(event) =>
-                                    updateCell(rowIndex, column.key, event.target.value)
-                                  }
-                                  onPaste={(event) =>
-                                    handlePasteAtCell(event, rowIndex, columnIndex)
-                                  }
-                                  placeholder={column.placeholder || ""}
-                                  className="w-full rounded-md border bg-background px-2 py-1.5 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                                />
+                                {column.inputType === "university" ? (
+                                  <UniversityAutocomplete
+                                    value={row[column.key] || ""}
+                                    onValueChange={(nextValue) =>
+                                      updateCell(rowIndex, column.key, nextValue)
+                                    }
+                                    onSelect={() => undefined}
+                                    placeholder={column.placeholder || ""}
+                                    inputClassName="h-8 rounded-md border bg-background px-2 py-1.5 text-xs pr-8"
+                                    containerClassName="w-full"
+                                    showSelectionHint={false}
+                                    onPaste={(event) =>
+                                      handlePasteAtCell(event, rowIndex, columnIndex)
+                                    }
+                                  />
+                                ) : column.inputType === "location" ? (
+                                  <LocationAutocomplete
+                                    value={row[column.key] || ""}
+                                    onChange={(nextValue) =>
+                                      updateCell(rowIndex, column.key, nextValue)
+                                    }
+                                    onLocationChange={(meta) => {
+                                      if (meta.source === "autocomplete") {
+                                        setLocationCoordinates(rowIndex, {
+                                          lat: meta.lat,
+                                          lng: meta.lng,
+                                        });
+                                      }
+                                    }}
+                                    showMapButton={false}
+                                    placeholder={column.placeholder || ""}
+                                    inputClassName="h-8 rounded-md border bg-background px-2 py-1.5 text-xs"
+                                    initialLat={parseCoordinateCell(row.location_lat)}
+                                    initialLng={parseCoordinateCell(row.location_lng)}
+                                    onPaste={(event) =>
+                                      handlePasteAtCell(event, rowIndex, columnIndex)
+                                    }
+                                  />
+                                ) : (
+                                  <input
+                                    value={row[column.key] || ""}
+                                    onChange={(event) =>
+                                      updateCell(rowIndex, column.key, event.target.value)
+                                    }
+                                    onBlur={(event) => {
+                                      if (!column.normalizeMode) return;
+                                      autoNormalizeCell(rowIndex, column, event.target.value);
+                                    }}
+                                    onPaste={(event) =>
+                                      handlePasteAtCell(event, rowIndex, columnIndex)
+                                    }
+                                    placeholder={column.placeholder || ""}
+                                    className="w-full rounded-md border bg-background px-2 py-1.5 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                  />
+                                )}
                               </td>
                             ))}
                             <td className="px-3 py-2 text-right">

@@ -65,6 +65,8 @@ export const IMPORT_COLUMNS = {
   freelancers: "freelancers",
   freelanceIds: "freelance_ids",
   location: "location",
+  locationLat: "location_lat",
+  locationLng: "location_lng",
   locationDetail: "location_detail",
   bookingDate: "booking_date",
   notes: "notes",
@@ -416,6 +418,25 @@ function normalizeWhatsappValue(value: unknown): string | null {
   return `+${normalizedDigits}`;
 }
 
+function normalizeCoordinateInput(
+  value: unknown,
+  type: "lat" | "lng",
+): number | null {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    if (type === "lat") return value >= -90 && value <= 90 ? value : null;
+    return value >= -180 && value <= 180 ? value : null;
+  }
+
+  if (typeof value !== "string") return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  const parsed = Number(raw.replace(",", "."));
+  if (!Number.isFinite(parsed)) return null;
+  if (type === "lat") return parsed >= -90 && parsed <= 90 ? parsed : null;
+  return parsed >= -180 && parsed <= 180 ? parsed : null;
+}
+
 function normalizeStatusInput(value: unknown, statusOptions: string[]): string | null {
   const raw = normalizeText(value);
   if (!raw) return null;
@@ -452,6 +473,8 @@ function getTemplateHeaders(context: ImportContext): string[] {
     IMPORT_COLUMNS.freelancers,
     IMPORT_COLUMNS.freelanceIds,
     IMPORT_COLUMNS.location,
+    IMPORT_COLUMNS.locationLat,
+    IMPORT_COLUMNS.locationLng,
     IMPORT_COLUMNS.locationDetail,
     IMPORT_COLUMNS.bookingDate,
     IMPORT_COLUMNS.notes,
@@ -511,6 +534,8 @@ function resolveHeaderAlias(
     catatan: "notes",
     catatan_admin: "adminNotes",
     lokasi_detail: "locationDetail",
+    latitude: "locationLat",
+    longitude: "locationLng",
   };
   return aliases[normalizedToken] || null;
 }
@@ -1216,13 +1241,14 @@ export function buildTemplateWorkbookBuffer(context: ImportContext): Buffer {
     ["6. Untuk Wisuda: isi session_date ATAU isi lengkap wisuda_session_1_date + wisuda_session_2_date."],
     ["7. Untuk event Wisuda, extra.universitas wajib terdaftar di referensi universitas."],
     ["8. booking_date opsional; jika kosong akan otomatis mengikuti tanggal session_date."],
-    ["9. Gunakan pemisah | atau koma untuk multi-value (services/addons/freelancers)."],
-    ["10. Mapping Name + ID fallback: isi nama untuk mudah dibaca, pakai ID bila ada nama ganda."],
-    ["11. Kolom dynamic: extra.<key> untuk built-in extra fields, cf.<id> untuk custom fields."],
-    ["12. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
-    ["13. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
-    ["14. Batas maksimum 500 baris per file .xlsx."],
-    ["15. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
+    ["9. location_lat/location_lng opsional; jika diisi harus berpasangan dan dalam rentang valid."],
+    ["10. Gunakan pemisah | atau koma untuk multi-value (services/addons/freelancers)."],
+    ["11. Mapping Name + ID fallback: isi nama untuk mudah dibaca, pakai ID bila ada nama ganda."],
+    ["12. Kolom dynamic: extra.<key> untuk built-in extra fields, cf.<id> untuk custom fields."],
+    ["13. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
+    ["14. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
+    ["15. Batas maksimum 500 baris per file .xlsx."],
+    ["16. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
   ];
   const guideSheet = XLSX.utils.aoa_to_sheet(guideRows);
   guideSheet["!cols"] = [{ wch: 140 }];
@@ -1560,6 +1586,8 @@ function buildEmptyNormalizedRow(rowNumber: number): NormalizedImportRow {
     hasAccommodationFeeInput: false,
     hasDiscountAmountInput: false,
     location: null,
+    locationLat: null,
+    locationLng: null,
     locationDetail: null,
     notes: null,
     adminNotes: null,
@@ -1745,6 +1773,38 @@ function validateOneRow(input: {
   normalized.hasDiscountAmountInput = discount.hasInput;
 
   normalized.location = normalizeNullableText(input.row[IMPORT_COLUMNS.location]);
+  const locationLatRaw = normalizeText(input.row[IMPORT_COLUMNS.locationLat]);
+  const locationLngRaw = normalizeText(input.row[IMPORT_COLUMNS.locationLng]);
+  const locationLat = locationLatRaw
+    ? normalizeCoordinateInput(locationLatRaw, "lat")
+    : null;
+  const locationLng = locationLngRaw
+    ? normalizeCoordinateInput(locationLngRaw, "lng")
+    : null;
+  if (locationLatRaw && locationLat === null) {
+    pushIssue(
+      normalized,
+      "warning",
+      "location_lat tidak valid. Gunakan angka rentang -90 hingga 90; nilai diabaikan.",
+    );
+  }
+  if (locationLngRaw && locationLng === null) {
+    pushIssue(
+      normalized,
+      "warning",
+      "location_lng tidak valid. Gunakan angka rentang -180 hingga 180; nilai diabaikan.",
+    );
+  }
+  if (locationLat !== null && locationLng !== null) {
+    normalized.locationLat = locationLat;
+    normalized.locationLng = locationLng;
+  } else if (locationLat !== null || locationLng !== null) {
+    pushIssue(
+      normalized,
+      "warning",
+      "location_lat/location_lng harus diisi berpasangan agar koordinat tersimpan.",
+    );
+  }
   normalized.locationDetail = normalizeNullableText(input.row[IMPORT_COLUMNS.locationDetail]);
   normalized.notes = normalizeNullableText(input.row[IMPORT_COLUMNS.notes]);
   normalized.adminNotes = normalizeNullableText(input.row[IMPORT_COLUMNS.adminNotes]);
@@ -2424,16 +2484,24 @@ export function resolveImportedLocation(row: NormalizedImportRow): {
     row.builtInExtraFields.tempat_wisuda_2,
   );
   const fallback = normalizeNullableText(row.location);
+  const resolvedLocation =
+    weddingAkad ||
+    weddingResepsi ||
+    wisudaSession1 ||
+    wisudaSession2 ||
+    fallback;
+  const canUseFallbackCoordinates =
+    Boolean(fallback) &&
+    fallback === resolvedLocation &&
+    typeof row.locationLat === "number" &&
+    Number.isFinite(row.locationLat) &&
+    typeof row.locationLng === "number" &&
+    Number.isFinite(row.locationLng);
 
   return {
-    location:
-      weddingAkad ||
-      weddingResepsi ||
-      wisudaSession1 ||
-      wisudaSession2 ||
-      fallback,
-    locationLat: null,
-    locationLng: null,
+    location: resolvedLocation,
+    locationLat: canUseFallbackCoordinates ? row.locationLat : null,
+    locationLng: canUseFallbackCoordinates ? row.locationLng : null,
   };
 }
 

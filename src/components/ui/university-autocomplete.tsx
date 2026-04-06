@@ -27,6 +27,10 @@ type UniversityAutocompleteProps = {
   required?: boolean;
   disabled?: boolean;
   inputClassName?: string;
+  containerClassName?: string;
+  showSelectionHint?: boolean;
+  onPaste?: (event: React.ClipboardEvent<HTMLInputElement>) => void;
+  onBlur?: (event: React.FocusEvent<HTMLInputElement>) => void;
   strings?: UniversityAutocompleteStrings;
 };
 
@@ -42,6 +46,10 @@ export function UniversityAutocomplete({
   required = false,
   disabled = false,
   inputClassName,
+  containerClassName,
+  showSelectionHint = true,
+  onPaste,
+  onBlur,
   strings,
 }: UniversityAutocompleteProps) {
   const t = useTranslations("UniversityAutocomplete");
@@ -204,7 +212,10 @@ export function UniversityAutocomplete({
   const showResults = open && (loading || items.length > 0 || !!error || invalidSelection);
 
   return (
-    <div ref={rootRef} className="space-y-1.5">
+    <div
+      ref={rootRef}
+      className={cn("space-y-1.5", !showSelectionHint && "space-y-0", containerClassName)}
+    >
       <div className="relative">
         <input
           ref={inputRef}
@@ -214,6 +225,8 @@ export function UniversityAutocomplete({
             setOpen(true);
           }}
           onKeyDown={handleKeyDown}
+          onPaste={onPaste}
+          onBlur={onBlur}
           placeholder={resolvedPlaceholder}
           className={cn(DEFAULT_INPUT_CLASS, inputClassName)}
           required={required}
@@ -271,7 +284,7 @@ export function UniversityAutocomplete({
         ) : null}
       </div>
 
-      {invalidSelection ? (
+      {showSelectionHint && invalidSelection ? (
         <p className="text-[11px] text-amber-600">{uiStrings.selectionHint}</p>
       ) : null}
     </div>

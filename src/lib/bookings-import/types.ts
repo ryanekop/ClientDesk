@@ -110,6 +110,8 @@ export type NormalizedImportRow = {
   hasAccommodationFeeInput: boolean;
   hasDiscountAmountInput: boolean;
   location: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
   locationDetail: string | null;
   notes: string | null;
   adminNotes: string | null;

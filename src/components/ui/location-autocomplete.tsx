@@ -33,6 +33,11 @@ const loadCallbacks: (() => void)[] = [];
 
 function loadGoogleMaps(language: string): Promise<void> {
   return new Promise((resolve) => {
+    if (!GOOGLE_MAPS_API_KEY) {
+      resolve();
+      return;
+    }
+
     if (googleMapsLoaded && window.google?.maps) {
       resolve();
       return;
@@ -48,6 +53,12 @@ function loadGoogleMaps(language: string): Promise<void> {
     script.defer = true;
     script.onload = () => {
       googleMapsLoaded = true;
+      googleMapsLoading = false;
+      loadCallbacks.forEach((cb) => cb());
+      loadCallbacks.length = 0;
+    };
+    script.onerror = () => {
+      googleMapsLoading = false;
       loadCallbacks.forEach((cb) => cb());
       loadCallbacks.length = 0;
     };
@@ -84,6 +95,10 @@ interface LocationAutocompleteProps {
   initialLat?: number | null;
   initialLng?: number | null;
   mapsLanguage?: string;
+  showMapButton?: boolean;
+  inputClassName?: string;
+  onPaste?: (event: React.ClipboardEvent<HTMLInputElement>) => void;
+  onBlur?: (event: React.FocusEvent<HTMLInputElement>) => void;
   strings?: {
     mapButtonTitle?: string;
   };
@@ -98,6 +113,10 @@ export function LocationAutocomplete({
   initialLat,
   initialLng,
   mapsLanguage,
+  showMapButton = true,
+  inputClassName,
+  onPaste,
+  onBlur,
   strings,
 }: LocationAutocompleteProps) {
   const locale = useLocale();
@@ -270,8 +289,10 @@ export function LocationAutocomplete({
                 });
               }}
               onFocus={handleFocus}
+              onPaste={onPaste}
+              onBlur={onBlur}
               placeholder={resolvedPlaceholder}
-              className={inputClass + " pr-8"}
+              className={`${inputClass} pr-8 ${inputClassName || ""}`}
               autoComplete="off"
             />
             {loadTriggered && !ready && (
@@ -287,14 +308,16 @@ export function LocationAutocomplete({
               </button>
             )}
           </div>
-          <button
-            type="button"
-            onClick={openMapPicker}
-            title={uiStrings.mapButtonTitle}
-            className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors shrink-0"
-          >
-            <MapPin className="w-4 h-4" />
-          </button>
+          {showMapButton ? (
+            <button
+              type="button"
+              onClick={openMapPicker}
+              title={uiStrings.mapButtonTitle}
+              className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors shrink-0"
+            >
+              <MapPin className="w-4 h-4" />
+            </button>
+          ) : null}
         </div>
       </div>
 
