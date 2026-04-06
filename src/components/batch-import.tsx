@@ -25,7 +25,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { LocationAutocomplete, type LocationSelectionMeta } from "@/components/ui/location-autocomplete";
+import { FreelancerAutocomplete } from "@/components/ui/freelancer-autocomplete";
+import {
+  LocationPortalAutocomplete,
+  type LocationPortalSelectionMeta,
+} from "@/components/ui/location-portal-autocomplete";
 import { UniversityAutocomplete } from "@/components/ui/university-autocomplete";
 import { cn } from "@/lib/utils";
 
@@ -156,7 +160,7 @@ type BatchColumn = {
   required?: boolean;
   advanced?: boolean;
   internal?: boolean;
-  inputType?: "text" | "university" | "location";
+  inputType?: "text" | "university" | "location" | "freelancer";
   normalizeMode?: "whatsapp" | "date" | "time";
 };
 
@@ -195,7 +199,13 @@ const TABLE_COLUMNS: BatchColumn[] = [
   { key: "dp_paid", label: "DP", required: true, placeholder: "1000000" },
   { key: "status", label: "Status", placeholder: "Default otomatis" , advanced: true },
   { key: "addon_services", label: "Add-on", placeholder: "Nama addon 1 | addon 2", advanced: true },
-  { key: "freelancers", label: "Freelancer", placeholder: "Nama freelance", advanced: true },
+  {
+    key: "freelancers",
+    label: "Freelancer",
+    placeholder: "Nama freelance",
+    advanced: true,
+    inputType: "freelancer",
+  },
   { key: "location_lat", label: "Location Latitude", internal: true, advanced: true },
   { key: "location_lng", label: "Location Longitude", internal: true, advanced: true },
   { key: "location_detail", label: "Detail Lokasi", placeholder: "Gedung / area", advanced: true },
@@ -206,10 +216,34 @@ const TABLE_COLUMNS: BatchColumn[] = [
   { key: "resepsi_date", label: "Tanggal Resepsi", placeholder: "YYYY-MM-DDTHH:mm", advanced: true },
   { key: "wisuda_session_1_date", label: "Tanggal Wisuda 1", placeholder: "YYYY-MM-DDTHH:mm", advanced: true },
   { key: "wisuda_session_2_date", label: "Tanggal Wisuda 2", placeholder: "YYYY-MM-DDTHH:mm", advanced: true },
-  { key: "extra.tempat_akad", label: "Lokasi Akad", placeholder: "Lokasi akad", advanced: true },
-  { key: "extra.tempat_resepsi", label: "Lokasi Resepsi", placeholder: "Lokasi resepsi", advanced: true },
-  { key: "extra.tempat_wisuda_1", label: "Lokasi Wisuda 1", placeholder: "Lokasi sesi 1", advanced: true },
-  { key: "extra.tempat_wisuda_2", label: "Lokasi Wisuda 2", placeholder: "Lokasi sesi 2", advanced: true },
+  {
+    key: "extra.tempat_akad",
+    label: "Lokasi Akad",
+    placeholder: "Lokasi akad",
+    advanced: true,
+    inputType: "location",
+  },
+  {
+    key: "extra.tempat_resepsi",
+    label: "Lokasi Resepsi",
+    placeholder: "Lokasi resepsi",
+    advanced: true,
+    inputType: "location",
+  },
+  {
+    key: "extra.tempat_wisuda_1",
+    label: "Lokasi Wisuda 1",
+    placeholder: "Lokasi sesi 1",
+    advanced: true,
+    inputType: "location",
+  },
+  {
+    key: "extra.tempat_wisuda_2",
+    label: "Lokasi Wisuda 2",
+    placeholder: "Lokasi sesi 2",
+    advanced: true,
+    inputType: "location",
+  },
   { key: "main_service_ids", label: "Main Service IDs", placeholder: "uuid|uuid", advanced: true },
   { key: "addon_service_ids", label: "Addon Service IDs", placeholder: "uuid|uuid", advanced: true },
   { key: "freelance_ids", label: "Freelance IDs", placeholder: "uuid|uuid", advanced: true },
@@ -447,14 +481,6 @@ function normalizeCellValueByColumn(column: BatchColumn, rawValue: string) {
   return trimmed;
 }
 
-function parseCoordinateCell(raw: string | undefined) {
-  if (typeof raw !== "string") return null;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function createEmptyRow(): BatchRow {
   const row: BatchRow = {};
   TABLE_COLUMNS.forEach((column) => {
@@ -570,7 +596,7 @@ export function BatchImportButton({
 
   function setLocationCoordinates(
     rowIndex: number,
-    meta: Pick<LocationSelectionMeta, "lat" | "lng">,
+    meta: Pick<LocationPortalSelectionMeta, "lat" | "lng">,
   ) {
     setRows((prev) => {
       const next = prev.map((row) => ({ ...row }));
@@ -815,7 +841,7 @@ export function BatchImportButton({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex items-center gap-2 py-2 overflow-x-auto">
+          <div className="flex items-center gap-2 py-2">
             {steps.map((item, index) => (
               <React.Fragment key={item.key}>
                 <div
@@ -869,7 +895,7 @@ export function BatchImportButton({
                   </Button>
                 </div>
 
-                <div className="rounded-xl border bg-card overflow-hidden">
+                <div className="rounded-xl border bg-card">
                   <div className="border-b bg-muted/30 px-4 py-3 text-sm">
                     <p className="font-medium">Batch Mode Tabel</p>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -889,7 +915,7 @@ export function BatchImportButton({
                   </div>
 
                   <div className="overflow-x-auto max-h-[46vh]">
-                    <table className="w-full text-xs">
+                    <table className="min-w-max text-xs">
                       <thead className="bg-muted/50 sticky top-0 z-10">
                         <tr>
                           <th className="px-3 py-2 text-left font-medium text-muted-foreground w-12">No</th>
@@ -919,29 +945,46 @@ export function BatchImportButton({
                                     inputClassName="h-8 rounded-md border bg-background px-2 py-1.5 text-xs pr-8"
                                     containerClassName="w-full"
                                     showSelectionHint={false}
+                                    usePortalMenu
+                                    portalMinWidth={480}
                                     onPaste={(event) =>
                                       handlePasteAtCell(event, rowIndex, columnIndex)
                                     }
                                   />
                                 ) : column.inputType === "location" ? (
-                                  <LocationAutocomplete
+                                  <LocationPortalAutocomplete
                                     value={row[column.key] || ""}
                                     onChange={(nextValue) =>
                                       updateCell(rowIndex, column.key, nextValue)
                                     }
                                     onLocationChange={(meta) => {
-                                      if (meta.source === "autocomplete") {
+                                      if (
+                                        column.key === "location" &&
+                                        meta.source === "autocomplete"
+                                      ) {
                                         setLocationCoordinates(rowIndex, {
                                           lat: meta.lat,
                                           lng: meta.lng,
                                         });
                                       }
                                     }}
-                                    showMapButton={false}
                                     placeholder={column.placeholder || ""}
                                     inputClassName="h-8 rounded-md border bg-background px-2 py-1.5 text-xs"
-                                    initialLat={parseCoordinateCell(row.location_lat)}
-                                    initialLng={parseCoordinateCell(row.location_lng)}
+                                    onPaste={(event) =>
+                                      handlePasteAtCell(event, rowIndex, columnIndex)
+                                    }
+                                  />
+                                ) : column.inputType === "freelancer" ? (
+                                  <FreelancerAutocomplete
+                                    value={row[column.key] || ""}
+                                    onValueChange={(nextValue) =>
+                                      updateCell(rowIndex, column.key, nextValue)
+                                    }
+                                    placeholder={column.placeholder || ""}
+                                    inputClassName="h-8 rounded-md border bg-background px-2 py-1.5 text-xs pr-8"
+                                    containerClassName="w-full"
+                                    usePortalMenu
+                                    portalMinWidth={480}
                                     onPaste={(event) =>
                                       handlePasteAtCell(event, rowIndex, columnIndex)
                                     }

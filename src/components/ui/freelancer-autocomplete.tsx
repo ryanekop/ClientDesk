@@ -2,72 +2,63 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { useTranslations } from "next-intl";
 import { Check, Loader2, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import {
-  buildUniversityDisplayName,
-  cleanUniversityName,
-  normalizeUniversityName,
-  type UniversityReferenceItem,
-} from "@/lib/university-references";
 
-type UniversityAutocompleteStrings = {
+type FreelancerAutocompleteItem = {
+  id: string;
+  name: string;
+  status?: string | null;
+};
+
+type FreelancerAutocompleteStrings = {
   noResults?: string;
-  selectionHint?: string;
   searchError?: string;
 };
 
-type UniversityAutocompleteProps = {
+type FreelancerAutocompleteProps = {
   value: string;
-  selectedId?: string;
   onValueChange: (value: string) => void;
-  onSelect: (item: UniversityReferenceItem | null) => void;
+  onSelect?: (item: FreelancerAutocompleteItem | null) => void;
   placeholder?: string;
-  required?: boolean;
   disabled?: boolean;
   inputClassName?: string;
   containerClassName?: string;
-  showSelectionHint?: boolean;
-  usePortalMenu?: boolean;
-  portalMinWidth?: number;
   onPaste?: (event: React.ClipboardEvent<HTMLInputElement>) => void;
   onBlur?: (event: React.FocusEvent<HTMLInputElement>) => void;
-  strings?: UniversityAutocompleteStrings;
+  usePortalMenu?: boolean;
+  portalMinWidth?: number;
+  strings?: FreelancerAutocompleteStrings;
 };
 
 const DEFAULT_INPUT_CLASS =
   "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 pr-8 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 
-export function UniversityAutocomplete({
+export function FreelancerAutocomplete({
   value,
-  selectedId,
   onValueChange,
   onSelect,
   placeholder,
-  required = false,
   disabled = false,
   inputClassName,
   containerClassName,
-  showSelectionHint = true,
-  usePortalMenu = false,
-  portalMinWidth = 480,
   onPaste,
   onBlur,
+  usePortalMenu = false,
+  portalMinWidth = 480,
   strings,
-}: UniversityAutocompleteProps) {
-  const t = useTranslations("UniversityAutocomplete");
-  const defaultStrings = React.useMemo<Required<UniversityAutocompleteStrings>>(
+}: FreelancerAutocompleteProps) {
+  const uiStrings = React.useMemo<Required<FreelancerAutocompleteStrings>>(
     () => ({
-      noResults: t("noResults"),
-      selectionHint: t("selectionHint"),
-      searchError: t("searchError"),
+      noResults: "Freelancer tidak ditemukan.",
+      searchError: "Gagal memuat suggestion freelancer.",
+      ...strings,
     }),
-    [t],
+    [strings],
   );
-  const uiStrings = { ...defaultStrings, ...strings };
-  const resolvedPlaceholder = placeholder || t("placeholder");
+  const resolvedPlaceholder = placeholder || "Cari freelancer...";
+
   const rootRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const portalMenuRef = React.useRef<HTMLDivElement>(null);
@@ -84,12 +75,12 @@ export function UniversityAutocomplete({
     width: 0,
   });
   const [open, setOpen] = React.useState(false);
-  const [items, setItems] = React.useState<UniversityReferenceItem[]>([]);
+  const [items, setItems] = React.useState<FreelancerAutocompleteItem[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
   const [activeIndex, setActiveIndex] = React.useState(-1);
 
-  const searchTerm = cleanUniversityName(value);
+  const searchTerm = value.trim();
 
   React.useEffect(() => {
     setMounted(true);
@@ -110,14 +101,11 @@ export function UniversityAutocomplete({
   }, []);
 
   React.useEffect(() => {
-    if (!open) {
-      setActiveIndex(-1);
-    }
+    if (!open) setActiveIndex(-1);
   }, [open]);
 
   React.useEffect(() => {
-    const normalizedSearchTerm = normalizeUniversityName(searchTerm);
-    if (normalizedSearchTerm.length < 2) {
+    if (searchTerm.length < 2) {
       setItems([]);
       setLoading(false);
       return;
@@ -129,29 +117,26 @@ export function UniversityAutocomplete({
         setLoading(true);
         setError("");
         const response = await fetch(
-          `/api/public/universities/search?q=${encodeURIComponent(
+          `/api/internal/reference/freelancers/search?q=${encodeURIComponent(
             searchTerm,
-          )}&limit=8`,
+          )}&limit=8&status=active`,
           {
             method: "GET",
             signal: controller.signal,
           },
         );
-
         const payload = await response.json().catch(() => ({ items: [] }));
         if (!response.ok) {
           throw new Error(uiStrings.searchError);
         }
-
         setItems(
           Array.isArray(payload.items)
             ? payload.items.filter(
-                (item: unknown): item is UniversityReferenceItem =>
+                (item: unknown): item is FreelancerAutocompleteItem =>
                   Boolean(item) &&
                   typeof item === "object" &&
-                  typeof (item as UniversityReferenceItem).id === "string" &&
-                  typeof (item as UniversityReferenceItem).name === "string" &&
-                  typeof (item as UniversityReferenceItem).displayName === "string",
+                  typeof (item as FreelancerAutocompleteItem).id === "string" &&
+                  typeof (item as FreelancerAutocompleteItem).name === "string",
               )
             : [],
         );
@@ -159,14 +144,10 @@ export function UniversityAutocomplete({
         if (controller.signal.aborted) return;
         setItems([]);
         setError(
-          fetchError instanceof Error
-            ? fetchError.message
-            : uiStrings.searchError,
+          fetchError instanceof Error ? fetchError.message : uiStrings.searchError,
         );
       } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
+        if (!controller.signal.aborted) setLoading(false);
       }
     }, 250);
 
@@ -176,24 +157,9 @@ export function UniversityAutocomplete({
     };
   }, [searchTerm, uiStrings.searchError]);
 
-  const invalidSelection = searchTerm.length > 0 && !selectedId && !loading;
-
-  function handleInputChange(nextValue: string) {
-    onValueChange(nextValue);
-    onSelect(null);
-    setOpen(true);
-    setError("");
-  }
-
-  function selectItem(item: UniversityReferenceItem) {
-    onValueChange(
-      item.displayName || buildUniversityDisplayName(item.name, item.abbreviation),
-    );
-    onSelect(item);
-    setItems((current) => {
-      const alreadyExists = current.some((entry) => entry.id === item.id);
-      return alreadyExists ? current : [item, ...current];
-    });
+  function selectItem(item: FreelancerAutocompleteItem) {
+    onValueChange(item.name);
+    onSelect?.(item);
     setOpen(false);
     setActiveIndex(-1);
     setError("");
@@ -201,7 +167,6 @@ export function UniversityAutocomplete({
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     const actionCount = items.length;
-
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setOpen(true);
@@ -209,32 +174,25 @@ export function UniversityAutocomplete({
       setActiveIndex((current) => (current + 1) % actionCount);
       return;
     }
-
     if (event.key === "ArrowUp") {
       event.preventDefault();
       setOpen(true);
       if (actionCount === 0) return;
-      setActiveIndex((current) =>
-        current <= 0 ? actionCount - 1 : current - 1,
-      );
+      setActiveIndex((current) => (current <= 0 ? actionCount - 1 : current - 1));
       return;
     }
-
     if (event.key === "Escape") {
       setOpen(false);
       setActiveIndex(-1);
       return;
     }
-
-    if (event.key === "Enter" && open) {
-      if (activeIndex >= 0 && activeIndex < items.length) {
-        event.preventDefault();
-        selectItem(items[activeIndex]);
-      }
+    if (event.key === "Enter" && open && activeIndex >= 0 && activeIndex < items.length) {
+      event.preventDefault();
+      selectItem(items[activeIndex]);
     }
   }
 
-  const showResults = open && (loading || items.length > 0 || !!error || invalidSelection);
+  const showResults = open && (loading || items.length > 0 || Boolean(error));
   const shouldRenderPortal = mounted && usePortalMenu && showResults;
 
   const updatePortalMenuPosition = React.useCallback(() => {
@@ -257,12 +215,7 @@ export function UniversityAutocomplete({
     const top = showAbove
       ? Math.max(16, rect.top - measuredHeight - 8)
       : Math.min(viewportHeight - measuredHeight - 16, rect.bottom + 8);
-    setPortalMenuPosition({
-      ready: true,
-      top,
-      left,
-      width,
-    });
+    setPortalMenuPosition({ ready: true, top, left, width });
   }, [portalMinWidth]);
 
   React.useEffect(() => {
@@ -272,7 +225,6 @@ export function UniversityAutocomplete({
       );
       return;
     }
-
     const rafId = window.requestAnimationFrame(() => {
       updatePortalMenuPosition();
     });
@@ -289,9 +241,8 @@ export function UniversityAutocomplete({
   const menuContent = (
     <div className="max-h-[320px] overflow-y-auto rounded-lg border bg-popover shadow-lg">
       {items.map((item, index) => {
-        const selected = item.id === selectedId;
         const active = index === activeIndex;
-
+        const selected = value.trim().toLowerCase() === item.name.trim().toLowerCase();
         return (
           <button
             key={item.id}
@@ -303,27 +254,18 @@ export function UniversityAutocomplete({
               active ? "bg-muted" : "hover:bg-muted/70",
             )}
           >
-            <span className="truncate">
-              {item.displayName ||
-                buildUniversityDisplayName(item.name, item.abbreviation)}
-            </span>
-            {selected ? (
-              <Check className="h-4 w-4 shrink-0 text-primary" />
-            ) : null}
+            <span className="truncate">{item.name}</span>
+            {selected ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
           </button>
         );
       })}
 
       {!loading && items.length === 0 && !error ? (
-        <div className="px-3 py-2 text-sm text-muted-foreground">
-          {uiStrings.noResults}
-        </div>
+        <div className="px-3 py-2 text-sm text-muted-foreground">{uiStrings.noResults}</div>
       ) : null}
 
       {error ? (
-        <div className="border-t px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
+        <div className="border-t px-3 py-2 text-sm text-destructive">{error}</div>
       ) : null}
     </div>
   );
@@ -351,46 +293,37 @@ export function UniversityAutocomplete({
           document.body,
         )
       : (
-          <div className="absolute z-30 mt-1 w-full">
-            {menuContent}
-          </div>
+          <div className="absolute z-30 mt-1 w-full">{menuContent}</div>
         )
     : null;
 
   return (
-    <div
-      ref={rootRef}
-      className={cn("space-y-1.5", !showSelectionHint && "space-y-0", containerClassName)}
-    >
-      <div className="relative">
-        <input
-          ref={inputRef}
-          value={value}
-          onChange={(event) => handleInputChange(event.target.value)}
-          onFocus={() => {
-            setOpen(true);
-          }}
-          onKeyDown={handleKeyDown}
-          onPaste={onPaste}
-          onBlur={onBlur}
-          placeholder={resolvedPlaceholder}
-          className={cn(DEFAULT_INPUT_CLASS, inputClassName)}
-          required={required}
-          disabled={disabled}
-          autoComplete="off"
-        />
-        {loading ? (
-          <Loader2 className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
-        ) : (
-          <Search className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        )}
-
-        {resultsMenu}
-      </div>
-
-      {showSelectionHint && invalidSelection ? (
-        <p className="text-[11px] text-amber-600">{uiStrings.selectionHint}</p>
-      ) : null}
+    <div ref={rootRef} className={cn("relative", containerClassName)}>
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(event) => {
+          onValueChange(event.target.value);
+          onSelect?.(null);
+          setOpen(true);
+          setError("");
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={handleKeyDown}
+        onPaste={onPaste}
+        onBlur={onBlur}
+        placeholder={resolvedPlaceholder}
+        className={cn(DEFAULT_INPUT_CLASS, inputClassName)}
+        disabled={disabled}
+        autoComplete="off"
+      />
+      {loading ? (
+        <Loader2 className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
+      ) : (
+        <Search className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      )}
+      {resultsMenu}
     </div>
   );
 }
+
