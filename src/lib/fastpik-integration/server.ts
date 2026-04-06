@@ -40,6 +40,24 @@ type BookingFastpikSyncRow = {
   fastpik_last_synced_at: string | null;
   fastpik_sync_message: string | null;
   extra_fields: Record<string, unknown> | null;
+  freelance: BookingFreelancerRow | null;
+  booking_freelance: BookingFreelancerJunctionRow[] | null;
+};
+
+type BookingFreelancerRow = {
+  id: string | null;
+  name: string | null;
+  whatsapp_number: string | null;
+};
+
+type BookingFreelancerJunctionRow = {
+  freelance: BookingFreelancerRow | null;
+};
+
+type FastpikFreelancerPayload = {
+  id?: string;
+  name: string;
+  whatsapp: string;
 };
 
 type SyncResult = {
@@ -67,6 +85,7 @@ type DeleteProjectResult = {
 const FASTPIK_REQUEST_TIMEOUT_MS = 15000;
 const FASTPIK_RETRY_COUNT = 1;
 export const FASTPIK_SYNC_CHUNK_SIZE = 50;
+const FASTPIK_SYNC_MAX_FREELANCERS = 5;
 
 function resolveFastpikBaseUrl() {
   return (
@@ -88,6 +107,67 @@ function normalizeStatus(value: unknown, fallback: FastpikSyncStatus = "idle") {
     return raw;
   }
   return fallback;
+}
+
+function sanitizeFreelancerName(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function sanitizeFreelancerWhatsapp(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeWhatsAppKey(value: string) {
+  const digitsOnly = value.replace(/[^0-9]/g, "");
+  if (!digitsOnly) return "";
+  if (digitsOnly.startsWith("0")) {
+    return `62${digitsOnly.slice(1)}`;
+  }
+  return digitsOnly;
+}
+
+function resolveFreelancersSnapshotPayload(
+  booking: BookingFastpikSyncRow,
+): FastpikFreelancerPayload[] {
+  const junctionFreelancers = Array.isArray(booking.booking_freelance)
+    ? booking.booking_freelance
+        .map((item) => {
+          if (!item || typeof item !== "object") return null;
+          return item.freelance && typeof item.freelance === "object"
+            ? item.freelance
+            : null;
+        })
+        .filter((item): item is BookingFreelancerRow => Boolean(item))
+    : [];
+
+  const sourceRows =
+    junctionFreelancers.length > 0
+      ? junctionFreelancers
+      : booking.freelance
+        ? [booking.freelance]
+        : [];
+
+  const seenWaKeys = new Set<string>();
+  const snapshot: FastpikFreelancerPayload[] = [];
+
+  for (const freelancer of sourceRows) {
+    const name = sanitizeFreelancerName(freelancer.name);
+    const whatsapp = sanitizeFreelancerWhatsapp(freelancer.whatsapp_number);
+    if (!name || !whatsapp) continue;
+
+    const waKey = normalizeWhatsAppKey(whatsapp) || whatsapp.toLowerCase();
+    if (seenWaKeys.has(waKey)) continue;
+    seenWaKeys.add(waKey);
+
+    const id = typeof freelancer.id === "string" ? freelancer.id.trim() : "";
+    snapshot.push(id ? { id, name, whatsapp } : { name, whatsapp });
+
+    if (snapshot.length >= FASTPIK_SYNC_MAX_FREELANCERS) {
+      break;
+    }
+  }
+
+  return snapshot;
 }
 
 async function patchProfileSyncLog(
@@ -171,7 +251,7 @@ async function getBookingForSync(supabase: any, userId: string, bookingId: strin
   const { data, error } = await supabase
     .from("bookings")
     .select(
-      "id, user_id, client_name, client_whatsapp, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, fastpik_sync_message, extra_fields",
+      "id, user_id, client_name, client_whatsapp, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, fastpik_sync_message, extra_fields, freelance(id, name, whatsapp_number), booking_freelance(freelance(id, name, whatsapp_number))",
     )
     .eq("id", bookingId)
     .eq("user_id", userId)
@@ -194,6 +274,7 @@ async function callFastpikUpsert(
     throw new Error("API key Fastpik belum diisi.");
   }
 
+  const freelancers = resolveFreelancersSnapshotPayload(booking);
   const payload = {
     source_app: "clientdesk",
     source_ref_id: booking.id,
@@ -203,6 +284,7 @@ async function callFastpikUpsert(
     client_name: booking.client_name,
     client_whatsapp: booking.client_whatsapp || "",
     gdrive_link: booking.drive_folder_url || "",
+    freelancers,
     sync_offset_ms: Math.max(0, Math.floor(options?.syncOffsetMs || 0)),
     clientdesk_defaults: {
       max_photos: profile.fastpik_default_max_photos,
