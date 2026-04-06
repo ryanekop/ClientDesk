@@ -95,7 +95,6 @@ type BatchImportButtonProps = {
 
 type BatchImportStrings = {
   blockedBookingWriteFallback: string;
-  failedDownloadTemplate: string;
   failedValidateImport: string;
   failedCommitImport: string;
   stepUpload: string;
@@ -105,7 +104,16 @@ type BatchImportStrings = {
   triggerLabel: string;
   dialogTitle: string;
   dialogDescription: string;
-  downloadTemplateLabel: string;
+  showAdvancedLabel: string;
+  hideAdvancedLabel: string;
+  guidanceTitle: string;
+  guidanceUniversity: string;
+  guidanceSessionDate: string;
+  guidanceSessionTime: string;
+  guidanceBookingDate: string;
+  guidanceWisudaOnly: string;
+  validateBatchLabel: string;
+  pasteTipsLabel: string;
   uploadPrimaryHint: string;
   uploadHintAutoId: string;
   uploadHintAutoValidate: string;
@@ -154,7 +162,11 @@ const TABLE_COLUMNS: BatchColumn[] = [
   { key: "client_whatsapp", label: "Nomor WA", placeholder: "+628123..." },
   { key: "event_type", label: "Event", required: true, placeholder: "Wedding / Wisuda / ..." },
   { key: "main_services", label: "Paket Utama", required: true, placeholder: "Nama paket" },
-  { key: "extra.universitas", label: "Universitas", placeholder: "Nama kampus / singkatan" },
+  {
+    key: "extra.universitas",
+    label: "Universitas",
+    placeholder: "Contoh: Universitas Indonesia / Universitas Indonesia (UI) / UI",
+  },
   { key: "session_date", label: "Tanggal Sesi", placeholder: "DD/MM/YYYY atau YYYY-MM-DD" },
   { key: "session_time", label: "Jam Sesi", placeholder: "HH:mm" },
   { key: "booking_date", label: "Tanggal Booking", placeholder: "DD/MM/YYYY atau YYYY-MM-DD" },
@@ -185,7 +197,6 @@ const TABLE_COLUMNS: BatchColumn[] = [
 function buildBatchImportStrings(t: BatchImportTranslator): BatchImportStrings {
   return {
     blockedBookingWriteFallback: t("blockedBookingWriteFallback"),
-    failedDownloadTemplate: t("failedDownloadTemplate"),
     failedValidateImport: t("failedValidateImport"),
     failedCommitImport: t("failedCommitImport"),
     stepUpload: t("stepUpload"),
@@ -195,7 +206,16 @@ function buildBatchImportStrings(t: BatchImportTranslator): BatchImportStrings {
     triggerLabel: t("triggerLabel"),
     dialogTitle: t("dialogTitle"),
     dialogDescription: t("dialogDescription"),
-    downloadTemplateLabel: t("downloadTemplateLabel"),
+    showAdvancedLabel: t("showAdvancedLabel"),
+    hideAdvancedLabel: t("hideAdvancedLabel"),
+    guidanceTitle: t("guidanceTitle"),
+    guidanceUniversity: t("guidanceUniversity"),
+    guidanceSessionDate: t("guidanceSessionDate"),
+    guidanceSessionTime: t("guidanceSessionTime"),
+    guidanceBookingDate: t("guidanceBookingDate"),
+    guidanceWisudaOnly: t("guidanceWisudaOnly"),
+    validateBatchLabel: t("validateBatchLabel"),
+    pasteTipsLabel: t("pasteTipsLabel"),
     uploadPrimaryHint: t("uploadPrimaryHint"),
     uploadHintAutoId: t("uploadHintAutoId"),
     uploadHintAutoValidate: t("uploadHintAutoValidate"),
@@ -358,34 +378,6 @@ export function BatchImportButton({
     setCommitResult(null);
     setPreparedRows([]);
     setFatalError(null);
-  }
-
-  async function handleDownloadTemplate() {
-    setFatalError(null);
-    try {
-      const response = await fetch("/api/bookings/import/template", {
-        method: "GET",
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(payload?.error || ui.failedDownloadTemplate);
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "template_batch_booking_v2.xlsx";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : ui.failedDownloadTemplate;
-      setFatalError(message);
-    }
   }
 
   function updateCell(rowIndex: number, key: string, value: string) {
@@ -603,7 +595,7 @@ export function BatchImportButton({
           resetState();
         }}
       >
-        <DialogContent className="sm:max-w-[96vw] lg:max-w-[1280px] max-h-[92vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-[960px] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Zap className="w-5 h-5" /> {ui.dialogTitle}
@@ -613,7 +605,7 @@ export function BatchImportButton({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex items-center gap-1 py-2">
+          <div className="flex items-center gap-2 py-2 overflow-x-auto">
             {steps.map((item, index) => (
               <React.Fragment key={item.key}>
                 <div
@@ -636,7 +628,7 @@ export function BatchImportButton({
                 </div>
                 {index < steps.length - 1 && (
                   <div
-                    className={`flex-1 h-px ${
+                    className={`h-px w-8 sm:w-12 shrink-0 ${
                       index < currentStepIdx ? "bg-green-500" : "bg-border"
                     }`}
                   />
@@ -655,15 +647,7 @@ export function BatchImportButton({
 
             {step === "upload" && (
               <>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Button
-                    variant="outline"
-                    className="gap-2 border-green-300 text-green-700 dark:text-green-400 dark:border-green-500/30 hover:bg-green-50 dark:hover:bg-green-500/10"
-                    onClick={handleDownloadTemplate}
-                  >
-                    <Download className="w-4 h-4" /> {ui.downloadTemplateLabel}
-                  </Button>
-
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <Button
                     type="button"
                     variant="outline"
@@ -671,7 +655,7 @@ export function BatchImportButton({
                     onClick={() => setShowAdvanced((prev) => !prev)}
                   >
                     <Settings2 className="w-4 h-4" />
-                    {showAdvanced ? "Sembunyikan Opsi Lanjutan" : "Tampilkan Opsi Lanjutan"}
+                    {showAdvanced ? ui.hideAdvancedLabel : ui.showAdvancedLabel}
                   </Button>
                 </div>
 
@@ -684,6 +668,14 @@ export function BatchImportButton({
                     <p className="text-xs text-muted-foreground/80 mt-1">
                       Baris terisi: {filledRowCount} • Total baris: {rows.length}
                     </p>
+                    <div className="mt-3 rounded-md border bg-background/80 p-2.5 space-y-1 text-[11px] text-muted-foreground">
+                      <p className="font-medium text-foreground/90">{ui.guidanceTitle}</p>
+                      <p>{ui.guidanceUniversity}</p>
+                      <p>{ui.guidanceSessionDate}</p>
+                      <p>{ui.guidanceSessionTime}</p>
+                      <p>{ui.guidanceBookingDate}</p>
+                      <p>{ui.guidanceWisudaOnly}</p>
+                    </div>
                   </div>
 
                   <div className="overflow-x-auto max-h-[46vh]">
@@ -751,7 +743,7 @@ export function BatchImportButton({
                     </Button>
 
                     <div className="text-xs text-muted-foreground">
-                      Tips: klik satu sel lalu paste blok data (Ctrl/Cmd + V)
+                      {ui.pasteTipsLabel}
                     </div>
                   </div>
                 </div>
@@ -939,7 +931,7 @@ export function BatchImportButton({
                   className="gap-2 w-full sm:w-auto"
                 >
                   {validating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  {validating ? ui.validatingLabel : "Validasi Data Batch"}
+                  {validating ? ui.validatingLabel : ui.validateBatchLabel}
                 </Button>
               </>
             )}
