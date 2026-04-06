@@ -56,6 +56,7 @@ const DEFAULT_WHATSAPP_TEMPLATES: Record<
       "Kode Booking: {{booking_code}}\n" +
       "Paket: {{service_name}}\n" +
       "Jadwal: {{session_date}}\n" +
+      "Jam: {{session_time}}\n" +
       "Total: {{total_price}}\n" +
       "DP: {{dp_paid}}\n\n" +
       "Mohon konfirmasi booking saya. Terima kasih.",
@@ -64,6 +65,7 @@ const DEFAULT_WHATSAPP_TEMPLATES: Record<
       "Booking Code: {{booking_code}}\n" +
       "Package: {{service_name}}\n" +
       "Schedule: {{session_date}}\n" +
+      "Time: {{session_time}}\n" +
       "Total: {{total_price}}\n" +
       "DP: {{dp_paid}}\n\n" +
       "Please confirm my booking. Thank you.",

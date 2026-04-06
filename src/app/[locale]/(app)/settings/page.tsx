@@ -358,6 +358,7 @@ const variableHints: Record<string, string[]> = {
     "{{instagram_link}}",
     "{{booking_code}}",
     "{{session_date}}",
+    ...BOOKING_WHATSAPP_TIME_VARIABLES,
     "{{service_name}}",
     "{{total_price}}",
     "{{dp_paid}}",

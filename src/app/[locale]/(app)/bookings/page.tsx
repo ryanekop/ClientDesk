@@ -81,6 +81,7 @@ import {
 } from "@/utils/google-calendar-status-sync";
 import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
 import { buildAutoDpVerificationPatch } from "@/lib/final-settlement";
+import { updateBookingStatusWithQueueTransition } from "@/lib/booking-status-queue";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
 import * as XLSX from "xlsx";
@@ -929,9 +930,6 @@ export default function BookingsPage() {
         }
 
         setIsUpdatingStatus(true);
-        const trigger = queueTriggerStatus?.trim();
-        const wasQueue = Boolean(trigger) && previousStatus === trigger;
-        const isQueue = Boolean(trigger) && nextStatus === trigger;
         const isCancelling = isTransitionToCancelled(previousStatus, nextStatus);
         const cancelPatch = isCancelling
             ? buildCancelPaymentPatch({
@@ -949,71 +947,22 @@ export default function BookingsPage() {
         });
 
         try {
-            if (isQueue && !wasQueue) {
-                const { data: queueRows } = await supabase
-                    .from("bookings")
-                    .select("queue_position")
-                    .eq("client_status", trigger)
-                    .not("queue_position", "is", null);
-                const maxPos = ((queueRows || []) as Array<{ queue_position?: number | null }>)
-                    .reduce((max, booking) => Math.max(max, booking.queue_position || 0), 0);
-                const newPos = maxPos + 1;
-                const { error } = await supabase
-                    .from("bookings")
-                    .update({
-                        status: nextStatus,
-                        client_status: nextStatus,
-                        queue_position: newPos,
-                        ...(cancelPatch || {}),
-                        ...(autoDpPatch || {}),
-                    })
-                    .eq("id", bookingId);
-                if (error) {
-                    setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
-                    return;
-                }
-            } else if (wasQueue && !isQueue) {
-                const { error } = await supabase
-                    .from("bookings")
-                    .update({
-                        status: nextStatus,
-                        client_status: nextStatus,
-                        queue_position: null,
-                        ...(cancelPatch || {}),
-                        ...(autoDpPatch || {}),
-                    })
-                    .eq("id", bookingId);
-                if (error) {
-                    setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
-                    return;
-                }
-
-                const { data: remainingQueueRows } = await supabase
-                    .from("bookings")
-                    .select("id, queue_position")
-                    .eq("client_status", trigger)
-                    .neq("id", bookingId)
-                    .not("queue_position", "is", null)
-                    .order("queue_position", { ascending: true });
-                const remainingQueue = ((remainingQueueRows || []) as Array<{ id: string; queue_position?: number | null }>);
-                for (let i = 0; i < remainingQueue.length; i += 1) {
-                    await supabase.from("bookings").update({ queue_position: i + 1 }).eq("id", remainingQueue[i].id);
-                }
-            } else {
-                const { error } = await supabase
-                    .from("bookings")
-                    .update({
-                        status: nextStatus,
-                        client_status: nextStatus,
-                        ...(cancelPatch || {}),
-                        ...(autoDpPatch || {}),
-                    })
-                    .eq("id", bookingId);
-                if (error) {
-                    setFeedbackDialog({ open: true, message: tb("failedUpdateStatus") });
-                    return;
-                }
+            const updateResult = await updateBookingStatusWithQueueTransition({
+                supabase,
+                bookingId,
+                previousStatus,
+                nextStatus,
+                queueTriggerStatus,
+                patch: {
+                    ...(cancelPatch || {}),
+                    ...(autoDpPatch || {}),
+                },
+            });
+            if (!updateResult.ok) {
+                setFeedbackDialog({ open: true, message: updateResult.errorMessage || tb("failedUpdateStatus") });
+                return;
             }
+
             await invalidateBookingPublicCache({
                 bookingCode: activeBooking.booking_code,
                 trackingUuid: activeBooking.tracking_uuid,

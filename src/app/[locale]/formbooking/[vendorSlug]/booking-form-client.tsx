@@ -69,6 +69,10 @@ import {
   resolvePreferredLocation,
   type LocationCoordinates,
 } from "@/utils/location";
+import {
+  formatSessionTime,
+  formatSessionTimeRange,
+} from "@/utils/format-date";
 import { buildInstagramTemplateVars } from "@/utils/instagram-template-vars";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
 import {
@@ -1285,6 +1289,20 @@ export function BookingFormClient({
       totalDurationMinutes,
       extraFields: mergedExtraForTemplate,
     });
+    const primarySession = sessionsForTemplate.find(
+      (session) => session.sessionDate === resolvedSessionDate,
+    );
+    const primarySessionDurationMinutes = primarySession
+      ? sessionDurationMinutesByKey[primarySession.key] || totalDurationMinutes
+      : totalDurationMinutes;
+    const sessionTime = resolvedSessionDate
+      ? formatSessionTimeRange(resolvedSessionDate, primarySessionDurationMinutes)
+      : "-";
+    const sessionStart = resolvedSessionDate
+      ? formatSessionTime(resolvedSessionDate)
+      : "-";
+    const sessionEnd =
+      sessionTime === "-" ? "-" : sessionTime.split(" - ").at(1) || "-";
 
     const msg =
       (resultData.bookingConfirmTemplate || "").trim()
@@ -1294,6 +1312,9 @@ export function BookingFormClient({
             ...buildInstagramTemplateVars(instagram),
             booking_code: resultData.bookingCode || "-",
             session_date: dateStr,
+            session_time: sessionTime,
+            session_start: sessionStart,
+            session_end: sessionEnd,
             service_name: svcName,
             total_price: formatCurrency(selectedBookingTotal),
             dp_paid: formatCurrency(dpVal),

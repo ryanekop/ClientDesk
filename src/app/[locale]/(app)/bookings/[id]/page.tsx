@@ -90,6 +90,7 @@ import {
 } from "@/lib/event-type-config";
 import { MAX_GOOGLE_UPLOAD_BYTES } from "@/lib/security/public-upload";
 import { normalizeSafeExternalUrl } from "@/utils/safe-link";
+import { updateBookingStatusWithQueueTransition } from "@/lib/booking-status-queue";
 import {
     buildEditableSpecialOfferSnapshot,
     computeSpecialOfferTotal,
@@ -223,6 +224,12 @@ type AddonService = {
 
 type BookingProofStage = "initial" | "final";
 
+type BookingDetailTabKey =
+    | "informasi"
+    | "keuangan"
+    | "hasil-jadi"
+    | "status-klien";
+
 type DrivePathProfile = {
     studio_name?: string | null;
     drive_folder_format?: string | null;
@@ -233,6 +240,7 @@ type DrivePathProfile = {
 type BookingProfileRow = {
     custom_client_statuses?: string[] | null;
     dp_verify_trigger_status?: string | null;
+    queue_trigger_status?: string | null;
     form_show_proof?: boolean | null;
     google_drive_access_token?: string | null;
     google_drive_refresh_token?: string | null;
@@ -367,13 +375,11 @@ function LocationValue({
 }
 
 function PaymentProofPanel({
-    title,
     url,
     driveFileId,
     alt,
     linkLabel,
 }: {
-    title: string;
     url: string;
     driveFileId: string | null;
     alt: string;
@@ -387,42 +393,43 @@ function PaymentProofPanel({
         setPreviewFailed(false);
     }, [previewSrc]);
 
-    return (
-        <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
-            <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                <ImageIcon className="w-4 h-4" /> {title}
-            </h3>
-            {!previewFailed && safeUrl ? (
-                <a href={safeUrl} target="_blank" rel="noopener noreferrer" className="block">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src={previewSrc}
-                        alt={alt}
-                        onError={() => setPreviewFailed(true)}
-                        className="max-w-sm w-full rounded-lg border bg-muted/20 shadow-sm"
-                    />
-                </a>
-            ) : safeUrl ? (
-                <a
-                    href={safeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between gap-3 rounded-xl border bg-muted/20 px-4 py-3 transition-colors hover:bg-muted/40"
-                >
-                    <div className="min-w-0">
-                        <p className="text-sm font-medium">{linkLabel}</p>
-                        <p className="mt-1 truncate text-xs text-muted-foreground">{safeUrl}</p>
-                    </div>
-                    <ExternalLink className="w-4 h-4 shrink-0 text-muted-foreground" />
-                </a>
-            ) : (
-                <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/20 px-4 py-3">
-                    <div className="min-w-0">
-                        <p className="text-sm font-medium">{linkLabel}</p>
-                        <p className="mt-1 truncate text-xs text-muted-foreground">URL bukti tidak valid.</p>
-                    </div>
+    if (!previewFailed && safeUrl) {
+        return (
+            <a href={safeUrl} target="_blank" rel="noopener noreferrer" className="block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                    src={previewSrc}
+                    alt={alt}
+                    onError={() => setPreviewFailed(true)}
+                    className="max-w-sm w-full rounded-lg border bg-muted/20 shadow-sm"
+                />
+            </a>
+        );
+    }
+
+    if (safeUrl) {
+        return (
+            <a
+                href={safeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between gap-3 rounded-xl border bg-muted/20 px-4 py-3 transition-colors hover:bg-muted/40"
+            >
+                <div className="min-w-0">
+                    <p className="text-sm font-medium">{linkLabel}</p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">{safeUrl}</p>
                 </div>
-            )}
+                <ExternalLink className="w-4 h-4 shrink-0 text-muted-foreground" />
+            </a>
+        );
+    }
+
+    return (
+        <div className="flex items-center justify-between gap-3 rounded-xl border bg-muted/20 px-4 py-3">
+            <div className="min-w-0">
+                <p className="text-sm font-medium">{linkLabel}</p>
+                <p className="mt-1 truncate text-xs text-muted-foreground">URL bukti tidak valid.</p>
+            </div>
         </div>
     );
 }
@@ -515,75 +522,69 @@ function PaymentProofManager({
         setResetKey((current) => current + 1);
     }
 
-    const uploadForm = canUpload ? (
-        <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
-            <FileDropzone
-                key={resetKey}
-                file={file}
-                previewUrl={previewUrl}
-                accept="image/*,.pdf"
-                label={uploadLabel}
-                helperText={helperText}
-                emptyText={tBookingDetail("paymentProofUploadPrompt")}
-                emptySubtext={tBookingDetail("paymentProofUploadHint")}
-                removeLabel={tBookingDetail("removeFile")}
-                onFileSelect={handleFileSelect}
-            />
-            <div className="flex justify-end">
-                <Button
-                    type="button"
-                    onClick={handleUpload}
-                    disabled={!file || uploading}
-                    className="gap-2"
-                >
-                    {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                    {uploading ? tBookingDetail("uploading") : uploadLabel}
-                </Button>
-            </div>
-        </div>
-    ) : null;
-
-    if (url) {
-        return (
-            <div className="space-y-4">
-                <PaymentProofPanel
-                    title={title}
-                    url={url}
-                    driveFileId={driveFileId}
-                    alt={alt}
-                    linkLabel={linkLabel}
-                />
-                {canDelete && onDelete ? (
-                    <div className="flex justify-end">
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            className="gap-1.5"
-                            onClick={onDelete}
-                            disabled={deleting}
-                        >
-                            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                            {deleteLabel || tBookingDetail("deleteProof")}
-                        </Button>
-                    </div>
-                ) : null}
-                {uploadForm}
-            </div>
-        );
-    }
-
     return (
         <div className="rounded-xl border bg-card p-4 space-y-4 sm:p-6">
             <div className="space-y-3">
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                     <ImageIcon className="w-4 h-4" /> {title}
                 </h3>
-                <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-sm text-muted-foreground">
-                    {emptyLabel}
-                </div>
+                {url ? (
+                    <PaymentProofPanel
+                        url={url}
+                        driveFileId={driveFileId}
+                        alt={alt}
+                        linkLabel={linkLabel}
+                    />
+                ) : (
+                    <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-8 text-sm text-muted-foreground">
+                        {emptyLabel}
+                    </div>
+                )}
             </div>
-            {uploadForm}
+
+            {canUpload ? (
+                <div className="space-y-3 border-t pt-4">
+                    <FileDropzone
+                        key={resetKey}
+                        file={file}
+                        previewUrl={previewUrl}
+                        accept="image/*,.pdf"
+                        label={uploadLabel}
+                        helperText={helperText}
+                        emptyText={tBookingDetail("paymentProofUploadPrompt")}
+                        emptySubtext={tBookingDetail("paymentProofUploadHint")}
+                        removeLabel={tBookingDetail("removeFile")}
+                        onFileSelect={handleFileSelect}
+                    />
+                    <div className="flex justify-end">
+                        <Button
+                            type="button"
+                            onClick={handleUpload}
+                            disabled={!file || uploading}
+                            className="gap-2"
+                        >
+                            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                            {uploading ? tBookingDetail("uploading") : uploadLabel}
+                        </Button>
+                    </div>
+                </div>
+            ) : null}
+
+            {canDelete && onDelete ? (
+                <div className="flex justify-end border-t pt-4">
+                    <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={onDelete}
+                        disabled={deleting}
+                    >
+                        {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        {deleteLabel || tBookingDetail("deleteProof")}
+                    </Button>
+                </div>
+            ) : null}
         </div>
     );
 }
@@ -647,7 +648,9 @@ export default function BookingDetailPage() {
     const [isDriveConnected, setIsDriveConnected] = React.useState(false);
     const [clientStatus, setClientStatus] = React.useState("");
     const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
-    const [queuePos, setQueuePos] = React.useState<number | "">(0);
+    const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
+    const [activeDetailTab, setActiveDetailTab] =
+        React.useState<BookingDetailTabKey>("informasi");
     const [savingStatus, setSavingStatus] = React.useState(false);
     const [statusSaved, setStatusSaved] = React.useState(false);
     const [cancelStatusConfirmOpen, setCancelStatusConfirmOpen] = React.useState(false);
@@ -1152,7 +1155,7 @@ export default function BookingDetailPage() {
                 supabase.from("bookings")
                     .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, admin_notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, price, duration_minutes, is_addon, affects_schedule)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
-                supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, dp_verify_trigger_status, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof").eq("id", user.id).single(),
+                supabase.from("profiles").select("google_drive_access_token, google_drive_refresh_token, studio_name, custom_client_statuses, dp_verify_trigger_status, queue_trigger_status, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof").eq("id", user.id).single(),
                 supabase.from("services")
                     .select("id, name, price, description, event_types")
                     .eq("user_id", user.id)
@@ -1180,6 +1183,7 @@ export default function BookingDetailPage() {
             )?.fastpik_link_display_mode_booking_detail;
             const statusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
             setDpVerifyTriggerStatus(profileRow?.dp_verify_trigger_status ?? "");
+            setQueueTriggerStatus((profileRow?.queue_trigger_status || "Antrian Edit").trim() || "Antrian Edit");
             setFastpikLinkDisplayMode(
                 normalizeFastpikLinkDisplayMode(
                     bookingDetailLinkMode ??
@@ -1234,7 +1238,6 @@ export default function BookingDetailPage() {
             setAddonServices((addonServiceRows || []) as AddonService[]);
             if (rawBooking) {
                 setClientStatus(syncedStatus);
-                setQueuePos(rawBooking.queue_position || "");
                 if (canWriteBookings && (rawBooking.client_status !== syncedStatus || rawBooking.status !== syncedStatus)) {
                     await supabase.from("bookings").update({ status: syncedStatus, client_status: syncedStatus }).eq("id", id);
                     await invalidateBookingPublicCache({
@@ -1311,20 +1314,21 @@ export default function BookingDetailPage() {
             dpPaid: booking.dp_paid,
             dpVerifiedAt: booking.dp_verified_at,
         });
-        const { error } = await supabase
-            .from("bookings")
-            .update({
-                status: nextStatus,
-                client_status: nextStatus,
-                queue_position: queuePos === "" ? null : Number(queuePos),
+        const updateResult = await updateBookingStatusWithQueueTransition({
+            supabase,
+            bookingId: booking.id,
+            previousStatus,
+            nextStatus,
+            queueTriggerStatus,
+            patch: {
                 ...(cancelPatch || {}),
                 ...(autoDpPatch || {}),
-            })
-            .eq("id", booking.id);
+            },
+        });
         setSavingStatus(false);
 
-        if (error) {
-            showFeedback(tBookingDetail("failedSaveStatus"));
+        if (!updateResult.ok) {
+            showFeedback(updateResult.errorMessage || tBookingDetail("failedSaveStatus"));
             return;
         }
         await invalidateBookingPublicCache({
@@ -1339,7 +1343,12 @@ export default function BookingDetailPage() {
                     ...prev,
                     status: nextStatus || prev.status,
                     client_status: nextStatus,
-                    queue_position: queuePos === "" ? null : Number(queuePos),
+                    queue_position:
+                        updateResult.transition === "entered"
+                            ? (updateResult.queuePosition ?? prev.queue_position)
+                            : updateResult.transition === "left"
+                                ? null
+                                : prev.queue_position,
                     ...(cancelPatch || {}),
                     ...(autoDpPatch || {}),
                 }
@@ -2411,6 +2420,22 @@ export default function BookingDetailPage() {
                 booking.fastpik_last_synced_at,
         ),
     };
+    const normalizedQueueTriggerStatus =
+        (queueTriggerStatus || "Antrian Edit").trim() || "Antrian Edit";
+    const normalizedCurrentStatus =
+        (booking.client_status || booking.status || "").trim();
+    const normalizedSelectedStatus = (clientStatus || "").trim();
+    const isCurrentlyInQueue =
+        normalizedCurrentStatus === normalizedQueueTriggerStatus &&
+        booking.queue_position !== null;
+    const willEnterQueueAfterSave =
+        normalizedSelectedStatus === normalizedQueueTriggerStatus &&
+        normalizedCurrentStatus !== normalizedQueueTriggerStatus;
+    const queuePositionDisplay = isCurrentlyInQueue
+        ? `#${booking.queue_position}`
+        : willEnterQueueAfterSave
+            ? "Akan otomatis saat disimpan."
+            : "-";
 
     // Separate nama_pasangan from other extra fields (show right after Nama for Wedding)
     const namaPasangan = builtInExtraFields.nama_pasangan;
@@ -2554,6 +2579,12 @@ export default function BookingDetailPage() {
             </div>
         </div>
     );
+    const detailTabs: Array<{ key: BookingDetailTabKey; label: string }> = [
+        { key: "informasi", label: "Informasi" },
+        { key: "keuangan", label: "Keuangan" },
+        { key: "hasil-jadi", label: "Hasil Jadi" },
+        { key: "status-klien", label: "Status Klien" },
+    ];
 
     return (
         <>
@@ -2632,7 +2663,29 @@ export default function BookingDetailPage() {
                 )}
             </div>
 
+            <div className="border-b">
+                <div className="-mx-1 overflow-x-auto px-1 md:mx-0 md:overflow-visible md:px-0">
+                    <div className="flex min-w-max gap-0 md:min-w-0 md:flex-wrap">
+                        {detailTabs.map((tab) => (
+                            <button
+                                key={tab.key}
+                                type="button"
+                                onClick={() => setActiveDetailTab(tab.key)}
+                                className={`shrink-0 whitespace-nowrap px-3 sm:px-4 pt-3 pb-2 text-sm font-medium border-b-[3px] transition-colors cursor-pointer ${
+                                    activeDetailTab === tab.key
+                                        ? "border-foreground text-foreground"
+                                        : "border-transparent text-muted-foreground hover:text-foreground/80 hover:border-muted-foreground/30"
+                                }`}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
             {/* Informasi Klien */}
+            {activeDetailTab === "informasi" && (
             <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Informasi Klien</h3>
                 <InfoRow label="Nama" value={booking.client_name} />
@@ -2657,8 +2710,10 @@ export default function BookingDetailPage() {
                     <InfoRow key={field.id} label={field.label} value={field.value} />
                 ))}
             </div>
+            )}
 
             {/* Detail Sesi */}
+            {activeDetailTab === "informasi" && (
             <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Detail Sesi</h3>
                 <InfoRow label={tBookingDetail("sessionDateLabel")} value={renderSessionDisplayValue(sessionDisplay.dateDisplay)} />
@@ -2696,8 +2751,11 @@ export default function BookingDetailPage() {
                     <InfoRow key={field.id} label={field.label} value={field.value} />
                 ))}
             </div>
+            )}
 
             {/* Keuangan */}
+            {activeDetailTab === "keuangan" && (
+            <>
             <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
                 <div className={RESPONSIVE_SECTION_HEADER_CLASS}>
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Keuangan</h3>
@@ -3121,15 +3179,17 @@ export default function BookingDetailPage() {
                     onError={(message) => showFeedback(message, warningTitle)}
                 />
             )}
+            </>
+            )}
 
             {/* Catatan */}
-            {booking.notes && (
+            {activeDetailTab === "informasi" && booking.notes && (
                 <div className="rounded-xl border bg-card p-4 space-y-2 sm:p-6">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Catatan</h3>
                     <p className="text-sm whitespace-pre-wrap">{booking.notes}</p>
                 </div>
             )}
-            {booking.admin_notes && (
+            {activeDetailTab === "informasi" && booking.admin_notes && (
                 <div className="rounded-xl border bg-card p-4 space-y-2 sm:p-6">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Catatan Admin</h3>
                     <p className="text-sm whitespace-pre-wrap">{booking.admin_notes}</p>
@@ -3137,7 +3197,7 @@ export default function BookingDetailPage() {
             )}
 
             {/* Link Pilih Foto (mengikuti mode tampilan link Fastpik) */}
-            {(booking.fastpik_project_link || booking.drive_folder_url || booking.fastpik_project_edit_link || booking.fastpik_project_id) && (
+            {activeDetailTab === "hasil-jadi" && (
                 <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
                     <div className={RESPONSIVE_SECTION_HEADER_CLASS}>
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
@@ -3207,6 +3267,12 @@ export default function BookingDetailPage() {
                             "text-blue-500",
                             fastpikLinkVisibility.mode === "both" &&
                               fastpikLinkVisibility.showFastpik,
+                        )}
+                    {!fastpikLinkVisibility.showFastpik &&
+                        !fastpikLinkVisibility.showDrive && (
+                            <p className="text-xs text-muted-foreground">
+                                Link Fastpik atau Google Drive belum tersedia untuk booking ini.
+                            </p>
                         )}
 
                     <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
@@ -3284,7 +3350,7 @@ export default function BookingDetailPage() {
             )}
 
             {/* Link Portofolio IG */}
-            {booking.portfolio_url && (
+            {activeDetailTab === "hasil-jadi" && booking.portfolio_url && (
                 <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5"><Link2 className="w-4 h-4" /> Portofolio Instagram</h3>
                     <div className="flex min-w-0 flex-col gap-2 rounded-lg border bg-muted/30 p-3 text-sm sm:flex-row sm:items-center">
@@ -3305,7 +3371,7 @@ export default function BookingDetailPage() {
             )}
 
             {/* File Klien — Upload ke Google Drive */}
-            {isDriveConnected && (
+            {activeDetailTab === "hasil-jadi" && isDriveConnected && (
                 <div className="rounded-xl border bg-card p-4 space-y-4 sm:p-6">
                     <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
                         <FileText className="w-4 h-4" /> File Klien
@@ -3385,6 +3451,7 @@ export default function BookingDetailPage() {
             )}
 
             {/* Status Klien / Tracking */}
+            {activeDetailTab === "status-klien" && (
             <div className="rounded-xl border bg-card p-4 space-y-4 sm:p-6">
                 <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-1.5"><ListOrdered className="w-4 h-4" /> Status Klien</h3>
 
@@ -3404,16 +3471,13 @@ export default function BookingDetailPage() {
                         </select>
                     </div>
                     <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">Posisi Antrian</label>
-                        <input
-                            type="number"
-                            min={0}
-                            value={queuePos}
-                            onChange={e => setQueuePos(e.target.value === "" ? "" : parseInt(e.target.value, 10))}
-                            placeholder="Misal: 3"
-                            disabled={!canWriteBookings}
-                            className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                        />
+                        <label className="text-xs font-medium text-muted-foreground">Posisi Antrian (Otomatis)</label>
+                        <div className="min-h-9 rounded-md border border-input bg-muted/20 px-3 py-2 text-sm">
+                            {queuePositionDisplay}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                            Trigger antrian: {normalizedQueueTriggerStatus}
+                        </p>
                     </div>
                 </div>
 
@@ -3457,6 +3521,7 @@ export default function BookingDetailPage() {
                     </div>
                 )}
             </div>
+            )}
         </div>
 
             {/* Delete File Confirmation Modal */}
