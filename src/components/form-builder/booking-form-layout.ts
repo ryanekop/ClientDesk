@@ -710,7 +710,11 @@ function getSessionBuiltInOrderIds(
     }
   });
 
-  const sessionFieldGroups = buildSessionFieldGroups(eventType, extraFieldKeys);
+  const sessionFieldGroups = buildSessionFieldGroups(
+    eventType,
+    extraFieldKeys,
+    options.layoutMode,
+  );
   const splitToggleFields = getSplitToggleFields(eventType);
   const splitLocationFieldIds = sessionFieldGroups.split_location.map(
     (field) => field.builtinId,
@@ -1124,10 +1128,9 @@ export function resolveNormalizedActiveFormLayout(
     options.layoutMode,
   );
   const candidateRaw = isFormLayoutByMode(candidateLayout)
-    ? candidateLayout[resolvedLayoutMode] ||
-      candidateLayout.normal ||
-      candidateLayout.split ||
-      []
+    ? resolvedLayoutMode === "split"
+      ? candidateLayout.split
+      : candidateLayout.normal ?? candidateLayout.split ?? []
     : candidateLayout;
 
   return normalizeStoredFormLayout(

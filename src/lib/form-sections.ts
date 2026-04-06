@@ -123,10 +123,9 @@ export function resolveNormalizedLayoutFromStoredSections(
   }
 
   const modeRaw =
-    candidateValue[resolvedLayoutMode] ||
-    candidateValue.normal ||
-    candidateValue.split ||
-    [];
+    resolvedLayoutMode === "split"
+      ? candidateValue.split
+      : candidateValue.normal ?? candidateValue.split ?? [];
   return normalizeStoredFormLayout(modeRaw, normalizedEventType, {
     layoutMode: resolvedLayoutMode,
   });
