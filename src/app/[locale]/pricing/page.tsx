@@ -8,7 +8,7 @@ import { useTenant } from "@/lib/tenant-context"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from 'next/link'
-import { Check, Star, Zap, Crown, Infinity as InfinityIcon, ArrowLeft } from "lucide-react"
+import { Check, Star, Zap, Crown, ArrowLeft } from "lucide-react"
 import {
     Card,
     CardContent,
@@ -76,8 +76,7 @@ export default function PricingPage() {
             features: [...bundleExtraFeatures, ...sharedFeatures],
             link: pricingMode === "bundle" ? BUNDLE_CHECKOUT_LINK : CLIENT_DESK_CHECKOUT_LINK,
             popular: false,
-            icon: Zap,
-            isLifetime: false
+            icon: Zap
         },
         {
             nameKey: "plan3Months",
@@ -91,8 +90,7 @@ export default function PricingPage() {
             ],
             link: pricingMode === "bundle" ? BUNDLE_CHECKOUT_LINK : CLIENT_DESK_CHECKOUT_LINK,
             popular: false,
-            icon: Star,
-            isLifetime: false
+            icon: Star
         },
         {
             nameKey: "plan1Year",
@@ -106,19 +104,7 @@ export default function PricingPage() {
             ],
             link: pricingMode === "bundle" ? BUNDLE_CHECKOUT_LINK : CLIENT_DESK_CHECKOUT_LINK,
             popular: true,
-            icon: Crown,
-            isLifetime: false
-        },
-        {
-            nameKey: "planLifetime",
-            tier: "lifetime",
-            price: pricingMode === "bundle" ? "749rb" : "549rb",
-            durationKey: "oneTime",
-            features: ["featurePayOnce", ...bundleExtraFeatures, "featureLimitedSlot", ...sharedFeatures, "featureFutureUpdates"],
-            link: pricingMode === "bundle" ? BUNDLE_CHECKOUT_LINK : CLIENT_DESK_CHECKOUT_LINK,
-            popular: false,
-            icon: InfinityIcon,
-            isLifetime: true
+            icon: Crown
         }
     ]
 
@@ -214,7 +200,7 @@ export default function PricingPage() {
                     </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
                     {plans.map((plan) => {
                         const isActive = currentTier === plan.tier
                         return (
@@ -248,7 +234,7 @@ export default function PricingPage() {
                                         <span className="text-muted-foreground text-sm mb-1">{t(plan.durationKey)}</span>
                                     </div>
                                     <CardDescription>
-                                        {plan.isLifetime ? t('billingOnce') : t('billingManualRenew')}
+                                        {t('billingManualRenew')}
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="flex-1">
