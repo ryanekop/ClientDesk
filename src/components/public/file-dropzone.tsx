@@ -7,7 +7,7 @@ type FileDropzoneProps = {
   file: File | null;
   previewUrl: string | null;
   accept?: string;
-  label: string;
+  label: React.ReactNode;
   helperText?: string;
   emptyText: string;
   emptySubtext?: string;

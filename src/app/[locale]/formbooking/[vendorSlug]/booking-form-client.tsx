@@ -4,13 +4,23 @@ import * as React from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
+  AtSign,
+  Banknote,
+  CalendarDays,
   Loader2,
   CheckCircle2,
+  Clock3,
+  CreditCard,
   MapPin,
   MessageCircle,
   FileText,
+  Package,
+  Phone,
   List,
   LayoutGrid,
+  Tag,
+  User,
+  type LucideIcon,
 } from "lucide-react";
 import {
   LocationAutocomplete,
@@ -30,6 +40,8 @@ import {
   buildCustomFieldTemplateVars,
   buildCustomFieldSnapshots,
   groupFormLayoutBySection,
+  resolveBuiltInFieldRequired,
+  type BuiltInFieldId,
   type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
 import { FileDropzone } from "@/components/public/file-dropzone";
@@ -244,6 +256,63 @@ function parseFormatted(s: string): number | "" {
 function sanitizeNumericCustomFieldValue(value: string): string {
   return value.replace(/\D+/g, "");
 }
+
+function hasDateTimeTimePart(value: string | null | undefined) {
+  if (!value) return false;
+  const normalized = value.trim();
+  if (!normalized) return false;
+  const [, timePart = ""] = normalized.split("T");
+  return timePart.trim().length > 0;
+}
+
+function getBuiltInFieldIcon(builtinId: BuiltInFieldId): LucideIcon {
+  if (builtinId.startsWith("extra:")) return List;
+
+  switch (builtinId) {
+    case "client_name":
+      return User;
+    case "client_whatsapp":
+      return Phone;
+    case "instagram":
+      return AtSign;
+    case "event_type":
+      return Tag;
+    case "session_date":
+    case "akad_date":
+    case "resepsi_date":
+    case "wisuda_session1_date":
+    case "wisuda_session2_date":
+      return CalendarDays;
+    case "session_time":
+    case "akad_time":
+    case "resepsi_time":
+    case "wisuda_session1_time":
+    case "wisuda_session2_time":
+      return Clock3;
+    case "location":
+    case "location_detail":
+      return MapPin;
+    case "notes":
+      return FileText;
+    case "service_package":
+    case "addon_packages":
+      return Package;
+    case "dp_paid":
+      return Banknote;
+    case "bank_accounts":
+      return CreditCard;
+    case "payment_proof":
+      return FileText;
+    default:
+      return List;
+  }
+}
+
+type SummaryRow = {
+  label: string;
+  value: string;
+  icon?: LucideIcon;
+};
 
 function compareServicesByCatalogOrder(a: Service, b: Service) {
   const aSort = typeof a.sort_order === "number" ? a.sort_order : Number.MAX_SAFE_INTEGER;
@@ -788,10 +857,18 @@ export function BookingFormClient({
     }
     setError("");
 
-    const hasBuiltInField = (builtinId: string) =>
-      visibleActiveLayout.some(
-        (item) => item.kind === "builtin_field" && item.builtinId === builtinId,
+    const getVisibleBuiltInField = (builtinId: BuiltInFieldId) =>
+      visibleActiveLayout.find(
+        (item): item is Extract<FormLayoutItem, { kind: "builtin_field" }> =>
+          item.kind === "builtin_field" && item.builtinId === builtinId,
       );
+    const hasBuiltInField = (builtinId: BuiltInFieldId) =>
+      Boolean(getVisibleBuiltInField(builtinId));
+    const isRequiredBuiltInField = (builtinId: BuiltInFieldId) => {
+      const builtInField = getVisibleBuiltInField(builtinId);
+      if (!builtInField) return false;
+      return resolveBuiltInFieldRequired(builtInField);
+    };
     const hasExtraField = (key: string) =>
       hasBuiltInField(`extra:${key}`);
     const isWeddingEvent = eventType === "Wedding";
@@ -799,26 +876,43 @@ export function BookingFormClient({
     const isSplitSessionEnabled =
       splitDates && (isWeddingEvent || isWisudaEvent);
 
-    const requiresClientName = hasBuiltInField("client_name");
-    const requiresClientWhatsapp = hasBuiltInField("client_whatsapp");
-    const requiresEventType = hasBuiltInField("event_type");
-    const requiresServicePackage = hasBuiltInField("service_package");
+    const requiresClientName = isRequiredBuiltInField("client_name");
+    const requiresClientWhatsapp = isRequiredBuiltInField("client_whatsapp");
+    const requiresEventType = isRequiredBuiltInField("event_type");
+    const requiresServicePackage = isRequiredBuiltInField("service_package");
     const requiresCitySelection = requiresServicePackage && isCityScopedEvent;
     const requiresSessionDate =
-      hasBuiltInField("session_date") &&
+      isRequiredBuiltInField("session_date") &&
+      !isSplitSessionEnabled;
+    const requiresSessionTime =
+      isRequiredBuiltInField("session_time") &&
       !isSplitSessionEnabled;
     const requiresAkadDate =
-      hasBuiltInField("akad_date") && isWeddingEvent && isSplitSessionEnabled;
+      isRequiredBuiltInField("akad_date") && isWeddingEvent && isSplitSessionEnabled;
+    const requiresAkadTime =
+      isRequiredBuiltInField("akad_time") && isWeddingEvent && isSplitSessionEnabled;
     const requiresResepsiDate =
-      hasBuiltInField("resepsi_date") && isWeddingEvent && isSplitSessionEnabled;
+      isRequiredBuiltInField("resepsi_date") && isWeddingEvent && isSplitSessionEnabled;
+    const requiresResepsiTime =
+      isRequiredBuiltInField("resepsi_time") && isWeddingEvent && isSplitSessionEnabled;
     const requiresWisudaSession1Date =
-      hasBuiltInField("wisuda_session1_date") &&
+      isRequiredBuiltInField("wisuda_session1_date") &&
+      isWisudaEvent &&
+      isSplitSessionEnabled;
+    const requiresWisudaSession1Time =
+      isRequiredBuiltInField("wisuda_session1_time") &&
       isWisudaEvent &&
       isSplitSessionEnabled;
     const requiresWisudaSession2Date =
-      hasBuiltInField("wisuda_session2_date") &&
+      isRequiredBuiltInField("wisuda_session2_date") &&
       isWisudaEvent &&
       isSplitSessionEnabled;
+    const requiresWisudaSession2Time =
+      isRequiredBuiltInField("wisuda_session2_time") &&
+      isWisudaEvent &&
+      isSplitSessionEnabled;
+    const requiresLocation =
+      isRequiredBuiltInField("location") && showsLocationField;
 
     if (requiresCitySelection && !normalizedSelectedCityCode) {
       setError(
@@ -834,15 +928,17 @@ export function BookingFormClient({
       (requiresClientWhatsapp && !phone.trim()) ||
       (requiresEventType && !eventType) ||
       (requiresSessionDate && !sessionDate) ||
+      (requiresSessionTime && !hasDateTimeTimePart(sessionDate)) ||
       (requiresAkadDate && !akadDate) ||
+      (requiresAkadTime && !hasDateTimeTimePart(akadDate)) ||
       (requiresResepsiDate && !resepsiDate) ||
+      (requiresResepsiTime && !hasDateTimeTimePart(resepsiDate)) ||
       (requiresWisudaSession1Date && !wisudaSession1Date) ||
+      (requiresWisudaSession1Time && !hasDateTimeTimePart(wisudaSession1Date)) ||
       (requiresWisudaSession2Date && !wisudaSession2Date) ||
+      (requiresWisudaSession2Time && !hasDateTimeTimePart(wisudaSession2Date)) ||
       (requiresServicePackage && selectedServiceIds.length === 0) ||
-      (!location &&
-        !isWeddingEvent &&
-        !(isWisudaEvent && isSplitSessionEnabled) &&
-        showsLocationField)
+      (requiresLocation && !location)
     ) {
       setError(t("errorWajib"));
       return;
@@ -1408,6 +1504,25 @@ export function BookingFormClient({
     inputClass +
     " cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat pr-8";
 
+  function buildFieldLabelNode({
+    text,
+    required,
+    icon,
+  }: {
+    text: string;
+    required?: boolean;
+    icon?: LucideIcon;
+  }) {
+    const Icon = icon;
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        {Icon ? <Icon className="h-3.5 w-3.5 text-muted-foreground" /> : null}
+        <span>{text}</span>
+        {required ? <span className="text-red-500">*</span> : null}
+      </span>
+    );
+  }
+
   const minDP = getMinDpForEvent();
   const normalizedEventType = normalizeEventTypeName(eventType) || eventType;
   const hasSelectedEventType = eventType.trim().length > 0;
@@ -1824,12 +1939,31 @@ export function BookingFormClient({
     setProofPreview(null);
   }, [selectedPaymentMethod]);
 
+  const visibleBuiltInFieldById = React.useMemo(() => {
+    const map = new Map<
+      string,
+      Extract<FormLayoutItem, { kind: "builtin_field" }>
+    >();
+    visibleActiveLayout.forEach((item) => {
+      if (item.kind !== "builtin_field") return;
+      if (!map.has(item.builtinId)) {
+        map.set(item.builtinId, item);
+      }
+    });
+    return map;
+  }, [visibleActiveLayout]);
+
   const hasVisibleBuiltInField = React.useCallback(
-    (builtinId: string) =>
-      visibleActiveLayout.some(
-        (item) => item.kind === "builtin_field" && item.builtinId === builtinId,
-      ),
-    [visibleActiveLayout],
+    (builtinId: string) => visibleBuiltInFieldById.has(builtinId),
+    [visibleBuiltInFieldById],
+  );
+  const isBuiltInFieldRequired = React.useCallback(
+    (builtinId: BuiltInFieldId) => {
+      const builtInField = visibleBuiltInFieldById.get(builtinId);
+      if (!builtInField) return false;
+      return resolveBuiltInFieldRequired(builtInField);
+    },
+    [visibleBuiltInFieldById],
   );
 
   const step1ValidationState = React.useMemo(() => {
@@ -1837,21 +1971,35 @@ export function BookingFormClient({
     const isWisudaEvent = eventType === "Wisuda";
     const isSplitSessionEnabled = splitDates && (isWeddingEvent || isWisudaEvent);
     const requiresSessionDate =
-      hasVisibleBuiltInField("session_date") && !isSplitSessionEnabled;
+      isBuiltInFieldRequired("session_date") && !isSplitSessionEnabled;
+    const requiresSessionTime =
+      isBuiltInFieldRequired("session_time") && !isSplitSessionEnabled;
     const requiresAkadDate =
-      hasVisibleBuiltInField("akad_date") && isWeddingEvent && isSplitSessionEnabled;
+      isBuiltInFieldRequired("akad_date") && isWeddingEvent && isSplitSessionEnabled;
+    const requiresAkadTime =
+      isBuiltInFieldRequired("akad_time") && isWeddingEvent && isSplitSessionEnabled;
     const requiresResepsiDate =
-      hasVisibleBuiltInField("resepsi_date") && isWeddingEvent && isSplitSessionEnabled;
+      isBuiltInFieldRequired("resepsi_date") && isWeddingEvent && isSplitSessionEnabled;
+    const requiresResepsiTime =
+      isBuiltInFieldRequired("resepsi_time") && isWeddingEvent && isSplitSessionEnabled;
     const requiresWisudaSession1Date =
-      hasVisibleBuiltInField("wisuda_session1_date") &&
+      isBuiltInFieldRequired("wisuda_session1_date") &&
+      isWisudaEvent &&
+      isSplitSessionEnabled;
+    const requiresWisudaSession1Time =
+      isBuiltInFieldRequired("wisuda_session1_time") &&
       isWisudaEvent &&
       isSplitSessionEnabled;
     const requiresWisudaSession2Date =
-      hasVisibleBuiltInField("wisuda_session2_date") &&
+      isBuiltInFieldRequired("wisuda_session2_date") &&
+      isWisudaEvent &&
+      isSplitSessionEnabled;
+    const requiresWisudaSession2Time =
+      isBuiltInFieldRequired("wisuda_session2_time") &&
       isWisudaEvent &&
       isSplitSessionEnabled;
     const requiresLocation =
-      hasVisibleBuiltInField("location") && effectiveVendor.form_show_location !== false;
+      isBuiltInFieldRequired("location") && effectiveVendor.form_show_location !== false;
     const requiredCustomFields = infoStepSections.flatMap((section) =>
       section.items.filter(
         (item): item is Extract<FormLayoutItem, { kind: "custom_field" }> =>
@@ -1891,14 +2039,19 @@ export function BookingFormClient({
           !extraData.tempat_wisuda_2?.trim()));
 
     if (
-      (hasVisibleBuiltInField("client_name") && !clientName.trim()) ||
-      (hasVisibleBuiltInField("client_whatsapp") && !phone.trim()) ||
-      (hasVisibleBuiltInField("event_type") && !eventType) ||
+      (isBuiltInFieldRequired("client_name") && !clientName.trim()) ||
+      (isBuiltInFieldRequired("client_whatsapp") && !phone.trim()) ||
+      (isBuiltInFieldRequired("event_type") && !eventType) ||
       (requiresSessionDate && !sessionDate) ||
+      (requiresSessionTime && !hasDateTimeTimePart(sessionDate)) ||
       (requiresAkadDate && !akadDate) ||
+      (requiresAkadTime && !hasDateTimeTimePart(akadDate)) ||
       (requiresResepsiDate && !resepsiDate) ||
+      (requiresResepsiTime && !hasDateTimeTimePart(resepsiDate)) ||
       (requiresWisudaSession1Date && !wisudaSession1Date) ||
+      (requiresWisudaSession1Time && !hasDateTimeTimePart(wisudaSession1Date)) ||
       (requiresWisudaSession2Date && !wisudaSession2Date) ||
+      (requiresWisudaSession2Time && !hasDateTimeTimePart(wisudaSession2Date)) ||
       (requiresLocation && !location.trim()) ||
       hasMissingCustomField ||
       hasMissingExtraField
@@ -1937,6 +2090,7 @@ export function BookingFormClient({
     eventType,
     extraData,
     hasVisibleBuiltInField,
+    isBuiltInFieldRequired,
     infoStepSections,
     localeCode,
     location,
@@ -1951,7 +2105,7 @@ export function BookingFormClient({
   ]);
 
   const step2ValidationState = React.useMemo(() => {
-    const requiresServicePackage = hasVisibleBuiltInField("service_package");
+    const requiresServicePackage = isBuiltInFieldRequired("service_package");
 
     if (requiresServicePackage && isCityScopedEvent && !normalizedSelectedCityCode) {
       return {
@@ -1969,7 +2123,7 @@ export function BookingFormClient({
 
     return { valid: true, errorMessage: "" };
   }, [
-    hasVisibleBuiltInField,
+    isBuiltInFieldRequired,
     isCityScopedEvent,
     localeCode,
     normalizedSelectedCityCode,
@@ -2058,8 +2212,11 @@ export function BookingFormClient({
     return (
       <div key={field.id} className="space-y-1.5">
         <label className="text-sm font-medium">
-          {field.label}
-          {field.required && <span className="text-red-500"> *</span>}
+          {buildFieldLabelNode({
+            text: field.label,
+            required: field.required,
+            icon: List,
+          })}
         </label>
         {description ? <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{description}</p> : null}
         {field.type === "textarea" ? (
@@ -2165,8 +2322,11 @@ export function BookingFormClient({
         className={`space-y-1.5 ${field.isLocation || field.fullWidth || currentExtraFields.length === 1 ? "col-span-full" : ""}`}
       >
         <label className="text-sm font-medium">
-          {label}
-          {field.required && <span className="text-red-500"> *</span>}
+          {buildFieldLabelNode({
+            text: label,
+            required: field.required,
+            icon: field.isLocation ? MapPin : List,
+          })}
         </label>
         {description ? (
           <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{description}</p>
@@ -2255,13 +2415,19 @@ export function BookingFormClient({
     const fieldLabel = (fallback: string) =>
       getDisplayLabelForBuiltInField(item, fallback);
     const fieldDescription = getDisplayDescriptionForField(item);
+    const builtInFieldRequired = resolveBuiltInFieldRequired(item);
+    const builtInFieldIcon = getBuiltInFieldIcon(item.builtinId);
 
     switch (item.builtinId) {
       case "client_name":
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel(t("namaLengkap"))} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel(t("namaLengkap")),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2271,7 +2437,7 @@ export function BookingFormClient({
               onChange={(e) => setClientName(e.target.value)}
               placeholder={t("namaPlaceholder")}
               className={inputClass}
-              required
+              required={builtInFieldRequired}
             />
           </div>
         );
@@ -2279,7 +2445,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel(t("nomorWhatsapp"))} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel(t("nomorWhatsapp")),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2310,7 +2480,7 @@ export function BookingFormClient({
                 }}
                 placeholder="8123456789"
                 className={inputClass}
-                required
+                required={builtInFieldRequired}
               />
             </div>
           </div>
@@ -2318,7 +2488,13 @@ export function BookingFormClient({
       case "instagram":
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">{fieldLabel("Instagram")}</label>
+            <label className="text-sm font-medium">
+              {buildFieldLabelNode({
+                text: fieldLabel("Instagram"),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
+            </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
@@ -2340,7 +2516,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel(t("tipeAcara"))} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel(t("tipeAcara")),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2371,7 +2551,7 @@ export function BookingFormClient({
                 setDpDisplay("");
               }}
               className={selectClass}
-              required
+              required={builtInFieldRequired}
             >
               <option value="">{t("pilihTipe")}</option>
               {eventTypeOptions.map((et) => (
@@ -2400,7 +2580,10 @@ export function BookingFormClient({
                 <span className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${splitDates ? "translate-x-4" : "translate-x-0"}`} />
               </button>
               <span className="text-sm font-medium">
-                {fieldLabel("Akad & Resepsi beda hari")}
+                {buildFieldLabelNode({
+                  text: fieldLabel("Akad & Resepsi beda hari"),
+                  icon: builtInFieldIcon,
+                })}
               </span>
             </div>
             {fieldDescription ? (
@@ -2426,7 +2609,10 @@ export function BookingFormClient({
                 <span className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${splitDates ? "translate-x-4" : "translate-x-0"}`} />
               </button>
               <span className="text-sm font-medium">
-                {fieldLabel("Sesi 1 & Sesi 2 beda waktu/lokasi")}
+                {buildFieldLabelNode({
+                  text: fieldLabel("Sesi 1 & Sesi 2 beda waktu/lokasi"),
+                  icon: builtInFieldIcon,
+                })}
               </span>
             </div>
             {fieldDescription ? (
@@ -2439,7 +2625,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel("Tanggal Akad")} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel("Tanggal Akad"),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2452,7 +2642,7 @@ export function BookingFormClient({
                 setAkadDate(e.target.value ? `${e.target.value}T${timePart}` : "");
               }}
               className={inputClass}
-              required
+              required={builtInFieldRequired}
             />
           </div>
         );
@@ -2461,7 +2651,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel("Jam Akad")} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel("Jam Akad"),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2474,6 +2668,7 @@ export function BookingFormClient({
                 if (datePart) setAkadDate(`${datePart}T${e.target.value}`);
               }}
               className={inputClass}
+              required={builtInFieldRequired}
             />
           </div>
         );
@@ -2482,7 +2677,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel("Tanggal Resepsi")} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel("Tanggal Resepsi"),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2495,7 +2694,7 @@ export function BookingFormClient({
                 setResepsiDate(e.target.value ? `${e.target.value}T${timePart}` : "");
               }}
               className={inputClass}
-              required
+              required={builtInFieldRequired}
             />
           </div>
         );
@@ -2504,7 +2703,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel("Jam Resepsi")} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel("Jam Resepsi"),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2517,6 +2720,7 @@ export function BookingFormClient({
                 if (datePart) setResepsiDate(`${datePart}T${e.target.value}`);
               }}
               className={inputClass}
+              required={builtInFieldRequired}
             />
           </div>
         );
@@ -2525,7 +2729,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel("Tanggal Sesi 1")} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel("Tanggal Sesi 1"),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2538,7 +2746,7 @@ export function BookingFormClient({
                 setWisudaSession1Date(e.target.value ? `${e.target.value}T${timePart}` : "");
               }}
               className={inputClass}
-              required
+              required={builtInFieldRequired}
             />
           </div>
         );
@@ -2547,7 +2755,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel("Jam Sesi 1")} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel("Jam Sesi 1"),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2560,6 +2772,7 @@ export function BookingFormClient({
                 if (datePart) setWisudaSession1Date(`${datePart}T${e.target.value}`);
               }}
               className={inputClass}
+              required={builtInFieldRequired}
             />
           </div>
         );
@@ -2568,7 +2781,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel("Tanggal Sesi 2")} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel("Tanggal Sesi 2"),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2581,7 +2798,7 @@ export function BookingFormClient({
                 setWisudaSession2Date(e.target.value ? `${e.target.value}T${timePart}` : "");
               }}
               className={inputClass}
-              required
+              required={builtInFieldRequired}
             />
           </div>
         );
@@ -2590,7 +2807,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel("Jam Sesi 2")} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel("Jam Sesi 2"),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2603,6 +2824,7 @@ export function BookingFormClient({
                 if (datePart) setWisudaSession2Date(`${datePart}T${e.target.value}`);
               }}
               className={inputClass}
+              required={builtInFieldRequired}
             />
           </div>
         );
@@ -2611,7 +2833,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel(t("jadwalSesi"))} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel(t("jadwalSesi")),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2624,7 +2850,7 @@ export function BookingFormClient({
                 setSessionDate(e.target.value ? `${e.target.value}T${timePart}` : "");
               }}
               className={inputClass}
-              required
+              required={builtInFieldRequired}
             />
           </div>
         );
@@ -2633,7 +2859,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel(t("jam") || "Jam")} <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel(t("jam") || "Jam"),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2646,6 +2876,7 @@ export function BookingFormClient({
                 if (datePart) setSessionDate(`${datePart}T${e.target.value}`);
               }}
               className={inputClass}
+              required={builtInFieldRequired}
             />
           </div>
         );
@@ -2655,9 +2886,12 @@ export function BookingFormClient({
         }
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5" />
-              {fieldLabel(t("lokasi"))} <span className="text-red-500">*</span>
+            <label className="text-sm font-medium">
+              {buildFieldLabelNode({
+                text: fieldLabel(t("lokasi")),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2681,7 +2915,13 @@ export function BookingFormClient({
       case "location_detail":
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">{fieldLabel("Detail Lokasi")}</label>
+            <label className="text-sm font-medium">
+              {buildFieldLabelNode({
+                text: fieldLabel("Detail Lokasi"),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
+            </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
@@ -2697,7 +2937,13 @@ export function BookingFormClient({
         if (effectiveVendor.form_show_notes === false) return null;
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">{fieldLabel(t("catatan"))}</label>
+            <label className="text-sm font-medium">
+              {buildFieldLabelNode({
+                text: fieldLabel(t("catatan")),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
+            </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
@@ -2716,7 +2962,11 @@ export function BookingFormClient({
             {isCityScopedEvent ? (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">
-                  Kota / Kabupaten <span className="text-red-500">*</span>
+                  {buildFieldLabelNode({
+                    text: "Kota / Kabupaten",
+                    required: builtInFieldRequired,
+                    icon: List,
+                  })}
                 </label>
                 <CitySingleSelect
                   options={cityOptions}
@@ -2735,7 +2985,11 @@ export function BookingFormClient({
             ) : null}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">
-                {fieldLabel(t("paketLayanan"))} <span className="text-red-500">*</span>
+                {buildFieldLabelNode({
+                  text: fieldLabel(t("paketLayanan")),
+                  required: builtInFieldRequired,
+                  icon: builtInFieldIcon,
+                })}
               </label>
               {fieldDescription ? (
                 <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2963,14 +3217,17 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {fieldLabel(
-                eventType
-                  ? minDP.mode === "fixed"
-                    ? `DP (Minimal ${formatCurrency(minDP.value)})`
-                    : t("dpMinimal", { percent: String(minDP.value) })
-                  : "DP",
-              )}{" "}
-              <span className="text-red-500">*</span>
+              {buildFieldLabelNode({
+                text: fieldLabel(
+                  eventType
+                    ? minDP.mode === "fixed"
+                      ? `DP (Minimal ${formatCurrency(minDP.value)})`
+                      : t("dpMinimal", { percent: String(minDP.value) })
+                    : "DP",
+                ),
+                required: builtInFieldRequired,
+                icon: builtInFieldIcon,
+              })}
             </label>
             {fieldDescription ? (
               <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
@@ -2998,7 +3255,7 @@ export function BookingFormClient({
                     ? "!border-red-500 focus-visible:!border-red-500 focus-visible:!ring-red-500/30"
                     : ""
                 }`}
-                required
+                required={builtInFieldRequired}
               />
             </div>
             {selectedService && dpDisplay && Number(parseFormatted(dpDisplay)) <
@@ -3037,8 +3294,16 @@ export function BookingFormClient({
                 qrisImageUrl={effectiveVendor.qris_image_url}
                 brandColor={brandColor}
                 labels={{
-                  methodLabel: `${fieldLabel(t("paymentMethod"))} *`,
-                  bankLabel: `${t("paymentSourceBank")} *`,
+                  methodLabel: buildFieldLabelNode({
+                    text: fieldLabel(t("paymentMethod")),
+                    required: builtInFieldRequired,
+                    icon: builtInFieldIcon,
+                  }),
+                  bankLabel: buildFieldLabelNode({
+                    text: t("paymentSourceBank"),
+                    required: builtInFieldRequired,
+                    icon: CreditCard,
+                  }),
                   bankEmpty: t("paymentNoBank"),
                   qrisLabel: t("paymentSourceQris"),
                   qrisEmpty: t("paymentNoQris"),
@@ -3068,7 +3333,11 @@ export function BookingFormClient({
               file={proofFile}
               previewUrl={proofPreview}
               accept="image/*,.pdf"
-              label={fieldLabel(t("buktiPembayaran"))}
+              label={buildFieldLabelNode({
+                text: fieldLabel(t("buktiPembayaran")),
+                required: builtInFieldRequired && proofRequired,
+                icon: builtInFieldIcon,
+              })}
               helperText={
                 fieldDescription ||
                 (selectedPaymentMethod === "qris"
@@ -3140,17 +3409,17 @@ export function BookingFormClient({
     return renderBuiltInField(item);
   }
 
-  function getBuiltInDisplayLabel(
+  const getBuiltInDisplayLabel = React.useCallback((
     builtinId: string,
     fallbackLabel: string,
-  ) {
+  ) => {
     const layoutItem = visibleActiveLayout.find(
       (item): item is Extract<FormLayoutItem, { kind: "builtin_field" }> =>
         item.kind === "builtin_field" && item.builtinId === builtinId,
     );
     if (!layoutItem) return fallbackLabel;
     return getDisplayLabelForBuiltInField(layoutItem, fallbackLabel);
-  }
+  }, [visibleActiveLayout]);
 
   const summaryLocale = localeCode === "en" ? "en" : "id";
   const summaryFullWhatsapp = phone ? `${countryCode}${phone}` : "";
@@ -3311,27 +3580,28 @@ export function BookingFormClient({
     summaryServiceSelections,
     t,
   ]);
-  const summaryExtraFieldRows = React.useMemo(() => {
-    return visibleActiveLayout
+  const summaryExtraFieldRows = React.useMemo<SummaryRow[]>(() => {
+    const rows: SummaryRow[] = [];
+    visibleActiveLayout
       .filter(
         (item): item is Extract<FormLayoutItem, { kind: "builtin_field" }> =>
           item.kind === "builtin_field" && item.builtinId.startsWith("extra:"),
       )
-      .map((item) => {
+      .forEach((item) => {
         const key = item.builtinId.slice("extra:".length);
         const extraDefinition = currentExtraFields.find((field) => field.key === key);
         if (eventType === "Wedding" && !splitDates && (key === "tempat_akad" || key === "tempat_resepsi")) {
-          return null;
+          return;
         }
         if (eventType === "Wisuda" && !splitDates && (key === "tempat_wisuda_1" || key === "tempat_wisuda_2")) {
-          return null;
+          return;
         }
         const value =
           key === UNIVERSITY_EXTRA_FIELD_KEY
             ? extraData[key] || ""
             : extraData[key] || "";
-        if (!value.trim()) return null;
-        return {
+        if (!value.trim()) return;
+        rows.push({
           label:
             (typeof item.labelOverride === "string" && item.labelOverride.trim().length > 0
               ? item.labelOverride
@@ -3339,48 +3609,56 @@ export function BookingFormClient({
             extraDefinition?.label ||
             key.replace(/_/g, " "),
           value,
-        };
-      })
-      .filter((row): row is { label: string; value: string } => Boolean(row));
+          icon: extraDefinition?.isLocation ? MapPin : List,
+        });
+      });
+    return rows;
   }, [currentExtraFields, eventType, extraData, splitDates, visibleActiveLayout]);
-  const summaryCustomFieldRows = React.useMemo(() => {
-    return visibleActiveLayout
+  const summaryCustomFieldRows = React.useMemo<SummaryRow[]>(() => {
+    const rows: SummaryRow[] = [];
+    visibleActiveLayout
       .filter(
         (item): item is Extract<FormLayoutItem, { kind: "custom_field" }> =>
           item.kind === "custom_field",
       )
-      .map((item) => {
+      .forEach((item) => {
         const value = customFields[item.id] || "";
-        if (!value.trim()) return null;
-        return {
+        if (!value.trim()) return;
+        rows.push({
           label: item.label || t("summaryCustomFieldFallback"),
           value,
-        };
-      })
-      .filter((row): row is { label: string; value: string } => Boolean(row));
+          icon: List,
+        });
+      });
+    return rows;
   }, [customFields, t, visibleActiveLayout]);
-  const summaryClientInfoRows = React.useMemo(
+  const summaryClientInfoRows = React.useMemo<SummaryRow[]>(
     () =>
       [
         {
           label: getBuiltInDisplayLabel("client_name", t("summaryClientName")),
           value: clientName.trim(),
+          icon: getBuiltInFieldIcon("client_name"),
         },
         {
           label: getBuiltInDisplayLabel("client_whatsapp", t("summaryWhatsapp")),
           value: summaryFullWhatsapp.trim(),
+          icon: getBuiltInFieldIcon("client_whatsapp"),
         },
         {
           label: getBuiltInDisplayLabel("instagram", "Instagram"),
           value: instagram.trim() ? `@${instagram.trim().replace(/^@/, "")}` : "",
+          icon: getBuiltInFieldIcon("instagram"),
         },
         {
           label: getBuiltInDisplayLabel("event_type", t("summaryEventType")),
           value: eventType.trim(),
+          icon: getBuiltInFieldIcon("event_type"),
         },
         {
           label: t("summaryCity"),
           value: selectedCity ? buildCityDisplayName(selectedCity) : "",
+          icon: List,
         },
       ].filter((row) => row.value.length > 0),
     [
@@ -3389,25 +3667,29 @@ export function BookingFormClient({
       instagram,
       selectedCity,
       summaryFullWhatsapp,
+      getBuiltInDisplayLabel,
       t,
     ],
   );
-  const summarySessionDetailRows = React.useMemo(() => {
-    const rows: Array<{ label: string; value: string }> = [];
+  const summarySessionDetailRows = React.useMemo<SummaryRow[]>(() => {
+    const rows: SummaryRow[] = [];
 
     summarySessionRows.forEach((session) => {
       const sessionLabel = session.label || t("summarySessionLabel");
       rows.push({
         label: `${sessionLabel} • ${t("summaryDateLabel")}`,
         value: session.date,
+        icon: CalendarDays,
       });
       rows.push({
         label: `${sessionLabel} • ${t("summaryTimeLabel")}`,
         value: session.time,
+        icon: Clock3,
       });
       rows.push({
         label: `${sessionLabel} • ${t("summaryLocationLabel")}`,
         value: session.location,
+        icon: MapPin,
       });
     });
 
@@ -3415,6 +3697,7 @@ export function BookingFormClient({
       rows.push({
         label: getBuiltInDisplayLabel("location_detail", t("summaryLocationDetailLabel")),
         value: locationDetail.trim(),
+        icon: getBuiltInFieldIcon("location_detail"),
       });
     }
 
@@ -3422,24 +3705,27 @@ export function BookingFormClient({
       rows.push({
         label: getBuiltInDisplayLabel("notes", t("catatan")),
         value: notes.trim(),
+        icon: getBuiltInFieldIcon("notes"),
       });
     }
 
     return rows.filter((row) => row.value.length > 0);
-  }, [locationDetail, notes, summarySessionRows, t]);
-  const summaryPackageRows = React.useMemo(
+  }, [locationDetail, notes, summarySessionRows, t, getBuiltInDisplayLabel]);
+  const summaryPackageRows = React.useMemo<SummaryRow[]>(
     () =>
       [
         {
           label: getBuiltInDisplayLabel("service_package", t("summaryMainPackage")),
           value: selectedMainServices.map((service) => service.name).join(", "),
+          icon: getBuiltInFieldIcon("service_package"),
         },
         {
           label: getBuiltInDisplayLabel("addon_packages", t("summaryAddon")),
           value: selectedAddonServices.map((service) => service.name).join(", "),
+          icon: getBuiltInFieldIcon("addon_packages"),
         },
       ].filter((row) => row.value.length > 0),
-    [selectedAddonServices, selectedMainServices, t],
+    [selectedAddonServices, selectedMainServices, t, getBuiltInDisplayLabel],
   );
   const summaryCostRows = React.useMemo(() => {
     const rows: Array<{
@@ -3516,6 +3802,16 @@ export function BookingFormClient({
     selectedPackageTotal,
     t,
   ]);
+
+  function renderSummaryRowLabel(row: SummaryRow) {
+    const Icon = row.icon || List;
+    return (
+      <span className="inline-flex items-start gap-1.5">
+        <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span>{row.label}</span>
+      </span>
+    );
+  }
 
   // ── Success screen ──
 
@@ -3731,7 +4027,9 @@ export function BookingFormClient({
                           key={`${row.label}-${row.value}`}
                           className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
                         >
-                          <p className="text-muted-foreground break-words sm:max-w-[45%]">{row.label}</p>
+                          <p className="text-muted-foreground break-words sm:max-w-[45%]">
+                            {renderSummaryRowLabel(row)}
+                          </p>
                           <p className="font-medium break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right">{row.value}</p>
                         </div>
                       ))}
@@ -3750,7 +4048,9 @@ export function BookingFormClient({
                           key={`${row.label}-${row.value}`}
                           className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
                         >
-                          <p className="text-muted-foreground break-words sm:max-w-[45%]">{row.label}</p>
+                          <p className="text-muted-foreground break-words sm:max-w-[45%]">
+                            {renderSummaryRowLabel(row)}
+                          </p>
                           <p className="font-medium break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right">{row.value}</p>
                         </div>
                       ))}
@@ -3769,7 +4069,9 @@ export function BookingFormClient({
                           key={`${row.label}-${row.value}`}
                           className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
                         >
-                          <p className="text-muted-foreground break-words sm:max-w-[45%]">{row.label}</p>
+                          <p className="text-muted-foreground break-words sm:max-w-[45%]">
+                            {renderSummaryRowLabel(row)}
+                          </p>
                           <p className="font-medium break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right">{row.value}</p>
                         </div>
                       ))}
@@ -3788,7 +4090,9 @@ export function BookingFormClient({
                           key={`${row.label}-${row.value}`}
                           className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
                         >
-                          <p className="text-muted-foreground break-words sm:max-w-[45%]">{row.label}</p>
+                          <p className="text-muted-foreground break-words sm:max-w-[45%]">
+                            {renderSummaryRowLabel(row)}
+                          </p>
                           <p className="font-medium break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right">{row.value}</p>
                         </div>
                       ))}
@@ -3807,7 +4111,9 @@ export function BookingFormClient({
                           key={`${row.label}-${row.value}`}
                           className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
                         >
-                          <p className="text-muted-foreground break-words sm:max-w-[45%]">{row.label}</p>
+                          <p className="text-muted-foreground break-words sm:max-w-[45%]">
+                            {renderSummaryRowLabel(row)}
+                          </p>
                           <p className="font-medium break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right">{row.value}</p>
                         </div>
                       ))}
@@ -3902,7 +4208,7 @@ export function BookingFormClient({
                       htmlFor="booking-terms"
                       className="text-sm leading-6 text-muted-foreground"
                     >
-                      {termsAgreementText}{" "}
+                      {termsAgreementText} <span className="text-red-500">*</span>{" "}
                       <button
                         type="button"
                         onClick={(e) => {

@@ -85,6 +85,7 @@ export type BuiltInFieldItem = {
   id: string;
   kind: "builtin_field";
   builtinId: BuiltInFieldId;
+  required?: boolean;
   labelOverride?: string;
   description?: string;
   hidden?: boolean;
@@ -310,6 +311,47 @@ const PAYMENT_BUILT_IN_FIELDS: BuiltInFieldDefinition[] = [
   },
 ];
 
+const BUILT_IN_REQUIRED_LOCKED_IDS = new Set<BuiltInFieldId>([
+  "client_name",
+  "client_whatsapp",
+  "event_type",
+  "session_date",
+  "session_time",
+  "akad_date",
+  "akad_time",
+  "resepsi_date",
+  "resepsi_time",
+  "wisuda_session1_date",
+  "wisuda_session1_time",
+  "wisuda_session2_date",
+  "wisuda_session2_time",
+  "service_package",
+  "dp_paid",
+  "bank_accounts",
+  "payment_proof",
+]);
+
+const BUILT_IN_REQUIRED_DEFAULT_IDS = new Set<BuiltInFieldId>([
+  ...BUILT_IN_REQUIRED_LOCKED_IDS,
+  "location",
+]);
+
+export function isBuiltInFieldRequiredLocked(builtinId: BuiltInFieldId) {
+  return BUILT_IN_REQUIRED_LOCKED_IDS.has(builtinId);
+}
+
+export function isBuiltInFieldRequiredByDefault(builtinId: BuiltInFieldId) {
+  return BUILT_IN_REQUIRED_DEFAULT_IDS.has(builtinId);
+}
+
+export function resolveBuiltInFieldRequired(
+  item: Pick<BuiltInFieldItem, "builtinId" | "required">,
+) {
+  if (isBuiltInFieldRequiredLocked(item.builtinId)) return true;
+  if (typeof item.required === "boolean") return item.required;
+  return isBuiltInFieldRequiredByDefault(item.builtinId);
+}
+
 function customFieldToLayout(field: FormField): CustomFieldItem {
   return {
     id: field.id,
@@ -382,10 +424,12 @@ function createBuiltInSectionItem(sectionId: BuiltInSectionId): BuiltInSectionIt
 export function createBuiltInFieldItem(
   builtinId: BuiltInFieldId,
 ): BuiltInFieldItem {
+  const required = isBuiltInFieldRequiredByDefault(builtinId);
   return {
     id: `builtin:${builtinId}`,
     kind: "builtin_field",
     builtinId,
+    required: required ? true : undefined,
   };
 }
 
@@ -666,8 +710,14 @@ function normalizeOptionalOptions(value: unknown): string[] | undefined {
 }
 
 function normalizeBuiltInFieldItem(item: BuiltInFieldItem): BuiltInFieldItem {
+  const normalizedRequired =
+    typeof item.required === "boolean" ? item.required : undefined;
+  const required = isBuiltInFieldRequiredLocked(item.builtinId)
+    ? true
+    : normalizedRequired;
   return {
     ...createBuiltInFieldItem(item.builtinId),
+    required,
     labelOverride: normalizeOptionalText(item.labelOverride),
     description: normalizeOptionalText(item.description),
     hidden: item.hidden === true ? true : undefined,

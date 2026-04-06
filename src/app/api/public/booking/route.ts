@@ -64,7 +64,11 @@ import {
 } from "@/lib/university-references";
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 import { resolveNormalizedLayoutFromStoredSections } from "@/lib/form-sections";
-import type { BuiltInFieldItem } from "@/components/form-builder/booking-form-layout";
+import {
+    resolveBuiltInFieldRequired,
+    type BuiltInFieldId,
+    type BuiltInFieldItem,
+} from "@/components/form-builder/booking-form-layout";
 import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
 import { apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
@@ -199,6 +203,14 @@ function normalizeStoredDateTime(value: unknown): string {
     return trimmed;
 }
 
+function hasDateTimeTimePart(value: string | null | undefined) {
+    if (!value) return false;
+    const normalized = value.trim();
+    if (!normalized) return false;
+    const [, timePart = ""] = normalized.split("T");
+    return timePart.trim().length > 0;
+}
+
 function normalizeStoredCoordinate(value: unknown): number | null {
     return normalizeCoordinate(value);
 }
@@ -330,21 +342,32 @@ const VENDOR_SELECT_COLUMNS = [
     "form_sections",
 ] as const;
 
-function resolveBuiltInFieldIdsFromStoredSections(
+function resolveBuiltInFieldStateFromStoredSections(
     rawFormSections: VendorRecord["form_sections"],
     eventType: string | null | undefined,
 ) {
-    return new Set(
-        resolveNormalizedLayoutFromStoredSections(
-            rawFormSections ?? null,
-            eventType || "Umum",
+    const visibleBuiltInFieldIds = new Set<BuiltInFieldId>();
+    const requiredBuiltInFieldIds = new Set<BuiltInFieldId>();
+
+    resolveNormalizedLayoutFromStoredSections(
+        rawFormSections ?? null,
+        eventType || "Umum",
+    )
+        .filter(
+            (item): item is BuiltInFieldItem =>
+                item.kind === "builtin_field" && item.hidden !== true,
         )
-            .filter(
-                (item): item is BuiltInFieldItem =>
-                    item.kind === "builtin_field" && item.hidden !== true,
-            )
-            .map((item) => item.builtinId),
-    );
+        .forEach((item) => {
+            visibleBuiltInFieldIds.add(item.builtinId);
+            if (resolveBuiltInFieldRequired(item)) {
+                requiredBuiltInFieldIds.add(item.builtinId);
+            }
+        });
+
+    return {
+        visibleBuiltInFieldIds,
+        requiredBuiltInFieldIds,
+    };
 }
 
 async function fetchVendorByField(
@@ -514,7 +537,8 @@ export async function POST(request: NextRequest) {
         }
         const normalizedPaymentProofInputUrl = paymentProofUrlValidation.normalizedUrl;
 
-        const normalizedClientName = (clientName || "").trim() || "Klien";
+        const trimmedClientName = (clientName || "").trim();
+        const normalizedClientName = trimmedClientName || "Klien";
         const normalizedClientWhatsapp = (clientWhatsapp || "").trim();
         const normalizedEventType = normalizeEventTypeName(eventType);
         const normalizedCityCode = normalizeCityCode(cityCode);
@@ -661,23 +685,51 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        const normalizedLayoutBuiltInFieldIds = resolveBuiltInFieldIdsFromStoredSections(
+        const {
+            visibleBuiltInFieldIds: normalizedLayoutBuiltInFieldIds,
+            requiredBuiltInFieldIds,
+        } = resolveBuiltInFieldStateFromStoredSections(
             vendor.form_sections ?? null,
             resolvedEventType || "Umum",
         );
         const shouldRequireEventType =
-            normalizedLayoutBuiltInFieldIds.has("event_type");
+            requiredBuiltInFieldIds.has("event_type");
+        const shouldRequireClientName =
+            requiredBuiltInFieldIds.has("client_name");
+        const shouldRequireClientWhatsapp =
+            requiredBuiltInFieldIds.has("client_whatsapp");
+        const shouldRequireServicePackage =
+            requiredBuiltInFieldIds.has("service_package");
         const shouldRequireSessionDate =
-            normalizedLayoutBuiltInFieldIds.has("session_date") ||
-            normalizedLayoutBuiltInFieldIds.has("akad_date") ||
-            normalizedLayoutBuiltInFieldIds.has("resepsi_date") ||
-            normalizedLayoutBuiltInFieldIds.has("wisuda_session1_date") ||
-            normalizedLayoutBuiltInFieldIds.has("wisuda_session2_date");
+            requiredBuiltInFieldIds.has("session_date") ||
+            requiredBuiltInFieldIds.has("akad_date") ||
+            requiredBuiltInFieldIds.has("resepsi_date") ||
+            requiredBuiltInFieldIds.has("wisuda_session1_date") ||
+            requiredBuiltInFieldIds.has("wisuda_session2_date");
+        const shouldRequireSessionTime =
+            requiredBuiltInFieldIds.has("session_time") ||
+            requiredBuiltInFieldIds.has("akad_time") ||
+            requiredBuiltInFieldIds.has("resepsi_time") ||
+            requiredBuiltInFieldIds.has("wisuda_session1_time") ||
+            requiredBuiltInFieldIds.has("wisuda_session2_time");
         const shouldRequireUniversitySelection =
             isUniversityEventType(resolvedEventType) &&
             normalizedLayoutBuiltInFieldIds.has(
                 `extra:${UNIVERSITY_EXTRA_FIELD_KEY}`,
             );
+
+        if (shouldRequireClientName && !trimmedClientName) {
+            return NextResponse.json(
+                { success: false, error: "Silakan isi nama klien terlebih dahulu." },
+                { status: 400 },
+            );
+        }
+        if (shouldRequireClientWhatsapp && !normalizedClientWhatsapp.trim()) {
+            return NextResponse.json(
+                { success: false, error: "Silakan isi nomor WhatsApp terlebih dahulu." },
+                { status: 400 },
+            );
+        }
 
         if (shouldRequireEventType && !resolvedEventType) {
             return NextResponse.json(
@@ -778,6 +830,13 @@ export async function POST(request: NextRequest) {
         if (shouldRequireSessionDate && !resolvedSessionDate) {
             return NextResponse.json(
                 { success: false, error: "Silakan isi tanggal sesi terlebih dahulu." },
+                { status: 400 },
+            );
+        }
+
+        if (shouldRequireSessionTime && !hasDateTimeTimePart(resolvedSessionDate)) {
+            return NextResponse.json(
+                { success: false, error: "Silakan isi jam sesi terlebih dahulu." },
                 { status: 400 },
             );
         }
@@ -938,6 +997,13 @@ export async function POST(request: NextRequest) {
                     success: false,
                     error: "Paket utama hanya bisa dipilih satu.",
                 },
+                { status: 400 },
+            );
+        }
+
+        if (normalizedMainServiceIds.length === 0 && shouldRequireServicePackage) {
+            return NextResponse.json(
+                { success: false, error: "Silakan pilih paket layanan terlebih dahulu." },
                 { status: 400 },
             );
         }

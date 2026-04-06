@@ -28,8 +28,8 @@ type PaymentMethodSectionProps = {
   qrisImageUrl?: string | null;
   brandColor?: string;
   labels: {
-    methodLabel: string;
-    bankLabel: string;
+    methodLabel: React.ReactNode;
+    bankLabel: React.ReactNode;
     bankEmpty: string;
     qrisLabel: string;
     qrisEmpty: string;

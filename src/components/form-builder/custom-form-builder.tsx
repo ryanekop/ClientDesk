@@ -53,7 +53,9 @@ import {
   getBuiltInFieldDefinitions,
   getBuiltInFieldDefinition,
   groupFormLayoutBySection,
+  isBuiltInFieldRequiredLocked,
   normalizeStoredFormLayout,
+  resolveBuiltInFieldRequired,
   type BuiltInCategory,
   type BuiltInFieldId,
   type BuiltInSectionId,
@@ -723,6 +725,8 @@ export default function CustomFormBuilder({
     if (!definition) return null;
     const isExpanded = expandedIds.has(item.id);
     const isLocked = BUILT_IN_HIDE_LOCKED_IDS.has(item.builtinId);
+    const isRequiredLocked = isBuiltInFieldRequiredLocked(item.builtinId);
+    const isRequired = resolveBuiltInFieldRequired(item);
     const isHidden = item.hidden === true;
     const isCrossEventBuiltIn = !nativeBuiltInIds.has(item.builtinId);
     const displayLabel = item.labelOverride?.trim() || definition.label;
@@ -764,6 +768,17 @@ export default function CustomFormBuilder({
                 <span className="rounded-full bg-slate-300/70 px-2 py-0.5 text-[10px] text-slate-700">
                   Bawaan
                 </span>
+                {isRequired ? (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] ${
+                      isRequiredLocked
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    {isRequiredLocked ? "Wajib (core)" : "Wajib"}
+                  </span>
+                ) : null}
                 {isHidden ? (
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700">
                     Disembunyikan
@@ -834,11 +849,29 @@ export default function CustomFormBuilder({
                     placeholder="Contoh: Ringkasan booking dikirim ke email ini."
                   />
                 </div>
+                <label className="flex cursor-pointer items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={isRequired}
+                    disabled={isRequiredLocked}
+                    onChange={(e) =>
+                      updateBuiltInField(sectionId, item.id, {
+                        required: e.target.checked,
+                      })
+                    }
+                    className="h-3.5 w-3.5 accent-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                  Wajib diisi
+                </label>
                 <div className="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/20 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
                   <Lock className="h-3.5 w-3.5" />
-                  {isLocked
-                    ? "Field ini penting untuk alur booking, jadi tidak bisa di-hide."
-                    : "Field bawaan ini bisa di-hide atau ditampilkan kembali lewat tombol Tambah Field."}
+                  {isLocked && isRequiredLocked
+                    ? "Field ini penting untuk alur booking, jadi tidak bisa di-hide dan tetap wajib diisi."
+                    : isLocked
+                      ? "Field ini penting untuk alur booking, jadi tidak bisa di-hide."
+                      : isRequiredLocked
+                        ? "Field ini termasuk core wajib, jadi status wajib tidak bisa diubah."
+                        : "Field bawaan ini bisa di-hide, ditampilkan lagi, dan status wajibnya bisa diubah."}
                 </div>
               </div>
             )}
@@ -1197,8 +1230,8 @@ export default function CustomFormBuilder({
               <div className="text-sm font-semibold break-words">{section.section.title}</div>
               <p className="mt-1 text-xs text-muted-foreground">
                 Field custom dan divider bisa di-drag antar section. Field bawaan
-                tetap di section asal, bisa rename/deskripsi, dan bisa di-hide jika
-                tidak termasuk field lock.
+                tetap di section asal, bisa rename/deskripsi, bisa atur wajib diisi,
+                dan bisa di-hide jika tidak termasuk field lock.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
