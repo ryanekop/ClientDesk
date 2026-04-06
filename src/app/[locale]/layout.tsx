@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Geist } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ClientErrorObserver } from "@/components/layout/client-error-observer";
+import { UmamiLoader } from "@/components/layout/umami-loader";
 import { getTenantConfig } from "@/lib/tenant-config";
 import { TenantProvider } from "@/lib/tenant-context";
 import "../globals.css";
@@ -66,15 +67,6 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <head>
-        {isProduction ? (
-          <Script
-            src="https://cloud.umami.is/script.js"
-            data-website-id="50dbf632-4580-45e9-a67e-a651da1e4d42"
-            strategy="lazyOnload"
-          />
-        ) : null}
-      </head>
       <body
         className={`${geistSans.className} antialiased bg-background text-foreground`}
         style={
@@ -83,6 +75,12 @@ export default async function RootLayout({
             : undefined
         }
       >
+        {isProduction ? (
+          <>
+            <ClientErrorObserver />
+            <UmamiLoader />
+          </>
+        ) : null}
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
             <TenantProvider
