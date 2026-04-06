@@ -38,7 +38,10 @@ import {
     buildCalendarTemplateVars,
     resolveTemplateByEventType,
 } from "@/utils/google/template";
-import { isGoogleCalendarConnected } from "@/utils/google/connection";
+import {
+    clearConnectedGoogleAccountCache,
+    fetchConnectedGoogleAccountStatus,
+} from "@/utils/google/connected-account-client";
 
 const locales = { "id-ID": id };
 
@@ -541,7 +544,8 @@ export default function CalendarPage() {
 
         const handleMessage = (event: MessageEvent) => {
             if (event.data?.type === "GOOGLE_AUTH_SUCCESS") {
-                void checkGoogleConnection();
+                clearConnectedGoogleAccountCache();
+                void checkGoogleConnection({ force: true });
             }
         };
 
@@ -610,7 +614,7 @@ export default function CalendarPage() {
         setLoadingFreelancers(false);
     }
 
-    async function checkGoogleConnection() {
+    async function checkGoogleConnection(args?: { force?: boolean }) {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
             setIsGoogleConnected(false);
@@ -619,11 +623,14 @@ export default function CalendarPage() {
 
         const { data: profile } = await supabase
             .from("profiles")
-            .select("google_access_token, google_refresh_token, calendar_event_format, calendar_event_format_map, studio_name, custom_client_statuses")
+            .select("calendar_event_format, calendar_event_format_map, studio_name, custom_client_statuses")
             .eq("id", user.id)
             .single();
 
-        setIsGoogleConnected(isGoogleCalendarConnected(profile));
+        const connectedPayload = await fetchConnectedGoogleAccountStatus({
+            force: args?.force === true,
+        });
+        setIsGoogleConnected(connectedPayload?.calendar.connected === true);
         if ((profile as any)?.calendar_event_format) {
             setCalendarEventFormat((profile as any).calendar_event_format);
         }
@@ -804,6 +811,7 @@ export default function CalendarPage() {
             })
             .eq("id", user.id);
         await invalidateProfilePublicCache();
+        clearConnectedGoogleAccountCache();
 
         setIsGoogleConnected(false);
     }
@@ -844,7 +852,8 @@ export default function CalendarPage() {
                 result.reconnectRequired === true;
 
             if (scopeMismatch) {
-                await checkGoogleConnection();
+                clearConnectedGoogleAccountCache();
+                await checkGoogleConnection({ force: true });
                 const reconnectMessage = isEnglish
                     ? "Google Calendar permission has changed. Please reconnect Google Calendar from Settings."
                     : "Izin Google Calendar sudah berubah. Silakan hubungkan ulang Google Calendar di Pengaturan.";

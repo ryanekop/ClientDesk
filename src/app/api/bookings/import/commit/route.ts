@@ -215,6 +215,7 @@ async function syncImportedBookings(
       : "";
 
   if (!hasOAuthTokenPair(accessToken, refreshToken)) {
+    await clearGoogleCalendarConnection(supabase, userId);
     const message = apiT(locale, "incompleteCalendarConnection");
     await Promise.allSettled(
       bookingIds.map((bookingId) =>

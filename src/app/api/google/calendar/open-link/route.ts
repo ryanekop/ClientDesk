@@ -226,6 +226,7 @@ export async function POST(request: NextRequest) {
     const refreshToken = normalizeOptionalString(profile?.google_refresh_token) || "";
 
     if (!hasOAuthTokenPair(accessToken, refreshToken)) {
+      await clearGoogleCalendarConnection(supabase, user.id);
       return NextResponse.json(
         { success: false, error: apiText(request, "incompleteCalendarConnection") },
         { status: 400 },

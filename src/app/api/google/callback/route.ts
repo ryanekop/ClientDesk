@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { google } from "googleapis";
 import { getOAuth2Client } from "@/utils/google/calendar";
+import { hasOAuthTokenPair } from "@/utils/google/connection";
 import { createClient } from "@/utils/supabase/server";
 import {
   buildGoogleOAuthReturnUrl,
@@ -271,13 +272,28 @@ export async function GET(request: NextRequest) {
       String(effectiveSessionUser?.email || "").split("@")[0] ||
       fallbackFullName;
 
+    const resolvedAccessToken = normalizeEmail(
+      tokens.access_token ?? existingProfile?.google_access_token ?? null,
+    );
+    const resolvedRefreshToken = normalizeEmail(
+      tokens.refresh_token ?? existingProfile?.google_refresh_token ?? null,
+    );
+
+    if (!hasOAuthTokenPair(resolvedAccessToken, resolvedRefreshToken)) {
+      return buildCallbackHtml({
+        success: false,
+        errorCode: "incomplete_token_pair",
+        targetOrigin,
+        redirectOrigin,
+        returnPath,
+      });
+    }
+
     const profilePatch: Record<string, unknown> = {
       id: targetUserId,
       full_name: fullName,
-      google_access_token:
-        tokens.access_token ?? existingProfile?.google_access_token ?? null,
-      google_refresh_token:
-        tokens.refresh_token ?? existingProfile?.google_refresh_token ?? null,
+      google_access_token: resolvedAccessToken,
+      google_refresh_token: resolvedRefreshToken,
       google_token_expiry: tokens.expiry_date
         ? new Date(tokens.expiry_date).toISOString()
         : null,

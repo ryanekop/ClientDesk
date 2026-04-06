@@ -64,7 +64,10 @@ import {
   normalizeEventTypeMap,
   normalizeEventTypeName,
 } from "@/lib/event-type-config";
-import { isGoogleDriveConnected } from "@/utils/google/connection";
+import {
+  clearConnectedGoogleAccountCache,
+  fetchConnectedGoogleAccountStatus,
+} from "@/utils/google/connected-account-client";
 import {
   isMainClientDeskDomain,
   normalizeVendorSlug,
@@ -496,22 +499,22 @@ export default function FormBookingPage() {
     lastSavedSnapshot !== null &&
     serializedDraftSnapshot !== lastSavedSnapshot;
 
-  const refreshDriveConnection = React.useEffectEvent(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setIsDriveConnected(false);
-      return;
-    }
+  const refreshDriveConnection = React.useEffectEvent(
+    async (args?: { force?: boolean }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setIsDriveConnected(false);
+        return;
+      }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("google_drive_access_token, google_drive_refresh_token")
-      .eq("id", user.id)
-      .single();
-    setIsDriveConnected(isGoogleDriveConnected(profile));
-  });
+      const connectedPayload = await fetchConnectedGoogleAccountStatus({
+        force: args?.force === true,
+      });
+      setIsDriveConnected(connectedPayload?.drive.connected === true);
+    },
+  );
 
   React.useEffect(() => {
     setSiteUrl(window.location.origin);
@@ -526,7 +529,8 @@ export default function FormBookingPage() {
   React.useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "GOOGLE_DRIVE_SUCCESS") {
-        void refreshDriveConnection();
+        clearConnectedGoogleAccountCache();
+        void refreshDriveConnection({ force: true });
       }
     };
 
@@ -701,7 +705,10 @@ export default function FormBookingPage() {
         if (p.vendor_slug) {
           setVendorSlug(p.vendor_slug);
         }
-        const driveOk = isGoogleDriveConnected(p);
+        const connectedPayload = await fetchConnectedGoogleAccountStatus({
+          force: false,
+        });
+        const driveOk = connectedPayload?.drive.connected === true;
         setIsDriveConnected(driveOk);
         const loadedShowProof = driveOk
           ? (p.form_show_proof ?? DEFAULTS.showProof)
@@ -1121,6 +1128,7 @@ export default function FormBookingPage() {
   }
 
   function connectGoogleDrive() {
+    clearConnectedGoogleAccountCache();
     const w = 520;
     const h = 700;
     const left = window.screenX + (window.outerWidth - w) / 2;
@@ -1172,12 +1180,16 @@ export default function FormBookingPage() {
           setSaveMessageTone("error");
           return;
         }
+        clearConnectedGoogleAccountCache();
+        await refreshDriveConnection({ force: true });
         setSavedMsg(result?.error || t("failedUploadQris"));
         setSaveMessageTone("error");
         return;
       }
 
       if (!result?.success) {
+        clearConnectedGoogleAccountCache();
+        await refreshDriveConnection({ force: true });
         setSavedMsg(result?.error || t("failedUploadQris"));
         setSaveMessageTone("error");
         return;
@@ -1187,6 +1199,8 @@ export default function FormBookingPage() {
       setSavedMsg(t("uploadQrisSuccess"));
       setSaveMessageTone("success");
     } catch {
+      clearConnectedGoogleAccountCache();
+      await refreshDriveConnection({ force: true });
       setSavedMsg(t("failedUploadQris"));
       setSaveMessageTone("error");
     } finally {
@@ -1212,6 +1226,8 @@ export default function FormBookingPage() {
       const result = await res.json();
 
       if (!result.success) {
+        clearConnectedGoogleAccountCache();
+        await refreshDriveConnection({ force: true });
         setSavedMsg(result.error || t("failedDeleteQris"));
         setSaveMessageTone("error");
         return;
@@ -1221,6 +1237,8 @@ export default function FormBookingPage() {
       setSavedMsg(t("deleteQrisSuccess"));
       setSaveMessageTone("success");
     } catch {
+      clearConnectedGoogleAccountCache();
+      await refreshDriveConnection({ force: true });
       setSavedMsg(t("failedDeleteQris"));
       setSaveMessageTone("error");
     } finally {

@@ -53,9 +53,10 @@ import {
   type GoogleCalendarTemplateMode,
 } from "@/utils/google/template";
 import {
-  isGoogleCalendarConnected,
-  isGoogleDriveConnected,
-} from "@/utils/google/connection";
+  clearConnectedGoogleAccountCache,
+  fetchConnectedGoogleAccountStatus,
+  type ConnectedGoogleAccountResponse,
+} from "@/utils/google/connected-account-client";
 import {
   fillWhatsAppTemplate,
   getStoredTemplateName,
@@ -192,21 +193,6 @@ type Template = {
   content_en: string;
   is_default: boolean;
   event_type: string | null;
-};
-
-type ConnectedGoogleAccountResponse = {
-  calendar?: {
-    connected?: boolean;
-    email?: string | null;
-    reconnectRequired?: boolean;
-    code?: string;
-  };
-  drive?: {
-    connected?: boolean;
-    email?: string | null;
-    reconnectRequired?: boolean;
-    code?: string;
-  };
 };
 
 type GoogleConnectionService = "calendar" | "drive";
@@ -1032,14 +1018,12 @@ export default function SettingsPage() {
     },
   );
   const fetchConnectedAccountInfo = React.useEffectEvent(
-    async (withLoading: boolean = true) => {
+    async (args?: { withLoading?: boolean; force?: boolean }) => {
+      const withLoading = args?.withLoading ?? true;
+      const force = args?.force ?? false;
       if (withLoading) setLoadingConnectedAccountInfo(true);
       try {
-        const response = await fetch("/api/google/connected-account");
-        if (!response.ok) return null;
-        return (await response.json().catch(
-          () => null,
-        )) as ConnectedGoogleAccountResponse | null;
+        return await fetchConnectedGoogleAccountStatus({ force });
       } catch {
         return null;
       } finally {
@@ -1053,7 +1037,10 @@ export default function SettingsPage() {
       setLoadingConnectedAccountInfo(true);
 
       const runCheck = async () => {
-        const payload = await fetchConnectedAccountInfo(false);
+        const payload = await fetchConnectedAccountInfo({
+          withLoading: false,
+          force: true,
+        });
         if (!payload) return;
         applyConnectedAccountInfo(payload);
         const connected =
@@ -1284,10 +1271,12 @@ export default function SettingsPage() {
     const handleMessage = (event: MessageEvent) => {
       const messageType = event.data?.type;
       if (messageType === "GOOGLE_AUTH_SUCCESS") {
+        clearConnectedGoogleAccountCache();
         startGoogleConnectPolling("calendar");
         return;
       }
       if (messageType === "GOOGLE_DRIVE_SUCCESS") {
+        clearConnectedGoogleAccountCache();
         startGoogleConnectPolling("drive");
         return;
       }
@@ -1458,8 +1447,6 @@ export default function SettingsPage() {
     setActiveEventTypes(loadedActiveEventTypes);
     setStudioName(prof?.studio_name || "");
     setStudioAddress((prof as any)?.studio_address || "");
-    setIsCalendarConnected(isGoogleCalendarConnected(prof));
-    setIsDriveConnected(isGoogleDriveConnected(prof));
     setLogoUrl((prof as any)?.invoice_logo_url || null);
     setFormBookingGreeting((prof as any)?.form_greeting || "");
     setSeoSettings({
@@ -1688,6 +1675,20 @@ export default function SettingsPage() {
       contents: { ...contents },
       contentsEn: { ...contentsEn },
     };
+
+    const connectedPayload = await fetchConnectedAccountInfo({
+      withLoading: false,
+      force: false,
+    });
+    if (connectedPayload) {
+      applyConnectedAccountInfo(connectedPayload);
+    } else {
+      setIsCalendarConnected(false);
+      setIsDriveConnected(false);
+      setCalendarConnectedEmail(null);
+      setDriveConnectedEmail(null);
+    }
+
     setLoading(false);
   });
 
@@ -1702,9 +1703,11 @@ export default function SettingsPage() {
 
     const errorCode = currentUrl.searchParams.get("error");
     if (oauthStatus === "calendar_success") {
+      clearConnectedGoogleAccountCache();
       startGoogleConnectPolling("calendar");
       void fetchAll(true);
     } else if (oauthStatus === "drive_success") {
+      clearConnectedGoogleAccountCache();
       startGoogleConnectPolling("drive");
       void fetchAll(true);
     } else if (oauthStatus === "calendar_error" || oauthStatus === "drive_error") {
@@ -1731,7 +1734,10 @@ export default function SettingsPage() {
 
     let cancelled = false;
     void (async () => {
-      const payload = await fetchConnectedAccountInfo(true);
+      const payload = await fetchConnectedAccountInfo({
+        withLoading: true,
+        force: true,
+      });
       if (cancelled) return;
       if (payload) {
         applyConnectedAccountInfo(payload);
@@ -2450,6 +2456,7 @@ export default function SettingsPage() {
   async function handleDisconnect() {
     if (!disconnectModal.service) return;
     stopGoogleConnectPolling();
+    clearConnectedGoogleAccountCache();
     setIsDisconnecting(true);
     const {
       data: { user },

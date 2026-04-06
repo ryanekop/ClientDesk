@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
             : "";
 
         if (!hasOAuthTokenPair(accessToken, refreshToken)) {
+            await clearGoogleCalendarConnection(supabase, user.id);
             const tokenErrorMessage = apiText(request, "incompleteCalendarConnection");
             for (const bookingId of bookingIds) {
                 await updateBookingCalendarSyncState({

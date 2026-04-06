@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
             .single();
 
         if (!profile?.google_access_token || !profile?.google_refresh_token) {
+            await clearGoogleCalendarConnection(supabase, user.id);
             return NextResponse.json(
                 { success: false, error: apiText(request, "calendarNotConnected") },
                 { status: 400 },

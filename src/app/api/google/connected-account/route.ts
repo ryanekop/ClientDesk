@@ -36,6 +36,40 @@ function normalizeEmail(value: unknown) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function extractGoogleErrorStatus(error: unknown) {
+  if (!error || typeof error !== "object") return null;
+
+  const withCode = error as { code?: unknown };
+  if (typeof withCode.code === "number") return withCode.code;
+
+  const withResponse = error as { response?: { status?: unknown } };
+  if (typeof withResponse.response?.status === "number") {
+    return withResponse.response.status;
+  }
+
+  return null;
+}
+
+function isGoogleAuthRejectedError(error: unknown) {
+  const status = extractGoogleErrorStatus(error);
+  if (status === 401 || status === 403) return true;
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) return false;
+
+  return (
+    normalized.includes("invalid credentials") ||
+    normalized.includes("invalid_grant") ||
+    normalized.includes("unauthorized")
+  );
+}
+
 async function resolveCalendarConnection(
   accessToken: string,
   refreshToken: string,
@@ -71,7 +105,8 @@ async function resolveCalendarConnection(
       return { email: null, scopeMismatch: false, invalidGrant: false };
     }
   } catch (error) {
-    const invalidGrant = isGoogleInvalidGrantError(error);
+    const invalidGrant =
+      isGoogleInvalidGrantError(error) || isGoogleAuthRejectedError(error);
     return {
       email: null,
       scopeMismatch: !invalidGrant && isGoogleScopeMismatchError(error),
@@ -80,13 +115,17 @@ async function resolveCalendarConnection(
   }
 }
 
-async function resolveDriveEmail(accessToken: string, refreshToken: string) {
+async function resolveDriveConnection(accessToken: string, refreshToken: string) {
   try {
     const { drive } = await getDriveClient(accessToken, refreshToken);
     const about = await drive.about.get({ fields: "user(emailAddress)" });
     return { email: normalizeEmail(about.data.user?.emailAddress), invalidGrant: false };
   } catch (error) {
-    return { email: null, invalidGrant: isGoogleInvalidGrantError(error) };
+    return {
+      email: null,
+      invalidGrant:
+        isGoogleInvalidGrantError(error) || isGoogleAuthRejectedError(error),
+    };
   }
 }
 
@@ -179,16 +218,14 @@ export async function GET() {
 
     const [calendarConnection, driveConnection] = await Promise.all([
       calendarConnected &&
-      !responsePayload.calendar.email &&
       calendarAccessToken &&
       calendarRefreshToken
         ? resolveCalendarConnection(calendarAccessToken, calendarRefreshToken)
         : Promise.resolve({ email: null, scopeMismatch: false, invalidGrant: false }),
       driveConnected &&
-      !responsePayload.drive.email &&
       driveAccessToken &&
       driveRefreshToken
-        ? resolveDriveEmail(driveAccessToken, driveRefreshToken)
+        ? resolveDriveConnection(driveAccessToken, driveRefreshToken)
         : Promise.resolve({ email: null, invalidGrant: false }),
     ]);
 

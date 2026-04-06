@@ -1369,6 +1369,7 @@ export async function POST(request: NextRequest) {
                 );
             }
         } else if (!hasOAuthTokenPair(vendor.google_access_token, vendor.google_refresh_token)) {
+            await clearGoogleCalendarConnection(supabaseAdmin, vendor.id);
             const updated = await updateBookingCalendarSyncState({
                 supabase: supabaseAdmin,
                 bookingId: booking.id,

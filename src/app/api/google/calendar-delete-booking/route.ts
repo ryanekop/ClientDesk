@@ -123,6 +123,7 @@ export async function POST(request: NextRequest) {
         : "";
 
     if (!hasOAuthTokenPair(accessToken, refreshToken)) {
+      await clearGoogleCalendarConnection(supabase, user.id);
       return NextResponse.json(
         {
           success: false,
