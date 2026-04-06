@@ -209,6 +209,10 @@ const PACKAGE_SELECTION_BUILTIN_IDS = new Set([
   "service_package",
   "addon_packages",
 ]);
+const WEDDING_SPLIT_LOCATION_EXTRA_IDS = new Set([
+  "extra:tempat_akad",
+  "extra:tempat_resepsi",
+]);
 const PRE_EVENT_SELECTION_BUILTIN_IDS = new Set([
   "client_name",
   "client_whatsapp",
@@ -290,8 +294,8 @@ function getDisplayLabelForBuiltInField(
   item: Extract<FormLayoutItem, { kind: "builtin_field" }>,
   fallback: string,
 ) {
-  const override = item.labelOverride?.trim();
-  return override && override.length > 0 ? override : fallback;
+  if (typeof item.labelOverride !== "string") return fallback;
+  return item.labelOverride.trim().length > 0 ? item.labelOverride : fallback;
 }
 
 function getDisplayDescriptionForField(
@@ -299,8 +303,8 @@ function getDisplayDescriptionForField(
     | Extract<FormLayoutItem, { kind: "builtin_field" }>
     | Extract<FormLayoutItem, { kind: "custom_field" }>,
 ) {
-  const description = item.description?.trim();
-  return description && description.length > 0 ? description : "";
+  if (typeof item.description !== "string") return "";
+  return item.description.trim().length > 0 ? item.description : "";
 }
 
 function isPaymentConfirmField(item: FormLayoutItem) {
@@ -1409,6 +1413,8 @@ export function BookingFormClient({
   const hasSelectedEventType = eventType.trim().length > 0;
   const hideGeneralLocationForWeddingSplit =
     eventType === "Wedding" && splitDates;
+  const hideWeddingSplitLocationExtras =
+    eventType === "Wedding" && !splitDates;
   const brandColor = resolveHexColor(effectiveVendor.form_brand_color, "#000000");
   const normalizedActiveLayout = React.useMemo(
     () =>
@@ -1430,6 +1436,13 @@ export function BookingFormClient({
           ) {
             return false;
           }
+          if (
+            hideWeddingSplitLocationExtras &&
+            item.kind === "builtin_field" &&
+            WEDDING_SPLIT_LOCATION_EXTRA_IDS.has(item.builtinId)
+          ) {
+            return false;
+          }
           if (!hasSelectedEventType) {
             return (
               item.kind === "builtin_field" &&
@@ -1443,6 +1456,7 @@ export function BookingFormClient({
     [
       hasSelectedEventType,
       hideGeneralLocationForWeddingSplit,
+      hideWeddingSplitLocationExtras,
       normalizedActiveLayout,
     ],
   );
@@ -1464,6 +1478,13 @@ export function BookingFormClient({
             ) {
               return false;
             }
+            if (
+              hideWeddingSplitLocationExtras &&
+              item.kind === "builtin_field" &&
+              WEDDING_SPLIT_LOCATION_EXTRA_IDS.has(item.builtinId)
+            ) {
+              return false;
+            }
             if (!hasSelectedEventType) {
               return (
                 item.kind === "builtin_field" &&
@@ -1478,6 +1499,7 @@ export function BookingFormClient({
     [
       hasSelectedEventType,
       hideGeneralLocationForWeddingSplit,
+      hideWeddingSplitLocationExtras,
       normalizedActiveLayout,
       normalizedEventType,
     ],
@@ -2039,7 +2061,7 @@ export function BookingFormClient({
           {field.label}
           {field.required && <span className="text-red-500"> *</span>}
         </label>
-        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+        {description ? <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{description}</p> : null}
         {field.type === "textarea" ? (
           <textarea
             value={customFields[field.id] || ""}
@@ -2116,10 +2138,23 @@ export function BookingFormClient({
   ) {
     const field = currentExtraFields.find((item) => item.key === extraKey);
     if (!field) return null;
-    const label = display?.labelOverride?.trim() || field.label;
-    const description = display?.description?.trim() || "";
+    const label =
+      typeof display?.labelOverride === "string" &&
+      display.labelOverride.trim().length > 0
+        ? display.labelOverride
+        : field.label;
+    const description =
+      typeof display?.description === "string" &&
+      display.description.trim().length > 0
+        ? display.description
+        : "";
     const isWisudaSplitLocationField =
       field.key === "tempat_wisuda_1" || field.key === "tempat_wisuda_2";
+    const isWeddingSplitLocationField =
+      field.key === "tempat_akad" || field.key === "tempat_resepsi";
+    if (eventType === "Wedding" && !splitDates && isWeddingSplitLocationField) {
+      return null;
+    }
     if (eventType === "Wisuda" && !splitDates && isWisudaSplitLocationField) {
       return null;
     }
@@ -2134,7 +2169,7 @@ export function BookingFormClient({
           {field.required && <span className="text-red-500"> *</span>}
         </label>
         {description ? (
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{description}</p>
         ) : null}
         {field.key === UNIVERSITY_EXTRA_FIELD_KEY ? (
           <UniversityAutocomplete
@@ -2229,7 +2264,7 @@ export function BookingFormClient({
               {fieldLabel(t("namaLengkap"))} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <input
               value={clientName}
@@ -2247,7 +2282,7 @@ export function BookingFormClient({
               {fieldLabel(t("nomorWhatsapp"))} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <div className="flex gap-2">
               <select
@@ -2285,7 +2320,7 @@ export function BookingFormClient({
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">{fieldLabel("Instagram")}</label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
@@ -2308,7 +2343,7 @@ export function BookingFormClient({
               {fieldLabel(t("tipeAcara"))} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <select
               value={eventType}
@@ -2369,7 +2404,7 @@ export function BookingFormClient({
               </span>
             </div>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
           </div>
         );
@@ -2395,7 +2430,7 @@ export function BookingFormClient({
               </span>
             </div>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
           </div>
         );
@@ -2407,7 +2442,7 @@ export function BookingFormClient({
               {fieldLabel("Tanggal Akad")} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <input
               type="date"
@@ -2429,7 +2464,7 @@ export function BookingFormClient({
               {fieldLabel("Jam Akad")} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <input
               type="time"
@@ -2450,7 +2485,7 @@ export function BookingFormClient({
               {fieldLabel("Tanggal Resepsi")} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <input
               type="date"
@@ -2472,7 +2507,7 @@ export function BookingFormClient({
               {fieldLabel("Jam Resepsi")} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <input
               type="time"
@@ -2493,7 +2528,7 @@ export function BookingFormClient({
               {fieldLabel("Tanggal Sesi 1")} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <input
               type="date"
@@ -2515,7 +2550,7 @@ export function BookingFormClient({
               {fieldLabel("Jam Sesi 1")} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <input
               type="time"
@@ -2536,7 +2571,7 @@ export function BookingFormClient({
               {fieldLabel("Tanggal Sesi 2")} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <input
               type="date"
@@ -2558,7 +2593,7 @@ export function BookingFormClient({
               {fieldLabel("Jam Sesi 2")} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <input
               type="time"
@@ -2579,7 +2614,7 @@ export function BookingFormClient({
               {fieldLabel(t("jadwalSesi"))} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <input
               type="date"
@@ -2601,7 +2636,7 @@ export function BookingFormClient({
               {fieldLabel(t("jam") || "Jam")} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <input
               type="time"
@@ -2625,7 +2660,7 @@ export function BookingFormClient({
               {fieldLabel(t("lokasi"))} <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <LocationAutocomplete
               value={location}
@@ -2648,7 +2683,7 @@ export function BookingFormClient({
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">{fieldLabel("Detail Lokasi")}</label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <input
               value={locationDetail}
@@ -2664,7 +2699,7 @@ export function BookingFormClient({
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">{fieldLabel(t("catatan"))}</label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <textarea
               value={notes}
@@ -2703,7 +2738,7 @@ export function BookingFormClient({
                 {fieldLabel(t("paketLayanan"))} <span className="text-red-500">*</span>
               </label>
               {fieldDescription ? (
-                <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+                <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
               ) : null}
               {isCityScopedEvent && !normalizedSelectedCityCode ? (
                 <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
@@ -2799,7 +2834,7 @@ export function BookingFormClient({
               <div className="flex-1 border-t" />
             </div>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <button
               type="button"
@@ -2938,7 +2973,7 @@ export function BookingFormClient({
               <span className="text-red-500">*</span>
             </label>
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-muted-foreground shrink-0">
@@ -2990,7 +3025,7 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-4">
             {fieldDescription ? (
-              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              <p className="text-xs text-muted-foreground whitespace-pre-line break-words leading-relaxed">{fieldDescription}</p>
             ) : null}
             <PaymentMethodSection
               methods={availablePaymentMethods}
@@ -3067,6 +3102,14 @@ export function BookingFormClient({
       return null;
     }
     if (item.kind === "custom_section") {
+      const sectionNotesLabel =
+        typeof item.notesLabel === "string" && item.notesLabel.trim().length > 0
+          ? item.notesLabel
+          : "";
+      const sectionDescription =
+        typeof item.description === "string" && item.description.trim().length > 0
+          ? item.description
+          : "";
       return (
         <div key={item.id} className="space-y-2 pt-1">
           <div className="flex items-center gap-3">
@@ -3076,6 +3119,18 @@ export function BookingFormClient({
             </h4>
             <div className="h-px flex-1 bg-border" />
           </div>
+          {sectionDescription ? (
+            <div className="space-y-1">
+              {sectionNotesLabel ? (
+                <p className="text-sm font-medium text-foreground break-words">
+                  {sectionNotesLabel}
+                </p>
+              ) : null}
+              <p className="text-sm text-muted-foreground whitespace-pre-line break-words leading-relaxed">
+                {sectionDescription}
+              </p>
+            </div>
+          ) : null}
         </div>
       );
     }
@@ -3265,6 +3320,9 @@ export function BookingFormClient({
       .map((item) => {
         const key = item.builtinId.slice("extra:".length);
         const extraDefinition = currentExtraFields.find((field) => field.key === key);
+        if (eventType === "Wedding" && !splitDates && (key === "tempat_akad" || key === "tempat_resepsi")) {
+          return null;
+        }
         if (eventType === "Wisuda" && !splitDates && (key === "tempat_wisuda_1" || key === "tempat_wisuda_2")) {
           return null;
         }
@@ -3275,7 +3333,9 @@ export function BookingFormClient({
         if (!value.trim()) return null;
         return {
           label:
-            item.labelOverride?.trim() ||
+            (typeof item.labelOverride === "string" && item.labelOverride.trim().length > 0
+              ? item.labelOverride
+              : "") ||
             extraDefinition?.label ||
             key.replace(/_/g, " "),
           value,
@@ -3669,10 +3729,10 @@ export function BookingFormClient({
                       {summaryClientInfoRows.map((row) => (
                         <div
                           key={`${row.label}-${row.value}`}
-                          className="flex items-start justify-between gap-4"
+                          className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
                         >
-                          <p className="text-muted-foreground">{row.label}</p>
-                          <p className="text-right font-medium">{row.value}</p>
+                          <p className="text-muted-foreground break-words sm:max-w-[45%]">{row.label}</p>
+                          <p className="font-medium break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right">{row.value}</p>
                         </div>
                       ))}
                     </div>
@@ -3688,10 +3748,10 @@ export function BookingFormClient({
                       {summarySessionDetailRows.map((row) => (
                         <div
                           key={`${row.label}-${row.value}`}
-                          className="flex items-start justify-between gap-4"
+                          className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
                         >
-                          <p className="text-muted-foreground">{row.label}</p>
-                          <p className="text-right font-medium">{row.value}</p>
+                          <p className="text-muted-foreground break-words sm:max-w-[45%]">{row.label}</p>
+                          <p className="font-medium break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right">{row.value}</p>
                         </div>
                       ))}
                     </div>
@@ -3707,10 +3767,10 @@ export function BookingFormClient({
                       {summaryPackageRows.map((row) => (
                         <div
                           key={`${row.label}-${row.value}`}
-                          className="flex items-start justify-between gap-4"
+                          className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
                         >
-                          <p className="text-muted-foreground">{row.label}</p>
-                          <p className="text-right font-medium">{row.value}</p>
+                          <p className="text-muted-foreground break-words sm:max-w-[45%]">{row.label}</p>
+                          <p className="font-medium break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right">{row.value}</p>
                         </div>
                       ))}
                     </div>
@@ -3726,10 +3786,10 @@ export function BookingFormClient({
                       {summaryExtraFieldRows.map((row) => (
                         <div
                           key={`${row.label}-${row.value}`}
-                          className="flex items-start justify-between gap-4"
+                          className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
                         >
-                          <p className="text-muted-foreground">{row.label}</p>
-                          <p className="text-right font-medium">{row.value}</p>
+                          <p className="text-muted-foreground break-words sm:max-w-[45%]">{row.label}</p>
+                          <p className="font-medium break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right">{row.value}</p>
                         </div>
                       ))}
                     </div>
@@ -3745,10 +3805,10 @@ export function BookingFormClient({
                       {summaryCustomFieldRows.map((row) => (
                         <div
                           key={`${row.label}-${row.value}`}
-                          className="flex items-start justify-between gap-4"
+                          className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
                         >
-                          <p className="text-muted-foreground">{row.label}</p>
-                          <p className="text-right font-medium">{row.value}</p>
+                          <p className="text-muted-foreground break-words sm:max-w-[45%]">{row.label}</p>
+                          <p className="font-medium break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right">{row.value}</p>
                         </div>
                       ))}
                     </div>
@@ -3761,7 +3821,7 @@ export function BookingFormClient({
                     {summaryCostRows.map((row) => (
                       <div
                         key={row.id}
-                        className={`flex items-start justify-between gap-4 ${
+                        className={`flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4 ${
                           row.tone === "total"
                             ? "border-t pt-2 mt-2"
                             : ""
@@ -3770,16 +3830,16 @@ export function BookingFormClient({
                         <p
                           className={
                             row.tone === "total"
-                              ? "font-semibold"
+                              ? "font-semibold break-words sm:max-w-[45%]"
                               : row.tone === "subtotal"
-                                ? "font-medium"
-                                : "text-muted-foreground"
+                                ? "font-medium break-words sm:max-w-[45%]"
+                                : "text-muted-foreground break-words sm:max-w-[45%]"
                           }
                         >
                           {row.label}
                         </p>
                         <p
-                          className={`text-right ${
+                          className={`break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right ${
                             row.tone === "total"
                               ? "text-lg font-semibold"
                               : row.tone === "discount"

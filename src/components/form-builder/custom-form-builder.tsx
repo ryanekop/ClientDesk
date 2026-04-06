@@ -634,10 +634,10 @@ export default function CustomFormBuilder({
   function updateCustomDivider(
     sectionId: BuiltInSectionId,
     id: string,
-    title: string,
+    updates: Partial<Extract<SectionContentItem, { kind: "custom_section" }>>,
   ) {
     updateSection(sectionId, (items) =>
-      updateLayoutItem(items, id, { title }),
+      updateLayoutItem(items, id, updates),
     );
   }
 
@@ -912,10 +912,41 @@ export default function CustomFormBuilder({
                   value={item.title}
                   onFocus={() => setEditingItemId(item.id)}
                   onChange={(e) =>
-                    updateCustomDivider(sectionId, item.id, e.target.value)
+                    updateCustomDivider(sectionId, item.id, {
+                      title: e.target.value,
+                    })
                   }
                   className={inputClass + (isEditing ? " border-primary/40" : "")}
                   placeholder="Judul divider"
+                />
+                <label className="text-[11px] font-medium text-muted-foreground">
+                  Label Catatan Section (Opsional)
+                </label>
+                <input
+                  value={item.notesLabel || ""}
+                  onFocus={() => setEditingItemId(item.id)}
+                  onChange={(e) =>
+                    updateCustomDivider(sectionId, item.id, {
+                      notesLabel: e.target.value,
+                    })
+                  }
+                  className={inputClass + (isEditing ? " border-primary/40" : "")}
+                  placeholder="Contoh: Catatan dari LUMIA"
+                />
+                <label className="text-[11px] font-medium text-muted-foreground">
+                  Catatan Section (Opsional)
+                </label>
+                <textarea
+                  value={item.description || ""}
+                  onFocus={() => setEditingItemId(item.id)}
+                  onChange={(e) =>
+                    updateCustomDivider(sectionId, item.id, {
+                      description: e.target.value,
+                    })
+                  }
+                  rows={3}
+                  className="placeholder:text-muted-foreground w-full min-w-0 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] transition-all dark:bg-input/30"
+                  placeholder="Contoh: Catatan penting untuk klien di section ini."
                 />
               </div>
             )}

@@ -106,6 +106,8 @@ export type CustomSectionItem = {
   id: string;
   kind: "custom_section";
   title: string;
+  notesLabel?: string;
+  description?: string;
 };
 
 export type SectionContentItem =
@@ -630,6 +632,8 @@ export function createCustomSectionItem(): CustomSectionItem {
     id: Math.random().toString(36).slice(2, 10),
     kind: "custom_section",
     title: "Divider Baru",
+    notesLabel: "",
+    description: "",
   };
 }
 
@@ -649,8 +653,7 @@ function isNewLayoutItem(value: unknown): value is FormLayoutItem {
 
 function normalizeOptionalText(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  return value.trim().length > 0 ? value : undefined;
 }
 
 function normalizeOptionalOptions(value: unknown): string[] | undefined {
@@ -682,6 +685,16 @@ function normalizeCustomFieldItem(item: CustomFieldItem): CustomFieldItem {
     options: normalizeOptionalOptions(item.options),
     description: normalizeOptionalText(item.description),
     hidden: item.hidden === true ? true : undefined,
+  };
+}
+
+function normalizeCustomSectionItem(item: CustomSectionItem): CustomSectionItem {
+  return {
+    id: item.id,
+    kind: "custom_section",
+    title: typeof item.title === "string" ? item.title : "Divider Baru",
+    notesLabel: normalizeOptionalText(item.notesLabel),
+    description: normalizeOptionalText(item.description),
   };
 }
 
@@ -741,7 +754,7 @@ function normalizeNewLayout(
       return;
     }
 
-    buckets[currentSection].push(item);
+    buckets[currentSection].push(normalizeCustomSectionItem(item));
   });
 
   getBuiltInFieldDefinitions(eventType, builtInOptions).forEach((field) => {
