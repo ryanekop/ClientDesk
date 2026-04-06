@@ -42,6 +42,17 @@ Emergency toggle for security headers (set in `.env.local` and redeploy):
 
 Use `DISABLE_SECURITY_HEADERS=true` only for incident recovery, then switch it back off.
 
+Current CSP defaults include:
+
+- `http://localhost:3000` in `connect-src` for local development flows.
+- Google Maps hosts (`https://maps.googleapis.com` and `https://maps.gstatic.com`) in `script-src` and `connect-src`.
+- Umami host (`https://cloud.umami.is`) for analytics script and network requests.
+
+If you use vendor/custom domains, also allowlist those domains in external service dashboards:
+
+- Google Cloud Console: add each domain to allowed HTTP referrers for your Maps API key.
+- Umami website settings: add each domain to allowed domains for the tracked website.
+
 ## Upload Limit (VPS + Nginx)
 
 App-level limit for Google-related uploads (payment proof, QRIS, client files) is **5MB**.
