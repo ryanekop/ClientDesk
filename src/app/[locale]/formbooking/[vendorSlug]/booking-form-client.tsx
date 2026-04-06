@@ -1407,6 +1407,8 @@ export function BookingFormClient({
   const minDP = getMinDpForEvent();
   const normalizedEventType = normalizeEventTypeName(eventType) || eventType;
   const hasSelectedEventType = eventType.trim().length > 0;
+  const hideGeneralLocationForWeddingSplit =
+    eventType === "Wedding" && splitDates;
   const brandColor = resolveHexColor(effectiveVendor.form_brand_color, "#000000");
   const normalizedActiveLayout = React.useMemo(
     () =>
@@ -1421,6 +1423,13 @@ export function BookingFormClient({
       normalizedActiveLayout.filter((item) => {
         if (item.kind === "builtin_field" || item.kind === "custom_field") {
           if (item.hidden === true) return false;
+          if (
+            hideGeneralLocationForWeddingSplit &&
+            item.kind === "builtin_field" &&
+            item.builtinId === "location"
+          ) {
+            return false;
+          }
           if (!hasSelectedEventType) {
             return (
               item.kind === "builtin_field" &&
@@ -1431,7 +1440,11 @@ export function BookingFormClient({
         }
         return hasSelectedEventType;
       }),
-    [hasSelectedEventType, normalizedActiveLayout],
+    [
+      hasSelectedEventType,
+      hideGeneralLocationForWeddingSplit,
+      normalizedActiveLayout,
+    ],
   );
   const currentExtraFields = getLayoutExtraFields(visibleActiveLayout);
   const activeSections = React.useMemo(
@@ -1444,6 +1457,13 @@ export function BookingFormClient({
         items: section.items.filter((item) => {
           if (item.kind === "builtin_field" || item.kind === "custom_field") {
             if (item.hidden === true) return false;
+            if (
+              hideGeneralLocationForWeddingSplit &&
+              item.kind === "builtin_field" &&
+              item.builtinId === "location"
+            ) {
+              return false;
+            }
             if (!hasSelectedEventType) {
               return (
                 item.kind === "builtin_field" &&
@@ -1455,7 +1475,12 @@ export function BookingFormClient({
           return hasSelectedEventType;
         }),
       })),
-    [hasSelectedEventType, normalizedActiveLayout, normalizedEventType],
+    [
+      hasSelectedEventType,
+      hideGeneralLocationForWeddingSplit,
+      normalizedActiveLayout,
+      normalizedEventType,
+    ],
   );
   const infoStepSections = React.useMemo(
     () =>
