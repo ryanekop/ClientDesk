@@ -50,6 +50,7 @@ import {
   createCustomSectionItem,
   flattenGroupedFormLayout,
   getBuiltInFieldCatalogDefinitions,
+  getBuiltInFieldDefinitions,
   getBuiltInFieldDefinition,
   groupFormLayoutBySection,
   normalizeStoredFormLayout,
@@ -297,6 +298,10 @@ export default function CustomFormBuilder({
 
   const builtInDefinitions = React.useMemo(
     () => getBuiltInFieldCatalogDefinitions(eventType),
+    [eventType],
+  );
+  const nativeBuiltInIds = React.useMemo(
+    () => new Set(getBuiltInFieldDefinitions(eventType).map((item) => item.builtinId)),
     [eventType],
   );
 
@@ -719,6 +724,7 @@ export default function CustomFormBuilder({
     const isExpanded = expandedIds.has(item.id);
     const isLocked = BUILT_IN_HIDE_LOCKED_IDS.has(item.builtinId);
     const isHidden = item.hidden === true;
+    const isCrossEventBuiltIn = !nativeBuiltInIds.has(item.builtinId);
     const displayLabel = item.labelOverride?.trim() || definition.label;
 
     return (
@@ -775,6 +781,16 @@ export default function CustomFormBuilder({
                       index={index}
                       itemsLength={itemsLength}
                       onMove={(direction) => moveItem(sectionId, index, direction)}
+                      onDelete={
+                        isCrossEventBuiltIn
+                          ? () => deleteItem(sectionId, item.id)
+                          : undefined
+                      }
+                      deleteTitle={
+                        isCrossEventBuiltIn
+                          ? "Hapus built-in lintas acara"
+                          : undefined
+                      }
                     />
                   </div>
                 </div>

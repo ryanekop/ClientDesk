@@ -209,6 +209,11 @@ const PACKAGE_SELECTION_BUILTIN_IDS = new Set([
   "service_package",
   "addon_packages",
 ]);
+const PRE_EVENT_SELECTION_BUILTIN_IDS = new Set([
+  "client_name",
+  "client_whatsapp",
+  "event_type",
+]);
 type BookingStep = 1 | 2 | 3 | 4;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1401,6 +1406,7 @@ export function BookingFormClient({
 
   const minDP = getMinDpForEvent();
   const normalizedEventType = normalizeEventTypeName(eventType) || eventType;
+  const hasSelectedEventType = eventType.trim().length > 0;
   const brandColor = resolveHexColor(effectiveVendor.form_brand_color, "#000000");
   const normalizedActiveLayout = React.useMemo(
     () =>
@@ -1414,11 +1420,18 @@ export function BookingFormClient({
     () =>
       normalizedActiveLayout.filter((item) => {
         if (item.kind === "builtin_field" || item.kind === "custom_field") {
-          return item.hidden !== true;
+          if (item.hidden === true) return false;
+          if (!hasSelectedEventType) {
+            return (
+              item.kind === "builtin_field" &&
+              PRE_EVENT_SELECTION_BUILTIN_IDS.has(item.builtinId)
+            );
+          }
+          return true;
         }
-        return true;
+        return hasSelectedEventType;
       }),
-    [normalizedActiveLayout],
+    [hasSelectedEventType, normalizedActiveLayout],
   );
   const currentExtraFields = getLayoutExtraFields(visibleActiveLayout);
   const activeSections = React.useMemo(
@@ -1430,12 +1443,19 @@ export function BookingFormClient({
         ...section,
         items: section.items.filter((item) => {
           if (item.kind === "builtin_field" || item.kind === "custom_field") {
-            return item.hidden !== true;
+            if (item.hidden === true) return false;
+            if (!hasSelectedEventType) {
+              return (
+                item.kind === "builtin_field" &&
+                PRE_EVENT_SELECTION_BUILTIN_IDS.has(item.builtinId)
+              );
+            }
+            return true;
           }
-          return true;
+          return hasSelectedEventType;
         }),
       })),
-    [normalizedActiveLayout, normalizedEventType],
+    [hasSelectedEventType, normalizedActiveLayout, normalizedEventType],
   );
   const infoStepSections = React.useMemo(
     () =>
