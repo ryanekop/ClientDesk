@@ -203,6 +203,19 @@ function downloadBase64Xlsx(base64: string, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
+function parsePastedTable(raw: string): string[][] {
+  if (!raw.trim()) return [];
+
+  return raw
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .split("\t")
+        .map((cell) => cell.trim()),
+    )
+    .filter((row) => row.some((cell) => cell.length > 0));
+}
+
 export function BatchImportButton({
   onImported,
   canCommitBookings = true,
@@ -224,7 +237,9 @@ export function BatchImportButton({
     bookingWriteBlockedMessage || ui.blockedBookingWriteFallback;
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const [step, setStep] = React.useState<Step>("upload");
-  const [file, setFile] = React.useState<File | null>(null);
+  const [rawPasteText, setRawPasteText] = React.useState("");
+  const [pasteRows, setPasteRows] = React.useState<string[][]>([]);
+  const [headerMode, setHeaderMode] = React.useState<"auto" | "yes" | "no">("auto");
   const [validating, setValidating] = React.useState(false);
   const [committing, setCommitting] = React.useState(false);
   const [validation, setValidation] = React.useState<ValidationResponse | null>(null);
@@ -254,7 +269,9 @@ export function BatchImportButton({
   function resetState() {
     setOpen(false);
     setStep("upload");
-    setFile(null);
+    setRawPasteText("");
+    setPasteRows([]);
+    setHeaderMode("auto");
     setValidating(false);
     setCommitting(false);
     setValidation(null);
@@ -290,19 +307,24 @@ export function BatchImportButton({
     }
   }
 
-  async function runValidation(selectedFile: File) {
+  async function runValidationFromPaste(nextRows: string[][]) {
     setValidating(true);
     setFatalError(null);
     setValidation(null);
     setCommitResult(null);
 
     try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-
       const response = await fetch("/api/bookings/import/validate", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mode: "paste",
+          rows: nextRows,
+          hasHeader:
+            headerMode === "auto" ? null : headerMode === "yes",
+        }),
       });
 
       const payload = (await response.json().catch(() => null)) as
@@ -331,15 +353,8 @@ export function BatchImportButton({
     }
   }
 
-  function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0];
-    if (!selected) return;
-    setFile(selected);
-    void runValidation(selected);
-  }
-
   async function handleCommit() {
-    if (!file || !validation || !validation.canCommit) return;
+    if (!validation || !validation.canCommit || pasteRows.length === 0) return;
     if (!canCommitBookings) {
       setFatalError(blockedMessage);
       return;
@@ -349,12 +364,17 @@ export function BatchImportButton({
     setFatalError(null);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
       const response = await fetch("/api/bookings/import/commit", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mode: "paste",
+          rows: pasteRows,
+          hasHeader:
+            headerMode === "auto" ? null : headerMode === "yes",
+        }),
       });
 
       const payload = (await response.json().catch(() => null)) as CommitResponse | null;
@@ -378,6 +398,21 @@ export function BatchImportButton({
     } finally {
       setCommitting(false);
     }
+  }
+
+  function handlePasteInputChange(nextValue: string) {
+    setRawPasteText(nextValue);
+    setPasteRows(parsePastedTable(nextValue));
+    setValidation(null);
+    setCommitResult(null);
+  }
+
+  function handleValidatePaste() {
+    if (pasteRows.length === 0) {
+      setFatalError(ui.failedValidateImport);
+      return;
+    }
+    void runValidationFromPaste(pasteRows);
   }
 
   const steps: { key: Step; label: string }[] = [
@@ -468,48 +503,108 @@ export function BatchImportButton({
                   <Download className="w-4 h-4" /> {ui.downloadTemplateLabel}
                 </Button>
 
-                <label className="flex flex-col items-center justify-center gap-3 p-8 rounded-xl border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors cursor-pointer bg-muted/10">
-                  <input
-                    type="file"
-                    accept=".xlsx"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    disabled={validating}
-                  />
-                  {validating ? (
-                    <Loader2 className="w-8 h-8 text-muted-foreground/50 animate-spin" />
-                  ) : (
-                    <Upload className="w-8 h-8 text-muted-foreground/50" />
-                  )}
-                  <div className="text-center">
-                    <p className="text-sm text-muted-foreground">
-                      {ui.uploadPrimaryHint}
-                    </p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">
-                      {ui.uploadHintAutoId}
-                    </p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">
-                      {ui.uploadHintAutoValidate}
-                    </p>
+                <div className="space-y-3 rounded-xl border bg-muted/10 p-4">
+                  <div className="flex items-start gap-2">
+                    {validating ? (
+                      <Loader2 className="mt-0.5 w-4 h-4 text-muted-foreground/70 animate-spin" />
+                    ) : (
+                      <Upload className="mt-0.5 w-4 h-4 text-muted-foreground/70" />
+                    )}
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">{ui.uploadPrimaryHint}</p>
+                      <p className="text-xs text-muted-foreground/60">{ui.uploadHintAutoId}</p>
+                      <p className="text-xs text-muted-foreground/60">{ui.uploadHintAutoValidate}</p>
+                    </div>
                   </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <span>{validating ? ui.validatingLabel : ui.chooseFileLabel}</span>
-                  </Button>
-                </label>
+
+                  <textarea
+                    value={rawPasteText}
+                    onChange={(event) => handlePasteInputChange(event.target.value)}
+                    placeholder="Paste data dari Excel/Google Sheets di sini (Ctrl/Cmd + V)."
+                    rows={8}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                  />
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Header baris pertama:</span>
+                    {[
+                      { value: "auto" as const, label: "Auto" },
+                      { value: "yes" as const, label: "Ya" },
+                      { value: "no" as const, label: "Tidak" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setHeaderMode(option.value)}
+                        className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                          headerMode === option.value
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-input text-muted-foreground hover:bg-muted/60"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {pasteRows.length > 0 ? (
+                    <div className="rounded-lg border bg-background p-3 text-xs text-muted-foreground">
+                      Terdeteksi {pasteRows.length} baris data.
+                    </div>
+                  ) : null}
+
+                  {pasteRows.length > 0 ? (
+                    <div className="rounded-lg border overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <tbody className="divide-y divide-border/50">
+                          {pasteRows.slice(0, 6).map((row, rowIndex) => (
+                            <tr key={`${rowIndex}-${row.join("|")}`}>
+                              {row.slice(0, 8).map((cell, columnIndex) => (
+                                <td key={`${rowIndex}-${columnIndex}`} className="px-2 py-1.5">
+                                  {cell || <span className="text-muted-foreground/50">-</span>}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      onClick={handleValidatePaste}
+                      disabled={validating || pasteRows.length === 0}
+                      className="gap-2"
+                    >
+                      {validating ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : null}
+                      {validating ? ui.validatingLabel : ui.chooseFileLabel}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handlePasteInputChange("")}
+                      disabled={validating || !rawPasteText}
+                    >
+                      Bersihkan
+                    </Button>
+                  </div>
+                </div>
               </>
             )}
 
             {step === "preview" && validation && (
               <>
-                {file && (
-                  <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
-                    <FileSpreadsheet className="w-4 h-4 text-green-600 shrink-0" />
-                    <span className="flex-1 truncate font-medium">{file.name}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {validation.summary.totalRows} {ui.rowsLabel}
-                    </span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
+                  <FileSpreadsheet className="w-4 h-4 text-green-600 shrink-0" />
+                  <span className="flex-1 truncate font-medium">Data paste siap commit</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {validation.summary.totalRows} {ui.rowsLabel}
+                  </span>
+                </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                   <div className="rounded-md border p-2 bg-muted/20">

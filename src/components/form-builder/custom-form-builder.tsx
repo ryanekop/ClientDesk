@@ -34,14 +34,27 @@ import {
   Rows3,
   Lock,
   FolderKanban,
+  Eye,
+  EyeOff,
+  Search,
 } from "lucide-react";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  createBuiltInFieldItem,
   createCustomFieldItem,
   createCustomSectionItem,
   flattenGroupedFormLayout,
+  getBuiltInFieldCatalogDefinitions,
   getBuiltInFieldDefinition,
   groupFormLayoutBySection,
   normalizeStoredFormLayout,
+  type BuiltInCategory,
+  type BuiltInFieldId,
   type BuiltInSectionId,
   type CustomFieldItem,
   type CustomFieldType,
@@ -60,6 +73,17 @@ const FIELD_TYPES: { value: CustomFieldType; label: string }[] = [
 
 const inputClass =
   "placeholder:text-muted-foreground h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] transition-all dark:bg-input/30";
+
+const BUILT_IN_HIDE_LOCKED_IDS = new Set<BuiltInFieldId>([
+  "client_name",
+  "client_whatsapp",
+  "event_type",
+  "session_date",
+  "service_package",
+  "dp_paid",
+  "bank_accounts",
+  "payment_proof",
+]);
 
 function updateLayoutItem(
   items: SectionContentItem[],
@@ -211,6 +235,34 @@ function ItemMoveControls({
   );
 }
 
+function VisibilityToggleButton({
+  hidden,
+  disabled,
+  disabledTitle,
+  onClick,
+}: {
+  hidden: boolean;
+  disabled?: boolean;
+  disabledTitle?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="rounded p-1 transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-30"
+      onClick={onClick}
+      disabled={disabled}
+      title={disabled ? disabledTitle : hidden ? "Tampilkan field" : "Sembunyikan field"}
+    >
+      {hidden ? (
+        <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+      ) : (
+        <Eye className="h-3.5 w-3.5" />
+      )}
+    </button>
+  );
+}
+
 export default function CustomFormBuilder({
   eventType,
   layout,
@@ -234,6 +286,19 @@ export default function CustomFormBuilder({
   const [editingItemId, setEditingItemId] = React.useState<string | null>(null);
   const [activeDragId, setActiveDragId] = React.useState<string | null>(null);
   const [optionDrafts, setOptionDrafts] = React.useState<Record<string, string>>({});
+  const [fieldPickerOpen, setFieldPickerOpen] = React.useState(false);
+  const [pickerSectionId, setPickerSectionId] = React.useState<BuiltInSectionId | null>(
+    null,
+  );
+  const [pickerQuery, setPickerQuery] = React.useState("");
+  const [pickerCategory, setPickerCategory] = React.useState<"Semua" | BuiltInCategory>(
+    "Semua",
+  );
+
+  const builtInDefinitions = React.useMemo(
+    () => getBuiltInFieldCatalogDefinitions(eventType),
+    [eventType],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -313,6 +378,83 @@ export default function CustomFormBuilder({
 
   const activeDragItem = activeDragId ? itemLookup.get(activeDragId)?.item ?? null : null;
 
+  const builtInStateById = React.useMemo(() => {
+    const map = new Map<
+      BuiltInFieldId,
+      {
+        sectionId: BuiltInSectionId;
+        item: Extract<SectionContentItem, { kind: "builtin_field" }>;
+      }
+    >();
+
+    groupedSections.forEach((section) => {
+      section.items.forEach((item) => {
+        if (item.kind !== "builtin_field") return;
+        if (map.has(item.builtinId)) return;
+        map.set(item.builtinId, {
+          sectionId: section.section.sectionId,
+          item,
+        });
+      });
+    });
+
+    return map;
+  }, [groupedSections]);
+
+  const pickerBuiltInItems = React.useMemo(() => {
+    const query = pickerQuery.trim().toLowerCase();
+    return builtInDefinitions
+      .filter((definition) => {
+        if (pickerCategory !== "Semua" && definition.category !== pickerCategory) {
+          return false;
+        }
+        if (!query) return true;
+        return (
+          definition.label.toLowerCase().includes(query) ||
+          definition.builtinId.toLowerCase().includes(query) ||
+          definition.category.toLowerCase().includes(query)
+        );
+      })
+      .map((definition) => {
+        const existing = builtInStateById.get(definition.builtinId);
+        const isHidden = existing?.item.hidden === true;
+        const isVisible = Boolean(existing && existing.item.hidden !== true);
+        return {
+          builtinId: definition.builtinId,
+          label: existing?.item.labelOverride?.trim() || definition.label,
+          category: definition.category,
+          description: existing?.item.description?.trim() || "",
+          sectionId: existing?.sectionId || definition.sectionId,
+          status: isVisible
+            ? ("visible" as const)
+            : isHidden
+              ? ("hidden" as const)
+              : ("missing" as const),
+        };
+      });
+  }, [
+    builtInDefinitions,
+    builtInStateById,
+    pickerCategory,
+    pickerQuery,
+  ]);
+
+  const pickerCategories = React.useMemo(() => {
+    return ["Semua", ...Array.from(new Set(builtInDefinitions.map((item) => item.category)))] as Array<
+      "Semua" | BuiltInCategory
+    >;
+  }, [builtInDefinitions]);
+  const sectionTitleById = React.useMemo(
+    () =>
+      Object.fromEntries(
+        groupedSections.map((section) => [
+          section.section.sectionId,
+          section.section.title,
+        ]),
+      ) as Record<BuiltInSectionId, string>,
+    [groupedSections],
+  );
+
   function toggleExpand(id: string) {
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -338,11 +480,30 @@ export default function CustomFormBuilder({
     commitSections(nextSections);
   }
 
-  function addCustomField(sectionId: BuiltInSectionId) {
+  function addCustomField(
+    sectionId: BuiltInSectionId,
+    type: CustomFieldType = "text",
+  ) {
     const nextItem = createCustomFieldItem();
-    updateSection(sectionId, (items) => [...items, nextItem]);
-    setExpandedIds((prev) => new Set(prev).add(nextItem.id));
-    setEditingItemId(nextItem.id);
+    const typedItem: CustomFieldItem = {
+      ...nextItem,
+      type,
+      options:
+        type === "checkbox"
+          ? ["Ya", "Tidak"]
+          : type === "select"
+            ? ["Opsi 1", "Opsi 2"]
+            : undefined,
+      placeholder:
+        type === "checkbox"
+          ? ""
+          : type === "number"
+            ? "Masukkan angka"
+            : nextItem.placeholder,
+    };
+    updateSection(sectionId, (items) => [...items, typedItem]);
+    setExpandedIds((prev) => new Set(prev).add(typedItem.id));
+    setEditingItemId(typedItem.id);
   }
 
   function addCustomDivider(sectionId: BuiltInSectionId) {
@@ -350,6 +511,93 @@ export default function CustomFormBuilder({
     updateSection(sectionId, (items) => [...items, nextItem]);
     setExpandedIds((prev) => new Set(prev).add(nextItem.id));
     setEditingItemId(nextItem.id);
+  }
+
+  function openFieldPicker(sectionId: BuiltInSectionId) {
+    setPickerSectionId(sectionId);
+    setPickerQuery("");
+    setPickerCategory("Semua");
+    setFieldPickerOpen(true);
+  }
+
+  function closeFieldPicker() {
+    setFieldPickerOpen(false);
+    setPickerQuery("");
+    setPickerCategory("Semua");
+    setPickerSectionId(null);
+  }
+
+  function updateBuiltInField(
+    sectionId: BuiltInSectionId,
+    id: string,
+    updates: Partial<Extract<SectionContentItem, { kind: "builtin_field" }>>,
+  ) {
+    updateSection(sectionId, (items) => updateLayoutItem(items, id, updates));
+  }
+
+  function toggleBuiltInFieldVisibility(
+    sectionId: BuiltInSectionId,
+    item: Extract<SectionContentItem, { kind: "builtin_field" }>,
+  ) {
+    const isLocked = BUILT_IN_HIDE_LOCKED_IDS.has(item.builtinId);
+    if (isLocked && item.hidden !== true) return;
+
+    updateBuiltInField(sectionId, item.id, {
+      hidden: item.hidden === true ? false : true,
+    });
+  }
+
+  function toggleCustomFieldVisibility(
+    sectionId: BuiltInSectionId,
+    item: CustomFieldItem,
+  ) {
+    updateCustomField(sectionId, item.id, {
+      hidden: item.hidden === true ? false : true,
+    });
+  }
+
+  function revealBuiltInField(
+    builtinId: BuiltInFieldId,
+    targetSectionId?: BuiltInSectionId,
+  ) {
+    const definition = getBuiltInFieldDefinition(builtinId, eventType);
+    if (!definition && !targetSectionId) return;
+
+    const resolvedTargetSectionId =
+      targetSectionId || definition?.sectionId || "session_details";
+    const nextSections = groupedSections.map((section) => ({
+      ...section,
+      items: [...section.items],
+    }));
+
+    let revealedItem: Extract<SectionContentItem, { kind: "builtin_field" }> | null =
+      null;
+
+    nextSections.forEach((section) => {
+      section.items.forEach((item) => {
+        if (item.kind !== "builtin_field" || item.builtinId !== builtinId) {
+          return;
+        }
+        revealedItem = { ...item, hidden: false };
+      });
+      section.items = section.items.filter(
+        (item) => !(item.kind === "builtin_field" && item.builtinId === builtinId),
+      );
+    });
+
+    const targetSection = nextSections.find(
+      (section) => section.section.sectionId === resolvedTargetSectionId,
+    );
+    if (!targetSection) return;
+
+    if (!revealedItem) {
+      targetSection.items.push(createBuiltInFieldItem(builtinId));
+      commitSections(nextSections);
+      return;
+    }
+
+    targetSection.items.push(revealedItem);
+    commitSections(nextSections);
   }
 
   function deleteItem(sectionId: BuiltInSectionId, id: string) {
@@ -469,11 +717,18 @@ export default function CustomFormBuilder({
     const definition = getBuiltInFieldDefinition(item.builtinId, eventType);
     if (!definition) return null;
     const isExpanded = expandedIds.has(item.id);
+    const isLocked = BUILT_IN_HIDE_LOCKED_IDS.has(item.builtinId);
+    const isHidden = item.hidden === true;
+    const displayLabel = item.labelOverride?.trim() || definition.label;
 
     return (
       <SortableItemShell key={item.id} id={item.id}>
         {({ attributes, listeners, setActivatorNodeRef, isDragging }) => (
-          <div className="rounded-lg border border-muted-foreground/20 bg-muted/35 shadow-sm">
+          <div
+            className={`rounded-lg border border-muted-foreground/20 bg-muted/35 shadow-sm ${
+              isHidden ? "opacity-70" : ""
+            }`}
+          >
             <div className="space-y-3 px-4 py-3">
               <div className="flex items-start gap-2">
                 <BuilderDragHandle
@@ -492,7 +747,7 @@ export default function CustomFormBuilder({
                     <ChevronUp className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                   )}
                   <span className="min-w-0 text-sm font-medium text-foreground break-words">
-                    {definition.label}
+                    {displayLabel}
                   </span>
                 </button>
               </div>
@@ -503,21 +758,71 @@ export default function CustomFormBuilder({
                 <span className="rounded-full bg-slate-300/70 px-2 py-0.5 text-[10px] text-slate-700">
                   Bawaan
                 </span>
+                {isHidden ? (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700">
+                    Disembunyikan
+                  </span>
+                ) : null}
                 <div className="sm:ml-auto">
-                  <ItemMoveControls
-                    index={index}
-                    itemsLength={itemsLength}
-                    onMove={(direction) => moveItem(sectionId, index, direction)}
-                  />
+                  <div className="flex items-center gap-1">
+                    <VisibilityToggleButton
+                      hidden={isHidden}
+                      disabled={isLocked && !isHidden}
+                      disabledTitle="Field penting tidak bisa disembunyikan."
+                      onClick={() => toggleBuiltInFieldVisibility(sectionId, item)}
+                    />
+                    <ItemMoveControls
+                      index={index}
+                      itemsLength={itemsLength}
+                      onMove={(direction) => moveItem(sectionId, index, direction)}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
             {isExpanded && (
-              <div className="px-4 pb-4">
+              <div className="space-y-3 px-4 pb-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-muted-foreground">
+                    Label Tampilan
+                  </label>
+                  <input
+                    value={item.labelOverride || ""}
+                    onFocus={() => setEditingItemId(item.id)}
+                    onChange={(e) =>
+                      updateBuiltInField(sectionId, item.id, {
+                        labelOverride: e.target.value,
+                      })
+                    }
+                    className={inputClass}
+                    placeholder={definition.label}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Kosongkan untuk kembali ke label default.
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-muted-foreground">
+                    Deskripsi (Opsional)
+                  </label>
+                  <textarea
+                    value={item.description || ""}
+                    onFocus={() => setEditingItemId(item.id)}
+                    onChange={(e) =>
+                      updateBuiltInField(sectionId, item.id, {
+                        description: e.target.value,
+                      })
+                    }
+                    rows={2}
+                    className="placeholder:text-muted-foreground w-full min-w-0 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] transition-all dark:bg-input/30"
+                    placeholder="Contoh: Ringkasan booking dikirim ke email ini."
+                  />
+                </div>
                 <div className="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/20 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
                   <Lock className="h-3.5 w-3.5" />
-                  Field bawaan ini tetap tampil, tapi urutannya bisa diatur di dalam
-                  section.
+                  {isLocked
+                    ? "Field ini penting untuk alur booking, jadi tidak bisa di-hide."
+                    : "Field bawaan ini bisa di-hide atau ditampilkan kembali lewat tombol Tambah Field."}
                 </div>
               </div>
             )}
@@ -613,6 +918,7 @@ export default function CustomFormBuilder({
   ) {
     const isExpanded = expandedIds.has(item.id);
     const isEditing = editingItemId === item.id;
+    const isHidden = item.hidden === true;
 
     return (
       <SortableItemShell key={item.id} id={item.id}>
@@ -620,7 +926,7 @@ export default function CustomFormBuilder({
           <div
             className={`rounded-lg border bg-card shadow-sm ${
               isEditing ? "border-primary/30" : ""
-            }`}
+            } ${isHidden ? "opacity-70" : ""}`}
           >
             <div className="space-y-3 px-4 py-3">
               <div className="flex items-start gap-2">
@@ -662,14 +968,25 @@ export default function CustomFormBuilder({
                     Wajib
                   </span>
                 )}
+                {isHidden && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700">
+                    Disembunyikan
+                  </span>
+                )}
                 <div className="sm:ml-auto">
-                  <ItemMoveControls
-                    index={index}
-                    itemsLength={itemsLength}
-                    onMove={(direction) => moveItem(sectionId, index, direction)}
-                    onDelete={() => deleteItem(sectionId, item.id)}
-                    deleteTitle="Delete field"
-                  />
+                  <div className="flex items-center gap-1">
+                    <VisibilityToggleButton
+                      hidden={isHidden}
+                      onClick={() => toggleCustomFieldVisibility(sectionId, item)}
+                    />
+                    <ItemMoveControls
+                      index={index}
+                      itemsLength={itemsLength}
+                      onMove={(direction) => moveItem(sectionId, index, direction)}
+                      onDelete={() => deleteItem(sectionId, item.id)}
+                      deleteTitle="Delete field"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -738,6 +1055,23 @@ export default function CustomFormBuilder({
                     />
                   </div>
                 )}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-muted-foreground">
+                    Deskripsi (Opsional)
+                  </label>
+                  <textarea
+                    value={item.description || ""}
+                    onFocus={() => setEditingItemId(item.id)}
+                    onChange={(e) =>
+                      updateCustomField(sectionId, item.id, {
+                        description: e.target.value,
+                      })
+                    }
+                    rows={2}
+                    className="placeholder:text-muted-foreground w-full min-w-0 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] transition-all dark:bg-input/30"
+                    placeholder="Contoh: Isi akun Instagram tanpa tanda @."
+                  />
+                </div>
                 {(item.type === "select" || item.type === "checkbox") && (
                   <div className="space-y-1">
                     <label className="text-[11px] font-medium text-muted-foreground">
@@ -815,8 +1149,9 @@ export default function CustomFormBuilder({
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold break-words">{section.section.title}</div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Section bawaan tetap tampil. Custom field dan divider bisa di-drag
-                antar section, sedangkan field bawaan tetap di section asalnya.
+                Field custom dan divider bisa di-drag antar section. Field bawaan
+                tetap di section asal, bisa rename/deskripsi, dan bisa di-hide jika
+                tidak termasuk field lock.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
@@ -871,7 +1206,7 @@ export default function CustomFormBuilder({
               <div className="grid gap-2 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() => addCustomField(sectionId)}
+                  onClick={() => openFieldPicker(sectionId)}
                   className="flex items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground transition-all hover:bg-muted/30 hover:text-foreground"
                 >
                   <Plus className="h-4 w-4" /> Tambah Field di Section Ini
@@ -908,8 +1243,10 @@ export default function CustomFormBuilder({
               <GripVertical className="h-4 w-4 text-muted-foreground/60" />
               <span className="text-sm font-medium">
                 {activeDragItem.kind === "builtin_field"
-                  ? getBuiltInFieldDefinition(activeDragItem.builtinId, eventType)
-                      ?.label || "Field Bawaan"
+                  ? activeDragItem.labelOverride?.trim() ||
+                    getBuiltInFieldDefinition(activeDragItem.builtinId, eventType)
+                      ?.label ||
+                    "Field Bawaan"
                   : activeDragItem.kind === "custom_section"
                     ? activeDragItem.title || "Divider Baru"
                     : activeDragItem.label || "Field Custom"}
@@ -918,6 +1255,143 @@ export default function CustomFormBuilder({
           </div>
         ) : null}
       </DragOverlay>
+
+      <Dialog open={fieldPickerOpen} onOpenChange={(open) => (open ? setFieldPickerOpen(true) : closeFieldPicker())}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Tambah Field</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Custom Field
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {FIELD_TYPES.map((fieldType) => (
+                  <button
+                    key={fieldType.value}
+                    type="button"
+                    onClick={() => {
+                      if (!pickerSectionId) return;
+                      addCustomField(pickerSectionId, fieldType.value);
+                      closeFieldPicker();
+                    }}
+                    className="flex items-start gap-3 rounded-lg border border-dashed px-4 py-3 text-left transition-colors hover:bg-muted/40"
+                  >
+                    <Plus className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{fieldType.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Buat field custom tipe {fieldType.label.toLowerCase()}.
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+              Katalog built-in menampilkan semua field khusus lintas event.
+              Field yang sudah dipakai aktif tidak bisa ditambahkan lagi agar tidak duplikat.
+            </div>
+
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={pickerQuery}
+                onChange={(e) => setPickerQuery(e.target.value)}
+                placeholder="Cari field bawaan..."
+                className={inputClass + " pl-9"}
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {pickerCategories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setPickerCategory(category)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    pickerCategory === category
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-input text-muted-foreground hover:bg-muted/60"
+                  }`}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+
+            <div className="max-h-[48vh] space-y-2 overflow-y-auto pr-1">
+              {pickerBuiltInItems.length === 0 ? (
+                <div className="rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">
+                  Tidak ada field bawaan yang cocok dengan pencarian.
+                </div>
+              ) : (
+                pickerBuiltInItems.map((item) => (
+                  <button
+                    key={item.builtinId}
+                    type="button"
+                    disabled={item.status === "visible"}
+                    onClick={() => {
+                      if (item.status === "visible") return;
+                      revealBuiltInField(
+                        item.builtinId,
+                        pickerSectionId || item.sectionId,
+                      );
+                      closeFieldPicker();
+                    }}
+                    className={`flex w-full items-start justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
+                      item.status === "visible"
+                        ? "cursor-not-allowed opacity-60"
+                        : "hover:bg-muted/40"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{item.label}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                          {item.category}
+                        </span>
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                          {sectionTitleById[item.sectionId] || item.sectionId}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] ${
+                            item.status === "visible"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : item.status === "hidden"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-blue-100 text-blue-700"
+                          }`}
+                        >
+                          {item.status === "visible"
+                            ? "Aktif"
+                            : item.status === "hidden"
+                              ? "Tersembunyi"
+                              : "Belum dipakai"}
+                        </span>
+                      </div>
+                      {item.description ? (
+                        <p className="mt-1 text-xs text-muted-foreground/90">
+                          {item.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    {item.status === "visible" ? (
+                      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    ) : item.status === "hidden" ? (
+                      <Eye className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    ) : (
+                      <Plus className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DndContext>
   );
 }

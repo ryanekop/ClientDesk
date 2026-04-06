@@ -70,6 +70,7 @@ import {
   type LocationCoordinates,
 } from "@/utils/location";
 import {
+  formatSessionDate,
   formatSessionTime,
   formatSessionTimeRange,
 } from "@/utils/format-date";
@@ -199,6 +200,17 @@ const PAYMENT_PROOF_IMAGE_COMPRESSION_STEPS = [
   { maxSize: 1200, quality: 0.68 },
 ] as const;
 
+const PAYMENT_CONFIRM_BUILTIN_IDS = new Set([
+  "dp_paid",
+  "bank_accounts",
+  "payment_proof",
+]);
+const PACKAGE_SELECTION_BUILTIN_IDS = new Set([
+  "service_package",
+  "addon_packages",
+]);
+type BookingStep = 1 | 2 | 3 | 4;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatCurrency(n: number) {
@@ -267,6 +279,30 @@ async function optimizePaymentProofImageForUpload(file: File) {
   }
 
   return candidateFile;
+}
+
+function getDisplayLabelForBuiltInField(
+  item: Extract<FormLayoutItem, { kind: "builtin_field" }>,
+  fallback: string,
+) {
+  const override = item.labelOverride?.trim();
+  return override && override.length > 0 ? override : fallback;
+}
+
+function getDisplayDescriptionForField(
+  item:
+    | Extract<FormLayoutItem, { kind: "builtin_field" }>
+    | Extract<FormLayoutItem, { kind: "custom_field" }>,
+) {
+  const description = item.description?.trim();
+  return description && description.length > 0 ? description : "";
+}
+
+function isPaymentConfirmField(item: FormLayoutItem) {
+  return (
+    item.kind === "builtin_field" &&
+    PAYMENT_CONFIRM_BUILTIN_IDS.has(item.builtinId)
+  );
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -504,6 +540,8 @@ export function BookingFormClient({
   const [packageSearchQuery, setPackageSearchQuery] = React.useState("");
   const [addonSearchQuery, setAddonSearchQuery] = React.useState("");
   const [error, setError] = React.useState("");
+  const [currentStep, setCurrentStep] = React.useState<BookingStep>(1);
+  const [maxUnlockedStep, setMaxUnlockedStep] = React.useState<BookingStep>(1);
 
   const autoDpAmountRef = React.useRef<number | null>(null);
   const isSpecialOfferActive = Boolean(
@@ -736,10 +774,13 @@ export function BookingFormClient({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (currentStep !== 4) {
+      return;
+    }
     setError("");
 
     const hasBuiltInField = (builtinId: string) =>
-      normalizedActiveLayout.some(
+      visibleActiveLayout.some(
         (item) => item.kind === "builtin_field" && item.builtinId === builtinId,
       );
     const hasExtraField = (key: string) =>
@@ -853,7 +894,7 @@ export function BookingFormClient({
     const normalizedCustomFields: Record<string, string> = { ...customFields };
     let customNumberFieldErrorLabel = "";
     let customFieldsNormalized = false;
-    normalizedActiveLayout.forEach((item) => {
+    visibleActiveLayout.forEach((item) => {
       if (
         customNumberFieldErrorLabel ||
         item.kind !== "custom_field" ||
@@ -1026,7 +1067,7 @@ export function BookingFormClient({
       }
       delete mergedExtra.universitas_abbreviation_draft;
       const customFieldSnapshots = buildCustomFieldSnapshots(
-        normalizedActiveLayout,
+        visibleActiveLayout,
         eventType || "Umum",
         normalizedCustomFields,
       );
@@ -1369,14 +1410,79 @@ export function BookingFormClient({
       ),
     [effectiveVendor.form_sections, normalizedEventType],
   );
-  const currentExtraFields = getLayoutExtraFields(normalizedActiveLayout);
-  const activeSections = groupFormLayoutBySection(
-    normalizedActiveLayout,
-    normalizedEventType || "Umum",
+  const visibleActiveLayout = React.useMemo(
+    () =>
+      normalizedActiveLayout.filter((item) => {
+        if (item.kind === "builtin_field" || item.kind === "custom_field") {
+          return item.hidden !== true;
+        }
+        return true;
+      }),
+    [normalizedActiveLayout],
+  );
+  const currentExtraFields = getLayoutExtraFields(visibleActiveLayout);
+  const activeSections = React.useMemo(
+    () =>
+      groupFormLayoutBySection(
+        normalizedActiveLayout,
+        normalizedEventType || "Umum",
+      ).map((section) => ({
+        ...section,
+        items: section.items.filter((item) => {
+          if (item.kind === "builtin_field" || item.kind === "custom_field") {
+            return item.hidden !== true;
+          }
+          return true;
+        }),
+      })),
+    [normalizedActiveLayout, normalizedEventType],
+  );
+  const infoStepSections = React.useMemo(
+    () =>
+      activeSections
+        .map((section) => ({
+          ...section,
+          items: section.items.filter((item) => {
+            if (isPaymentConfirmField(item)) return false;
+            if (
+              item.kind === "builtin_field" &&
+              PACKAGE_SELECTION_BUILTIN_IDS.has(item.builtinId)
+            ) {
+              return false;
+            }
+            return true;
+          }),
+        }))
+        .filter((section) => section.items.length > 0),
+    [activeSections],
+  );
+  const packageSelectionSections = React.useMemo(
+    () =>
+      activeSections
+        .map((section) => ({
+          ...section,
+          items: section.items.filter(
+            (item) =>
+              item.kind === "builtin_field" &&
+              PACKAGE_SELECTION_BUILTIN_IDS.has(item.builtinId),
+          ),
+        }))
+        .filter((section) => section.items.length > 0),
+    [activeSections],
+  );
+  const paymentConfirmationSections = React.useMemo(
+    () =>
+      activeSections
+        .map((section) => ({
+          ...section,
+          items: section.items.filter((item) => isPaymentConfirmField(item)),
+        }))
+        .filter((section) => section.items.length > 0),
+    [activeSections],
   );
   const showsLocationField =
     effectiveVendor.form_show_location !== false &&
-    normalizedActiveLayout.some(
+    visibleActiveLayout.some(
       (item) =>
         item.kind === "builtin_field" &&
         item.builtinId === "location",
@@ -1647,7 +1753,230 @@ export function BookingFormClient({
     setProofPreview(null);
   }, [selectedPaymentMethod]);
 
+  const hasVisibleBuiltInField = React.useCallback(
+    (builtinId: string) =>
+      visibleActiveLayout.some(
+        (item) => item.kind === "builtin_field" && item.builtinId === builtinId,
+      ),
+    [visibleActiveLayout],
+  );
+
+  const step1ValidationState = React.useMemo(() => {
+    const isWeddingEvent = eventType === "Wedding";
+    const isWisudaEvent = eventType === "Wisuda";
+    const isSplitSessionEnabled = splitDates && (isWeddingEvent || isWisudaEvent);
+    const requiresSessionDate =
+      hasVisibleBuiltInField("session_date") && !isSplitSessionEnabled;
+    const requiresAkadDate =
+      hasVisibleBuiltInField("akad_date") && isWeddingEvent && isSplitSessionEnabled;
+    const requiresResepsiDate =
+      hasVisibleBuiltInField("resepsi_date") && isWeddingEvent && isSplitSessionEnabled;
+    const requiresWisudaSession1Date =
+      hasVisibleBuiltInField("wisuda_session1_date") &&
+      isWisudaEvent &&
+      isSplitSessionEnabled;
+    const requiresWisudaSession2Date =
+      hasVisibleBuiltInField("wisuda_session2_date") &&
+      isWisudaEvent &&
+      isSplitSessionEnabled;
+    const requiresLocation =
+      hasVisibleBuiltInField("location") && effectiveVendor.form_show_location !== false;
+    const requiredCustomFields = infoStepSections.flatMap((section) =>
+      section.items.filter(
+        (item): item is Extract<FormLayoutItem, { kind: "custom_field" }> =>
+          item.kind === "custom_field" && item.required,
+      ),
+    );
+    const hasMissingCustomField = requiredCustomFields.some(
+      (field) => !customFields[field.id]?.trim(),
+    );
+    const requiredExtraFields = currentExtraFields.filter(
+      (field) =>
+        field.required &&
+        hasVisibleBuiltInField(`extra:${field.key}`) &&
+        !["tempat_akad", "tempat_resepsi", "tempat_wisuda_1", "tempat_wisuda_2"].includes(
+          field.key,
+        ) &&
+        !(
+          eventType === "Wisuda" &&
+          !splitDates &&
+          (field.key === "tempat_wisuda_1" || field.key === "tempat_wisuda_2")
+        ),
+    );
+    const hasMissingExtraField = requiredExtraFields.some(
+      (field) => !extraData[field.key]?.trim(),
+    );
+    const hasMissingWeddingLocations =
+      isWeddingEvent &&
+      hasVisibleBuiltInField("extra:tempat_akad") &&
+      hasVisibleBuiltInField("extra:tempat_resepsi") &&
+      (!extraData.tempat_akad?.trim() || !extraData.tempat_resepsi?.trim());
+    const hasMissingWisudaSplitLocations =
+      isWisudaEvent &&
+      isSplitSessionEnabled &&
+      ((hasVisibleBuiltInField("extra:tempat_wisuda_1") &&
+        !extraData.tempat_wisuda_1?.trim()) ||
+        (hasVisibleBuiltInField("extra:tempat_wisuda_2") &&
+          !extraData.tempat_wisuda_2?.trim()));
+
+    if (
+      (hasVisibleBuiltInField("client_name") && !clientName.trim()) ||
+      (hasVisibleBuiltInField("client_whatsapp") && !phone.trim()) ||
+      (hasVisibleBuiltInField("event_type") && !eventType) ||
+      (requiresSessionDate && !sessionDate) ||
+      (requiresAkadDate && !akadDate) ||
+      (requiresResepsiDate && !resepsiDate) ||
+      (requiresWisudaSession1Date && !wisudaSession1Date) ||
+      (requiresWisudaSession2Date && !wisudaSession2Date) ||
+      (requiresLocation && !location.trim()) ||
+      hasMissingCustomField ||
+      hasMissingExtraField
+    ) {
+      return { valid: false, errorMessage: t("errorWajib") };
+    }
+
+    if (hasMissingWeddingLocations) {
+      return { valid: false, errorMessage: t("errorLokasiWedding") };
+    }
+
+    if (hasMissingWisudaSplitLocations) {
+      return {
+        valid: false,
+        errorMessage:
+          localeCode === "en"
+            ? "Please complete Session 1 and Session 2 locations."
+            : "Mohon lengkapi Lokasi Sesi 1 dan Lokasi Sesi 2.",
+      };
+    }
+
+    if (hasVisibleBuiltInField(`extra:${UNIVERSITY_EXTRA_FIELD_KEY}`)) {
+      const hasUniversityName = hasUniversityValue(extraData);
+      const selectedUniversityRefId = getUniversityReferenceId(extraData);
+      if (!hasUniversityName || !selectedUniversityRefId) {
+        return { valid: false, errorMessage: t("errorUniversityRequired") };
+      }
+    }
+
+    return { valid: true, errorMessage: "" };
+  }, [
+    akadDate,
+    clientName,
+    currentExtraFields,
+    customFields,
+    eventType,
+    extraData,
+    hasVisibleBuiltInField,
+    infoStepSections,
+    localeCode,
+    location,
+    phone,
+    resepsiDate,
+    sessionDate,
+    splitDates,
+    t,
+    wisudaSession1Date,
+    wisudaSession2Date,
+    effectiveVendor.form_show_location,
+  ]);
+
+  const step2ValidationState = React.useMemo(() => {
+    const requiresServicePackage = hasVisibleBuiltInField("service_package");
+
+    if (requiresServicePackage && isCityScopedEvent && !normalizedSelectedCityCode) {
+      return {
+        valid: false,
+        errorMessage:
+          localeCode === "en"
+            ? "Please select your city/regency before choosing a package."
+            : "Pilih kota/kabupaten terlebih dahulu sebelum memilih paket.",
+      };
+    }
+
+    if (requiresServicePackage && selectedServiceIds.length === 0) {
+      return { valid: false, errorMessage: t("errorWajib") };
+    }
+
+    return { valid: true, errorMessage: "" };
+  }, [
+    hasVisibleBuiltInField,
+    isCityScopedEvent,
+    localeCode,
+    normalizedSelectedCityCode,
+    selectedServiceIds.length,
+    t,
+  ]);
+
+  React.useEffect(() => {
+    setMaxUnlockedStep((prev) => {
+      if (!step1ValidationState.valid) return 1;
+      if (!step2ValidationState.valid) return prev > 2 ? 2 : prev;
+      return prev;
+    });
+  }, [step1ValidationState.valid, step2ValidationState.valid]);
+
+  React.useEffect(() => {
+    if (!step1ValidationState.valid && currentStep !== 1) {
+      setCurrentStep(1);
+      return;
+    }
+    if (step1ValidationState.valid && !step2ValidationState.valid && currentStep > 2) {
+      setCurrentStep(2);
+    }
+  }, [currentStep, step1ValidationState.valid, step2ValidationState.valid]);
+
+  function goToStep(step: BookingStep) {
+    if (step > maxUnlockedStep) return;
+    if (step >= 2 && !step1ValidationState.valid) {
+      setError(step1ValidationState.errorMessage || t("errorWajib"));
+      setCurrentStep(1);
+      return;
+    }
+    if (step >= 3 && !step2ValidationState.valid) {
+      setError(step2ValidationState.errorMessage || t("errorWajib"));
+      setCurrentStep(2);
+      return;
+    }
+    setError("");
+    setCurrentStep(step);
+  }
+
+  function goNextStep() {
+    if (currentStep === 1) {
+      if (!step1ValidationState.valid) {
+        setError(step1ValidationState.errorMessage || t("errorWajib"));
+        return;
+      }
+      setError("");
+      setMaxUnlockedStep((prev) => (prev < 2 ? 2 : prev));
+      setCurrentStep(2);
+      return;
+    }
+
+    if (currentStep === 2) {
+      if (!step2ValidationState.valid) {
+        setError(step2ValidationState.errorMessage || t("errorWajib"));
+        return;
+      }
+      setError("");
+      setMaxUnlockedStep((prev) => (prev < 3 ? 3 : prev));
+      setCurrentStep(3);
+      return;
+    }
+
+    if (currentStep === 3) {
+      setError("");
+      setMaxUnlockedStep((prev) => (prev < 4 ? 4 : prev));
+      setCurrentStep(4);
+    }
+  }
+
+  function goPrevStep() {
+    setError("");
+    setCurrentStep((prev) => (prev <= 1 ? 1 : ((prev - 1) as BookingStep)));
+  }
+
   function renderCustomField(field: Extract<FormLayoutItem, { kind: "custom_field" }>) {
+    const description = getDisplayDescriptionForField(field);
     const choiceOptions =
       field.type === "checkbox"
         ? field.options && field.options.length > 0
@@ -1661,6 +1990,7 @@ export function BookingFormClient({
           {field.label}
           {field.required && <span className="text-red-500"> *</span>}
         </label>
+        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
         {field.type === "textarea" ? (
           <textarea
             value={customFields[field.id] || ""}
@@ -1731,9 +2061,14 @@ export function BookingFormClient({
     );
   }
 
-  function renderEventExtraField(extraKey: string) {
+  function renderEventExtraField(
+    extraKey: string,
+    display?: { labelOverride?: string; description?: string },
+  ) {
     const field = currentExtraFields.find((item) => item.key === extraKey);
     if (!field) return null;
+    const label = display?.labelOverride?.trim() || field.label;
+    const description = display?.description?.trim() || "";
     const isWisudaSplitLocationField =
       field.key === "tempat_wisuda_1" || field.key === "tempat_wisuda_2";
     if (eventType === "Wisuda" && !splitDates && isWisudaSplitLocationField) {
@@ -1746,9 +2081,12 @@ export function BookingFormClient({
         className={`space-y-1.5 ${field.isLocation || field.fullWidth || currentExtraFields.length === 1 ? "col-span-full" : ""}`}
       >
         <label className="text-sm font-medium">
-          {field.label}
+          {label}
           {field.required && <span className="text-red-500"> *</span>}
         </label>
+        {description ? (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        ) : null}
         {field.key === UNIVERSITY_EXTRA_FIELD_KEY ? (
           <UniversityAutocomplete
             value={extraData[field.key] || ""}
@@ -1790,7 +2128,7 @@ export function BookingFormClient({
                     : { lat: meta.lat, lng: meta.lng },
               }));
             }}
-            placeholder={`Cari lokasi ${field.label.toLowerCase()}...`}
+            placeholder={`Cari lokasi ${label.toLowerCase()}...`}
             initialLat={extraLocationCoords[field.key]?.lat ?? null}
             initialLng={extraLocationCoords[field.key]?.lng ?? null}
           />
@@ -1806,7 +2144,7 @@ export function BookingFormClient({
                   raw === "" ? "" : new Intl.NumberFormat("id-ID").format(num),
               }));
             }}
-            placeholder={field.label}
+            placeholder={label}
             className={inputClass}
             required={field.required}
             inputMode="numeric"
@@ -1820,7 +2158,7 @@ export function BookingFormClient({
                 [field.key]: e.target.value,
               }))
             }
-            placeholder={field.label}
+            placeholder={label}
             className={inputClass}
             required={field.required}
           />
@@ -1830,13 +2168,20 @@ export function BookingFormClient({
   }
 
   function renderBuiltInField(item: Extract<FormLayoutItem, { kind: "builtin_field" }>) {
+    const fieldLabel = (fallback: string) =>
+      getDisplayLabelForBuiltInField(item, fallback);
+    const fieldDescription = getDisplayDescriptionForField(item);
+
     switch (item.builtinId) {
       case "client_name":
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {t("namaLengkap")} <span className="text-red-500">*</span>
+              {fieldLabel(t("namaLengkap"))} <span className="text-red-500">*</span>
             </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <input
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
@@ -1850,8 +2195,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {t("nomorWhatsapp")} <span className="text-red-500">*</span>
+              {fieldLabel(t("nomorWhatsapp"))} <span className="text-red-500">*</span>
             </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <div className="flex gap-2">
               <select
                 value={countryCode}
@@ -1886,7 +2234,10 @@ export function BookingFormClient({
       case "instagram":
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">Instagram</label>
+            <label className="text-sm font-medium">{fieldLabel("Instagram")}</label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
               <input
@@ -1905,8 +2256,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {t("tipeAcara")} <span className="text-red-500">*</span>
+              {fieldLabel(t("tipeAcara"))} <span className="text-red-500">*</span>
             </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <select
               value={eventType}
               onChange={(e) => {
@@ -1952,15 +2306,22 @@ export function BookingFormClient({
           return null;
         }
         return (
-          <div key={item.id} className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setSplitDates(!splitDates)}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${splitDates ? "bg-primary" : "bg-gray-300"}`}
-            >
-              <span className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${splitDates ? "translate-x-4" : "translate-x-0"}`} />
-            </button>
-            <span className="text-sm font-medium">Akad &amp; Resepsi beda hari</span>
+          <div key={item.id} className="space-y-1.5">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setSplitDates(!splitDates)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${splitDates ? "bg-primary" : "bg-gray-300"}`}
+              >
+                <span className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${splitDates ? "translate-x-4" : "translate-x-0"}`} />
+              </button>
+              <span className="text-sm font-medium">
+                {fieldLabel("Akad & Resepsi beda hari")}
+              </span>
+            </div>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
           </div>
         );
       case "wisuda_split_toggle":
@@ -1971,22 +2332,34 @@ export function BookingFormClient({
           return null;
         }
         return (
-          <div key={item.id} className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setSplitDates(!splitDates)}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${splitDates ? "bg-primary" : "bg-gray-300"}`}
-            >
-              <span className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${splitDates ? "translate-x-4" : "translate-x-0"}`} />
-            </button>
-            <span className="text-sm font-medium">Sesi 1 &amp; Sesi 2 beda waktu/lokasi</span>
+          <div key={item.id} className="space-y-1.5">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setSplitDates(!splitDates)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${splitDates ? "bg-primary" : "bg-gray-300"}`}
+              >
+                <span className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${splitDates ? "translate-x-4" : "translate-x-0"}`} />
+              </button>
+              <span className="text-sm font-medium">
+                {fieldLabel("Sesi 1 & Sesi 2 beda waktu/lokasi")}
+              </span>
+            </div>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
           </div>
         );
       case "akad_date":
         if (eventType !== "Wedding" || !splitDates) return null;
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">Tanggal Akad <span className="text-red-500">*</span></label>
+            <label className="text-sm font-medium">
+              {fieldLabel("Tanggal Akad")} <span className="text-red-500">*</span>
+            </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <input
               type="date"
               value={akadDate ? akadDate.split("T")[0] : ""}
@@ -2003,7 +2376,12 @@ export function BookingFormClient({
         if (eventType !== "Wedding" || !splitDates) return null;
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">Jam Akad <span className="text-red-500">*</span></label>
+            <label className="text-sm font-medium">
+              {fieldLabel("Jam Akad")} <span className="text-red-500">*</span>
+            </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <input
               type="time"
               value={akadDate ? akadDate.split("T")[1] || "10:00" : ""}
@@ -2019,7 +2397,12 @@ export function BookingFormClient({
         if (eventType !== "Wedding" || !splitDates) return null;
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">Tanggal Resepsi <span className="text-red-500">*</span></label>
+            <label className="text-sm font-medium">
+              {fieldLabel("Tanggal Resepsi")} <span className="text-red-500">*</span>
+            </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <input
               type="date"
               value={resepsiDate ? resepsiDate.split("T")[0] : ""}
@@ -2036,7 +2419,12 @@ export function BookingFormClient({
         if (eventType !== "Wedding" || !splitDates) return null;
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">Jam Resepsi <span className="text-red-500">*</span></label>
+            <label className="text-sm font-medium">
+              {fieldLabel("Jam Resepsi")} <span className="text-red-500">*</span>
+            </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <input
               type="time"
               value={resepsiDate ? resepsiDate.split("T")[1] || "10:00" : ""}
@@ -2052,7 +2440,12 @@ export function BookingFormClient({
         if (eventType !== "Wisuda" || !splitDates) return null;
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">Tanggal Sesi 1 <span className="text-red-500">*</span></label>
+            <label className="text-sm font-medium">
+              {fieldLabel("Tanggal Sesi 1")} <span className="text-red-500">*</span>
+            </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <input
               type="date"
               value={wisudaSession1Date ? wisudaSession1Date.split("T")[0] : ""}
@@ -2069,7 +2462,12 @@ export function BookingFormClient({
         if (eventType !== "Wisuda" || !splitDates) return null;
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">Jam Sesi 1 <span className="text-red-500">*</span></label>
+            <label className="text-sm font-medium">
+              {fieldLabel("Jam Sesi 1")} <span className="text-red-500">*</span>
+            </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <input
               type="time"
               value={wisudaSession1Date ? wisudaSession1Date.split("T")[1] || "10:00" : ""}
@@ -2085,7 +2483,12 @@ export function BookingFormClient({
         if (eventType !== "Wisuda" || !splitDates) return null;
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">Tanggal Sesi 2 <span className="text-red-500">*</span></label>
+            <label className="text-sm font-medium">
+              {fieldLabel("Tanggal Sesi 2")} <span className="text-red-500">*</span>
+            </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <input
               type="date"
               value={wisudaSession2Date ? wisudaSession2Date.split("T")[0] : ""}
@@ -2102,7 +2505,12 @@ export function BookingFormClient({
         if (eventType !== "Wisuda" || !splitDates) return null;
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">Jam Sesi 2 <span className="text-red-500">*</span></label>
+            <label className="text-sm font-medium">
+              {fieldLabel("Jam Sesi 2")} <span className="text-red-500">*</span>
+            </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <input
               type="time"
               value={wisudaSession2Date ? wisudaSession2Date.split("T")[1] || "10:00" : ""}
@@ -2119,8 +2527,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {t("jadwalSesi")} <span className="text-red-500">*</span>
+              {fieldLabel(t("jadwalSesi"))} <span className="text-red-500">*</span>
             </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <input
               type="date"
               value={sessionDate ? sessionDate.split("T")[0] : ""}
@@ -2138,8 +2549,11 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {t("jam") || "Jam"} <span className="text-red-500">*</span>
+              {fieldLabel(t("jam") || "Jam")} <span className="text-red-500">*</span>
             </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <input
               type="time"
               value={sessionDate ? sessionDate.split("T")[1] || "10:00" : ""}
@@ -2152,19 +2566,18 @@ export function BookingFormClient({
           </div>
         );
       case "location":
-        if (
-          eventType === "Wedding" ||
-          (eventType === "Wisuda" && splitDates) ||
-          effectiveVendor.form_show_location === false
-        ) {
+        if (effectiveVendor.form_show_location === false) {
           return null;
         }
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5" />
-              {t("lokasi")} <span className="text-red-500">*</span>
+              {fieldLabel(t("lokasi"))} <span className="text-red-500">*</span>
             </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <LocationAutocomplete
               value={location}
               onChange={setLocation}
@@ -2184,7 +2597,10 @@ export function BookingFormClient({
       case "location_detail":
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">Detail Lokasi</label>
+            <label className="text-sm font-medium">{fieldLabel("Detail Lokasi")}</label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <input
               value={locationDetail}
               onChange={(e) => setLocationDetail(e.target.value)}
@@ -2197,7 +2613,10 @@ export function BookingFormClient({
         if (effectiveVendor.form_show_notes === false) return null;
         return (
           <div key={item.id} className="space-y-1.5">
-            <label className="text-sm font-medium">{t("catatan")}</label>
+            <label className="text-sm font-medium">{fieldLabel(t("catatan"))}</label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -2232,8 +2651,11 @@ export function BookingFormClient({
             ) : null}
             <div className="space-y-1.5">
               <label className="text-sm font-medium">
-                {t("paketLayanan")} <span className="text-red-500">*</span>
+                {fieldLabel(t("paketLayanan"))} <span className="text-red-500">*</span>
               </label>
+              {fieldDescription ? (
+                <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+              ) : null}
               {isCityScopedEvent && !normalizedSelectedCityCode ? (
                 <div className="rounded-lg border border-dashed px-3 py-3 text-xs text-muted-foreground">
                   Pilih kota/kabupaten dulu untuk menampilkan paket yang tersedia.
@@ -2322,9 +2744,14 @@ export function BookingFormClient({
           <div key={item.id} className="space-y-2">
             <div className="flex items-center gap-2 pt-1">
               <div className="flex-1 border-t" />
-              <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Paket Tambahan</span>
+              <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">
+                {fieldLabel("Paket Tambahan")}
+              </span>
               <div className="flex-1 border-t" />
             </div>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <button
               type="button"
               onClick={() => {
@@ -2452,13 +2879,18 @@ export function BookingFormClient({
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
-              {eventType
-                ? (minDP.mode === "fixed"
-                  ? `DP (Minimal ${formatCurrency(minDP.value)})`
-                  : t("dpMinimal", { percent: String(minDP.value) }))
-                : "DP"}{" "}
+              {fieldLabel(
+                eventType
+                  ? minDP.mode === "fixed"
+                    ? `DP (Minimal ${formatCurrency(minDP.value)})`
+                    : t("dpMinimal", { percent: String(minDP.value) })
+                  : "DP",
+              )}{" "}
               <span className="text-red-500">*</span>
             </label>
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-muted-foreground shrink-0">
                 Rp
@@ -2508,6 +2940,9 @@ export function BookingFormClient({
         if (availablePaymentMethods.length === 0) return null;
         return (
           <div key={item.id} className="space-y-4">
+            {fieldDescription ? (
+              <p className="text-xs text-muted-foreground">{fieldDescription}</p>
+            ) : null}
             <PaymentMethodSection
               methods={availablePaymentMethods}
               selectedMethod={selectedPaymentMethod}
@@ -2518,7 +2953,7 @@ export function BookingFormClient({
                 qrisImageUrl={effectiveVendor.qris_image_url}
                 brandColor={brandColor}
                 labels={{
-                  methodLabel: `${t("paymentMethod")} *`,
+                  methodLabel: `${fieldLabel(t("paymentMethod"))} *`,
                   bankLabel: `${t("paymentSourceBank")} *`,
                   bankEmpty: t("paymentNoBank"),
                   qrisLabel: t("paymentSourceQris"),
@@ -2549,11 +2984,12 @@ export function BookingFormClient({
               file={proofFile}
               previewUrl={proofPreview}
               accept="image/*,.pdf"
-              label={t("buktiPembayaran")}
+              label={fieldLabel(t("buktiPembayaran"))}
               helperText={
-                selectedPaymentMethod === "qris"
+                fieldDescription ||
+                (selectedPaymentMethod === "qris"
                   ? t("paymentProofQrisHint")
-                  : t("paymentProofBankHint")
+                  : t("paymentProofBankHint"))
               }
               emptyText={t("klikUpload")}
               emptySubtext={t("dragDropHint", { format: t("formatFile") })}
@@ -2564,7 +3000,10 @@ export function BookingFormClient({
         );
       default:
         if (item.builtinId.startsWith("extra:")) {
-          return renderEventExtraField(item.builtinId.slice(6));
+          return renderEventExtraField(item.builtinId.slice(6), {
+            labelOverride: item.labelOverride,
+            description: item.description,
+          });
         }
         return null;
     }
@@ -2572,6 +3011,12 @@ export function BookingFormClient({
 
   function renderLayoutItem(item: FormLayoutItem) {
     if (item.kind === "builtin_section") return null;
+    if (
+      (item.kind === "builtin_field" || item.kind === "custom_field") &&
+      item.hidden === true
+    ) {
+      return null;
+    }
     if (item.kind === "custom_section") {
       return (
         <div key={item.id} className="space-y-2 pt-1">
@@ -2590,6 +3035,303 @@ export function BookingFormClient({
     }
     return renderBuiltInField(item);
   }
+
+  function getBuiltInDisplayLabel(
+    builtinId: string,
+    fallbackLabel: string,
+  ) {
+    const layoutItem = visibleActiveLayout.find(
+      (item): item is Extract<FormLayoutItem, { kind: "builtin_field" }> =>
+        item.kind === "builtin_field" && item.builtinId === builtinId,
+    );
+    if (!layoutItem) return fallbackLabel;
+    return getDisplayLabelForBuiltInField(layoutItem, fallbackLabel);
+  }
+
+  const summaryLocale = localeCode === "en" ? "en" : "id";
+  const summaryFullWhatsapp = phone ? `${countryCode}${phone}` : "";
+  const summaryExtraData = React.useMemo(() => {
+    const merged = { ...extraData };
+    if (eventType === "Wedding" && splitDates) {
+      merged.tanggal_akad = akadDate || "";
+      merged.tanggal_resepsi = resepsiDate || "";
+    }
+    if (eventType === "Wisuda" && splitDates) {
+      merged.tanggal_wisuda_1 = wisudaSession1Date || "";
+      merged.tanggal_wisuda_2 = wisudaSession2Date || "";
+    }
+    return merged;
+  }, [
+    akadDate,
+    eventType,
+    extraData,
+    resepsiDate,
+    splitDates,
+    wisudaSession1Date,
+    wisudaSession2Date,
+  ]);
+  const summaryResolvedLocation = React.useMemo(() => {
+    const isWeddingEvent = eventType === "Wedding";
+    const isWisudaEvent = eventType === "Wisuda";
+    const isSplitSessionEnabled = splitDates && (isWeddingEvent || isWisudaEvent);
+    return resolvePreferredLocation(
+      isWeddingEvent
+        ? [
+            {
+              address: extraData.tempat_akad,
+              lat: extraLocationCoords.tempat_akad?.lat,
+              lng: extraLocationCoords.tempat_akad?.lng,
+            },
+            {
+              address: extraData.tempat_resepsi,
+              lat: extraLocationCoords.tempat_resepsi?.lat,
+              lng: extraLocationCoords.tempat_resepsi?.lng,
+            },
+            {
+              address: location,
+              lat: locationCoords.lat,
+              lng: locationCoords.lng,
+            },
+          ]
+        : isWisudaEvent && isSplitSessionEnabled
+          ? [
+              {
+                address: extraData.tempat_wisuda_1,
+                lat: extraLocationCoords.tempat_wisuda_1?.lat,
+                lng: extraLocationCoords.tempat_wisuda_1?.lng,
+              },
+              {
+                address: extraData.tempat_wisuda_2,
+                lat: extraLocationCoords.tempat_wisuda_2?.lat,
+                lng: extraLocationCoords.tempat_wisuda_2?.lng,
+              },
+              {
+                address: location,
+                lat: locationCoords.lat,
+                lng: locationCoords.lng,
+              },
+            ]
+          : [
+              {
+                address: location,
+                lat: locationCoords.lat,
+                lng: locationCoords.lng,
+              },
+            ],
+    );
+  }, [
+    eventType,
+    extraData.tempat_akad,
+    extraData.tempat_resepsi,
+    extraData.tempat_wisuda_1,
+    extraData.tempat_wisuda_2,
+    extraLocationCoords.tempat_akad?.lat,
+    extraLocationCoords.tempat_akad?.lng,
+    extraLocationCoords.tempat_resepsi?.lat,
+    extraLocationCoords.tempat_resepsi?.lng,
+    extraLocationCoords.tempat_wisuda_1?.lat,
+    extraLocationCoords.tempat_wisuda_1?.lng,
+    extraLocationCoords.tempat_wisuda_2?.lat,
+    extraLocationCoords.tempat_wisuda_2?.lng,
+    location,
+    locationCoords.lat,
+    locationCoords.lng,
+    splitDates,
+  ]);
+  const summaryServiceSelections = React.useMemo<BookingServiceSelection[]>(
+    () => [
+      ...selectedMainServices.map((service, index) => ({
+        id: service.id,
+        booking_service_id: null,
+        kind: "main" as const,
+        sort_order: index,
+        service: {
+          id: service.id,
+          name: service.name,
+          duration_minutes: service.duration_minutes ?? null,
+          is_addon: false,
+          affects_schedule: service.affects_schedule ?? null,
+        },
+      })),
+      ...selectedAddonServices.map((service, index) => ({
+        id: service.id,
+        booking_service_id: null,
+        kind: "addon" as const,
+        sort_order: index,
+        service: {
+          id: service.id,
+          name: service.name,
+          duration_minutes: service.duration_minutes ?? null,
+          is_addon: true,
+          affects_schedule: service.affects_schedule ?? null,
+        },
+      })),
+    ],
+    [selectedAddonServices, selectedMainServices],
+  );
+  const summarySessionRows = React.useMemo(() => {
+    const totalDurationMinutes = getBookingDurationMinutes(summaryServiceSelections);
+    const sessions = resolveBookingCalendarSessions({
+      eventType,
+      sessionDate: sessionDate || null,
+      extraFields: summaryExtraData,
+      defaultLocation: summaryResolvedLocation.location,
+    });
+    const sessionDurationMinutesByKey = resolveSessionDurationMinutesBySessionKey({
+      eventType,
+      sessions,
+      totalDurationMinutes,
+      extraFields: summaryExtraData,
+    });
+    return sessions.map((session) => {
+      const durationMinutes =
+        sessionDurationMinutesByKey[session.key] || totalDurationMinutes;
+      return {
+        label: session.label || t("summarySessionLabel"),
+        date: formatSessionDate(session.sessionDate, {
+          locale: summaryLocale,
+          withDay: false,
+          withTime: false,
+          dateOnly: true,
+        }),
+        time: formatSessionTimeRange(session.sessionDate, durationMinutes),
+        location: session.location || summaryResolvedLocation.location || "-",
+      };
+    });
+  }, [
+    eventType,
+    sessionDate,
+    summaryExtraData,
+    summaryLocale,
+    summaryResolvedLocation.location,
+    summaryServiceSelections,
+    t,
+  ]);
+  const summaryExtraFieldRows = React.useMemo(() => {
+    return visibleActiveLayout
+      .filter(
+        (item): item is Extract<FormLayoutItem, { kind: "builtin_field" }> =>
+          item.kind === "builtin_field" && item.builtinId.startsWith("extra:"),
+      )
+      .map((item) => {
+        const key = item.builtinId.slice("extra:".length);
+        const extraDefinition = currentExtraFields.find((field) => field.key === key);
+        if (eventType === "Wisuda" && !splitDates && (key === "tempat_wisuda_1" || key === "tempat_wisuda_2")) {
+          return null;
+        }
+        const value =
+          key === UNIVERSITY_EXTRA_FIELD_KEY
+            ? extraData[key] || ""
+            : extraData[key] || "";
+        if (!value.trim()) return null;
+        return {
+          label:
+            item.labelOverride?.trim() ||
+            extraDefinition?.label ||
+            key.replace(/_/g, " "),
+          value,
+        };
+      })
+      .filter((row): row is { label: string; value: string } => Boolean(row));
+  }, [currentExtraFields, eventType, extraData, splitDates, visibleActiveLayout]);
+  const summaryCustomFieldRows = React.useMemo(() => {
+    return visibleActiveLayout
+      .filter(
+        (item): item is Extract<FormLayoutItem, { kind: "custom_field" }> =>
+          item.kind === "custom_field",
+      )
+      .map((item) => {
+        const value = customFields[item.id] || "";
+        if (!value.trim()) return null;
+        return {
+          label: item.label || t("summaryCustomFieldFallback"),
+          value,
+        };
+      })
+      .filter((row): row is { label: string; value: string } => Boolean(row));
+  }, [customFields, t, visibleActiveLayout]);
+  const summaryClientInfoRows = React.useMemo(
+    () =>
+      [
+        {
+          label: getBuiltInDisplayLabel("client_name", t("summaryClientName")),
+          value: clientName.trim(),
+        },
+        {
+          label: getBuiltInDisplayLabel("client_whatsapp", t("summaryWhatsapp")),
+          value: summaryFullWhatsapp.trim(),
+        },
+        {
+          label: getBuiltInDisplayLabel("instagram", "Instagram"),
+          value: instagram.trim() ? `@${instagram.trim().replace(/^@/, "")}` : "",
+        },
+        {
+          label: getBuiltInDisplayLabel("event_type", t("summaryEventType")),
+          value: eventType.trim(),
+        },
+        {
+          label: t("summaryCity"),
+          value: selectedCity ? buildCityDisplayName(selectedCity) : "",
+        },
+      ].filter((row) => row.value.length > 0),
+    [
+      clientName,
+      eventType,
+      instagram,
+      selectedCity,
+      summaryFullWhatsapp,
+      t,
+    ],
+  );
+  const summarySessionDetailRows = React.useMemo(() => {
+    const rows: Array<{ label: string; value: string }> = [];
+
+    summarySessionRows.forEach((session) => {
+      const sessionLabel = session.label || t("summarySessionLabel");
+      rows.push({
+        label: `${sessionLabel} • ${t("summaryDateLabel")}`,
+        value: session.date,
+      });
+      rows.push({
+        label: `${sessionLabel} • ${t("summaryTimeLabel")}`,
+        value: session.time,
+      });
+      rows.push({
+        label: `${sessionLabel} • ${t("summaryLocationLabel")}`,
+        value: session.location,
+      });
+    });
+
+    if (locationDetail.trim()) {
+      rows.push({
+        label: getBuiltInDisplayLabel("location_detail", t("summaryLocationDetailLabel")),
+        value: locationDetail.trim(),
+      });
+    }
+
+    if (notes.trim()) {
+      rows.push({
+        label: getBuiltInDisplayLabel("notes", t("catatan")),
+        value: notes.trim(),
+      });
+    }
+
+    return rows.filter((row) => row.value.length > 0);
+  }, [locationDetail, notes, summarySessionRows, t]);
+  const summaryPackageRows = React.useMemo(
+    () =>
+      [
+        {
+          label: getBuiltInDisplayLabel("service_package", t("summaryMainPackage")),
+          value: selectedMainServices.map((service) => service.name).join(", "),
+        },
+        {
+          label: getBuiltInDisplayLabel("addon_packages", t("summaryAddon")),
+          value: selectedAddonServices.map((service) => service.name).join(", "),
+        },
+      ].filter((row) => row.value.length > 0),
+    [selectedAddonServices, selectedMainServices, t],
+  );
 
   // ── Success screen ──
 
@@ -2658,7 +3400,7 @@ export function BookingFormClient({
         backgroundImage: `linear-gradient(135deg, ${brandColor}18 0%, #ffffff 40%, #f8fafc 100%)`,
       }}
     >
-      <div className="mx-auto max-w-3xl space-y-6">
+      <div className="mx-auto max-w-5xl space-y-6">
         {/* Vendor Header */}
         <div className="text-center space-y-3">
           <div className="w-20 h-20 bg-background border-2 rounded-full mx-auto flex items-center justify-center font-bold text-2xl shadow-sm overflow-hidden">
@@ -2693,69 +3435,282 @@ export function BookingFormClient({
           onSubmit={handleSubmit}
           className="bg-background rounded-2xl shadow-lg border p-6 sm:p-8 space-y-5"
         >
-          {activeSections.map((section) => {
-            const renderedItems = section.items
-              .map((item) => renderLayoutItem(item))
-              .filter(Boolean);
-
-            if (renderedItems.length === 0) return null;
-
-            return (
-              <section key={section.section.sectionId} className="space-y-4">
-                <div className="space-y-1">
-                  <h3
-                    className="text-base font-semibold"
-                    style={{ color: brandColor }}
-                  >
-                    {section.section.title}
-                  </h3>
-                  <div className="h-px w-full bg-border" />
-                </div>
-                <div className="space-y-4">{renderedItems}</div>
-              </section>
-            );
-          })}
-
-          {hasTerms && (
-            <section className="space-y-3 rounded-xl border bg-muted/20 p-4">
-              <div className="flex items-start gap-3">
-                <input
-                  id="booking-terms"
-                  type="checkbox"
-                  disabled={!canAcceptTerms}
-                  checked={termsAccepted}
-                  onChange={(e) => {
-                    setTermsAccepted(e.target.checked);
-                    if (e.target.checked) setError("");
-                  }}
-                  className="mt-1 h-4 w-4 rounded border-input accent-primary disabled:cursor-not-allowed disabled:opacity-60"
-                />
-                <label
-                  htmlFor="booking-terms"
-                  className="text-sm leading-6 text-muted-foreground"
+          <div className="grid gap-2 md:grid-cols-4">
+            {[
+              { id: 1 as BookingStep, label: t("stepInfoClient") },
+              { id: 2 as BookingStep, label: t("stepPackageAddon") },
+              { id: 3 as BookingStep, label: t("stepSummary") },
+              { id: 4 as BookingStep, label: t("stepPaymentConfirm") },
+            ].map((step) => {
+              const active = currentStep === step.id;
+              const done = step.id < currentStep && step.id <= maxUnlockedStep;
+              const locked = step.id > maxUnlockedStep;
+              return (
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={() => goToStep(step.id)}
+                  disabled={locked}
+                  title={locked ? t("stepLockedHint") : undefined}
+                  className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                    active
+                      ? "border-foreground bg-foreground/5"
+                      : done
+                        ? "border-green-200 bg-green-50"
+                        : locked
+                          ? "cursor-not-allowed border-input bg-background opacity-60"
+                          : "border-input bg-background"
+                  }`}
                 >
-                  {termsAgreementText}{" "}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleTermsDialogOpenChange(true);
-                    }}
-                    className="inline-flex items-center gap-1 font-semibold text-primary underline underline-offset-4 cursor-pointer"
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    {termsLinkText}
-                  </button>
-                  {termsSuffixText ? ` ${termsSuffixText}` : ""}
-                </label>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                        active
+                          ? "bg-foreground text-background"
+                          : done
+                            ? "bg-green-600 text-white"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {step.id}
+                    </span>
+                    <span className="text-sm font-medium">{step.label}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {currentStep === 1 &&
+            infoStepSections.map((section) => {
+              const renderedItems = section.items
+                .map((item) => renderLayoutItem(item))
+                .filter(Boolean);
+
+              if (renderedItems.length === 0) return null;
+
+              return (
+                <section key={section.section.sectionId} className="space-y-4">
+                  <div className="space-y-1">
+                    <h3
+                      className="text-base font-semibold"
+                      style={{ color: brandColor }}
+                    >
+                      {section.section.title}
+                    </h3>
+                    <div className="h-px w-full bg-border" />
+                  </div>
+                  <div className="space-y-4">{renderedItems}</div>
+                </section>
+              );
+            })}
+
+          {currentStep === 2 &&
+            packageSelectionSections.map((section) => {
+              const renderedItems = section.items
+                .map((item) => renderLayoutItem(item))
+                .filter(Boolean);
+
+              if (renderedItems.length === 0) return null;
+
+              return (
+                <section key={section.section.sectionId} className="space-y-4">
+                  <div className="space-y-1">
+                    <h3
+                      className="text-base font-semibold"
+                      style={{ color: brandColor }}
+                    >
+                      {t("stepPackageAddon")}
+                    </h3>
+                    <div className="h-px w-full bg-border" />
+                  </div>
+                  <div className="space-y-4">{renderedItems}</div>
+                </section>
+              );
+            })}
+
+          {currentStep === 3 && (
+            <section className="space-y-5 rounded-xl border bg-muted/20 p-4 sm:p-5">
+              <h3 className="text-base font-semibold" style={{ color: brandColor }}>
+                {t("summaryTitle")}
+              </h3>
+
+              <div className="space-y-5 text-sm">
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold">{t("summarySectionClientInfo")}</h4>
+                  {summaryClientInfoRows.length === 0 ? (
+                    <p className="text-muted-foreground">-</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {summaryClientInfoRows.map((row) => (
+                        <div
+                          key={`${row.label}-${row.value}`}
+                          className="flex items-start justify-between gap-4"
+                        >
+                          <p className="text-muted-foreground">{row.label}</p>
+                          <p className="text-right font-medium">{row.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold">{t("summarySectionSessionDetail")}</h4>
+                  {summarySessionDetailRows.length === 0 ? (
+                    <p className="text-muted-foreground">-</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {summarySessionDetailRows.map((row) => (
+                        <div
+                          key={`${row.label}-${row.value}`}
+                          className="flex items-start justify-between gap-4"
+                        >
+                          <p className="text-muted-foreground">{row.label}</p>
+                          <p className="text-right font-medium">{row.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold">{t("summarySectionPackageAddon")}</h4>
+                  {summaryPackageRows.length === 0 ? (
+                    <p className="text-muted-foreground">-</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {summaryPackageRows.map((row) => (
+                        <div
+                          key={`${row.label}-${row.value}`}
+                          className="flex items-start justify-between gap-4"
+                        >
+                          <p className="text-muted-foreground">{row.label}</p>
+                          <p className="text-right font-medium">{row.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold">{t("summarySectionExtraFields")}</h4>
+                  {summaryExtraFieldRows.length === 0 ? (
+                    <p className="text-muted-foreground">-</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {summaryExtraFieldRows.map((row) => (
+                        <div
+                          key={`${row.label}-${row.value}`}
+                          className="flex items-start justify-between gap-4"
+                        >
+                          <p className="text-muted-foreground">{row.label}</p>
+                          <p className="text-right font-medium">{row.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold">{t("summarySectionCustomFields")}</h4>
+                  {summaryCustomFieldRows.length === 0 ? (
+                    <p className="text-muted-foreground">-</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {summaryCustomFieldRows.map((row) => (
+                        <div
+                          key={`${row.label}-${row.value}`}
+                          className="flex items-start justify-between gap-4"
+                        >
+                          <p className="text-muted-foreground">{row.label}</p>
+                          <p className="text-right font-medium">{row.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 border-t pt-3">
+                  <h4 className="text-sm font-semibold">{t("summarySectionTotalBooking")}</h4>
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-muted-foreground">{t("summaryTotal")}</p>
+                    <p className="text-lg font-semibold">{formatCurrency(selectedBookingTotal)}</p>
+                  </div>
+                </div>
               </div>
-              {!canAcceptTerms && (
-                <p className="text-xs text-muted-foreground">
-                  {t("termsReadHint")}
-                </p>
-              )}
+
+              <p className="text-xs text-muted-foreground">{t("summaryCheckHint")}</p>
             </section>
+          )}
+
+          {currentStep === 4 && (
+            <>
+              {paymentConfirmationSections.map((section) => {
+                const renderedItems = section.items
+                  .map((item) => renderLayoutItem(item))
+                  .filter(Boolean);
+
+                if (renderedItems.length === 0) return null;
+
+                return (
+                  <section key={section.section.sectionId} className="space-y-4">
+                    <div className="space-y-1">
+                      <h3
+                        className="text-base font-semibold"
+                        style={{ color: brandColor }}
+                      >
+                        {section.section.title}
+                      </h3>
+                      <div className="h-px w-full bg-border" />
+                    </div>
+                    <div className="space-y-4">{renderedItems}</div>
+                  </section>
+                );
+              })}
+
+              {hasTerms && (
+                <section className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                  <div className="flex items-start gap-3">
+                    <input
+                      id="booking-terms"
+                      type="checkbox"
+                      disabled={!canAcceptTerms}
+                      checked={termsAccepted}
+                      onChange={(e) => {
+                        setTermsAccepted(e.target.checked);
+                        if (e.target.checked) setError("");
+                      }}
+                      className="mt-1 h-4 w-4 rounded border-input accent-primary disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                    <label
+                      htmlFor="booking-terms"
+                      className="text-sm leading-6 text-muted-foreground"
+                    >
+                      {termsAgreementText}{" "}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleTermsDialogOpenChange(true);
+                        }}
+                        className="inline-flex items-center gap-1 font-semibold text-primary underline underline-offset-4 cursor-pointer"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        {termsLinkText}
+                      </button>
+                      {termsSuffixText ? ` ${termsSuffixText}` : ""}
+                    </label>
+                  </div>
+                  {!canAcceptTerms && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("termsReadHint")}
+                    </p>
+                  )}
+                </section>
+              )}
+            </>
           )}
 
           {/* Error */}
@@ -2765,25 +3720,49 @@ export function BookingFormClient({
             </div>
           )}
 
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="flex items-center justify-center gap-2 w-full h-12 rounded-lg text-white font-semibold hover:opacity-90 transition-opacity shadow-lg cursor-pointer disabled:opacity-50 text-base"
-            style={{
-              backgroundColor: brandColor,
-              boxShadow: `0 10px 15px -3px ${brandColor}33`,
-            }}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                {uploadingProof ? t("mengupload") : t("mengirim")}
-              </>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+            {currentStep > 1 ? (
+              <button
+                type="button"
+                onClick={goPrevStep}
+                className="inline-flex h-11 items-center justify-center rounded-lg border px-4 text-sm font-semibold transition-colors hover:bg-muted"
+              >
+                {t("buttonBack")}
+              </button>
             ) : (
-              <>{t("kirimBooking")}</>
+              <span />
             )}
-          </button>
+
+            {currentStep < 4 ? (
+              <button
+                type="button"
+                onClick={goNextStep}
+                className="inline-flex h-11 items-center justify-center rounded-lg px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                style={{ backgroundColor: brandColor }}
+              >
+                {t("buttonNext")}
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex items-center justify-center gap-2 h-11 rounded-lg px-4 text-white font-semibold hover:opacity-90 transition-opacity shadow-lg cursor-pointer disabled:opacity-50 text-sm"
+                style={{
+                  backgroundColor: brandColor,
+                  boxShadow: `0 10px 15px -3px ${brandColor}33`,
+                }}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {uploadingProof ? t("mengupload") : t("mengirim")}
+                  </>
+                ) : (
+                  <>{t("kirimBooking")}</>
+                )}
+              </button>
+            )}
+          </div>
         </form>
 
         <Dialog open={packageDialogOpen} onOpenChange={setPackageDialogOpen}>

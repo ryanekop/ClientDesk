@@ -253,6 +253,132 @@ function getTemplateHeaders(context: ImportContext): string[] {
   return [...baseHeaders, ...extraHeaders, ...customHeaders];
 }
 
+function normalizeHeaderToken(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function resolveHeaderAlias(
+  normalizedToken: string,
+): keyof typeof IMPORT_COLUMNS | null {
+  const aliases: Record<string, keyof typeof IMPORT_COLUMNS> = {
+    nama_klien: "clientName",
+    client: "clientName",
+    nama_client: "clientName",
+    wa: "clientWhatsapp",
+    wa_klien: "clientWhatsapp",
+    whatsapp: "clientWhatsapp",
+    event: "eventType",
+    jenis_acara: "eventType",
+    paket: "mainServices",
+    paket_layanan: "mainServices",
+    add_on: "addonServices",
+    addon: "addonServices",
+    tanggal: "sessionDate",
+    jadwal: "sessionDate",
+    lokasi_detail: "locationDetail",
+  };
+  return aliases[normalizedToken] || null;
+}
+
+function normalizePasteRows(rawRows: unknown): string[][] {
+  if (!Array.isArray(rawRows)) return [];
+
+  return rawRows
+    .filter((row) => Array.isArray(row))
+    .map((row) =>
+      (row as unknown[]).map((cell) =>
+        typeof cell === "string"
+          ? cell.trim()
+          : cell === null || cell === undefined
+            ? ""
+            : String(cell).trim(),
+      ),
+    )
+    .filter((row) => row.some((cell) => cell.length > 0));
+}
+
+function detectHeaderFromFirstRow(
+  firstRow: string[],
+  templateHeaderLookup: Map<string, string>,
+) {
+  const nonEmptyCells = firstRow.filter((cell) => cell.trim().length > 0);
+  if (nonEmptyCells.length === 0) return false;
+
+  const matchCount = nonEmptyCells.reduce((sum, cell) => {
+    const token = normalizeHeaderToken(cell);
+    if (templateHeaderLookup.has(token)) return sum + 1;
+    const aliasKey = resolveHeaderAlias(token);
+    if (aliasKey && templateHeaderLookup.has(IMPORT_COLUMNS[aliasKey])) {
+      return sum + 1;
+    }
+    return sum;
+  }, 0);
+
+  const threshold = Math.min(3, nonEmptyCells.length);
+  return matchCount >= threshold;
+}
+
+export function buildWorkbookBufferFromPasteRows(input: {
+  context: ImportContext;
+  rows: unknown;
+  hasHeader?: boolean | null;
+}) {
+  const templateHeaders = getTemplateHeaders(input.context);
+  const templateHeaderLookup = new Map(
+    templateHeaders.map((header) => [normalizeHeaderToken(header), header]),
+  );
+
+  const rows = normalizePasteRows(input.rows);
+  if (rows.length === 0) {
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet([]),
+      "Bookings",
+    );
+    return XLSX.write(workbook, { bookType: "xlsx", type: "buffer" }) as Buffer;
+  }
+
+  const shouldTreatFirstRowAsHeader =
+    typeof input.hasHeader === "boolean"
+      ? input.hasHeader
+      : detectHeaderFromFirstRow(rows[0], templateHeaderLookup);
+
+  const headerRow = shouldTreatFirstRowAsHeader ? rows[0] : templateHeaders;
+  const dataRows = shouldTreatFirstRowAsHeader ? rows.slice(1) : rows;
+
+  const resolvedHeaders = headerRow.map((headerCell, index) => {
+    const normalizedToken = normalizeHeaderToken(headerCell);
+    const direct = templateHeaderLookup.get(normalizedToken);
+    if (direct) return direct;
+
+    const aliasKey = resolveHeaderAlias(normalizedToken);
+    if (aliasKey) return IMPORT_COLUMNS[aliasKey];
+
+    return headerCell.trim() || templateHeaders[index] || `column_${index + 1}`;
+  });
+
+  const sheetRows = dataRows.map((row) => {
+    const record = Object.fromEntries(
+      templateHeaders.map((header) => [header, ""]),
+    ) as Record<string, string>;
+
+    row.forEach((value, index) => {
+      const key = resolvedHeaders[index];
+      if (!key) return;
+      record[key] = value;
+    });
+
+    return record;
+  });
+
+  const workbook = XLSX.utils.book_new();
+  const bookingsSheet = XLSX.utils.json_to_sheet(sheetRows);
+  XLSX.utils.book_append_sheet(workbook, bookingsSheet, "Bookings");
+
+  return XLSX.write(workbook, { bookType: "xlsx", type: "buffer" }) as Buffer;
+}
+
 function sampleValueFromLabel(label: string) {
   const trimmed = label.trim();
   return trimmed ? `Contoh ${trimmed}` : "Contoh";
@@ -530,6 +656,7 @@ function parseCustomFieldsFromNewLayout(
     }
 
     if (kind !== "custom_field") continue;
+    if (item.hidden === true) continue;
 
     const id = normalizeText(item.id);
     const label = normalizeText(item.label);

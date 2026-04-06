@@ -4,10 +4,6 @@ import {
 } from "@/utils/form-extra-fields";
 import { normalizeEventTypeName } from "@/lib/event-type-config";
 import { FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY } from "@/lib/freelancer-session-assignments";
-import {
-  isUniversityExtraField,
-  UNIVERSITY_EXTRA_FIELD_KEY,
-} from "@/lib/university-references";
 
 export type CustomFieldType =
   | "text"
@@ -89,6 +85,9 @@ export type BuiltInFieldItem = {
   id: string;
   kind: "builtin_field";
   builtinId: BuiltInFieldId;
+  labelOverride?: string;
+  description?: string;
+  hidden?: boolean;
 };
 
 export type CustomFieldItem = {
@@ -99,6 +98,8 @@ export type CustomFieldItem = {
   required: boolean;
   placeholder: string;
   options?: string[];
+  description?: string;
+  hidden?: boolean;
 };
 
 export type CustomSectionItem = {
@@ -137,6 +138,16 @@ export type GroupedCustomLayoutSection = {
 type BuiltInFieldDefinitionOptions = {
   extraFieldKeys?: string[];
 };
+
+function getKnownExtraFieldKeys() {
+  return Array.from(
+    new Set(
+      Object.values(EVENT_EXTRA_FIELDS).flatMap((fields) =>
+        fields.map((field) => field.key),
+      ),
+    ),
+  );
+}
 
 const BUILT_IN_SECTIONS: BuiltInSectionDefinition[] = [
   {
@@ -366,7 +377,9 @@ function createBuiltInSectionItem(sectionId: BuiltInSectionId): BuiltInSectionIt
   };
 }
 
-function createBuiltInFieldItem(builtinId: BuiltInFieldId): BuiltInFieldItem {
+export function createBuiltInFieldItem(
+  builtinId: BuiltInFieldId,
+): BuiltInFieldItem {
   return {
     id: `builtin:${builtinId}`,
     kind: "builtin_field",
@@ -476,12 +489,6 @@ export function getBuiltInFieldDefinitions(
     (EVENT_EXTRA_FIELDS[eventType] || []).map((field) => field.key),
   );
   (options.extraFieldKeys || []).forEach((key) => {
-    if (
-      key === UNIVERSITY_EXTRA_FIELD_KEY &&
-      !isUniversityExtraField({ eventType, fieldKey: key })
-    ) {
-      return;
-    }
     if (getExtraFieldDefinitionByKey(key)) {
       extraFieldKeys.add(key);
     }
@@ -543,13 +550,46 @@ export function getBuiltInFieldDefinitions(
   ];
 }
 
+export function getBuiltInFieldCatalogDefinitions(
+  eventType: string,
+): BuiltInFieldDefinition[] {
+  const knownExtraFieldKeys = getKnownExtraFieldKeys();
+  const candidateEventTypes = Array.from(
+    new Set([
+      eventType,
+      "Umum",
+      "Wedding",
+      "Wisuda",
+      ...Object.keys(EVENT_EXTRA_FIELDS),
+    ]),
+  );
+  const merged = new Map<BuiltInFieldId, BuiltInFieldDefinition>();
+
+  candidateEventTypes.forEach((candidateEventType) => {
+    getBuiltInFieldDefinitions(candidateEventType, {
+      extraFieldKeys: knownExtraFieldKeys,
+    }).forEach((definition) => {
+      if (!merged.has(definition.builtinId)) {
+        merged.set(definition.builtinId, definition);
+      }
+    });
+  });
+
+  return Array.from(merged.values());
+}
+
 export function getBuiltInFieldDefinition(
   builtinId: BuiltInFieldId,
   eventType: string,
   options: BuiltInFieldDefinitionOptions = {},
 ): BuiltInFieldDefinition | undefined {
-  return getBuiltInFieldDefinitions(eventType, options).find(
-    (field) => field.builtinId === builtinId,
+  return (
+    getBuiltInFieldDefinitions(eventType, options).find(
+      (field) => field.builtinId === builtinId,
+    ) ||
+    getBuiltInFieldCatalogDefinitions(eventType).find(
+      (field) => field.builtinId === builtinId,
+    )
   );
 }
 
@@ -580,6 +620,8 @@ export function createCustomFieldItem(): CustomFieldItem {
     type: "text",
     required: false,
     placeholder: "",
+    description: "",
+    hidden: false,
   };
 }
 
@@ -605,6 +647,44 @@ function isNewLayoutItem(value: unknown): value is FormLayoutItem {
   );
 }
 
+function normalizeOptionalText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeOptionalOptions(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const normalized = value
+    .filter((option): option is string => typeof option === "string")
+    .map((option) => option.trim())
+    .filter(Boolean);
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeBuiltInFieldItem(item: BuiltInFieldItem): BuiltInFieldItem {
+  return {
+    ...createBuiltInFieldItem(item.builtinId),
+    labelOverride: normalizeOptionalText(item.labelOverride),
+    description: normalizeOptionalText(item.description),
+    hidden: item.hidden === true ? true : undefined,
+  };
+}
+
+function normalizeCustomFieldItem(item: CustomFieldItem): CustomFieldItem {
+  return {
+    id: item.id,
+    kind: "custom_field",
+    label: typeof item.label === "string" ? item.label : "",
+    type: isCustomFieldType(item.type) ? item.type : "text",
+    required: Boolean(item.required),
+    placeholder: typeof item.placeholder === "string" ? item.placeholder : "",
+    options: normalizeOptionalOptions(item.options),
+    description: normalizeOptionalText(item.description),
+    hidden: item.hidden === true ? true : undefined,
+  };
+}
+
 function normalizeNewLayout(
   items: FormLayoutItem[],
   eventType: string,
@@ -622,11 +702,14 @@ function normalizeNewLayout(
     ),
   );
   const builtInOptions = { extraFieldKeys: explicitExtraFieldKeys };
-  const validBuiltInIds = new Set(
-    getBuiltInFieldDefinitions(eventType, builtInOptions).map(
+  const validBuiltInIds = new Set([
+    ...getBuiltInFieldDefinitions(eventType, builtInOptions).map(
       (field) => field.builtinId,
     ),
-  );
+    ...getBuiltInFieldCatalogDefinitions(eventType).map(
+      (field) => field.builtinId,
+    ),
+  ]);
   const seenBuiltIns = new Set<BuiltInFieldId>();
   const buckets = initializeBuckets();
   let currentSection: BuiltInSectionId = "client_info";
@@ -649,7 +732,12 @@ function normalizeNewLayout(
       );
       seenBuiltIns.add(item.builtinId);
       currentSection = sectionId;
-      buckets[sectionId].push(createBuiltInFieldItem(item.builtinId));
+      buckets[sectionId].push(normalizeBuiltInFieldItem(item));
+      return;
+    }
+
+    if (item.kind === "custom_field") {
+      buckets[currentSection].push(normalizeCustomFieldItem(item));
       return;
     }
 
@@ -749,7 +837,8 @@ export function getGroupedCustomLayoutSections(
     sectionTitle: section.section.title,
     items: section.items.filter(
       (item): item is CustomFieldItem | CustomSectionItem =>
-        item.kind === "custom_field" || item.kind === "custom_section",
+        item.kind === "custom_section" ||
+        (item.kind === "custom_field" && item.hidden !== true),
     ),
   }));
 }

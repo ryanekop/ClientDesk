@@ -46,6 +46,9 @@ export function hasBuiltInFieldInStoredSections(
   builtinId: string,
 ) {
   return resolveNormalizedLayoutFromStoredSections(rawFormSections, eventType).some(
-    (item) => item.kind === "builtin_field" && item.builtinId === builtinId,
+    (item) =>
+      item.kind === "builtin_field" &&
+      item.hidden !== true &&
+      item.builtinId === builtinId,
   );
 }

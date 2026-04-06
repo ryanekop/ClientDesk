@@ -64,6 +64,7 @@ import {
 } from "@/lib/university-references";
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 import { resolveNormalizedLayoutFromStoredSections } from "@/lib/form-sections";
+import type { BuiltInFieldItem } from "@/components/form-builder/booking-form-layout";
 import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
 import { apiText } from "@/lib/i18n/api-errors";
 import { resolveApiLocale } from "@/lib/i18n/api-locale";
@@ -338,7 +339,10 @@ function resolveBuiltInFieldIdsFromStoredSections(
             rawFormSections ?? null,
             eventType || "Umum",
         )
-            .filter((item) => item.kind === "builtin_field")
+            .filter(
+                (item): item is BuiltInFieldItem =>
+                    item.kind === "builtin_field" && item.hidden !== true,
+            )
             .map((item) => item.builtinId),
     );
 }
