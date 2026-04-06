@@ -963,7 +963,8 @@ export function extractBuiltInExtraFieldValues(
       .filter(
         ([key]) =>
           key !== "custom_fields" &&
-          key !== FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY,
+          key !== FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY &&
+          key !== "fastpik_project",
       )
       .map(([key, value]) => [key, stringifyFormFieldValue(value)] as const)
       .filter(([, value]) => value.length > 0),

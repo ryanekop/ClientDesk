@@ -138,6 +138,7 @@ const HIDDEN_EXTRA_FIELD_KEYS = new Set([
     "terms_accepted_at",
     "addon_ids",
     "addon_names",
+    "fastpik_project",
     "special_offer",
     "wisuda_session_duration_minutes",
     FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY,
