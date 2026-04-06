@@ -3608,7 +3608,7 @@ export function BookingFormClient({
             <h1 className="text-2xl font-bold tracking-tight">
               {effectiveVendor.studio_name || "Studio"}
             </h1>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-sm whitespace-pre-line break-words leading-relaxed">
               {effectiveVendor.form_greeting || t("greetingDefault")}
             </p>
           </div>

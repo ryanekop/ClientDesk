@@ -521,7 +521,7 @@ export default function SettlementClient({
           <p className="text-sm text-slate-600">
             {t("title")} - {booking.clientName}
           </p>
-          <p className="mx-auto max-w-xl text-sm text-slate-700">
+          <p className="mx-auto max-w-xl text-sm text-slate-700 whitespace-pre-line break-words leading-relaxed">
             {topGreeting}
           </p>
         </div>

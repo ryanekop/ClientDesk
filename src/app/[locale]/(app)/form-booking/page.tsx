@@ -1848,14 +1848,17 @@ export default function FormBookingPage() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Teks Sapaan</label>
-                    <input
+                    <textarea
                       value={greeting}
                       onChange={(e) => setGreeting(e.target.value)}
                       placeholder={t("greetingPlaceholder")}
-                      className={inputClass}
+                      className={
+                        inputClass + " !h-auto min-h-24 resize-y py-2 leading-relaxed"
+                      }
                     />
                     <p className="text-xs text-muted-foreground">
-                      Kosongkan untuk menggunakan teks default.
+                      Tekan Enter untuk baris baru. Kosongkan untuk menggunakan
+                      teks default.
                     </p>
                   </div>
 
