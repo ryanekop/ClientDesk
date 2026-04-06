@@ -61,6 +61,7 @@ import {
   type BuiltInSectionId,
   type CustomFieldItem,
   type CustomFieldType,
+  type FormLayoutMode,
   type FormLayoutItem,
   type GroupedFormLayoutSection,
   type SectionContentItem,
@@ -268,20 +269,22 @@ function VisibilityToggleButton({
 
 export default function CustomFormBuilder({
   eventType,
+  layoutMode = "normal",
   layout,
   onChange,
 }: {
   eventType: string;
+  layoutMode?: FormLayoutMode;
   layout: FormLayoutItem[];
   onChange: (layout: FormLayoutItem[]) => void;
 }) {
   const normalizedLayout = React.useMemo(
-    () => normalizeStoredFormLayout(layout, eventType),
-    [layout, eventType],
+    () => normalizeStoredFormLayout(layout, eventType, { layoutMode }),
+    [eventType, layout, layoutMode],
   );
   const groupedSections = React.useMemo(
-    () => groupFormLayoutBySection(normalizedLayout, eventType),
-    [normalizedLayout, eventType],
+    () => groupFormLayoutBySection(normalizedLayout, eventType, { layoutMode }),
+    [eventType, layoutMode, normalizedLayout],
   );
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(
     new Set(normalizedLayout.map((item) => item.id)),
@@ -303,8 +306,13 @@ export default function CustomFormBuilder({
     [eventType],
   );
   const nativeBuiltInIds = React.useMemo(
-    () => new Set(getBuiltInFieldDefinitions(eventType).map((item) => item.builtinId)),
-    [eventType],
+    () =>
+      new Set(
+        getBuiltInFieldDefinitions(eventType, { layoutMode }).map(
+          (item) => item.builtinId,
+        ),
+      ),
+    [eventType, layoutMode],
   );
 
   const sensors = useSensors(
@@ -567,7 +575,9 @@ export default function CustomFormBuilder({
     builtinId: BuiltInFieldId,
     targetSectionId?: BuiltInSectionId,
   ) {
-    const definition = getBuiltInFieldDefinition(builtinId, eventType);
+    const definition = getBuiltInFieldDefinition(builtinId, eventType, {
+      layoutMode,
+    });
     if (!definition && !targetSectionId) return;
 
     const resolvedTargetSectionId =
@@ -721,7 +731,9 @@ export default function CustomFormBuilder({
     sectionId: BuiltInSectionId,
     itemsLength: number,
   ) {
-    const definition = getBuiltInFieldDefinition(item.builtinId, eventType);
+    const definition = getBuiltInFieldDefinition(item.builtinId, eventType, {
+      layoutMode,
+    });
     if (!definition) return null;
     const isExpanded = expandedIds.has(item.id);
     const isLocked = BUILT_IN_HIDE_LOCKED_IDS.has(item.builtinId);
@@ -1324,7 +1336,9 @@ export default function CustomFormBuilder({
               <span className="text-sm font-medium">
                 {activeDragItem.kind === "builtin_field"
                   ? activeDragItem.labelOverride?.trim() ||
-                    getBuiltInFieldDefinition(activeDragItem.builtinId, eventType)
+                    getBuiltInFieldDefinition(activeDragItem.builtinId, eventType, {
+                      layoutMode,
+                    })
                       ?.label ||
                     "Field Bawaan"
                   : activeDragItem.kind === "custom_section"

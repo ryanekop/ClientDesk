@@ -68,6 +68,7 @@ import {
     resolveBuiltInFieldRequired,
     type BuiltInFieldId,
     type BuiltInFieldItem,
+    type FormLayoutMode,
 } from "@/components/form-builder/booking-form-layout";
 import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
 import { apiText } from "@/lib/i18n/api-errors";
@@ -109,7 +110,7 @@ type VendorRecord = {
     qris_drive_file_id?: string | null;
     bank_accounts?: unknown[] | null;
     custom_client_statuses?: string[] | null;
-    form_sections?: unknown[] | Record<string, unknown[]> | null;
+    form_sections?: unknown[] | Record<string, unknown> | null;
 };
 
 type AvailableServiceRow = {
@@ -345,6 +346,7 @@ const VENDOR_SELECT_COLUMNS = [
 function resolveBuiltInFieldStateFromStoredSections(
     rawFormSections: VendorRecord["form_sections"],
     eventType: string | null | undefined,
+    options: { layoutMode?: FormLayoutMode } = {},
 ) {
     const visibleBuiltInFieldIds = new Set<BuiltInFieldId>();
     const requiredBuiltInFieldIds = new Set<BuiltInFieldId>();
@@ -352,6 +354,7 @@ function resolveBuiltInFieldStateFromStoredSections(
     resolveNormalizedLayoutFromStoredSections(
         rawFormSections ?? null,
         eventType || "Umum",
+        options,
     )
         .filter(
             (item): item is BuiltInFieldItem =>
@@ -572,6 +575,16 @@ export async function POST(request: NextRequest) {
             typeof rawExtraData.tempat_wisuda_2 === "string"
                 ? rawExtraData.tempat_wisuda_2.trim()
                 : "";
+        const hasWeddingSplitFieldPayload =
+            Object.prototype.hasOwnProperty.call(rawExtraData, "tanggal_akad") ||
+            Object.prototype.hasOwnProperty.call(rawExtraData, "tanggal_resepsi") ||
+            Object.prototype.hasOwnProperty.call(rawExtraData, "tempat_akad") ||
+            Object.prototype.hasOwnProperty.call(rawExtraData, "tempat_resepsi");
+        const hasWisudaSplitFieldPayload =
+            Object.prototype.hasOwnProperty.call(rawExtraData, "tanggal_wisuda_1") ||
+            Object.prototype.hasOwnProperty.call(rawExtraData, "tanggal_wisuda_2") ||
+            Object.prototype.hasOwnProperty.call(rawExtraData, "tempat_wisuda_1") ||
+            Object.prototype.hasOwnProperty.call(rawExtraData, "tempat_wisuda_2");
         const splitSessionCandidates = [
             weddingAkadDate,
             weddingResepsiDate,
@@ -685,12 +698,29 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        const isWeddingEventType =
+            (resolvedEventType || "").toLowerCase() === "wedding";
+        const isWisudaEventType = (resolvedEventType || "").toLowerCase() === "wisuda";
+        const usesSplitLayoutMode =
+            (isWeddingEventType &&
+                (hasWeddingSplitFieldPayload ||
+                    Boolean(weddingAkadDate) ||
+                    Boolean(weddingResepsiDate))) ||
+            (isWisudaEventType &&
+                (hasWisudaSplitFieldPayload ||
+                    Boolean(wisudaSession1Date) ||
+                    Boolean(wisudaSession2Date)));
+        const resolvedFormLayoutMode: FormLayoutMode = usesSplitLayoutMode
+            ? "split"
+            : "normal";
+
         const {
             visibleBuiltInFieldIds: normalizedLayoutBuiltInFieldIds,
             requiredBuiltInFieldIds,
         } = resolveBuiltInFieldStateFromStoredSections(
             vendor.form_sections ?? null,
             resolvedEventType || "Umum",
+            { layoutMode: resolvedFormLayoutMode },
         );
         const shouldRequireEventType =
             requiredBuiltInFieldIds.has("event_type");
@@ -768,13 +798,10 @@ export async function POST(request: NextRequest) {
             resolvedCityName = (cityName || "").trim() || cityReference.city_name;
         }
 
-        const isWeddingEventType =
-            (resolvedEventType || "").toLowerCase() === "wedding";
-        const isWisudaEventType = (resolvedEventType || "").toLowerCase() === "wisuda";
         const splitWeddingAllowed = vendor.form_show_wedding_split ?? true;
         const splitWisudaAllowed = vendor.form_show_wisuda_split ?? true;
         if (isWeddingEventType && !splitWeddingAllowed) {
-            if (weddingAkadDate || weddingResepsiDate) {
+            if (hasWeddingSplitFieldPayload || weddingAkadDate || weddingResepsiDate) {
                 return NextResponse.json(
                     {
                         success: false,
@@ -787,6 +814,7 @@ export async function POST(request: NextRequest) {
         }
         if (isWisudaEventType && !splitWisudaAllowed) {
             if (
+                hasWisudaSplitFieldPayload ||
                 wisudaSession1Date ||
                 wisudaSession2Date ||
                 wisudaSession1Location ||

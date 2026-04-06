@@ -63,7 +63,7 @@ type VendorProfileRow = {
   form_terms_link_text: string | null;
   form_terms_suffix_text: string | null;
   form_terms_content: string | null;
-  form_sections: unknown[] | Record<string, unknown[]> | null;
+  form_sections: unknown[] | Record<string, unknown> | null;
   form_payment_methods: string[] | null;
   qris_image_url: string | null;
   qris_drive_file_id: string | null;
@@ -205,7 +205,7 @@ export type PublicVendorPayload = {
     form_terms_link_text: string | null;
     form_terms_suffix_text: string | null;
     form_terms_content: string | null;
-    form_sections: unknown[] | Record<string, unknown[]>;
+    form_sections: unknown[] | Record<string, unknown>;
     form_payment_methods: string[];
     qris_image_url: string | null;
     bank_accounts: ReturnType<typeof normalizeBankAccounts>;

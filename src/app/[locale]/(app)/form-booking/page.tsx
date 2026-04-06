@@ -42,9 +42,12 @@ import { createClient } from "@/utils/supabase/client";
 import CustomFormBuilder from "@/components/form-builder/custom-form-builder";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import {
+  createDefaultFormLayout,
   normalizeStoredFormLayout,
+  type FormLayoutMode,
   type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
+import { normalizeModeAwareFormSectionsByEventType } from "@/lib/form-sections";
 import {
   createEmptyBankAccount,
   getEnabledBankAccounts,
@@ -75,7 +78,14 @@ import {
 import { MAX_GOOGLE_UPLOAD_BYTES } from "@/lib/security/public-upload";
 const ALL_EVENT_TYPES = getBuiltInEventTypes();
 
-type FormSectionsByEventType = Record<string, FormLayoutItem[]>;
+type FormSectionsByMode = Partial<Record<FormLayoutMode, FormLayoutItem[]>>;
+type FormSectionsByEventType = Record<string, FormLayoutItem[] | FormSectionsByMode>;
+
+const SPLIT_CAPABLE_CUSTOM_FORM_EVENT_TYPES = new Set(["Wedding", "Wisuda"]);
+
+function isSplitCapableCustomFormEventType(eventType: string) {
+  return SPLIT_CAPABLE_CUSTOM_FORM_EVENT_TYPES.has(eventType);
+}
 type PreviewPayload = {
   studio_name: string | null;
   min_dp_percent: number;
@@ -292,6 +302,8 @@ export default function FormBookingPage() {
   const [formLang, setFormLang] = React.useState("id");
   const [settingsTab, setSettingsTab] = React.useState<"general" | "customForm">("general");
   const [selectedCustomFormEventType, setSelectedCustomFormEventType] = React.useState("Umum");
+  const [selectedCustomFormLayoutMode, setSelectedCustomFormLayoutMode] =
+    React.useState<FormLayoutMode>("normal");
 
   // Merged event types: built-in + custom
   const allEventTypes = React.useMemo(
@@ -609,26 +621,9 @@ export default function FormBookingPage() {
         setSelectedEventTypes(loadedSelectedEventTypes);
         setCustomEventTypes(loadedCustomEventTypes);
         const rawSections = (p as Record<string, unknown>).form_sections;
-        let normalizedSections: FormSectionsByEventType = {};
-        if (Array.isArray(rawSections)) {
-          // Backward compatibility: old data stored as single array
-          normalizedSections = {
-            Umum: normalizeStoredFormLayout(rawSections, "Umum"),
-          };
-        } else if (rawSections && typeof rawSections === "object") {
-          normalizedSections = Object.entries(
-            rawSections as Record<string, unknown>,
-          ).reduce((acc, [key, value]) => {
-            const normalizedKey = normalizeEventTypeName(key) || key;
-            if (!(normalizedKey in acc) || key === normalizedKey) {
-              acc[normalizedKey] = normalizeStoredFormLayout(
-                value,
-                normalizedKey,
-              );
-            }
-            return acc;
-          }, {} as FormSectionsByEventType);
-        }
+        const normalizedSections = normalizeModeAwareFormSectionsByEventType(
+          rawSections,
+        ) as FormSectionsByEventType;
         setFormSectionsByEventType(normalizedSections);
         const loadedShowNotes = p.form_show_notes ?? DEFAULTS.showNotes;
         const loadedShowAddons = (p as Record<string, unknown>).form_show_addons ?? DEFAULTS.showAddons;
@@ -788,6 +783,19 @@ export default function FormBookingPage() {
       setSelectedCustomFormEventType(customFormEventTypes[0]);
     }
   }, [customFormEventTypes, selectedCustomFormEventType]);
+
+  const selectedCustomFormSupportsSplit = React.useMemo(
+    () => isSplitCapableCustomFormEventType(selectedCustomFormEventType),
+    [selectedCustomFormEventType],
+  );
+  const effectiveCustomFormLayoutMode: FormLayoutMode =
+    selectedCustomFormSupportsSplit ? selectedCustomFormLayoutMode : "normal";
+
+  React.useEffect(() => {
+    if (!selectedCustomFormSupportsSplit && selectedCustomFormLayoutMode !== "normal") {
+      setSelectedCustomFormLayoutMode("normal");
+    }
+  }, [selectedCustomFormLayoutMode, selectedCustomFormSupportsSplit]);
 
   // Get DP config for currently selected event type
   function getDpForEventType(eventType: string): { mode: "percent" | "fixed"; value: number } {
@@ -1112,11 +1120,73 @@ export default function FormBookingPage() {
     setBankAccounts((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function updateFormSections(eventType: string, sections: FormLayoutItem[]) {
-    setFormSectionsByEventType((prev) => ({
-      ...prev,
-      [eventType]: normalizeStoredFormLayout(sections, eventType),
-    }));
+  const selectedCustomFormLayout = React.useMemo(() => {
+    const eventType = selectedCustomFormEventType;
+    const storedValue = formSectionsByEventType[eventType];
+    if (isSplitCapableCustomFormEventType(eventType)) {
+      if (storedValue && typeof storedValue === "object" && !Array.isArray(storedValue)) {
+        const rawLayout = storedValue[effectiveCustomFormLayoutMode] ?? [];
+        return normalizeStoredFormLayout(rawLayout, eventType, {
+          layoutMode: effectiveCustomFormLayoutMode,
+        });
+      }
+      if (Array.isArray(storedValue) && effectiveCustomFormLayoutMode === "normal") {
+        return normalizeStoredFormLayout(storedValue, eventType, {
+          layoutMode: "normal",
+        });
+      }
+      return createDefaultFormLayout(eventType, {
+        layoutMode: effectiveCustomFormLayoutMode,
+      });
+    }
+
+    return normalizeStoredFormLayout(
+      Array.isArray(storedValue) ? storedValue : [],
+      eventType,
+      { layoutMode: "normal" },
+    );
+  }, [
+    effectiveCustomFormLayoutMode,
+    formSectionsByEventType,
+    selectedCustomFormEventType,
+  ]);
+
+  function updateFormSections(
+    eventType: string,
+    sections: FormLayoutItem[],
+    layoutMode: FormLayoutMode = "normal",
+  ) {
+    setFormSectionsByEventType((prev) => {
+      const normalizedSections = normalizeStoredFormLayout(sections, eventType, {
+        layoutMode,
+      });
+      if (!isSplitCapableCustomFormEventType(eventType)) {
+        return {
+          ...prev,
+          [eventType]: normalizedSections,
+        };
+      }
+
+      const previousValue = prev[eventType];
+      const previousModes: FormSectionsByMode =
+        previousValue && typeof previousValue === "object" && !Array.isArray(previousValue)
+          ? previousValue
+          : Array.isArray(previousValue)
+            ? {
+                normal: normalizeStoredFormLayout(previousValue, eventType, {
+                  layoutMode: "normal",
+                }),
+              }
+            : {};
+
+      return {
+        ...prev,
+        [eventType]: {
+          ...previousModes,
+          [layoutMode]: normalizedSections,
+        },
+      };
+    });
   }
 
   function togglePaymentMethod(method: PaymentMethod) {
@@ -2108,14 +2178,33 @@ export default function FormBookingPage() {
                         ))}
                       </select>
                     </div>
+                    {selectedCustomFormSupportsSplit ? (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Template Sesi</label>
+                        <select
+                          value={selectedCustomFormLayoutMode}
+                          onChange={(e) =>
+                            setSelectedCustomFormLayoutMode(
+                              e.target.value === "split" ? "split" : "normal",
+                            )
+                          }
+                          className={inputClass + " cursor-pointer"}
+                        >
+                          <option value="normal">Normal</option>
+                          <option value="split">Split</option>
+                        </select>
+                      </div>
+                    ) : null}
                     <CustomFormBuilder
                       eventType={selectedCustomFormEventType}
-                      layout={normalizeStoredFormLayout(
-                        formSectionsByEventType[selectedCustomFormEventType] || [],
-                        selectedCustomFormEventType,
-                      )}
+                      layoutMode={effectiveCustomFormLayoutMode}
+                      layout={selectedCustomFormLayout}
                       onChange={(layout) =>
-                        updateFormSections(selectedCustomFormEventType, layout)
+                        updateFormSections(
+                          selectedCustomFormEventType,
+                          layout,
+                          effectiveCustomFormLayoutMode,
+                        )
                       }
                     />
                   </>

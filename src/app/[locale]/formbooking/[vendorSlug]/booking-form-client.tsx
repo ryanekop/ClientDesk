@@ -42,6 +42,7 @@ import {
   groupFormLayoutBySection,
   resolveBuiltInFieldRequired,
   type BuiltInFieldId,
+  type FormLayoutMode,
   type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
 import { FileDropzone } from "@/components/public/file-dropzone";
@@ -167,7 +168,7 @@ export type Vendor = {
   form_terms_link_text: string | null;
   form_terms_suffix_text: string | null;
   form_terms_content: string | null;
-  form_sections: FormLayoutItem[] | Record<string, FormLayoutItem[]>;
+  form_sections: unknown;
   form_payment_methods: PaymentMethod[];
   qris_image_url: string | null;
   bank_accounts: BankAccount[];
@@ -225,12 +226,27 @@ const WEDDING_SPLIT_LOCATION_EXTRA_IDS = new Set([
   "extra:tempat_akad",
   "extra:tempat_resepsi",
 ]);
+const WISUDA_SPLIT_LOCATION_EXTRA_IDS = new Set([
+  "extra:tempat_wisuda_1",
+  "extra:tempat_wisuda_2",
+]);
 const PRE_EVENT_SELECTION_BUILTIN_IDS = new Set([
   "client_name",
   "client_whatsapp",
+  "instagram",
   "event_type",
 ]);
 type BookingStep = 1 | 2 | 3 | 4;
+
+function isSplitLocationExtraBuiltinId(eventType: string, builtinId: string) {
+  if (eventType === "Wedding") {
+    return WEDDING_SPLIT_LOCATION_EXTRA_IDS.has(builtinId);
+  }
+  if (eventType === "Wisuda") {
+    return WISUDA_SPLIT_LOCATION_EXTRA_IDS.has(builtinId);
+  }
+  return false;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -620,6 +636,7 @@ export function BookingFormClient({
   const [error, setError] = React.useState("");
   const [currentStep, setCurrentStep] = React.useState<BookingStep>(1);
   const [maxUnlockedStep, setMaxUnlockedStep] = React.useState<BookingStep>(1);
+  const formRef = React.useRef<HTMLFormElement | null>(null);
 
   const autoDpAmountRef = React.useRef<number | null>(null);
   const isSpecialOfferActive = Boolean(
@@ -1526,18 +1543,20 @@ export function BookingFormClient({
   const minDP = getMinDpForEvent();
   const normalizedEventType = normalizeEventTypeName(eventType) || eventType;
   const hasSelectedEventType = eventType.trim().length > 0;
-  const hideGeneralLocationForWeddingSplit =
-    eventType === "Wedding" && splitDates;
-  const hideWeddingSplitLocationExtras =
-    eventType === "Wedding" && !splitDates;
+  const isSplitCapableEventType = eventType === "Wedding" || eventType === "Wisuda";
+  const isSplitLayoutMode = isSplitCapableEventType && splitDates;
+  const activeLayoutMode: FormLayoutMode = isSplitLayoutMode ? "split" : "normal";
+  const hideGeneralLocationForSplit = isSplitLayoutMode;
+  const hideSplitLocationExtras = isSplitCapableEventType && !splitDates;
   const brandColor = resolveHexColor(effectiveVendor.form_brand_color, "#000000");
   const normalizedActiveLayout = React.useMemo(
     () =>
       resolveNormalizedLayoutFromStoredSections(
         effectiveVendor.form_sections,
         normalizedEventType || "Umum",
+        { layoutMode: activeLayoutMode },
       ),
-    [effectiveVendor.form_sections, normalizedEventType],
+    [activeLayoutMode, effectiveVendor.form_sections, normalizedEventType],
   );
   const visibleActiveLayout = React.useMemo(
     () =>
@@ -1545,16 +1564,16 @@ export function BookingFormClient({
         if (item.kind === "builtin_field" || item.kind === "custom_field") {
           if (item.hidden === true) return false;
           if (
-            hideGeneralLocationForWeddingSplit &&
+            hideGeneralLocationForSplit &&
             item.kind === "builtin_field" &&
             item.builtinId === "location"
           ) {
             return false;
           }
           if (
-            hideWeddingSplitLocationExtras &&
+            hideSplitLocationExtras &&
             item.kind === "builtin_field" &&
-            WEDDING_SPLIT_LOCATION_EXTRA_IDS.has(item.builtinId)
+            isSplitLocationExtraBuiltinId(eventType, item.builtinId)
           ) {
             return false;
           }
@@ -1569,9 +1588,10 @@ export function BookingFormClient({
         return hasSelectedEventType;
       }),
     [
+      eventType,
       hasSelectedEventType,
-      hideGeneralLocationForWeddingSplit,
-      hideWeddingSplitLocationExtras,
+      hideGeneralLocationForSplit,
+      hideSplitLocationExtras,
       normalizedActiveLayout,
     ],
   );
@@ -1581,22 +1601,23 @@ export function BookingFormClient({
       groupFormLayoutBySection(
         normalizedActiveLayout,
         normalizedEventType || "Umum",
+        { layoutMode: activeLayoutMode },
       ).map((section) => ({
         ...section,
         items: section.items.filter((item) => {
           if (item.kind === "builtin_field" || item.kind === "custom_field") {
             if (item.hidden === true) return false;
             if (
-              hideGeneralLocationForWeddingSplit &&
+              hideGeneralLocationForSplit &&
               item.kind === "builtin_field" &&
               item.builtinId === "location"
             ) {
               return false;
             }
             if (
-              hideWeddingSplitLocationExtras &&
+              hideSplitLocationExtras &&
               item.kind === "builtin_field" &&
-              WEDDING_SPLIT_LOCATION_EXTRA_IDS.has(item.builtinId)
+              isSplitLocationExtraBuiltinId(eventType, item.builtinId)
             ) {
               return false;
             }
@@ -1612,10 +1633,12 @@ export function BookingFormClient({
         }),
       })),
     [
+      eventType,
       hasSelectedEventType,
-      hideGeneralLocationForWeddingSplit,
-      hideWeddingSplitLocationExtras,
+      hideGeneralLocationForSplit,
+      hideSplitLocationExtras,
       normalizedActiveLayout,
+      activeLayoutMode,
       normalizedEventType,
     ],
   );
@@ -1970,118 +1993,179 @@ export function BookingFormClient({
     const isWeddingEvent = eventType === "Wedding";
     const isWisudaEvent = eventType === "Wisuda";
     const isSplitSessionEnabled = splitDates && (isWeddingEvent || isWisudaEvent);
-    const requiresSessionDate =
-      isBuiltInFieldRequired("session_date") && !isSplitSessionEnabled;
-    const requiresSessionTime =
-      isBuiltInFieldRequired("session_time") && !isSplitSessionEnabled;
-    const requiresAkadDate =
-      isBuiltInFieldRequired("akad_date") && isWeddingEvent && isSplitSessionEnabled;
-    const requiresAkadTime =
-      isBuiltInFieldRequired("akad_time") && isWeddingEvent && isSplitSessionEnabled;
-    const requiresResepsiDate =
-      isBuiltInFieldRequired("resepsi_date") && isWeddingEvent && isSplitSessionEnabled;
-    const requiresResepsiTime =
-      isBuiltInFieldRequired("resepsi_time") && isWeddingEvent && isSplitSessionEnabled;
-    const requiresWisudaSession1Date =
-      isBuiltInFieldRequired("wisuda_session1_date") &&
-      isWisudaEvent &&
-      isSplitSessionEnabled;
-    const requiresWisudaSession1Time =
-      isBuiltInFieldRequired("wisuda_session1_time") &&
-      isWisudaEvent &&
-      isSplitSessionEnabled;
-    const requiresWisudaSession2Date =
-      isBuiltInFieldRequired("wisuda_session2_date") &&
-      isWisudaEvent &&
-      isSplitSessionEnabled;
-    const requiresWisudaSession2Time =
-      isBuiltInFieldRequired("wisuda_session2_time") &&
-      isWisudaEvent &&
-      isSplitSessionEnabled;
     const requiresLocation =
-      isBuiltInFieldRequired("location") && effectiveVendor.form_show_location !== false;
-    const requiredCustomFields = infoStepSections.flatMap((section) =>
-      section.items.filter(
-        (item): item is Extract<FormLayoutItem, { kind: "custom_field" }> =>
-          item.kind === "custom_field" && item.required,
-      ),
-    );
-    const hasMissingCustomField = requiredCustomFields.some(
-      (field) => !customFields[field.id]?.trim(),
-    );
-    const requiredExtraFields = currentExtraFields.filter(
-      (field) =>
-        field.required &&
-        hasVisibleBuiltInField(`extra:${field.key}`) &&
-        !["tempat_akad", "tempat_resepsi", "tempat_wisuda_1", "tempat_wisuda_2"].includes(
-          field.key,
-        ) &&
-        !(
-          eventType === "Wisuda" &&
-          !splitDates &&
-          (field.key === "tempat_wisuda_1" || field.key === "tempat_wisuda_2")
-        ),
-    );
-    const hasMissingExtraField = requiredExtraFields.some(
-      (field) => !extraData[field.key]?.trim(),
-    );
-    const hasMissingWeddingLocations =
-      isWeddingEvent &&
-      hasVisibleBuiltInField("extra:tempat_akad") &&
-      hasVisibleBuiltInField("extra:tempat_resepsi") &&
-      (!extraData.tempat_akad?.trim() || !extraData.tempat_resepsi?.trim());
-    const hasMissingWisudaSplitLocations =
-      isWisudaEvent &&
-      isSplitSessionEnabled &&
-      ((hasVisibleBuiltInField("extra:tempat_wisuda_1") &&
-        !extraData.tempat_wisuda_1?.trim()) ||
-        (hasVisibleBuiltInField("extra:tempat_wisuda_2") &&
-          !extraData.tempat_wisuda_2?.trim()));
+      isBuiltInFieldRequired("location") &&
+      effectiveVendor.form_show_location !== false &&
+      !isSplitSessionEnabled;
+    const infoStepItems = infoStepSections.flatMap((section) => section.items);
 
-    if (
-      (isBuiltInFieldRequired("client_name") && !clientName.trim()) ||
-      (isBuiltInFieldRequired("client_whatsapp") && !phone.trim()) ||
-      (isBuiltInFieldRequired("event_type") && !eventType) ||
-      (requiresSessionDate && !sessionDate) ||
-      (requiresSessionTime && !hasDateTimeTimePart(sessionDate)) ||
-      (requiresAkadDate && !akadDate) ||
-      (requiresAkadTime && !hasDateTimeTimePart(akadDate)) ||
-      (requiresResepsiDate && !resepsiDate) ||
-      (requiresResepsiTime && !hasDateTimeTimePart(resepsiDate)) ||
-      (requiresWisudaSession1Date && !wisudaSession1Date) ||
-      (requiresWisudaSession1Time && !hasDateTimeTimePart(wisudaSession1Date)) ||
-      (requiresWisudaSession2Date && !wisudaSession2Date) ||
-      (requiresWisudaSession2Time && !hasDateTimeTimePart(wisudaSession2Date)) ||
-      (requiresLocation && !location.trim()) ||
-      hasMissingCustomField ||
-      hasMissingExtraField
-    ) {
-      return { valid: false, errorMessage: t("errorWajib") };
-    }
+    for (const item of infoStepItems) {
+      if (item.kind === "custom_field") {
+        if (item.required && !customFields[item.id]?.trim()) {
+          return {
+            valid: false,
+            errorMessage: t("errorWajib"),
+            firstInvalidFieldKey: `custom:${item.id}`,
+          };
+        }
+        continue;
+      }
 
-    if (hasMissingWeddingLocations) {
-      return { valid: false, errorMessage: t("errorLokasiWedding") };
-    }
+      if (item.kind !== "builtin_field") continue;
+      const isUniversityBuiltInField =
+        item.builtinId === `extra:${UNIVERSITY_EXTRA_FIELD_KEY}`;
+      if (isUniversityBuiltInField) {
+        const hasUniversityName = hasUniversityValue(extraData);
+        const selectedUniversityRefId = getUniversityReferenceId(extraData);
+        if (!hasUniversityName || !selectedUniversityRefId) {
+          return {
+            valid: false,
+            errorMessage: t("errorUniversityRequired"),
+            firstInvalidFieldKey: item.builtinId,
+          };
+        }
+        continue;
+      }
 
-    if (hasMissingWisudaSplitLocations) {
-      return {
+      const isRequired = resolveBuiltInFieldRequired(item);
+      if (!isRequired) continue;
+
+      const fail = (errorMessage: string) => ({
         valid: false,
-        errorMessage:
-          localeCode === "en"
-            ? "Please complete Session 1 and Session 2 locations."
-            : "Mohon lengkapi Lokasi Sesi 1 dan Lokasi Sesi 2.",
-      };
-    }
+        errorMessage,
+        firstInvalidFieldKey: item.builtinId,
+      });
 
-    if (hasVisibleBuiltInField(`extra:${UNIVERSITY_EXTRA_FIELD_KEY}`)) {
-      const hasUniversityName = hasUniversityValue(extraData);
-      const selectedUniversityRefId = getUniversityReferenceId(extraData);
-      if (!hasUniversityName || !selectedUniversityRefId) {
-        return { valid: false, errorMessage: t("errorUniversityRequired") };
+      switch (item.builtinId) {
+        case "client_name":
+          if (!clientName.trim()) return fail(t("errorWajib"));
+          break;
+        case "client_whatsapp":
+          if (!phone.trim()) return fail(t("errorWajib"));
+          break;
+        case "instagram":
+          if (!instagram.trim()) return fail(t("errorWajib"));
+          break;
+        case "event_type":
+          if (!eventType) return fail(t("errorWajib"));
+          break;
+        case "session_date":
+          if (!isSplitSessionEnabled && !sessionDate) return fail(t("errorWajib"));
+          break;
+        case "session_time":
+          if (!isSplitSessionEnabled && !hasDateTimeTimePart(sessionDate)) {
+            return fail(t("errorWajib"));
+          }
+          break;
+        case "akad_date":
+          if (isWeddingEvent && isSplitSessionEnabled && !akadDate) {
+            return fail(t("errorWajib"));
+          }
+          break;
+        case "akad_time":
+          if (
+            isWeddingEvent &&
+            isSplitSessionEnabled &&
+            !hasDateTimeTimePart(akadDate)
+          ) {
+            return fail(t("errorWajib"));
+          }
+          break;
+        case "resepsi_date":
+          if (isWeddingEvent && isSplitSessionEnabled && !resepsiDate) {
+            return fail(t("errorWajib"));
+          }
+          break;
+        case "resepsi_time":
+          if (
+            isWeddingEvent &&
+            isSplitSessionEnabled &&
+            !hasDateTimeTimePart(resepsiDate)
+          ) {
+            return fail(t("errorWajib"));
+          }
+          break;
+        case "wisuda_session1_date":
+          if (isWisudaEvent && isSplitSessionEnabled && !wisudaSession1Date) {
+            return fail(t("errorWajib"));
+          }
+          break;
+        case "wisuda_session1_time":
+          if (
+            isWisudaEvent &&
+            isSplitSessionEnabled &&
+            !hasDateTimeTimePart(wisudaSession1Date)
+          ) {
+            return fail(t("errorWajib"));
+          }
+          break;
+        case "wisuda_session2_date":
+          if (isWisudaEvent && isSplitSessionEnabled && !wisudaSession2Date) {
+            return fail(t("errorWajib"));
+          }
+          break;
+        case "wisuda_session2_time":
+          if (
+            isWisudaEvent &&
+            isSplitSessionEnabled &&
+            !hasDateTimeTimePart(wisudaSession2Date)
+          ) {
+            return fail(t("errorWajib"));
+          }
+          break;
+        case "location":
+          if (requiresLocation && !location.trim()) return fail(t("errorWajib"));
+          break;
+        case "location_detail":
+          if (!locationDetail.trim()) return fail(t("errorWajib"));
+          break;
+        case "notes":
+          if (!notes.trim()) return fail(t("errorWajib"));
+          break;
+        default:
+          if (!item.builtinId.startsWith("extra:")) break;
+          {
+            const extraKey = item.builtinId.slice("extra:".length);
+            const extraValue = extraData[extraKey]?.trim() || "";
+            const extraDefinition = currentExtraFields.find(
+              (field) => field.key === extraKey,
+            );
+            const isSplitLocationExtra =
+              extraKey === "tempat_akad" ||
+              extraKey === "tempat_resepsi" ||
+              extraKey === "tempat_wisuda_1" ||
+              extraKey === "tempat_wisuda_2";
+            if (isSplitLocationExtra && !isSplitSessionEnabled) {
+              break;
+            }
+            const isRequiredExtraField =
+              (extraDefinition?.required === true || isRequired) &&
+              hasVisibleBuiltInField(item.builtinId);
+            if (!isRequiredExtraField || extraValue) break;
+
+            if (
+              isWeddingEvent &&
+              (extraKey === "tempat_akad" || extraKey === "tempat_resepsi")
+            ) {
+              return fail(t("errorLokasiWedding"));
+            }
+            if (
+              isWisudaEvent &&
+              (extraKey === "tempat_wisuda_1" || extraKey === "tempat_wisuda_2")
+            ) {
+              return fail(
+                localeCode === "en"
+                  ? "Please complete Session 1 and Session 2 locations."
+                  : "Mohon lengkapi Lokasi Sesi 1 dan Lokasi Sesi 2.",
+              );
+            }
+
+            return fail(t("errorWajib"));
+          }
       }
     }
 
-    return { valid: true, errorMessage: "" };
+    return { valid: true, errorMessage: "", firstInvalidFieldKey: null as string | null };
   }, [
     akadDate,
     clientName,
@@ -2090,10 +2174,13 @@ export function BookingFormClient({
     eventType,
     extraData,
     hasVisibleBuiltInField,
-    isBuiltInFieldRequired,
     infoStepSections,
+    instagram,
+    isBuiltInFieldRequired,
     localeCode,
     location,
+    locationDetail,
+    notes,
     phone,
     resepsiDate,
     sessionDate,
@@ -2114,14 +2201,19 @@ export function BookingFormClient({
           localeCode === "en"
             ? "Please select your city/regency before choosing a package."
             : "Pilih kota/kabupaten terlebih dahulu sebelum memilih paket.",
+        firstInvalidFieldKey: "service_package",
       };
     }
 
     if (requiresServicePackage && selectedServiceIds.length === 0) {
-      return { valid: false, errorMessage: t("errorWajib") };
+      return {
+        valid: false,
+        errorMessage: t("errorWajib"),
+        firstInvalidFieldKey: "service_package",
+      };
     }
 
-    return { valid: true, errorMessage: "" };
+    return { valid: true, errorMessage: "", firstInvalidFieldKey: null as string | null };
   }, [
     isBuiltInFieldRequired,
     isCityScopedEvent,
@@ -2149,42 +2241,78 @@ export function BookingFormClient({
     }
   }, [currentStep, step1ValidationState.valid, step2ValidationState.valid]);
 
+  const scrollToFormTop = React.useCallback(() => {
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, []);
+
+  const focusAndScrollToField = React.useCallback((fieldKey: string | null | undefined) => {
+    if (!fieldKey) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const escapedFieldKey = fieldKey.replace(/"/g, '\\"');
+        const container = formRef.current?.querySelector<HTMLElement>(
+          `[data-field-key="${escapedFieldKey}"]`,
+        );
+        if (!container) return;
+        container.scrollIntoView({ behavior: "smooth", block: "center" });
+        const focusable = container.querySelector<HTMLElement>(
+          "input, select, textarea, button, [tabindex]:not([tabindex='-1'])",
+        );
+        if (focusable && typeof focusable.focus === "function") {
+          focusable.focus({ preventScroll: true });
+        }
+      });
+    });
+  }, []);
+
   function goToStep(step: BookingStep) {
     if (step > maxUnlockedStep) return;
     if (step >= 2 && !step1ValidationState.valid) {
       setError(step1ValidationState.errorMessage || t("errorWajib"));
       setCurrentStep(1);
+      focusAndScrollToField(step1ValidationState.firstInvalidFieldKey);
       return;
     }
     if (step >= 3 && !step2ValidationState.valid) {
       setError(step2ValidationState.errorMessage || t("errorWajib"));
       setCurrentStep(2);
+      focusAndScrollToField(step2ValidationState.firstInvalidFieldKey);
       return;
     }
     setError("");
     setCurrentStep(step);
+    scrollToFormTop();
   }
 
   function goNextStep() {
     if (currentStep === 1) {
       if (!step1ValidationState.valid) {
         setError(step1ValidationState.errorMessage || t("errorWajib"));
+        focusAndScrollToField(step1ValidationState.firstInvalidFieldKey);
         return;
       }
       setError("");
       setMaxUnlockedStep((prev) => (prev < 2 ? 2 : prev));
       setCurrentStep(2);
+      scrollToFormTop();
       return;
     }
 
     if (currentStep === 2) {
       if (!step2ValidationState.valid) {
         setError(step2ValidationState.errorMessage || t("errorWajib"));
+        focusAndScrollToField(step2ValidationState.firstInvalidFieldKey);
         return;
       }
       setError("");
       setMaxUnlockedStep((prev) => (prev < 3 ? 3 : prev));
       setCurrentStep(3);
+      scrollToFormTop();
       return;
     }
 
@@ -2192,12 +2320,14 @@ export function BookingFormClient({
       setError("");
       setMaxUnlockedStep((prev) => (prev < 4 ? 4 : prev));
       setCurrentStep(4);
+      scrollToFormTop();
     }
   }
 
   function goPrevStep() {
     setError("");
     setCurrentStep((prev) => (prev <= 1 ? 1 : ((prev - 1) as BookingStep)));
+    scrollToFormTop();
   }
 
   function renderCustomField(field: Extract<FormLayoutItem, { kind: "custom_field" }>) {
@@ -3403,10 +3533,17 @@ export function BookingFormClient({
         </div>
       );
     }
-    if (item.kind === "custom_field") {
-      return renderCustomField(item);
-    }
-    return renderBuiltInField(item);
+    const fieldKey =
+      item.kind === "custom_field" ? `custom:${item.id}` : item.builtinId;
+    const renderedItem =
+      item.kind === "custom_field" ? renderCustomField(item) : renderBuiltInField(item);
+    if (!renderedItem) return null;
+
+    return (
+      <div key={`field-anchor:${item.id}`} data-field-key={fieldKey}>
+        {renderedItem}
+      </div>
+    );
   }
 
   const getBuiltInDisplayLabel = React.useCallback((
@@ -3709,8 +3846,29 @@ export function BookingFormClient({
       });
     }
 
+    summaryExtraFieldRows.forEach((row) => {
+      rows.push({
+        ...row,
+        label: `Extra • ${row.label}`,
+      });
+    });
+    summaryCustomFieldRows.forEach((row) => {
+      rows.push({
+        ...row,
+        label: `Extra • ${row.label}`,
+      });
+    });
+
     return rows.filter((row) => row.value.length > 0);
-  }, [locationDetail, notes, summarySessionRows, t, getBuiltInDisplayLabel]);
+  }, [
+    getBuiltInDisplayLabel,
+    locationDetail,
+    notes,
+    summaryCustomFieldRows,
+    summaryExtraFieldRows,
+    summarySessionRows,
+    t,
+  ]);
   const summaryPackageRows = React.useMemo<SummaryRow[]>(
     () =>
       [
@@ -3912,6 +4070,7 @@ export function BookingFormClient({
 
         {/* Form */}
         <form
+          ref={formRef}
           onSubmit={handleSubmit}
           className="bg-background rounded-2xl shadow-lg border p-6 sm:p-8 space-y-5"
         >
@@ -4015,8 +4174,8 @@ export function BookingFormClient({
                 {t("summaryTitle")}
               </h3>
 
-              <div className="space-y-5 text-sm">
-                <div className="space-y-2">
+              <div className="divide-y text-sm">
+                <div className="space-y-2 py-4 first:pt-0">
                   <h4 className="text-sm font-semibold">{t("summarySectionClientInfo")}</h4>
                   {summaryClientInfoRows.length === 0 ? (
                     <p className="text-muted-foreground">-</p>
@@ -4037,7 +4196,7 @@ export function BookingFormClient({
                   )}
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 py-4">
                   <h4 className="text-sm font-semibold">{t("summarySectionSessionDetail")}</h4>
                   {summarySessionDetailRows.length === 0 ? (
                     <p className="text-muted-foreground">-</p>
@@ -4058,7 +4217,7 @@ export function BookingFormClient({
                   )}
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 py-4">
                   <h4 className="text-sm font-semibold">{t("summarySectionPackageAddon")}</h4>
                   {summaryPackageRows.length === 0 ? (
                     <p className="text-muted-foreground">-</p>
@@ -4079,49 +4238,7 @@ export function BookingFormClient({
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  <h4 className="text-sm font-semibold">{t("summarySectionExtraFields")}</h4>
-                  {summaryExtraFieldRows.length === 0 ? (
-                    <p className="text-muted-foreground">-</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {summaryExtraFieldRows.map((row) => (
-                        <div
-                          key={`${row.label}-${row.value}`}
-                          className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
-                        >
-                          <p className="text-muted-foreground break-words sm:max-w-[45%]">
-                            {renderSummaryRowLabel(row)}
-                          </p>
-                          <p className="font-medium break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right">{row.value}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <h4 className="text-sm font-semibold">{t("summarySectionCustomFields")}</h4>
-                  {summaryCustomFieldRows.length === 0 ? (
-                    <p className="text-muted-foreground">-</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {summaryCustomFieldRows.map((row) => (
-                        <div
-                          key={`${row.label}-${row.value}`}
-                          className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
-                        >
-                          <p className="text-muted-foreground break-words sm:max-w-[45%]">
-                            {renderSummaryRowLabel(row)}
-                          </p>
-                          <p className="font-medium break-words leading-relaxed max-w-full sm:max-w-[55%] sm:text-right">{row.value}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2 border-t pt-3">
+                <div className="space-y-2 py-4 last:pb-0">
                   <h4 className="text-sm font-semibold">{t("summarySectionTotalBooking")}</h4>
                   <div className="space-y-1.5">
                     {summaryCostRows.map((row) => (

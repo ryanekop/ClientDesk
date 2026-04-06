@@ -140,13 +140,21 @@ export type GroupedCustomLayoutSection = {
 
 type BuiltInFieldDefinitionOptions = {
   extraFieldKeys?: string[];
+  layoutMode?: FormLayoutMode;
 };
 
-type SessionFieldGroup = "schedule" | "location" | "extra_non_location";
+type SessionFieldGroup =
+  | "schedule"
+  | "split_location"
+  | "location"
+  | "extra_non_location";
 
 type SessionFieldGroups = Record<SessionFieldGroup, BuiltInFieldDefinition[]>;
 
 type SessionFieldOrderStrategy = "desired" | "legacy_regressed";
+
+export type FormLayoutMode = "normal" | "split";
+export type FormLayoutByMode = Partial<Record<FormLayoutMode, FormLayoutItem[]>>;
 
 function getKnownExtraFieldKeys() {
   return Array.from(
@@ -569,6 +577,34 @@ function getSplitToggleFields(eventType: string): BuiltInFieldDefinition[] {
   return [];
 }
 
+function isSplitCapableEventType(eventType: string) {
+  return eventType === "Wedding" || eventType === "Wisuda";
+}
+
+function resolveLayoutModeForEvent(
+  eventType: string,
+  layoutMode?: FormLayoutMode,
+): FormLayoutMode {
+  if (!isSplitCapableEventType(eventType)) return "normal";
+  return layoutMode === "split" ? "split" : "normal";
+}
+
+const WEDDING_SPLIT_LOCATION_EXTRA_KEYS = new Set(["tempat_akad", "tempat_resepsi"]);
+const WISUDA_SPLIT_LOCATION_EXTRA_KEYS = new Set([
+  "tempat_wisuda_1",
+  "tempat_wisuda_2",
+]);
+
+function isSplitLocationExtraField(eventType: string, key: string) {
+  if (eventType === "Wedding") {
+    return WEDDING_SPLIT_LOCATION_EXTRA_KEYS.has(key);
+  }
+  if (eventType === "Wisuda") {
+    return WISUDA_SPLIT_LOCATION_EXTRA_KEYS.has(key);
+  }
+  return false;
+}
+
 function getSplitScheduleFields(eventType: string): BuiltInFieldDefinition[] {
   if (eventType === "Wedding") {
     return WEDDING_BUILT_IN_FIELDS.filter(
@@ -586,6 +622,12 @@ function getSplitScheduleFields(eventType: string): BuiltInFieldDefinition[] {
 function getLocationFields(eventType: string): BuiltInFieldDefinition[] {
   if (eventType === "Wedding") {
     return [
+      {
+        builtinId: "location",
+        label: "Lokasi",
+        category: "Sesi",
+        sectionId: "session_details",
+      },
       {
         builtinId: "location_detail",
         label: "Location Details",
@@ -614,20 +656,41 @@ function getLocationFields(eventType: string): BuiltInFieldDefinition[] {
 function buildSessionFieldGroups(
   eventType: string,
   extraFieldKeys: Iterable<string>,
+  layoutMode?: FormLayoutMode,
 ): SessionFieldGroups {
+  const resolvedLayoutMode = resolveLayoutModeForEvent(eventType, layoutMode);
   const splitScheduleFields = getSplitScheduleFields(eventType);
   const locationFields = getLocationFields(eventType);
   const extraFields = getSessionExtraFieldDefinitions(extraFieldKeys);
-  const extraLocationFields = extraFields
-    .filter((field) => field.isLocation)
+  const splitLocationFields = extraFields
+    .filter((field) => field.isLocation && isSplitLocationExtraField(eventType, field.key))
+    .map(toExtraBuiltInFieldDefinition);
+  const regularLocationFields = extraFields
+    .filter((field) => field.isLocation && !isSplitLocationExtraField(eventType, field.key))
     .map(toExtraBuiltInFieldDefinition);
   const extraNonLocationFields = extraFields
     .filter((field) => !field.isLocation)
     .map(toExtraBuiltInFieldDefinition);
+  const baseLocationField = locationFields.find((field) => field.builtinId === "location");
+  const locationDetailField = locationFields.find(
+    (field) => field.builtinId === "location_detail",
+  );
+  const splitSchedule =
+    resolvedLayoutMode === "split" ? splitScheduleFields : DEFAULT_SESSION_FIELDS;
+  const locationGroup: BuiltInFieldDefinition[] = [];
+
+  if (resolvedLayoutMode === "normal" && baseLocationField) {
+    locationGroup.push(baseLocationField);
+  }
+  if (locationDetailField) {
+    locationGroup.push(locationDetailField);
+  }
+  locationGroup.push(...regularLocationFields);
 
   return {
-    schedule: [...splitScheduleFields, ...DEFAULT_SESSION_FIELDS],
-    location: [...locationFields, ...extraLocationFields],
+    schedule: splitSchedule,
+    split_location: resolvedLayoutMode === "split" ? splitLocationFields : [],
+    location: locationGroup,
     extra_non_location: extraNonLocationFields,
   };
 }
@@ -637,6 +700,7 @@ function getSessionBuiltInOrderIds(
   options: BuiltInFieldDefinitionOptions,
   strategy: SessionFieldOrderStrategy,
 ): BuiltInFieldId[] {
+  const resolvedLayoutMode = resolveLayoutModeForEvent(eventType, options.layoutMode);
   const extraFieldKeys = new Set<string>(
     (EVENT_EXTRA_FIELDS[eventType] || []).map((field) => field.key),
   );
@@ -648,32 +712,51 @@ function getSessionBuiltInOrderIds(
 
   const sessionFieldGroups = buildSessionFieldGroups(eventType, extraFieldKeys);
   const splitToggleFields = getSplitToggleFields(eventType);
-  const extraFields = getSessionExtraFieldDefinitions(extraFieldKeys);
-  const extraLocationFields = extraFields
-    .filter((field) => field.isLocation)
-    .map(toExtraBuiltInFieldDefinition);
-  const extraNonLocationFields = extraFields
-    .filter((field) => !field.isLocation)
-    .map(toExtraBuiltInFieldDefinition);
-  const locationBuiltInFields = getLocationFields(eventType);
-  const eventSpecificFields =
-    strategy === "desired"
+  const splitLocationFieldIds = sessionFieldGroups.split_location.map(
+    (field) => field.builtinId,
+  );
+  const locationFieldIds = sessionFieldGroups.location.map((field) => field.builtinId);
+  const extraNonLocationFieldIds = sessionFieldGroups.extra_non_location.map(
+    (field) => field.builtinId,
+  );
+  const splitFallbackScheduleIds: BuiltInFieldId[] = DEFAULT_SESSION_FIELDS.map(
+    (field) => field.builtinId,
+  );
+  const scheduleIds: BuiltInFieldId[] =
+    resolvedLayoutMode === "split" && strategy === "legacy_regressed"
       ? [
-          ...locationBuiltInFields,
-          ...extraLocationFields,
-          ...extraNonLocationFields,
+          ...sessionFieldGroups.schedule.map((field) => field.builtinId),
+          ...splitFallbackScheduleIds,
         ]
-      : [
-          ...extraNonLocationFields,
-          ...extraLocationFields,
-          ...locationBuiltInFields,
-        ];
+      : sessionFieldGroups.schedule.map((field) => field.builtinId);
+  const splitHiddenFallbackIds: BuiltInFieldId[] =
+    resolvedLayoutMode === "split" && strategy === "desired"
+      ? [...splitFallbackScheduleIds, "location"]
+      : [];
+  const orderedEventSpecificIds: BuiltInFieldId[] =
+    strategy === "desired"
+      ? resolvedLayoutMode === "split"
+        ? [
+            ...splitLocationFieldIds,
+            ...locationFieldIds,
+            ...extraNonLocationFieldIds,
+          ]
+        : [...locationFieldIds, ...extraNonLocationFieldIds]
+      : resolvedLayoutMode === "split"
+        ? [
+            "location",
+            ...locationFieldIds,
+            ...splitLocationFieldIds,
+            ...extraNonLocationFieldIds,
+          ]
+        : [...extraNonLocationFieldIds, ...locationFieldIds];
 
   return [
     "event_type",
     ...splitToggleFields.map((field) => field.builtinId),
-    ...sessionFieldGroups.schedule.map((field) => field.builtinId),
-    ...eventSpecificFields.map((field) => field.builtinId),
+    ...scheduleIds,
+    ...orderedEventSpecificIds,
+    ...splitHiddenFallbackIds,
     SESSION_NOTES_FIELD.builtinId,
   ];
 }
@@ -682,8 +765,6 @@ export function getBuiltInFieldDefinitions(
   eventType: string,
   options: BuiltInFieldDefinitionOptions = {},
 ): BuiltInFieldDefinition[] {
-  const isWeddingEvent = eventType === "Wedding";
-  const isWisudaEvent = eventType === "Wisuda";
   const extraFieldKeys = new Set<string>(
     (EVENT_EXTRA_FIELDS[eventType] || []).map((field) => field.key),
   );
@@ -694,27 +775,32 @@ export function getBuiltInFieldDefinitions(
   });
 
   const splitToggleFields = getSplitToggleFields(eventType);
-  const sessionFieldGroups = buildSessionFieldGroups(eventType, extraFieldKeys);
-  const legacyExtraFields = sessionFieldGroups.extra_non_location;
-  const legacyLocationFields = sessionFieldGroups.location;
-  const sessionFields =
-    isWeddingEvent || isWisudaEvent
-      ? [
-          ...splitToggleFields,
-          ...sessionFieldGroups.schedule,
-          ...sessionFieldGroups.location,
-          ...sessionFieldGroups.extra_non_location,
-        ]
-      : [
-          ...sessionFieldGroups.schedule,
-          ...legacyExtraFields,
-          ...legacyLocationFields,
-        ];
+  const sessionFieldGroups = buildSessionFieldGroups(
+    eventType,
+    extraFieldKeys,
+    options.layoutMode,
+  );
+  const splitToggleIds = new Set(
+    splitToggleFields.map((field) => field.builtinId),
+  );
+  const sessionFieldPool = new Map<BuiltInFieldId, BuiltInFieldDefinition>([
+    ...splitToggleFields,
+    ...sessionFieldGroups.schedule,
+    ...sessionFieldGroups.split_location,
+    ...sessionFieldGroups.location,
+    ...sessionFieldGroups.extra_non_location,
+    SESSION_NOTES_FIELD,
+  ].map((field) => [field.builtinId, field] as const));
+  const orderedSessionFieldIds = getSessionBuiltInOrderIds(eventType, options, "desired");
+  const orderedSessionFields = orderedSessionFieldIds
+    .filter((builtinId) => !splitToggleIds.has(builtinId))
+    .map((builtinId) => sessionFieldPool.get(builtinId))
+    .filter((field): field is BuiltInFieldDefinition => Boolean(field));
+  const sessionFields = [...splitToggleFields, ...orderedSessionFields];
 
   return [
     ...BASE_BUILT_IN_FIELDS,
     ...sessionFields,
-    SESSION_NOTES_FIELD,
     ...PAYMENT_BUILT_IN_FIELDS,
   ];
 }
@@ -735,12 +821,18 @@ export function getBuiltInFieldCatalogDefinitions(
   const merged = new Map<BuiltInFieldId, BuiltInFieldDefinition>();
 
   candidateEventTypes.forEach((candidateEventType) => {
-    getBuiltInFieldDefinitions(candidateEventType, {
-      extraFieldKeys: knownExtraFieldKeys,
-    }).forEach((definition) => {
-      if (!merged.has(definition.builtinId)) {
-        merged.set(definition.builtinId, definition);
-      }
+    const candidateModes: FormLayoutMode[] = isSplitCapableEventType(candidateEventType)
+      ? ["normal", "split"]
+      : ["normal"];
+    candidateModes.forEach((mode) => {
+      getBuiltInFieldDefinitions(candidateEventType, {
+        extraFieldKeys: knownExtraFieldKeys,
+        layoutMode: mode,
+      }).forEach((definition) => {
+        if (!merged.has(definition.builtinId)) {
+          merged.set(definition.builtinId, definition);
+        }
+      });
     });
   });
 
@@ -773,9 +865,12 @@ export function getSectionIdForBuiltInField(
   );
 }
 
-export function createDefaultFormLayout(eventType: string): FormLayoutItem[] {
+export function createDefaultFormLayout(
+  eventType: string,
+  options: Pick<BuiltInFieldDefinitionOptions, "layoutMode"> = {},
+): FormLayoutItem[] {
   const buckets = initializeBuckets();
-  getBuiltInFieldDefinitions(eventType).forEach((field) => {
+  getBuiltInFieldDefinitions(eventType, options).forEach((field) => {
     buckets[field.sectionId].push(createBuiltInFieldItem(field.builtinId));
   });
   return flattenBuckets(buckets);
@@ -911,6 +1006,7 @@ function maybeMigrateSessionBuiltInOrder(
 function normalizeNewLayout(
   items: FormLayoutItem[],
   eventType: string,
+  options: Pick<BuiltInFieldDefinitionOptions, "layoutMode"> = {},
 ): FormLayoutItem[] {
   const explicitExtraFieldKeys = Array.from(
     new Set(
@@ -924,7 +1020,10 @@ function normalizeNewLayout(
       }),
     ),
   );
-  const builtInOptions = { extraFieldKeys: explicitExtraFieldKeys };
+  const builtInOptions: BuiltInFieldDefinitionOptions = {
+    extraFieldKeys: explicitExtraFieldKeys,
+    layoutMode: options.layoutMode,
+  };
   const validBuiltInIds = new Set([
     ...getBuiltInFieldDefinitions(eventType, builtInOptions).map(
       (field) => field.builtinId,
@@ -984,23 +1083,35 @@ function normalizeNewLayout(
 export function normalizeStoredFormLayout(
   raw: unknown,
   eventType: string,
+  options: Pick<BuiltInFieldDefinitionOptions, "layoutMode"> = {},
 ): FormLayoutItem[] {
-  if (!raw) return createDefaultFormLayout(eventType);
+  if (!raw) return createDefaultFormLayout(eventType, options);
 
   if (Array.isArray(raw) && raw.every(isNewLayoutItem)) {
-    return normalizeNewLayout(raw, eventType);
+    return normalizeNewLayout(raw, eventType, options);
   }
 
   if (Array.isArray(raw)) {
-    return normalizeNewLayout(legacySectionsToLayout(eventType, raw as FormSection[]), eventType);
+    return normalizeNewLayout(
+      legacySectionsToLayout(eventType, raw as FormSection[]),
+      eventType,
+      options,
+    );
   }
 
-  return createDefaultFormLayout(eventType);
+  return createDefaultFormLayout(eventType, options);
+}
+
+function isFormLayoutByMode(value: unknown): value is FormLayoutByMode {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  return "normal" in candidate || "split" in candidate;
 }
 
 export function resolveNormalizedActiveFormLayout(
-  formSectionsByEventType: Record<string, FormLayoutItem[]>,
+  formSectionsByEventType: Record<string, FormLayoutItem[] | FormLayoutByMode>,
   eventType: string | null | undefined,
+  options: Pick<BuiltInFieldDefinitionOptions, "layoutMode"> = {},
 ): FormLayoutItem[] {
   const normalizedEventType = normalizeEventTypeName(eventType) || eventType || "";
   const candidateLayout = normalizedEventType
@@ -1008,18 +1119,30 @@ export function resolveNormalizedActiveFormLayout(
       formSectionsByEventType.Umum ||
       []
     : formSectionsByEventType.Umum || [];
+  const resolvedLayoutMode = resolveLayoutModeForEvent(
+    normalizedEventType || "Umum",
+    options.layoutMode,
+  );
+  const candidateRaw = isFormLayoutByMode(candidateLayout)
+    ? candidateLayout[resolvedLayoutMode] ||
+      candidateLayout.normal ||
+      candidateLayout.split ||
+      []
+    : candidateLayout;
 
   return normalizeStoredFormLayout(
-    candidateLayout,
+    candidateRaw,
     normalizedEventType || "Umum",
+    { layoutMode: resolvedLayoutMode },
   );
 }
 
 export function groupFormLayoutBySection(
   raw: unknown,
   eventType: string,
+  options: Pick<BuiltInFieldDefinitionOptions, "layoutMode"> = {},
 ): GroupedFormLayoutSection[] {
-  const normalized = normalizeStoredFormLayout(raw, eventType);
+  const normalized = normalizeStoredFormLayout(raw, eventType, options);
   const buckets = initializeBuckets();
   let currentSection: BuiltInSectionId = "client_info";
 
@@ -1030,7 +1153,7 @@ export function groupFormLayoutBySection(
     }
 
     if (item.kind === "builtin_field") {
-      const sectionId = getSectionIdForBuiltInField(item.builtinId, eventType);
+      const sectionId = getSectionIdForBuiltInField(item.builtinId, eventType, options);
       currentSection = sectionId;
       buckets[sectionId].push(item);
       return;
@@ -1060,8 +1183,9 @@ export function flattenGroupedFormLayout(
 export function getGroupedCustomLayoutSections(
   raw: unknown,
   eventType: string,
+  options: Pick<BuiltInFieldDefinitionOptions, "layoutMode"> = {},
 ): GroupedCustomLayoutSection[] {
-  return groupFormLayoutBySection(raw, eventType).map((section) => ({
+  return groupFormLayoutBySection(raw, eventType, options).map((section) => ({
     sectionId: section.section.sectionId,
     sectionTitle: section.section.title,
     items: section.items.filter(
@@ -1076,10 +1200,11 @@ export function buildCustomFieldSnapshots(
   raw: unknown,
   eventType: string,
   values: Record<string, string>,
+  options: Pick<BuiltInFieldDefinitionOptions, "layoutMode"> = {},
 ): CustomFieldSnapshot[] {
   const snapshots: CustomFieldSnapshot[] = [];
 
-  getGroupedCustomLayoutSections(raw, eventType).forEach((section) => {
+  getGroupedCustomLayoutSections(raw, eventType, options).forEach((section) => {
     section.items.forEach((item) => {
       if (item.kind !== "custom_field") return;
       const value = values[item.id];
@@ -1204,13 +1329,14 @@ export function getCustomFieldTemplateTokens(
   raw: unknown,
   eventType: string,
   format: "calendar" | "drive" | "whatsapp" = "calendar",
+  options: Pick<BuiltInFieldDefinitionOptions, "layoutMode"> = {},
 ): string[] {
   const wrap =
     format === "drive"
       ? (key: string) => `{${key}}`
       : (key: string) => `{{${key}}}`;
 
-  return getGroupedCustomLayoutSections(raw, eventType)
+  return getGroupedCustomLayoutSections(raw, eventType, options)
     .flatMap((section) =>
       section.items
         .filter((item): item is CustomFieldItem => item.kind === "custom_field")
@@ -1221,9 +1347,10 @@ export function getCustomFieldTemplateTokens(
 export function getCustomFieldPreviewVars(
   raw: unknown,
   eventType: string,
+  options: Pick<BuiltInFieldDefinitionOptions, "layoutMode"> = {},
 ): Record<string, string> {
   return Object.fromEntries(
-    getGroupedCustomLayoutSections(raw, eventType).flatMap((section) =>
+    getGroupedCustomLayoutSections(raw, eventType, options).flatMap((section) =>
       section.items
         .filter((item): item is CustomFieldItem => item.kind === "custom_field")
         .map((item) => [item.id, item.placeholder || item.label]),
