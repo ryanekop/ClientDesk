@@ -437,6 +437,13 @@ function normalizeCoordinateInput(
   return parsed >= -180 && parsed <= 180 ? parsed : null;
 }
 
+function isValidUuid(value: string | null | undefined) {
+  const candidate = String(value || "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    candidate,
+  );
+}
+
 function normalizeStatusInput(value: unknown, statusOptions: string[]): string | null {
   const raw = normalizeText(value);
   if (!raw) return null;
@@ -496,6 +503,7 @@ function normalizeHeaderToken(value: string) {
 function resolveExtraHeaderAlias(normalizedToken: string) {
   const aliases: Record<string, string> = {
     universitas: "extra.universitas",
+    universitas_ref_id: "extra.universitas_ref_id",
     fakultas: "extra.fakultas",
     tempat_akad: "extra.tempat_akad",
     tempat_resepsi: "extra.tempat_resepsi",
@@ -1816,16 +1824,31 @@ function validateOneRow(input: {
       eventType: normalized.eventType,
     });
     if (normalizeEventTypeName(normalized.eventType) === UNIVERSITY_EVENT_TYPE) {
+      const universityReferenceCellKey = `extra.${UNIVERSITY_REFERENCE_EXTRA_KEY}`;
+      const hasUniversityReferenceColumn = Object.prototype.hasOwnProperty.call(
+        input.row,
+        universityReferenceCellKey,
+      );
+      const universityReferenceValue = hasUniversityReferenceColumn
+        ? normalizeCell(input.row, universityReferenceCellKey)
+        : "";
+      if (hasUniversityReferenceColumn) {
+        normalized.builtInExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY] =
+          universityReferenceValue;
+      }
+
       const universityValue = normalizeCell(
         input.row,
         `extra.${UNIVERSITY_EXTRA_FIELD_KEY}`,
       );
       if (!universityValue) {
-        pushIssue(
-          normalized,
-          "error",
-          "Extra field 'Universitas' wajib diisi untuk event Wisuda.",
-        );
+        if (!hasUniversityReferenceColumn && !universityReferenceValue) {
+          pushIssue(
+            normalized,
+            "error",
+            "Extra field 'Universitas' wajib diisi untuk event Wisuda.",
+          );
+        }
       } else {
         normalized.builtInExtraFields[UNIVERSITY_EXTRA_FIELD_KEY] =
           cleanUniversityName(universityValue);
@@ -2185,6 +2208,94 @@ async function attachUniversityReferenceValidation(
   );
   if (wisudaRows.length === 0) return;
 
+  const strictSuggestionRows = wisudaRows.filter((row) =>
+    Object.prototype.hasOwnProperty.call(
+      row.builtInExtraFields,
+      UNIVERSITY_REFERENCE_EXTRA_KEY,
+    ),
+  );
+  const legacyRows = wisudaRows.filter(
+    (row) =>
+      !Object.prototype.hasOwnProperty.call(
+        row.builtInExtraFields,
+        UNIVERSITY_REFERENCE_EXTRA_KEY,
+      ),
+  );
+
+  if (strictSuggestionRows.length > 0) {
+    const referenceIds = new Set<string>();
+    for (const row of strictSuggestionRows) {
+      const submittedReferenceId = normalizeText(
+        row.builtInExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY],
+      );
+      if (!submittedReferenceId) {
+        pushIssue(
+          row,
+          "error",
+          "Universitas untuk event Wisuda wajib dipilih dari suggestion.",
+        );
+        continue;
+      }
+      if (!isValidUuid(submittedReferenceId)) {
+        pushIssue(
+          row,
+          "error",
+          "Universitas yang dipilih tidak valid. Pilih ulang dari suggestion.",
+        );
+        continue;
+      }
+      referenceIds.add(submittedReferenceId);
+    }
+
+    const byReferenceId = new Map<string, UniversityReferenceLookupRow>();
+    try {
+      if (referenceIds.size > 0) {
+        const { data, error } = await supabase
+          .from("university_references")
+          .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
+          .in("id", Array.from(referenceIds));
+        if (error) throw error;
+        for (const row of (data || []) as UniversityReferenceLookupRow[]) {
+          byReferenceId.set(row.id, row);
+        }
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Gagal memvalidasi referensi universitas.";
+      for (const row of strictSuggestionRows) {
+        pushIssue(row, "error", `Gagal memvalidasi universitas: ${message}`);
+      }
+      return;
+    }
+
+    for (const row of strictSuggestionRows) {
+      const submittedReferenceId = normalizeText(
+        row.builtInExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY],
+      );
+      if (!submittedReferenceId || !isValidUuid(submittedReferenceId)) continue;
+
+      const chosen = byReferenceId.get(submittedReferenceId);
+      if (!chosen) {
+        pushIssue(
+          row,
+          "error",
+          "Universitas yang dipilih tidak valid. Pilih ulang dari suggestion.",
+        );
+        continue;
+      }
+
+      row.builtInExtraFields[UNIVERSITY_EXTRA_FIELD_KEY] = buildUniversityDisplayName(
+        chosen.name,
+        chosen.abbreviation,
+      );
+      row.builtInExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY] = chosen.id;
+    }
+  }
+
+  if (legacyRows.length === 0) return;
+
   const rowCandidates = new Map<
     number,
     ReturnType<typeof buildUniversityLookupCandidates>
@@ -2192,7 +2303,7 @@ async function attachUniversityReferenceValidation(
   const normalizedNames = new Set<string>();
   const normalizedAbbreviations = new Set<string>();
 
-  for (const row of wisudaRows) {
+  for (const row of legacyRows) {
     const submitted = normalizeText(row.builtInExtraFields[UNIVERSITY_EXTRA_FIELD_KEY]);
     if (!submitted) continue;
 
@@ -2246,13 +2357,13 @@ async function attachUniversityReferenceValidation(
       error instanceof Error
         ? error.message
         : "Gagal memvalidasi referensi universitas.";
-    for (const row of wisudaRows) {
+    for (const row of legacyRows) {
       pushIssue(row, "error", `Gagal memvalidasi universitas: ${message}`);
     }
     return;
   }
 
-  for (const row of wisudaRows) {
+  for (const row of legacyRows) {
     const submitted = normalizeText(row.builtInExtraFields[UNIVERSITY_EXTRA_FIELD_KEY]);
     if (!submitted) continue;
 

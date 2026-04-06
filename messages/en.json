@@ -1528,7 +1528,7 @@
         "guidanceSessionDate": "Session Date: supports DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, or Excel serial.",
         "guidanceSessionTime": "Session Time: supports HH:mm, HH.mm, or HHmm.",
         "guidanceBookingDate": "Booking Date: supports flexible date formats or Excel serial; when empty it falls back to session date (warning).",
-        "guidanceWisudaOnly": "University reference validation is required only for Wisuda events.",
+        "guidanceWisudaOnly": "For Wisuda events, university must be selected from suggestions (not manual typing).",
         "validateBatchLabel": "Validate Batch Data",
         "pasteTipsLabel": "Tip: click one cell then paste a data block (Ctrl/Cmd + V)",
         "uploadPrimaryHint": "Paste data from Excel/Google Sheets into the input area",

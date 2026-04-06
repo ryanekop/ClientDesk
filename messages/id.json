@@ -1528,7 +1528,7 @@
         "guidanceSessionDate": "Tanggal Sesi: mendukung DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, atau serial Excel.",
         "guidanceSessionTime": "Jam Sesi: mendukung HH:mm, HH.mm, atau HHmm.",
         "guidanceBookingDate": "Tanggal Booking: format tanggal fleksibel atau serial Excel; jika kosong akan fallback ke tanggal sesi (warning).",
-        "guidanceWisudaOnly": "Validasi referensi universitas wajib hanya untuk event Wisuda.",
+        "guidanceWisudaOnly": "Untuk event Wisuda, universitas wajib dipilih dari suggestion (bukan diketik manual).",
         "validateBatchLabel": "Validasi Data Batch",
         "pasteTipsLabel": "Tips: klik satu sel lalu paste blok data (Ctrl/Cmd + V)",
         "uploadPrimaryHint": "Paste data dari Excel/Google Sheets ke area input",

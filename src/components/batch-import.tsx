@@ -31,6 +31,7 @@ import {
   type LocationPortalSelectionMeta,
 } from "@/components/ui/location-portal-autocomplete";
 import { UniversityAutocomplete } from "@/components/ui/university-autocomplete";
+import { buildUniversityDisplayName } from "@/lib/university-references";
 import { cn } from "@/lib/utils";
 
 type Step = "upload" | "preview" | "confirm";
@@ -181,6 +182,12 @@ const TABLE_COLUMNS: BatchColumn[] = [
     label: "Universitas",
     placeholder: "Contoh: Universitas Indonesia / Universitas Indonesia (UI) / UI",
     inputType: "university",
+  },
+  {
+    key: "extra.universitas_ref_id",
+    label: "Universitas Ref ID",
+    internal: true,
+    advanced: true,
   },
   {
     key: "session_date",
@@ -574,7 +581,7 @@ export function BatchImportButton({
     rowIndex: number,
     key: string,
     value: string,
-    options?: { keepLocationCoordinates?: boolean },
+    options?: { keepLocationCoordinates?: boolean; keepUniversityReference?: boolean },
   ) {
     setRows((prev) => {
       const next = prev.map((row) => ({ ...row }));
@@ -587,6 +594,9 @@ export function BatchImportButton({
       if (key === "location" && !options?.keepLocationCoordinates) {
         next[rowIndex].location_lat = "";
         next[rowIndex].location_lng = "";
+      }
+      if (key === "extra.universitas" && !options?.keepUniversityReference) {
+        next[rowIndex]["extra.universitas_ref_id"] = "";
       }
       return next;
     });
@@ -659,6 +669,9 @@ export function BatchImportButton({
           if (column.key === "location") {
             next[startRowIndex + rowOffset].location_lat = "";
             next[startRowIndex + rowOffset].location_lng = "";
+          }
+          if (column.key === "extra.universitas") {
+            next[startRowIndex + rowOffset]["extra.universitas_ref_id"] = "";
           }
         });
       });
@@ -831,7 +844,7 @@ export function BatchImportButton({
           resetState();
         }}
       >
-        <DialogContent className="w-[95vw] max-w-[960px] max-h-[92vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-[960px] max-h-[92vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Zap className="w-5 h-5" /> {ui.dialogTitle}
@@ -841,7 +854,7 @@ export function BatchImportButton({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex items-center gap-2 py-2">
+          <div className="flex min-w-0 items-center gap-2 py-2">
             {steps.map((item, index) => (
               <React.Fragment key={item.key}>
                 <div
@@ -873,7 +886,7 @@ export function BatchImportButton({
             ))}
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
             {fatalError && (
               <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -895,7 +908,7 @@ export function BatchImportButton({
                   </Button>
                 </div>
 
-                <div className="rounded-xl border bg-card">
+                <div className="rounded-xl border bg-card overflow-hidden min-w-0">
                   <div className="border-b bg-muted/30 px-4 py-3 text-sm">
                     <p className="font-medium">Batch Mode Tabel</p>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -914,7 +927,7 @@ export function BatchImportButton({
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto max-h-[46vh]">
+                  <div className="max-w-full overflow-x-auto overflow-y-auto overscroll-x-contain max-h-[46vh]">
                     <table className="min-w-max text-xs">
                       <thead className="bg-muted/50 sticky top-0 z-10">
                         <tr>
@@ -937,10 +950,32 @@ export function BatchImportButton({
                                 {column.inputType === "university" ? (
                                   <UniversityAutocomplete
                                     value={row[column.key] || ""}
+                                    selectedId={row["extra.universitas_ref_id"] || undefined}
                                     onValueChange={(nextValue) =>
                                       updateCell(rowIndex, column.key, nextValue)
                                     }
-                                    onSelect={() => undefined}
+                                    onSelect={(item) => {
+                                      if (!item) {
+                                        updateCell(rowIndex, "extra.universitas_ref_id", "");
+                                        return;
+                                      }
+
+                                      updateCell(
+                                        rowIndex,
+                                        column.key,
+                                        item.displayName ||
+                                          buildUniversityDisplayName(
+                                            item.name,
+                                            item.abbreviation,
+                                          ),
+                                        { keepUniversityReference: true },
+                                      );
+                                      updateCell(
+                                        rowIndex,
+                                        "extra.universitas_ref_id",
+                                        item.id,
+                                      );
+                                    }}
                                     placeholder={column.placeholder || ""}
                                     inputClassName="h-8 rounded-md border bg-background px-2 py-1.5 text-xs pr-8"
                                     containerClassName="w-full"
@@ -1101,7 +1136,7 @@ export function BatchImportButton({
 
                 <div className="rounded-lg border overflow-hidden">
                   <div className="overflow-x-auto max-h-[280px]">
-                    <table className="w-full text-xs">
+                    <table className="w-full min-w-0 text-xs">
                       <thead className="bg-muted/50 sticky top-0">
                         <tr>
                           <th className="px-3 py-2 text-left font-medium text-muted-foreground">{ui.headerRow}</th>
@@ -1121,7 +1156,7 @@ export function BatchImportButton({
                               <td className="px-3 py-1.5 font-medium">{row.clientName || "-"}</td>
                               <td className="px-3 py-1.5">{row.eventType || "-"}</td>
                               <td className="px-3 py-1.5">{row.status || "-"}</td>
-                              <td className="px-3 py-1.5">
+                              <td className="px-3 py-1.5 whitespace-normal break-words">
                                 {hasError ? (
                                   <span className="text-red-600">{row.errors[0]}</span>
                                 ) : hasWarning ? (
@@ -1213,7 +1248,7 @@ export function BatchImportButton({
             )}
           </div>
 
-          <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
+          <DialogFooter className="gap-2 flex-col-reverse sm:flex-row min-w-0">
             {step === "upload" && (
               <>
                 <Button variant="outline" onClick={resetState} className="w-full sm:w-auto">
