@@ -15,6 +15,16 @@ import {
 import { EVENT_EXTRA_FIELDS } from "@/utils/form-extra-fields";
 import { parseSessionDateParts } from "@/utils/format-date";
 import {
+  buildUniversityDisplayName,
+  cleanUniversityName,
+  matchesUniversityDisplayValue,
+  normalizeUniversityAbbreviation,
+  normalizeUniversityName,
+  UNIVERSITY_EVENT_TYPE,
+  UNIVERSITY_EXTRA_FIELD_KEY,
+  UNIVERSITY_REFERENCE_EXTRA_KEY,
+} from "@/lib/university-references";
+import {
   computeSpecialOfferTotal,
   buildEditableSpecialOfferSnapshot,
   mergeSpecialOfferSnapshotIntoExtraFields,
@@ -43,6 +53,7 @@ export const IMPORT_COLUMNS = {
   mainServices: "main_services",
   mainServiceIds: "main_service_ids",
   sessionDate: "session_date",
+  sessionTime: "session_time",
   akadDate: "akad_date",
   resepsiDate: "resepsi_date",
   wisudaSession1Date: "wisuda_session_1_date",
@@ -105,12 +116,24 @@ type FreelancerImportRow = {
   name: string;
 };
 
+type UniversityReferenceLookupRow = {
+  id: string;
+  name: string;
+  abbreviation: string | null;
+  normalized_name: string;
+  normalized_abbreviation: string | null;
+};
+
 type ValidationOptions = {
   fileNamePrefix: string;
 };
 
 function normalizeText(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value).trim();
+  }
+  return "";
 }
 
 function normalizeNullableText(value: unknown): string | null {
@@ -175,9 +198,139 @@ function parseNonNegativeMoney(
   return { value: parsed, hasInput: true };
 }
 
-function normalizeSessionDateInput(value: unknown): string | null {
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function isValidDateParts(year: number, month: number, day: number) {
+  const parsed = parseSessionDateParts(
+    `${year}-${pad2(month)}-${pad2(day)}T00:00`,
+  );
+  return Boolean(parsed);
+}
+
+function parseExcelDateCode(value: number) {
+  const parsed = XLSX.SSF.parse_date_code(value);
+  if (!parsed) return null;
+  const year = Number(parsed.y || 0);
+  const month = Number(parsed.m || 0);
+  const day = Number(parsed.d || 0);
+  const hours = Number(parsed.H || 0);
+  const minutes = Number(parsed.M || 0);
+
+  if (!isValidDateParts(year, month, day)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+
+  return { year, month, day, hours, minutes };
+}
+
+function parseFlexibleDateValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const parsed = parseExcelDateCode(value);
+    if (!parsed) return null;
+    return { year: parsed.year, month: parsed.month, day: parsed.day };
+  }
+
   const raw = normalizeText(value);
   if (!raw) return null;
+
+  const dateToken = raw.split(/[T\s]+/).filter(Boolean)[0] || raw;
+
+  if (/^\d+(\.\d+)?$/.test(dateToken)) {
+    const numeric = Number(dateToken);
+    if (Number.isFinite(numeric)) {
+      const parsed = parseExcelDateCode(numeric);
+      if (parsed) {
+        return { year: parsed.year, month: parsed.month, day: parsed.day };
+      }
+    }
+  }
+
+  const normalized = dateToken.replace(/[.]/g, "-").replace(/\//g, "-");
+  let match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    return isValidDateParts(year, month, day) ? { year, month, day } : null;
+  }
+
+  match = normalized.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (!match) return null;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  return isValidDateParts(year, month, day) ? { year, month, day } : null;
+}
+
+function parseFlexibleTimeValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value >= 0 && value < 1) {
+      const parsed = parseExcelDateCode(value);
+      if (parsed) return { hours: parsed.hours, minutes: parsed.minutes };
+    }
+    if (value >= 100 && value <= 2359) {
+      const text = String(Math.floor(value));
+      const normalized = text.padStart(4, "0");
+      const hours = Number(normalized.slice(0, 2));
+      const minutes = Number(normalized.slice(2, 4));
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        return { hours, minutes };
+      }
+    }
+  }
+
+  const raw = normalizeText(value);
+  if (!raw) return null;
+
+  let match = raw.match(/^(\d{1,2})[:.](\d{1,2})$/);
+  if (match) {
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      return { hours, minutes };
+    }
+    return null;
+  }
+
+  match = raw.match(/^(\d{3,4})$/);
+  if (!match) return null;
+
+  const normalized = match[1].padStart(4, "0");
+  const hours = Number(normalized.slice(0, 2));
+  const minutes = Number(normalized.slice(2, 4));
+  if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+    return { hours, minutes };
+  }
+  return null;
+}
+
+function parseFlexibleDateTimeValue(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const parsed = parseExcelDateCode(value);
+    if (!parsed) return null;
+    const normalized = `${parsed.year}-${pad2(parsed.month)}-${pad2(
+      parsed.day,
+    )}T${pad2(parsed.hours)}:${pad2(parsed.minutes)}`;
+    return parseSessionDateParts(normalized) ? normalized : null;
+  }
+
+  const raw = normalizeText(value);
+  if (!raw) return null;
+
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) {
+      const parsed = parseExcelDateCode(numeric);
+      if (parsed) {
+        const normalized = `${parsed.year}-${pad2(parsed.month)}-${pad2(
+          parsed.day,
+        )}T${pad2(parsed.hours)}:${pad2(parsed.minutes)}`;
+        return parseSessionDateParts(normalized) ? normalized : null;
+      }
+    }
+  }
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     const normalized = `${raw}T10:00`;
@@ -194,14 +347,73 @@ function normalizeSessionDateInput(value: unknown): string | null {
     return parseSessionDateParts(normalized) ? normalized : null;
   }
 
-  return null;
+  const splitParts = raw.split(/[T\s]+/).filter(Boolean);
+  const datePart = parseFlexibleDateValue(splitParts[0] || "");
+  if (!datePart) return null;
+  const timePart = parseFlexibleTimeValue(splitParts[1] || "10:00") || {
+    hours: 10,
+    minutes: 0,
+  };
+  const normalized = `${datePart.year}-${pad2(datePart.month)}-${pad2(
+    datePart.day,
+  )}T${pad2(timePart.hours)}:${pad2(timePart.minutes)}`;
+  return parseSessionDateParts(normalized) ? normalized : null;
+}
+
+function normalizeSessionDateInput(value: unknown): string | null {
+  return parseFlexibleDateTimeValue(value);
 }
 
 function normalizeBookingDateInput(value: unknown): string | null {
+  const parsed = parseFlexibleDateValue(value);
+  if (!parsed) return null;
+  const normalized = `${parsed.year}-${pad2(parsed.month)}-${pad2(parsed.day)}`;
+  return parseSessionDateParts(`${normalized}T00:00`) ? normalized : null;
+}
+
+function combineSessionDateAndTime(input: {
+  sessionDate: string | null;
+  sessionTimeRaw: unknown;
+}): { value: string | null; usedTime: boolean; invalidTime: boolean } {
+  if (!input.sessionDate) {
+    return { value: null, usedTime: false, invalidTime: false };
+  }
+
+  const sessionTimeRaw = normalizeText(input.sessionTimeRaw);
+  if (!sessionTimeRaw) {
+    return { value: input.sessionDate, usedTime: false, invalidTime: false };
+  }
+
+  const parsedTime = parseFlexibleTimeValue(input.sessionTimeRaw);
+  if (!parsedTime) {
+    return { value: input.sessionDate, usedTime: false, invalidTime: true };
+  }
+
+  const [datePart] = input.sessionDate.split("T");
+  const normalized = `${datePart}T${pad2(parsedTime.hours)}:${pad2(parsedTime.minutes)}`;
+  return {
+    value: parseSessionDateParts(normalized) ? normalized : input.sessionDate,
+    usedTime: true,
+    invalidTime: false,
+  };
+}
+
+function normalizeWhatsappValue(value: unknown): string | null {
   const raw = normalizeText(value);
   if (!raw) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
-  return parseSessionDateParts(`${raw}T00:00`) ? raw : null;
+
+  let digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return null;
+
+  if (digits.startsWith("0")) {
+    digits = `62${digits.slice(1)}`;
+  } else if (!digits.startsWith("62")) {
+    digits = `62${digits}`;
+  }
+
+  const normalizedDigits = digits.replace(/^62+/, "62");
+  if (normalizedDigits.length < 8) return null;
+  return `+${normalizedDigits}`;
 }
 
 function normalizeStatusInput(value: unknown, statusOptions: string[]): string | null {
@@ -228,6 +440,7 @@ function getTemplateHeaders(context: ImportContext): string[] {
     IMPORT_COLUMNS.mainServices,
     IMPORT_COLUMNS.mainServiceIds,
     IMPORT_COLUMNS.sessionDate,
+    IMPORT_COLUMNS.sessionTime,
     IMPORT_COLUMNS.akadDate,
     IMPORT_COLUMNS.resepsiDate,
     IMPORT_COLUMNS.wisudaSession1Date,
@@ -257,6 +470,18 @@ function normalizeHeaderToken(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "_");
 }
 
+function resolveExtraHeaderAlias(normalizedToken: string) {
+  const aliases: Record<string, string> = {
+    universitas: "extra.universitas",
+    fakultas: "extra.fakultas",
+    tempat_akad: "extra.tempat_akad",
+    tempat_resepsi: "extra.tempat_resepsi",
+    tempat_wisuda_1: "extra.tempat_wisuda_1",
+    tempat_wisuda_2: "extra.tempat_wisuda_2",
+  };
+  return aliases[normalizedToken] || null;
+}
+
 function resolveHeaderAlias(
   normalizedToken: string,
 ): keyof typeof IMPORT_COLUMNS | null {
@@ -264,6 +489,8 @@ function resolveHeaderAlias(
     nama_klien: "clientName",
     client: "clientName",
     nama_client: "clientName",
+    nomor_whatsapp: "clientWhatsapp",
+    nomor_wa: "clientWhatsapp",
     wa: "clientWhatsapp",
     wa_klien: "clientWhatsapp",
     whatsapp: "clientWhatsapp",
@@ -275,6 +502,14 @@ function resolveHeaderAlias(
     addon: "addonServices",
     tanggal: "sessionDate",
     jadwal: "sessionDate",
+    tanggal_sesi: "sessionDate",
+    jam: "sessionTime",
+    jam_sesi: "sessionTime",
+    waktu: "sessionTime",
+    waktu_sesi: "sessionTime",
+    tanggal_booking: "bookingDate",
+    catatan: "notes",
+    catatan_admin: "adminNotes",
     lokasi_detail: "locationDetail",
   };
   return aliases[normalizedToken] || null;
@@ -351,6 +586,11 @@ export function buildWorkbookBufferFromPasteRows(input: {
     const normalizedToken = normalizeHeaderToken(headerCell);
     const direct = templateHeaderLookup.get(normalizedToken);
     if (direct) return direct;
+
+    const extraAlias = resolveExtraHeaderAlias(normalizedToken);
+    if (extraAlias && templateHeaderLookup.has(normalizeHeaderToken(extraAlias))) {
+      return extraAlias;
+    }
 
     const aliasKey = resolveHeaderAlias(normalizedToken);
     if (aliasKey) return IMPORT_COLUMNS[aliasKey];
@@ -450,12 +690,13 @@ function buildTemplateSampleRows(
   const row1 = {
     ...baseRow,
     [IMPORT_COLUMNS.clientName]: "CONTOH - Nama Klien Reguler",
-    [IMPORT_COLUMNS.clientWhatsapp]: "081234567890",
+    [IMPORT_COLUMNS.clientWhatsapp]: "+6281234567890",
     [IMPORT_COLUMNS.instagram]: "@klien.reguler",
     [IMPORT_COLUMNS.eventType]: nonWeddingEventType,
     [IMPORT_COLUMNS.mainServices]: nonWeddingMainService?.name || "",
     [IMPORT_COLUMNS.mainServiceIds]: "",
-    [IMPORT_COLUMNS.sessionDate]: "2026-07-15T10:00",
+    [IMPORT_COLUMNS.sessionDate]: "2026-07-15",
+    [IMPORT_COLUMNS.sessionTime]: "10:00",
     [IMPORT_COLUMNS.akadDate]: "",
     [IMPORT_COLUMNS.resepsiDate]: "",
     [IMPORT_COLUMNS.dpPaid]: "1000000",
@@ -496,12 +737,13 @@ function buildTemplateSampleRows(
     const row2 = {
       ...baseRow,
       [IMPORT_COLUMNS.clientName]: "CONTOH - Nama Klien Wedding",
-      [IMPORT_COLUMNS.clientWhatsapp]: "081298765432",
+      [IMPORT_COLUMNS.clientWhatsapp]: "+6281298765432",
       [IMPORT_COLUMNS.instagram]: "@klien.wedding",
       [IMPORT_COLUMNS.eventType]: weddingEventType,
       [IMPORT_COLUMNS.mainServices]: weddingMainService?.name || "",
       [IMPORT_COLUMNS.mainServiceIds]: "",
       [IMPORT_COLUMNS.sessionDate]: "",
+      [IMPORT_COLUMNS.sessionTime]: "",
       [IMPORT_COLUMNS.akadDate]: "2026-08-20T09:00",
       [IMPORT_COLUMNS.resepsiDate]: "2026-08-20T18:00",
       [IMPORT_COLUMNS.dpPaid]: "1500000",
@@ -543,12 +785,13 @@ function buildTemplateSampleRows(
     const row3 = {
       ...baseRow,
       [IMPORT_COLUMNS.clientName]: "CONTOH - Nama Klien Wisuda Split",
-      [IMPORT_COLUMNS.clientWhatsapp]: "081377788899",
+      [IMPORT_COLUMNS.clientWhatsapp]: "+6281377788899",
       [IMPORT_COLUMNS.instagram]: "@klien.wisuda",
       [IMPORT_COLUMNS.eventType]: wisudaEventType,
       [IMPORT_COLUMNS.mainServices]: wisudaMainService?.name || "",
       [IMPORT_COLUMNS.mainServiceIds]: "",
       [IMPORT_COLUMNS.sessionDate]: "",
+      [IMPORT_COLUMNS.sessionTime]: "",
       [IMPORT_COLUMNS.akadDate]: "",
       [IMPORT_COLUMNS.resepsiDate]: "",
       [IMPORT_COLUMNS.wisudaSession1Date]: "2026-09-10T07:30",
@@ -966,17 +1209,20 @@ export function buildTemplateWorkbookBuffer(context: ImportContext): Buffer {
   const guideRows = [
     ["Batch Import Excel v2 - Guide"],
     ["1. Wajib isi: client_name, event_type, dp_paid, dan salah satu main_services/main_service_ids."],
-    ["2. Kolom opsional: client_whatsapp, instagram (boleh kosong)."],
-    ["3. Date format: YYYY-MM-DD atau YYYY-MM-DDTHH:mm (timezone Asia/Jakarta)."],
-    ["4. Untuk Wedding: isi session_date ATAU isi lengkap akad_date + resepsi_date."],
-    ["5. Untuk Wisuda: isi session_date ATAU isi lengkap wisuda_session_1_date + wisuda_session_2_date."],
-    ["6. Gunakan pemisah | atau koma untuk multi-value (services/addons/freelancers)."],
-    ["7. Mapping Name + ID fallback: isi nama untuk mudah dibaca, pakai ID bila ada nama ganda."],
-    ["8. Kolom dynamic: extra.<key> untuk built-in extra fields, cf.<id> untuk custom fields."],
-    ["9. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
-    ["10. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
-    ["11. Batas maksimum 500 baris per file .xlsx."],
-    ["12. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
+    ["2. client_whatsapp akan dinormalisasi ke format +62XXXXXXXXXXX saat validasi."],
+    ["3. Date format fleksibel: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, atau serial Excel."],
+    ["4. Jam sesi opsional via session_time (contoh: 10:30, 10.30, 1030)."],
+    ["5. Untuk Wedding: isi session_date ATAU isi lengkap akad_date + resepsi_date."],
+    ["6. Untuk Wisuda: isi session_date ATAU isi lengkap wisuda_session_1_date + wisuda_session_2_date."],
+    ["7. Untuk event Wisuda, extra.universitas wajib terdaftar di referensi universitas."],
+    ["8. booking_date opsional; jika kosong akan otomatis mengikuti tanggal session_date."],
+    ["9. Gunakan pemisah | atau koma untuk multi-value (services/addons/freelancers)."],
+    ["10. Mapping Name + ID fallback: isi nama untuk mudah dibaca, pakai ID bila ada nama ganda."],
+    ["11. Kolom dynamic: extra.<key> untuk built-in extra fields, cf.<id> untuk custom fields."],
+    ["12. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
+    ["13. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
+    ["14. Batas maksimum 500 baris per file .xlsx."],
+    ["15. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
   ];
   const guideSheet = XLSX.utils.aoa_to_sheet(guideRows);
   guideSheet["!cols"] = [{ wch: 140 }];
@@ -1425,9 +1671,17 @@ function validateOneRow(input: {
   if (!normalized.clientName) {
     pushIssue(normalized, "error", "client_name wajib diisi.");
   }
-  normalized.clientWhatsapp = normalizeNullableText(
-    input.row[IMPORT_COLUMNS.clientWhatsapp],
-  );
+  const rawClientWhatsapp = normalizeText(input.row[IMPORT_COLUMNS.clientWhatsapp]);
+  if (rawClientWhatsapp) {
+    const normalizedWhatsapp = normalizeWhatsappValue(rawClientWhatsapp);
+    if (!normalizedWhatsapp) {
+      pushIssue(normalized, "error", "client_whatsapp tidak valid.");
+    } else {
+      normalized.clientWhatsapp = normalizedWhatsapp;
+    }
+  } else {
+    normalized.clientWhatsapp = null;
+  }
   normalized.instagram = normalizeNullableText(input.row[IMPORT_COLUMNS.instagram]);
 
   const resolvedEventType = normalizeEventTypeInput(
@@ -1495,25 +1749,32 @@ function validateOneRow(input: {
   normalized.notes = normalizeNullableText(input.row[IMPORT_COLUMNS.notes]);
   normalized.adminNotes = normalizeNullableText(input.row[IMPORT_COLUMNS.adminNotes]);
 
-  const bookingDateRaw = normalizeText(input.row[IMPORT_COLUMNS.bookingDate]);
-  if (bookingDateRaw) {
-    const bookingDate = normalizeBookingDateInput(bookingDateRaw);
-    if (!bookingDate) {
-      pushIssue(normalized, "error", "booking_date harus format YYYY-MM-DD.");
-    } else {
-      normalized.bookingDate = bookingDate;
-    }
-  }
-
   if (normalized.eventType) {
     applyExtraFieldsValidation({
       row: input.row,
       normalized,
       eventType: normalized.eventType,
     });
+    if (normalizeEventTypeName(normalized.eventType) === UNIVERSITY_EVENT_TYPE) {
+      const universityValue = normalizeCell(
+        input.row,
+        `extra.${UNIVERSITY_EXTRA_FIELD_KEY}`,
+      );
+      if (!universityValue) {
+        pushIssue(
+          normalized,
+          "error",
+          "Extra field 'Universitas' wajib diisi untuk event Wisuda.",
+        );
+      } else {
+        normalized.builtInExtraFields[UNIVERSITY_EXTRA_FIELD_KEY] =
+          cleanUniversityName(universityValue);
+      }
+    }
   }
 
   const sessionRaw = normalizeText(input.row[IMPORT_COLUMNS.sessionDate]);
+  const sessionTimeRaw = normalizeText(input.row[IMPORT_COLUMNS.sessionTime]);
   const akadRaw = normalizeText(input.row[IMPORT_COLUMNS.akadDate]);
   const resepsiRaw = normalizeText(input.row[IMPORT_COLUMNS.resepsiDate]);
   const wisudaSession1Raw = normalizeText(
@@ -1523,18 +1784,31 @@ function validateOneRow(input: {
     input.row[IMPORT_COLUMNS.wisudaSession2Date],
   );
 
-  const sessionDate = sessionRaw ? normalizeSessionDateInput(sessionRaw) : null;
-  const akadDate = akadRaw ? normalizeSessionDateInput(akadRaw) : null;
-  const resepsiDate = resepsiRaw ? normalizeSessionDateInput(resepsiRaw) : null;
+  const sessionDate = sessionRaw
+    ? normalizeSessionDateInput(input.row[IMPORT_COLUMNS.sessionDate])
+    : null;
+  const combinedSessionDate = combineSessionDateAndTime({
+    sessionDate,
+    sessionTimeRaw: input.row[IMPORT_COLUMNS.sessionTime],
+  });
+  const akadDate = akadRaw
+    ? normalizeSessionDateInput(input.row[IMPORT_COLUMNS.akadDate])
+    : null;
+  const resepsiDate = resepsiRaw
+    ? normalizeSessionDateInput(input.row[IMPORT_COLUMNS.resepsiDate])
+    : null;
   const wisudaSession1Date = wisudaSession1Raw
-    ? normalizeSessionDateInput(wisudaSession1Raw)
+    ? normalizeSessionDateInput(input.row[IMPORT_COLUMNS.wisudaSession1Date])
     : null;
   const wisudaSession2Date = wisudaSession2Raw
-    ? normalizeSessionDateInput(wisudaSession2Raw)
+    ? normalizeSessionDateInput(input.row[IMPORT_COLUMNS.wisudaSession2Date])
     : null;
 
   if (sessionRaw && !sessionDate) {
     pushIssue(normalized, "error", "session_date tidak valid.");
+  }
+  if (sessionTimeRaw && combinedSessionDate.invalidTime) {
+    pushIssue(normalized, "error", "session_time tidak valid.");
   }
   if (akadRaw && !akadDate) {
     pushIssue(normalized, "error", "akad_date tidak valid.");
@@ -1566,8 +1840,8 @@ function validateOneRow(input: {
       normalized.sessionDate = akadDate < resepsiDate ? akadDate : resepsiDate;
       normalized.builtInExtraFields.tanggal_akad = akadDate;
       normalized.builtInExtraFields.tanggal_resepsi = resepsiDate;
-    } else if (sessionDate) {
-      normalized.sessionDate = sessionDate;
+    } else if (combinedSessionDate.value) {
+      normalized.sessionDate = combinedSessionDate.value;
     } else {
       pushIssue(
         normalized,
@@ -1602,8 +1876,8 @@ function validateOneRow(input: {
           : wisudaSession2Date;
       normalized.builtInExtraFields.tanggal_wisuda_1 = wisudaSession1Date;
       normalized.builtInExtraFields.tanggal_wisuda_2 = wisudaSession2Date;
-    } else if (sessionDate) {
-      normalized.sessionDate = sessionDate;
+    } else if (combinedSessionDate.value) {
+      normalized.sessionDate = combinedSessionDate.value;
     } else {
       pushIssue(
         normalized,
@@ -1626,10 +1900,31 @@ function validateOneRow(input: {
         "wisuda_session_1_date/wisuda_session_2_date diabaikan karena event_type bukan Wisuda.",
       );
     }
-    normalized.sessionDate = sessionDate;
+    normalized.sessionDate = combinedSessionDate.value;
     if (!normalized.sessionDate) {
       pushIssue(normalized, "error", "session_date wajib diisi.");
     }
+  }
+
+  const bookingDateRaw = normalizeText(input.row[IMPORT_COLUMNS.bookingDate]);
+  if (bookingDateRaw) {
+    const bookingDate = normalizeBookingDateInput(input.row[IMPORT_COLUMNS.bookingDate]);
+    if (!bookingDate) {
+      pushIssue(
+        normalized,
+        "error",
+        "booking_date tidak valid. Gunakan format YYYY-MM-DD, DD/MM/YYYY, atau DD-MM-YYYY.",
+      );
+    } else {
+      normalized.bookingDate = bookingDate;
+    }
+  } else if (normalized.sessionDate) {
+    normalized.bookingDate = normalized.sessionDate.slice(0, 10);
+    pushIssue(
+      normalized,
+      "warning",
+      `booking_date kosong, default ke '${normalized.bookingDate}'.`,
+    );
   }
 
   if (normalized.eventType) {
@@ -1770,6 +2065,200 @@ async function attachExistingExternalIdErrors(
   }
 }
 
+function buildUniversityLookupCandidates(submittedValue: string) {
+  const cleaned = cleanUniversityName(submittedValue);
+  const normalizedNameCandidates = new Set<string>();
+  const normalizedAbbreviationCandidates = new Set<string>();
+  if (!cleaned) {
+    return {
+      cleaned,
+      normalizedNameCandidates,
+      normalizedAbbreviationCandidates,
+    };
+  }
+
+  normalizedNameCandidates.add(normalizeUniversityName(cleaned));
+
+  const displayMatch = cleaned.match(/^(.*)\(([^()]+)\)\s*$/);
+  if (displayMatch) {
+    const parsedName = cleanUniversityName(displayMatch[1] || "");
+    const parsedAbbreviation = normalizeUniversityAbbreviation(
+      displayMatch[2] || "",
+    );
+
+    if (parsedName) {
+      normalizedNameCandidates.add(normalizeUniversityName(parsedName));
+    }
+    if (parsedAbbreviation) {
+      normalizedAbbreviationCandidates.add(parsedAbbreviation);
+    }
+  }
+
+  const normalizedAbbreviation = normalizeUniversityAbbreviation(cleaned);
+  if (normalizedAbbreviation && normalizedAbbreviation.length <= 24) {
+    normalizedAbbreviationCandidates.add(normalizedAbbreviation);
+  }
+
+  return {
+    cleaned,
+    normalizedNameCandidates,
+    normalizedAbbreviationCandidates,
+  };
+}
+
+function getUniversityLookupRows(
+  map: Map<string, UniversityReferenceLookupRow>,
+  token: string,
+) {
+  const value = token.trim();
+  if (!value) return [] as UniversityReferenceLookupRow[];
+  const row = map.get(value);
+  return row ? [row] : [];
+}
+
+async function attachUniversityReferenceValidation(
+  supabase: SupabaseClient,
+  rows: NormalizedImportRow[],
+) {
+  const wisudaRows = rows.filter(
+    (row) => normalizeEventTypeName(row.eventType) === UNIVERSITY_EVENT_TYPE,
+  );
+  if (wisudaRows.length === 0) return;
+
+  const rowCandidates = new Map<
+    number,
+    ReturnType<typeof buildUniversityLookupCandidates>
+  >();
+  const normalizedNames = new Set<string>();
+  const normalizedAbbreviations = new Set<string>();
+
+  for (const row of wisudaRows) {
+    const submitted = normalizeText(row.builtInExtraFields[UNIVERSITY_EXTRA_FIELD_KEY]);
+    if (!submitted) continue;
+
+    const candidates = buildUniversityLookupCandidates(submitted);
+    rowCandidates.set(row.rowNumber, candidates);
+
+    candidates.normalizedNameCandidates.forEach((item) => {
+      if (item) normalizedNames.add(item);
+    });
+    candidates.normalizedAbbreviationCandidates.forEach((item) => {
+      if (item) normalizedAbbreviations.add(item);
+    });
+  }
+
+  const byNormalizedName = new Map<string, UniversityReferenceLookupRow>();
+  const byNormalizedAbbreviation = new Map<string, UniversityReferenceLookupRow>();
+
+  try {
+    if (normalizedNames.size > 0) {
+      const { data, error } = await supabase
+        .from("university_references")
+        .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
+        .in("normalized_name", Array.from(normalizedNames));
+
+      if (error) throw error;
+      for (const row of (data || []) as UniversityReferenceLookupRow[]) {
+        if (!row.normalized_name) continue;
+        byNormalizedName.set(row.normalized_name, row);
+      }
+    }
+
+    if (normalizedAbbreviations.size > 0) {
+      const { data, error } = await supabase
+        .from("university_references")
+        .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
+        .in("normalized_abbreviation", Array.from(normalizedAbbreviations));
+
+      if (error) throw error;
+      for (const row of (data || []) as UniversityReferenceLookupRow[]) {
+        if (!row.normalized_abbreviation) continue;
+        if (!byNormalizedAbbreviation.has(row.normalized_abbreviation)) {
+          byNormalizedAbbreviation.set(row.normalized_abbreviation, row);
+        } else {
+          // Mark ambiguous abbreviation by clearing the deterministic mapping.
+          byNormalizedAbbreviation.delete(row.normalized_abbreviation);
+        }
+      }
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Gagal memvalidasi referensi universitas.";
+    for (const row of wisudaRows) {
+      pushIssue(row, "error", `Gagal memvalidasi universitas: ${message}`);
+    }
+    return;
+  }
+
+  for (const row of wisudaRows) {
+    const submitted = normalizeText(row.builtInExtraFields[UNIVERSITY_EXTRA_FIELD_KEY]);
+    if (!submitted) continue;
+
+    const candidates = rowCandidates.get(row.rowNumber);
+    if (!candidates) {
+      pushIssue(
+        row,
+        "error",
+        `Universitas '${submitted}' tidak ditemukan pada referensi.`,
+      );
+      continue;
+    }
+
+    const matchedRows = new Map<string, UniversityReferenceLookupRow>();
+    candidates.normalizedNameCandidates.forEach((token) => {
+      getUniversityLookupRows(byNormalizedName, token).forEach((item) => {
+        matchedRows.set(item.id, item);
+      });
+    });
+    candidates.normalizedAbbreviationCandidates.forEach((token) => {
+      getUniversityLookupRows(byNormalizedAbbreviation, token).forEach((item) => {
+        matchedRows.set(item.id, item);
+      });
+    });
+
+    const resolvedRows = Array.from(matchedRows.values()).filter((item) => {
+      if (
+        normalizeUniversityAbbreviation(submitted) &&
+        item.normalized_abbreviation === normalizeUniversityAbbreviation(submitted)
+      ) {
+        return true;
+      }
+      return matchesUniversityDisplayValue({
+        submittedValue: submitted,
+        name: item.name,
+        abbreviation: item.abbreviation,
+      });
+    });
+
+    if (resolvedRows.length === 0) {
+      pushIssue(
+        row,
+        "error",
+        `Universitas '${submitted}' tidak ditemukan pada referensi.`,
+      );
+      continue;
+    }
+
+    if (resolvedRows.length > 1) {
+      pushIssue(
+        row,
+        "error",
+        `Universitas '${submitted}' ambigu. Gunakan nama/display universitas yang lebih spesifik.`,
+      );
+      continue;
+    }
+
+    const chosen = resolvedRows[0];
+    row.builtInExtraFields[UNIVERSITY_EXTRA_FIELD_KEY] = buildUniversityDisplayName(
+      chosen.name,
+      chosen.abbreviation,
+    );
+    row.builtInExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY] = chosen.id;
+  }
+}
+
 function makeHeaderErrorValidationResult(
   message: string,
   fileNamePrefix: string,
@@ -1858,6 +2347,7 @@ export async function validateImportWorkbook(
 
   attachDuplicateExternalIdErrors(normalizedRows);
   await attachExistingExternalIdErrors(supabase, userId, normalizedRows);
+  await attachUniversityReferenceValidation(supabase, normalizedRows);
 
   const summary = summarizeValidationRows(normalizedRows);
   const previewRows = toPreviewRows(normalizedRows);

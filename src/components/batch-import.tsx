@@ -10,9 +10,12 @@ import {
   Download,
   FileSpreadsheet,
   Loader2,
-  Upload,
+  Plus,
+  Settings2,
+  Trash2,
   Zap,
 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -136,6 +139,49 @@ type BatchImportStrings = {
 
 type BatchImportTranslator = ReturnType<typeof useTranslations<"BatchImport">>;
 
+type BatchColumn = {
+  key: string;
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  advanced?: boolean;
+};
+
+type BatchRow = Record<string, string>;
+
+const TABLE_COLUMNS: BatchColumn[] = [
+  { key: "client_name", label: "Nama Klien", required: true, placeholder: "Nama Klien..." },
+  { key: "client_whatsapp", label: "Nomor WA", placeholder: "+628123..." },
+  { key: "event_type", label: "Event", required: true, placeholder: "Wedding / Wisuda / ..." },
+  { key: "main_services", label: "Paket Utama", required: true, placeholder: "Nama paket" },
+  { key: "extra.universitas", label: "Universitas", placeholder: "Nama kampus / singkatan" },
+  { key: "session_date", label: "Tanggal Sesi", placeholder: "DD/MM/YYYY atau YYYY-MM-DD" },
+  { key: "session_time", label: "Jam Sesi", placeholder: "HH:mm" },
+  { key: "booking_date", label: "Tanggal Booking", placeholder: "DD/MM/YYYY atau YYYY-MM-DD" },
+  { key: "dp_paid", label: "DP", required: true, placeholder: "1000000" },
+  { key: "status", label: "Status", placeholder: "Default otomatis" , advanced: true },
+  { key: "addon_services", label: "Add-on", placeholder: "Nama addon 1 | addon 2", advanced: true },
+  { key: "freelancers", label: "Freelancer", placeholder: "Nama freelance", advanced: true },
+  { key: "location", label: "Lokasi", placeholder: "Lokasi utama", advanced: true },
+  { key: "location_detail", label: "Detail Lokasi", placeholder: "Gedung / area", advanced: true },
+  { key: "notes", label: "Catatan", placeholder: "Catatan klien", advanced: true },
+  { key: "admin_notes", label: "Catatan Admin", placeholder: "Internal", advanced: true },
+  { key: "instagram", label: "Instagram", placeholder: "@username", advanced: true },
+  { key: "akad_date", label: "Tanggal Akad", placeholder: "YYYY-MM-DDTHH:mm", advanced: true },
+  { key: "resepsi_date", label: "Tanggal Resepsi", placeholder: "YYYY-MM-DDTHH:mm", advanced: true },
+  { key: "wisuda_session_1_date", label: "Tanggal Wisuda 1", placeholder: "YYYY-MM-DDTHH:mm", advanced: true },
+  { key: "wisuda_session_2_date", label: "Tanggal Wisuda 2", placeholder: "YYYY-MM-DDTHH:mm", advanced: true },
+  { key: "extra.tempat_akad", label: "Lokasi Akad", placeholder: "Lokasi akad", advanced: true },
+  { key: "extra.tempat_resepsi", label: "Lokasi Resepsi", placeholder: "Lokasi resepsi", advanced: true },
+  { key: "extra.tempat_wisuda_1", label: "Lokasi Wisuda 1", placeholder: "Lokasi sesi 1", advanced: true },
+  { key: "extra.tempat_wisuda_2", label: "Lokasi Wisuda 2", placeholder: "Lokasi sesi 2", advanced: true },
+  { key: "main_service_ids", label: "Main Service IDs", placeholder: "uuid|uuid", advanced: true },
+  { key: "addon_service_ids", label: "Addon Service IDs", placeholder: "uuid|uuid", advanced: true },
+  { key: "freelance_ids", label: "Freelance IDs", placeholder: "uuid|uuid", advanced: true },
+  { key: "accommodation_fee", label: "Biaya Akomodasi", placeholder: "0", advanced: true },
+  { key: "discount_amount", label: "Diskon", placeholder: "0", advanced: true },
+];
+
 function buildBatchImportStrings(t: BatchImportTranslator): BatchImportStrings {
   return {
     blockedBookingWriteFallback: t("blockedBookingWriteFallback"),
@@ -203,17 +249,44 @@ function downloadBase64Xlsx(base64: string, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-function parsePastedTable(raw: string): string[][] {
+function parseClipboardTable(raw: string): string[][] {
   if (!raw.trim()) return [];
+  const lines = raw.replace(/\r/g, "").split("\n");
+  const effectiveLines =
+    lines.length > 0 && lines[lines.length - 1] === ""
+      ? lines.slice(0, -1)
+      : lines;
 
-  return raw
-    .split(/\r?\n/)
-    .map((line) =>
-      line
-        .split("\t")
-        .map((cell) => cell.trim()),
-    )
-    .filter((row) => row.some((cell) => cell.length > 0));
+  return effectiveLines.map((line) => line.split("\t"));
+}
+
+function normalizeWhatsappForSubmit(raw: string): string {
+  const value = raw.trim();
+  if (!value) return "";
+  let digits = value.replace(/[^0-9]/g, "");
+  if (!digits) return value;
+
+  if (digits.startsWith("0")) {
+    digits = `62${digits.slice(1)}`;
+  } else if (!digits.startsWith("62")) {
+    digits = `62${digits}`;
+  }
+
+  digits = digits.replace(/^62+/, "62");
+  if (digits.length <= 2) return value;
+  return `+${digits}`;
+}
+
+function createEmptyRow(): BatchRow {
+  const row: BatchRow = {};
+  TABLE_COLUMNS.forEach((column) => {
+    row[column.key] = "";
+  });
+  return row;
+}
+
+function rowHasAnyValue(row: BatchRow, keys: string[]) {
+  return keys.some((key) => (row[key] || "").trim().length > 0);
 }
 
 export function BatchImportButton({
@@ -233,18 +306,21 @@ export function BatchImportButton({
     }),
     [strings, t],
   );
+
   const blockedMessage =
     bookingWriteBlockedMessage || ui.blockedBookingWriteFallback;
+
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const [step, setStep] = React.useState<Step>("upload");
-  const [rawPasteText, setRawPasteText] = React.useState("");
-  const [pasteRows, setPasteRows] = React.useState<string[][]>([]);
-  const [headerMode, setHeaderMode] = React.useState<"auto" | "yes" | "no">("auto");
+  const [showAdvanced, setShowAdvanced] = React.useState(false);
+  const [rows, setRows] = React.useState<BatchRow[]>([createEmptyRow()]);
   const [validating, setValidating] = React.useState(false);
   const [committing, setCommitting] = React.useState(false);
   const [validation, setValidation] = React.useState<ValidationResponse | null>(null);
   const [commitResult, setCommitResult] = React.useState<CommitResponse | null>(null);
+  const [preparedRows, setPreparedRows] = React.useState<string[][]>([]);
   const [fatalError, setFatalError] = React.useState<string | null>(null);
+
   const isControlled = typeof controlledOpen === "boolean";
   const open = isControlled ? Boolean(controlledOpen) : uncontrolledOpen;
   const setOpen = React.useCallback(
@@ -255,6 +331,11 @@ export function BatchImportButton({
       onOpenChange?.(next);
     },
     [isControlled, onOpenChange],
+  );
+
+  const visibleColumns = React.useMemo(
+    () => TABLE_COLUMNS.filter((column) => showAdvanced || !column.advanced),
+    [showAdvanced],
   );
 
   const currentStepIdx = React.useMemo(() => {
@@ -269,13 +350,13 @@ export function BatchImportButton({
   function resetState() {
     setOpen(false);
     setStep("upload");
-    setRawPasteText("");
-    setPasteRows([]);
-    setHeaderMode("auto");
+    setShowAdvanced(false);
+    setRows([createEmptyRow()]);
     setValidating(false);
     setCommitting(false);
     setValidation(null);
     setCommitResult(null);
+    setPreparedRows([]);
     setFatalError(null);
   }
 
@@ -307,7 +388,96 @@ export function BatchImportButton({
     }
   }
 
-  async function runValidationFromPaste(nextRows: string[][]) {
+  function updateCell(rowIndex: number, key: string, value: string) {
+    setRows((prev) => {
+      const next = prev.map((row) => ({ ...row }));
+      if (!next[rowIndex]) {
+        while (next.length <= rowIndex) {
+          next.push(createEmptyRow());
+        }
+      }
+      next[rowIndex][key] = value;
+      return next;
+    });
+
+    if (validation) setValidation(null);
+    if (commitResult) setCommitResult(null);
+    if (fatalError) setFatalError(null);
+  }
+
+  function handlePasteAtCell(
+    event: React.ClipboardEvent<HTMLInputElement>,
+    startRowIndex: number,
+    startColumnIndex: number,
+  ) {
+    const text = event.clipboardData.getData("text/plain");
+    const matrix = parseClipboardTable(text);
+    if (matrix.length === 0) return;
+
+    event.preventDefault();
+    setRows((prev) => {
+      const next = prev.map((row) => ({ ...row }));
+      const requiredRows = startRowIndex + matrix.length;
+      while (next.length < requiredRows) {
+        next.push(createEmptyRow());
+      }
+
+      matrix.forEach((clipboardRow, rowOffset) => {
+        clipboardRow.forEach((cellValue, columnOffset) => {
+          const column = visibleColumns[startColumnIndex + columnOffset];
+          if (!column) return;
+          next[startRowIndex + rowOffset][column.key] = cellValue.trim();
+        });
+      });
+
+      return next;
+    });
+
+    if (validation) setValidation(null);
+    if (commitResult) setCommitResult(null);
+    if (fatalError) setFatalError(null);
+  }
+
+  function addRow() {
+    setRows((prev) => [...prev, createEmptyRow()]);
+  }
+
+  function removeRow(index: number) {
+    setRows((prev) => {
+      if (prev.length <= 1) return prev;
+      const next = prev.filter((_, rowIndex) => rowIndex !== index);
+      return next.length > 0 ? next : [createEmptyRow()];
+    });
+    if (validation) setValidation(null);
+    if (commitResult) setCommitResult(null);
+    if (fatalError) setFatalError(null);
+  }
+
+  function buildRowsForValidation(): string[][] {
+    const headers = TABLE_COLUMNS.map((column) => column.key);
+    const dataRows = rows
+      .map((row) =>
+        headers.map((header) => {
+          const rawValue = (row[header] || "").trim();
+          if (header === "client_whatsapp") {
+            return normalizeWhatsappForSubmit(rawValue);
+          }
+          return rawValue;
+        }),
+      )
+      .filter((rowValues) => rowValues.some((item) => item.length > 0));
+
+    if (dataRows.length === 0) return [];
+    return [headers, ...dataRows];
+  }
+
+  async function runValidation() {
+    const rowsForValidation = buildRowsForValidation();
+    if (rowsForValidation.length === 0) {
+      setFatalError(ui.failedValidateImport);
+      return;
+    }
+
     setValidating(true);
     setFatalError(null);
     setValidation(null);
@@ -321,9 +491,8 @@ export function BatchImportButton({
         },
         body: JSON.stringify({
           mode: "paste",
-          rows: nextRows,
-          hasHeader:
-            headerMode === "auto" ? null : headerMode === "yes",
+          rows: rowsForValidation,
+          hasHeader: true,
         }),
       });
 
@@ -340,6 +509,7 @@ export function BatchImportButton({
         throw new Error(message);
       }
 
+      setPreparedRows(rowsForValidation);
       setValidation(payload);
       setStep("preview");
     } catch (error) {
@@ -354,11 +524,12 @@ export function BatchImportButton({
   }
 
   async function handleCommit() {
-    if (!validation || !validation.canCommit || pasteRows.length === 0) return;
+    if (!validation || !validation.canCommit || preparedRows.length === 0) return;
     if (!canCommitBookings) {
       setFatalError(blockedMessage);
       return;
     }
+
     setCommitting(true);
     setStep("confirm");
     setFatalError(null);
@@ -371,9 +542,8 @@ export function BatchImportButton({
         },
         body: JSON.stringify({
           mode: "paste",
-          rows: pasteRows,
-          hasHeader:
-            headerMode === "auto" ? null : headerMode === "yes",
+          rows: preparedRows,
+          hasHeader: true,
         }),
       });
 
@@ -400,26 +570,16 @@ export function BatchImportButton({
     }
   }
 
-  function handlePasteInputChange(nextValue: string) {
-    setRawPasteText(nextValue);
-    setPasteRows(parsePastedTable(nextValue));
-    setValidation(null);
-    setCommitResult(null);
-  }
-
-  function handleValidatePaste() {
-    if (pasteRows.length === 0) {
-      setFatalError(ui.failedValidateImport);
-      return;
-    }
-    void runValidationFromPaste(pasteRows);
-  }
-
   const steps: { key: Step; label: string }[] = [
     { key: "upload", label: ui.stepUpload },
     { key: "preview", label: ui.stepPreview },
     { key: "confirm", label: ui.stepConfirm },
   ];
+
+  const filledRowCount = React.useMemo(() => {
+    const keys = TABLE_COLUMNS.map((column) => column.key);
+    return rows.filter((row) => rowHasAnyValue(row, keys)).length;
+  }, [rows]);
 
   return (
     <>
@@ -443,7 +603,7 @@ export function BatchImportButton({
           resetState();
         }}
       >
-        <DialogContent className="sm:max-w-[760px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[96vw] lg:max-w-[1280px] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Zap className="w-5 h-5" /> {ui.dialogTitle}
@@ -495,102 +655,104 @@ export function BatchImportButton({
 
             {step === "upload" && (
               <>
-                <Button
-                  variant="outline"
-                  className="w-full gap-2 border-green-300 text-green-700 dark:text-green-400 dark:border-green-500/30 hover:bg-green-50 dark:hover:bg-green-500/10"
-                  onClick={handleDownloadTemplate}
-                >
-                  <Download className="w-4 h-4" /> {ui.downloadTemplateLabel}
-                </Button>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Button
+                    variant="outline"
+                    className="gap-2 border-green-300 text-green-700 dark:text-green-400 dark:border-green-500/30 hover:bg-green-50 dark:hover:bg-green-500/10"
+                    onClick={handleDownloadTemplate}
+                  >
+                    <Download className="w-4 h-4" /> {ui.downloadTemplateLabel}
+                  </Button>
 
-                <div className="space-y-3 rounded-xl border bg-muted/10 p-4">
-                  <div className="flex items-start gap-2">
-                    {validating ? (
-                      <Loader2 className="mt-0.5 w-4 h-4 text-muted-foreground/70 animate-spin" />
-                    ) : (
-                      <Upload className="mt-0.5 w-4 h-4 text-muted-foreground/70" />
-                    )}
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">{ui.uploadPrimaryHint}</p>
-                      <p className="text-xs text-muted-foreground/60">{ui.uploadHintAutoId}</p>
-                      <p className="text-xs text-muted-foreground/60">{ui.uploadHintAutoValidate}</p>
-                    </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => setShowAdvanced((prev) => !prev)}
+                  >
+                    <Settings2 className="w-4 h-4" />
+                    {showAdvanced ? "Sembunyikan Opsi Lanjutan" : "Tampilkan Opsi Lanjutan"}
+                  </Button>
+                </div>
+
+                <div className="rounded-xl border bg-card overflow-hidden">
+                  <div className="border-b bg-muted/30 px-4 py-3 text-sm">
+                    <p className="font-medium">Batch Mode Tabel</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Paste langsung dari Excel/Google Sheets ke sel tabel (tanpa header). Sistem otomatis deteksi baris x kolom.
+                    </p>
+                    <p className="text-xs text-muted-foreground/80 mt-1">
+                      Baris terisi: {filledRowCount} • Total baris: {rows.length}
+                    </p>
                   </div>
 
-                  <textarea
-                    value={rawPasteText}
-                    onChange={(event) => handlePasteInputChange(event.target.value)}
-                    placeholder="Paste data dari Excel/Google Sheets di sini (Ctrl/Cmd + V)."
-                    rows={8}
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                  />
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Header baris pertama:</span>
-                    {[
-                      { value: "auto" as const, label: "Auto" },
-                      { value: "yes" as const, label: "Ya" },
-                      { value: "no" as const, label: "Tidak" },
-                    ].map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setHeaderMode(option.value)}
-                        className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-                          headerMode === option.value
-                            ? "border-foreground bg-foreground text-background"
-                            : "border-input text-muted-foreground hover:bg-muted/60"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {pasteRows.length > 0 ? (
-                    <div className="rounded-lg border bg-background p-3 text-xs text-muted-foreground">
-                      Terdeteksi {pasteRows.length} baris data.
-                    </div>
-                  ) : null}
-
-                  {pasteRows.length > 0 ? (
-                    <div className="rounded-lg border overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <tbody className="divide-y divide-border/50">
-                          {pasteRows.slice(0, 6).map((row, rowIndex) => (
-                            <tr key={`${rowIndex}-${row.join("|")}`}>
-                              {row.slice(0, 8).map((cell, columnIndex) => (
-                                <td key={`${rowIndex}-${columnIndex}`} className="px-2 py-1.5">
-                                  {cell || <span className="text-muted-foreground/50">-</span>}
-                                </td>
-                              ))}
-                            </tr>
+                  <div className="overflow-x-auto max-h-[46vh]">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground w-12">No</th>
+                          {visibleColumns.map((column) => (
+                            <th key={column.key} className="px-3 py-2 text-left font-medium text-muted-foreground min-w-[170px]">
+                              {column.label}
+                              {column.required ? <span className="text-red-500">*</span> : null}
+                            </th>
                           ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : null}
+                          <th className="px-3 py-2 text-right font-medium text-muted-foreground w-16">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/50">
+                        {rows.map((row, rowIndex) => (
+                          <tr key={`row-${rowIndex}`} className="hover:bg-muted/20 align-top">
+                            <td className="px-3 py-2 text-muted-foreground">{rowIndex + 1}</td>
+                            {visibleColumns.map((column, columnIndex) => (
+                              <td key={`${rowIndex}-${column.key}`} className="px-3 py-2">
+                                <input
+                                  value={row[column.key] || ""}
+                                  onChange={(event) =>
+                                    updateCell(rowIndex, column.key, event.target.value)
+                                  }
+                                  onPaste={(event) =>
+                                    handlePasteAtCell(event, rowIndex, columnIndex)
+                                  }
+                                  placeholder={column.placeholder || ""}
+                                  className="w-full rounded-md border bg-background px-2 py-1.5 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                />
+                              </td>
+                            ))}
+                            <td className="px-3 py-2 text-right">
+                              {rows.length > 1 ? (
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                  onClick={() => removeRow(rowIndex)}
+                                  title="Hapus Baris"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      onClick={handleValidatePaste}
-                      disabled={validating || pasteRows.length === 0}
-                      className="gap-2"
-                    >
-                      {validating ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : null}
-                      {validating ? ui.validatingLabel : ui.chooseFileLabel}
-                    </Button>
+                  <div className="p-3 border-t bg-muted/20 flex flex-wrap items-center justify-between gap-2">
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => handlePasteInputChange("")}
-                      disabled={validating || !rawPasteText}
+                      size="sm"
+                      className="gap-2 border-dashed border-2"
+                      onClick={addRow}
                     >
-                      Bersihkan
+                      <Plus className="w-4 h-4" /> Tambah Baris
                     </Button>
+
+                    <div className="text-xs text-muted-foreground">
+                      Tips: klik satu sel lalu paste blok data (Ctrl/Cmd + V)
+                    </div>
                   </div>
                 </div>
               </>
@@ -600,7 +762,7 @@ export function BatchImportButton({
               <>
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border text-sm">
                   <FileSpreadsheet className="w-4 h-4 text-green-600 shrink-0" />
-                  <span className="flex-1 truncate font-medium">Data paste siap commit</span>
+                  <span className="flex-1 truncate font-medium">Data batch siap commit</span>
                   <span className="text-xs text-muted-foreground shrink-0">
                     {validation.summary.totalRows} {ui.rowsLabel}
                   </span>
@@ -764,9 +926,22 @@ export function BatchImportButton({
 
           <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
             {step === "upload" && (
-              <Button variant="outline" onClick={resetState} className="w-full sm:w-auto">
-                {ui.closeLabel}
-              </Button>
+              <>
+                <Button variant="outline" onClick={resetState} className="w-full sm:w-auto">
+                  {ui.closeLabel}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    void runValidation();
+                  }}
+                  disabled={validating}
+                  className="gap-2 w-full sm:w-auto"
+                >
+                  {validating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {validating ? ui.validatingLabel : "Validasi Data Batch"}
+                </Button>
+              </>
             )}
 
             {step === "preview" && validation && (
