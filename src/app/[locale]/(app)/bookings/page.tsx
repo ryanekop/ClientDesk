@@ -4,6 +4,7 @@ import * as React from "react";
 import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered, ChevronDown, Zap, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -90,6 +91,14 @@ import { buildAutoDpVerificationPatch } from "@/lib/final-settlement";
 import { updateBookingStatusWithQueueTransition } from "@/lib/booking-status-queue";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
+import { deleteBookingWithDependencies } from "@/lib/client-booking-delete";
+import {
+    type BulkActionKind,
+    areAllVisibleSelected,
+    pruneSelection,
+    toggleSelectAllVisible,
+    toggleSelection,
+} from "@/lib/manage-selection";
 import * as XLSX from "xlsx";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
@@ -171,8 +180,9 @@ const BASE_BOOKING_COLUMNS: TableColumnPreference[] = [
     { id: "price", label: "Harga", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ];
-const BOOKING_NON_RESIZABLE_COLUMN_IDS = ["row_number", "actions"];
+const BOOKING_NON_RESIZABLE_COLUMN_IDS = ["select", "row_number", "actions"];
 const BOOKING_COLUMN_MIN_WIDTHS: Record<string, number> = {
+    select: 52,
     name: 140,
     invoice: 118,
     package: 150,
@@ -184,6 +194,13 @@ const BOOKING_COLUMN_MIN_WIDTHS: Record<string, number> = {
     status: 120,
     freelancer: 140,
     price: 124,
+};
+const BOOKING_MANAGE_SELECT_COLUMN: TableColumnPreference = {
+    id: "select",
+    label: "Select",
+    visible: true,
+    locked: true,
+    pin: "left",
 };
 const BOOKING_FILTER_STORAGE_PREFIX = "clientdesk:bookings:filters";
 const BOOKING_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:bookings:items_per_page";
@@ -420,6 +437,13 @@ export default function BookingsPage() {
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
     const [resettingColumnWidths, setResettingColumnWidths] = React.useState(false);
+    const [isManageMode, setIsManageMode] = React.useState(false);
+    const [selectedBookingIds, setSelectedBookingIds] = React.useState<string[]>([]);
+    const [bulkActionDialog, setBulkActionDialog] = React.useState<{
+        open: boolean;
+        action: BulkActionKind | null;
+    }>({ open: false, action: null });
+    const [bulkActionLoading, setBulkActionLoading] = React.useState(false);
 
     // Filters & Search
     const [searchQuery, setSearchQuery] = React.useState("");
@@ -557,6 +581,14 @@ export default function BookingsPage() {
         closeDesktopMenus();
         closeMobileHeaderActionMenu();
     }, [closeDesktopMenus, closeMobileHeaderActionMenu]);
+    const closeManageMode = React.useCallback(() => {
+        setIsManageMode(false);
+        setSelectedBookingIds([]);
+        setBulkActionDialog({ open: false, action: null });
+    }, []);
+    const openBulkActionDialog = React.useCallback((action: BulkActionKind) => {
+        setBulkActionDialog({ open: true, action });
+    }, []);
 
     const resetFilters = React.useCallback(() => {
         setStatusFilter([]);
@@ -935,6 +967,10 @@ export default function BookingsPage() {
             document.removeEventListener("keydown", handleEscape);
         };
     }, [closeAllActionMenus, copyMenuBookingId, mobileHeaderActionMenuOpen, waMenuBookingId]);
+    React.useEffect(() => {
+        if (!isManageMode) return;
+        closeAllActionMenus();
+    }, [closeAllActionMenus, isManageMode]);
 
     async function handleUpdateStatus(options?: {
         skipCancelConfirmation?: boolean;
@@ -1011,111 +1047,72 @@ export default function BookingsPage() {
         }
     }
 
+    function formatDeleteWarnings(
+        warnings: Awaited<ReturnType<typeof deleteBookingWithDependencies>>["warnings"],
+    ) {
+        return warnings.map((warning) => {
+            switch (warning.type) {
+                case "googleCalendarDeleteFailed":
+                    return tb("googleCalendarDeleteFailed", { reason: warning.reason });
+                case "googleCalendarDeletePartial":
+                    return tb("googleCalendarDeletePartial", {
+                        firstError: warning.firstError ? ` ${warning.firstError}` : "",
+                    });
+                case "googleCalendarDeleteFailedGeneric":
+                    return tb("googleCalendarDeleteFailedGeneric");
+                case "fastpikProjectDeleteFailed":
+                    return tb("fastpikProjectDeleteFailed", { reason: warning.reason });
+                case "fastpikProjectDeleteFailedGeneric":
+                    return tb("fastpikProjectDeleteFailedGeneric");
+                default:
+                    return tb("failedDeleteBooking");
+            }
+        });
+    }
+
+    async function deleteSingleBooking(bookingToDelete: Booking) {
+        const result = await deleteBookingWithDependencies({
+            supabase,
+            booking: bookingToDelete,
+            locale,
+        });
+        const warningDetails = formatDeleteWarnings(result.warnings);
+
+        if (!result.ok) {
+            return {
+                ok: false,
+                warningDetails,
+                message: tb("failedDeleteBooking"),
+            } as const;
+        }
+
+        return {
+            ok: true,
+            warningDetails,
+            message: warningDetails.length > 0
+                ? tb("deleteWarningWithDetails", { warnings: warningDetails.join(" ") })
+                : "",
+        } as const;
+    }
+
     async function confirmDelete() {
         if (!requireBookingWrite()) return;
         if (!deleteModal.booking) return;
         setIsDeleting(true);
 
-        const bookingToDelete = deleteModal.booking;
-        const warningDetails: string[] = [];
-
-        try {
-            const calendarRes = await fetch("/api/google/calendar-delete-booking", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ bookingId: bookingToDelete.id }),
-            });
-            const calendarResult = await calendarRes.json().catch(() => null) as {
-                success?: boolean;
-                failedCount?: number;
-                errors?: string[];
-                error?: string;
-            } | null;
-
-            if (!calendarRes.ok) {
-                warningDetails.push(
-                    locale === "en"
-                        ? `Google Calendar event deletion failed: ${calendarResult?.error || "Unknown error"}`
-                        : tb("googleCalendarDeleteFailed", {
-                            reason: calendarResult?.error || "Unknown error",
-                        }),
-                );
-            } else if (calendarResult && calendarResult.success === false) {
-                const firstError = Array.isArray(calendarResult.errors) ? calendarResult.errors[0] : null;
-                warningDetails.push(
-                    locale === "en"
-                        ? `Some Google Calendar events failed to delete.${firstError ? ` ${firstError}` : ""}`
-                        : tb("googleCalendarDeletePartial", {
-                            firstError: firstError ? ` ${firstError}` : "",
-                        }),
-                );
-            }
-        } catch {
-            warningDetails.push(
-                locale === "en"
-                    ? "Failed to remove Google Calendar event."
-                    : tb("googleCalendarDeleteFailedGeneric"),
-            );
-        }
-
-        const hasFastpikProject = Boolean(
-            bookingToDelete.fastpik_project_id?.trim() ||
-            bookingToDelete.fastpik_project_link?.trim() ||
-            bookingToDelete.fastpik_project_edit_link?.trim(),
-        );
-
-        if (hasFastpikProject) {
-            try {
-                const fastpikRes = await fetch("/api/integrations/fastpik/delete-booking-project", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        bookingId: bookingToDelete.id,
-                        locale,
-                    }),
-                });
-                const fastpikResult = await fastpikRes.json().catch(() => null) as {
-                    success?: boolean;
-                    message?: string;
-                    error?: string;
-                } | null;
-
-                if (!fastpikRes.ok || fastpikResult?.success === false) {
-                    const reason =
-                        (typeof fastpikResult?.message === "string" &&
-                            fastpikResult.message.trim()) ||
-                        (typeof fastpikResult?.error === "string" &&
-                            fastpikResult.error.trim()) ||
-                        "Unknown error";
-                    warningDetails.push(
-                        locale === "en"
-                            ? `Fastpik project deletion failed: ${reason}`
-                            : tb("fastpikProjectDeleteFailed", { reason }),
-                    );
-                }
-            } catch {
-                warningDetails.push(
-                    locale === "en"
-                        ? "Failed to delete Fastpik project."
-                        : tb("fastpikProjectDeleteFailedGeneric"),
-                );
-            }
-        }
-
-        const { error } = await supabase.from("bookings").delete().eq("id", bookingToDelete.id);
-        if (!error) {
-            setDeleteModal({ open: false, booking: null });
-            void fetchData("refresh");
-            if (warningDetails.length > 0) {
-                const warningMessage = locale === "en"
-                    ? `Booking deleted with warning${warningDetails.length > 1 ? "s" : ""}: ${warningDetails.join(" ")}`
-                    : tb("deleteWarningWithDetails", { warnings: warningDetails.join(" ") });
-                setFeedbackDialog({ open: true, message: warningMessage });
-            }
-        } else {
-            setFeedbackDialog({ open: true, message: tb("failedDeleteBooking") });
-        }
+        const result = await deleteSingleBooking(deleteModal.booking);
         setIsDeleting(false);
+
+        if (!result.ok) {
+            setFeedbackDialog({ open: true, message: result.message });
+            return;
+        }
+
+        setDeleteModal({ open: false, booking: null });
+        void fetchData("refresh");
+        if (result.warningDetails.length > 0) {
+            setFeedbackDialog({ open: true, message: result.message });
+        }
     }
 
     function openArchiveConfirmation(booking: Booking) {
@@ -1127,14 +1124,7 @@ export default function BookingsPage() {
         });
     }
 
-    async function confirmArchiveToggle() {
-        if (!requireBookingWrite()) return;
-        if (!archiveDialog.booking) return;
-
-        const booking = archiveDialog.booking;
-        const nextArchived = archiveDialog.nextArchived;
-        setArchiveSavingId(booking.id);
-
+    async function archiveSingleBooking(booking: Booking, nextArchived: boolean) {
         const patch = nextArchived
             ? {
                 archived_at: new Date().toISOString(),
@@ -1150,9 +1140,21 @@ export default function BookingsPage() {
             .update(patch)
             .eq("id", booking.id);
 
+        return !error;
+    }
+
+    async function confirmArchiveToggle() {
+        if (!requireBookingWrite()) return;
+        if (!archiveDialog.booking) return;
+
+        const booking = archiveDialog.booking;
+        const nextArchived = archiveDialog.nextArchived;
+        setArchiveSavingId(booking.id);
+
+        const ok = await archiveSingleBooking(booking, nextArchived);
         setArchiveSavingId(null);
 
-        if (error) {
+        if (!ok) {
             setFeedbackDialog({
                 open: true,
                 message: locale === "en"
@@ -1164,6 +1166,72 @@ export default function BookingsPage() {
 
         setArchiveDialog({ open: false, booking: null, nextArchived: false });
         void fetchData("refresh");
+    }
+
+    async function confirmBulkAction() {
+        if (!requireBookingWrite()) return;
+        if (!bulkActionDialog.action || selectedBookingIds.length === 0) return;
+
+        const selectedBookings = filteredBookings.filter((booking) =>
+            selectedBookingIdSet.has(booking.id),
+        );
+        if (selectedBookings.length === 0) return;
+
+        setBulkActionLoading(true);
+        let successCount = 0;
+        let failedCount = 0;
+        const warningMessages: string[] = [];
+
+        if (bulkActionDialog.action === "archive" || bulkActionDialog.action === "restore") {
+            const nextArchived = bulkActionDialog.action === "archive";
+            for (const booking of selectedBookings) {
+                const ok = await archiveSingleBooking(booking, nextArchived);
+                if (ok) {
+                    successCount += 1;
+                } else {
+                    failedCount += 1;
+                }
+            }
+        } else {
+            for (const booking of selectedBookings) {
+                const result = await deleteSingleBooking(booking);
+                if (result.ok) {
+                    successCount += 1;
+                    warningMessages.push(...result.warningDetails);
+                } else {
+                    failedCount += 1;
+                    if (result.warningDetails.length > 0) {
+                        warningMessages.push(...result.warningDetails);
+                    }
+                }
+            }
+        }
+
+        setBulkActionLoading(false);
+        setBulkActionDialog({ open: false, action: null });
+
+        if (successCount > 0) {
+            setSelectedBookingIds([]);
+            void fetchData("refresh");
+        }
+
+        if (failedCount > 0 || warningMessages.length > 0) {
+            const detailParts: string[] = [];
+            if (failedCount > 0) {
+                detailParts.push(
+                    locale === "en"
+                        ? `${failedCount} booking${failedCount > 1 ? "s" : ""} failed to process.`
+                        : `${failedCount} booking gagal diproses.`,
+                );
+            }
+            if (warningMessages.length > 0) {
+                detailParts.push(warningMessages.join(" "));
+            }
+            setFeedbackDialog({
+                open: true,
+                message: detailParts.join(" "),
+            });
+        }
     }
 
     function sendWhatsAppClient(booking: Booking) {
@@ -1377,6 +1445,24 @@ export default function BookingsPage() {
 
     function renderDesktopHeader(column: TableColumnPreference) {
         switch (column.id) {
+            case "select":
+                return renderDesktopHeaderCell(
+                    column,
+                    "w-12 px-3 py-3 font-semibold text-muted-foreground whitespace-nowrap text-center",
+                    (
+                        <div className="flex justify-center">
+                            <AppCheckbox
+                                checked={allVisibleSelected}
+                                onCheckedChange={() =>
+                                    setSelectedBookingIds((current) =>
+                                        toggleSelectAllVisible(current, visibleBookingIds),
+                                    )
+                                }
+                                aria-label={tc("pilihSemua")}
+                            />
+                        </div>
+                    ),
+                );
             case "name":
                 return renderDesktopHeaderCell(column, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap", t("namaKlien"));
             case "row_number":
@@ -1415,6 +1501,26 @@ export default function BookingsPage() {
     ) {
         const sessionDisplay = getSessionDisplay(booking);
         switch (column.id) {
+            case "select":
+                return (
+                    <td
+                        key={column.id}
+                        style={getDesktopColumnStyle(column.id)}
+                        className={getDesktopCellClassName(column.id, "w-12 px-3 py-3 text-center")}
+                    >
+                        <div className="flex justify-center">
+                            <AppCheckbox
+                                checked={selectedBookingIdSet.has(booking.id)}
+                                onCheckedChange={() =>
+                                    setSelectedBookingIds((current) =>
+                                        toggleSelection(current, booking.id),
+                                    )
+                                }
+                                aria-label={tc("modeKelola")}
+                            />
+                        </div>
+                    </td>
+                );
             case "name":
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 max-w-[140px]")}>
@@ -1498,6 +1604,8 @@ export default function BookingsPage() {
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[220px] px-4 py-3 whitespace-nowrap text-right")}>
                         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                            {isManageMode ? null : (
+                                <>
                             <div className="relative" data-copy-menu-root="true">
                                 <div className="flex items-stretch overflow-hidden rounded-md border border-violet-200 bg-violet-50 text-violet-600 dark:border-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
                                     <button
@@ -1678,6 +1786,8 @@ export default function BookingsPage() {
                             >
                                 <Trash2 className="w-4 h-4" />
                             </ActionIconButton>
+                                </>
+                            )}
                         </div>
                     </td>
                 );
@@ -1890,6 +2000,13 @@ export default function BookingsPage() {
         () => columns.filter((column) => column.visible),
         [columns],
     );
+    const tableVisibleColumns = React.useMemo(
+        () =>
+            isManageMode
+                ? [BOOKING_MANAGE_SELECT_COLUMN, ...orderedVisibleColumns]
+                : orderedVisibleColumns,
+        [isManageMode, orderedVisibleColumns],
+    );
     const {
         getColumnWidthStyle,
         getResizeHandleProps,
@@ -1902,7 +2019,7 @@ export default function BookingsPage() {
         enabled: !columnManagerOpen,
         menuKey: "bookings",
         userId: currentUserId,
-        columns: orderedVisibleColumns,
+        columns: tableVisibleColumns,
         nonResizableColumnIds: BOOKING_NON_RESIZABLE_COLUMN_IDS,
         minWidthByColumnId: BOOKING_COLUMN_MIN_WIDTHS,
     });
@@ -1910,7 +2027,7 @@ export default function BookingsPage() {
         tableRef,
         getStickyColumnStyle,
         getStickyColumnClassName,
-    } = useStickyTableColumns(orderedVisibleColumns, {
+    } = useStickyTableColumns(tableVisibleColumns, {
         enabled: !columnManagerOpen,
         isResizing,
     });
@@ -1964,6 +2081,19 @@ export default function BookingsPage() {
     }, [applyBookingColumnLabelNormalization, formSectionsByEventType, metadataRows]);
 
     const filteredBookings = bookings;
+    const visibleBookingIds = React.useMemo(
+        () => filteredBookings.map((booking) => booking.id),
+        [filteredBookings],
+    );
+    const allVisibleSelected = React.useMemo(
+        () => areAllVisibleSelected(selectedBookingIds, visibleBookingIds),
+        [selectedBookingIds, visibleBookingIds],
+    );
+    const selectedCount = selectedBookingIds.length;
+    const selectedBookingIdSet = React.useMemo(
+        () => new Set(selectedBookingIds),
+        [selectedBookingIds],
+    );
     const isArchiveView = archiveMode === "archived";
     const queryState = React.useMemo<PaginatedQueryState>(() => ({
         page: currentPage,
@@ -1990,6 +2120,12 @@ export default function BookingsPage() {
         }),
         [tc],
     );
+    React.useEffect(() => {
+        setSelectedBookingIds((current) => {
+            const next = pruneSelection(current, visibleBookingIds);
+            return next.length === current.length ? current : next;
+        });
+    }, [visibleBookingIds]);
 
     async function exportBookings() {
         const singleStatusFilter = statusFilter[0] || "All";
@@ -2256,7 +2392,7 @@ export default function BookingsPage() {
                         )}
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <Button
                         type="button"
                         variant={!isArchiveView ? "default" : "outline"}
@@ -2273,6 +2409,64 @@ export default function BookingsPage() {
                     >
                         {archiveToggleLabels.archived}
                     </Button>
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                        {!isManageMode ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="h-9 px-3"
+                                onClick={() => setIsManageMode(true)}
+                                disabled={!canWriteBookings}
+                                title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
+                            >
+                                {tc("kelola")}
+                            </Button>
+                        ) : (
+                            <>
+                                <span className="text-sm font-medium text-foreground">
+                                    {tc("nDipilih", { count: selectedCount })}
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-9 px-3"
+                                    onClick={() =>
+                                        setSelectedBookingIds((current) =>
+                                            toggleSelectAllVisible(current, visibleBookingIds),
+                                        )
+                                    }
+                                >
+                                    {tc("pilihSemua")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-9 px-3"
+                                    onClick={() => openBulkActionDialog(isArchiveView ? "restore" : "archive")}
+                                    disabled={selectedCount === 0}
+                                >
+                                    {isArchiveView ? tc("kembalikanTerpilih") : tc("arsipkanTerpilih")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    className="h-9 px-3"
+                                    onClick={() => openBulkActionDialog("delete")}
+                                    disabled={selectedCount === 0}
+                                >
+                                    {tc("hapusTerpilih")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="h-9 px-2"
+                                    onClick={closeManageMode}
+                                >
+                                    <X className="w-4 h-4" />
+                                </Button>
+                            </>
+                        )}
+                    </div>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:hidden">
                     <FilterSingleSelect
@@ -2430,13 +2624,30 @@ export default function BookingsPage() {
                         return (
                         <div
                             key={booking.id}
-                            className="rounded-xl border bg-card shadow-sm p-4 space-y-3"
+                            className={cn(
+                                "rounded-xl border bg-card shadow-sm p-4 space-y-3",
+                                isManageMode && selectedBookingIdSet.has(booking.id) && "ring-1 ring-foreground/20",
+                            )}
                             style={mobileCardStyle}
                         >
                             <div className="flex items-start justify-between">
-                                <div>
-                                    <p className="font-semibold">{booking.client_name}</p>
-                                    <p className="text-xs text-muted-foreground">{booking.booking_code}</p>
+                                <div className="flex items-start gap-3">
+                                    {isManageMode ? (
+                                        <AppCheckbox
+                                            checked={selectedBookingIdSet.has(booking.id)}
+                                            onCheckedChange={() =>
+                                                setSelectedBookingIds((current) =>
+                                                    toggleSelection(current, booking.id),
+                                                )
+                                            }
+                                            aria-label={tc("modeKelola")}
+                                            className="mt-0.5"
+                                        />
+                                    ) : null}
+                                    <div>
+                                        <p className="font-semibold">{booking.client_name}</p>
+                                        <p className="text-xs text-muted-foreground">{booking.booking_code}</p>
+                                    </div>
                                 </div>
                                 <StatusBadge status={booking.status} statusClass={statusColors[booking.status]} />
                             </div>
@@ -2452,6 +2663,7 @@ export default function BookingsPage() {
                                         </div>
                                     ))}
                             </div>
+                            {!isManageMode ? (
                             <div className="flex items-center gap-1 pt-1 border-t flex-wrap">
                                 <ActionIconButton tone="violet" title={tb("copyTemplate")} onClick={() => setCopyTargetPopup({ open: true, booking })}>
                                     {copiedClientTemplateId === booking.id || copiedFreelancerTemplateId === booking.id ? (
@@ -2504,6 +2716,7 @@ export default function BookingsPage() {
                                     <Trash2 className="w-4 h-4" />
                                 </ActionIconButton>
                             </div>
+                            ) : null}
                         </div>
                         );
                     })
@@ -2528,17 +2741,17 @@ export default function BookingsPage() {
                     <table ref={tableRef} className="min-w-full w-max border-separate border-spacing-0 text-left text-sm">
                         <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
-                                {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
+                                {tableVisibleColumns.map((column) => renderDesktopHeader(column))}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border/70 dark:divide-white/20">
                             {queryState.isLoading || queryState.isRefreshing ? (
                                 <TableRowsSkeleton
                                     rows={Math.min(queryState.perPage, 6)}
-                                    columns={orderedVisibleColumns.length}
+                                    columns={tableVisibleColumns.length}
                                 />
                             ) : queryState.totalItems === 0 ? (
-                                <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground text-xs italic">{tb("noDataFound")}</td></tr>
+                                <tr><td colSpan={tableVisibleColumns.length} className="px-6 py-12 text-center text-muted-foreground text-xs italic">{tb("noDataFound")}</td></tr>
                             ) : (
                                 filteredBookings.map((booking, rowIndex) => {
                                     const rowNumber =
@@ -2563,7 +2776,7 @@ export default function BookingsPage() {
                                                     : undefined
                                             }
                                         >
-                                            {orderedVisibleColumns.map((column) =>
+                                            {tableVisibleColumns.map((column) =>
                                                 renderDesktopCell(booking, column, rowNumber),
                                             )}
                                         </tr>
@@ -2768,6 +2981,49 @@ export default function BookingsPage() {
                         : tc("kembalikan")}
                 onConfirm={() => { void confirmArchiveToggle(); }}
                 loading={archiveSavingId !== null}
+            />
+
+            <ActionConfirmDialog
+                open={bulkActionDialog.open}
+                onOpenChange={(open) =>
+                    setBulkActionDialog({
+                        open,
+                        action: open ? bulkActionDialog.action : null,
+                    })
+                }
+                title={
+                    bulkActionDialog.action === "delete"
+                        ? (locale === "en" ? "Delete selected bookings?" : "Hapus booking terpilih?")
+                        : bulkActionDialog.action === "restore"
+                            ? (locale === "en" ? "Restore selected bookings?" : "Kembalikan booking terpilih?")
+                            : (locale === "en" ? "Archive selected bookings?" : "Arsipkan booking terpilih?")
+                }
+                message={
+                    bulkActionDialog.action === "delete"
+                        ? (locale === "en"
+                            ? `${selectedCount} booking(s) will be permanently deleted.`
+                            : `${selectedCount} booking akan dihapus permanen.`)
+                        : bulkActionDialog.action === "restore"
+                            ? (locale === "en"
+                                ? `${selectedCount} booking(s) will return to the active lists.`
+                                : `${selectedCount} booking akan kembali ke daftar aktif.`)
+                            : (locale === "en"
+                                ? `${selectedCount} booking(s) will be moved to the archive lists.`
+                                : `${selectedCount} booking akan dipindahkan ke daftar arsip.`)
+                }
+                cancelLabel={tc("batal")}
+                confirmLabel={
+                    bulkActionLoading
+                        ? (locale === "en" ? "Processing..." : "Memproses...")
+                        : bulkActionDialog.action === "delete"
+                            ? tc("hapusTerpilih")
+                            : bulkActionDialog.action === "restore"
+                                ? tc("kembalikanTerpilih")
+                                : tc("arsipkanTerpilih")
+                }
+                confirmVariant={bulkActionDialog.action === "delete" ? "destructive" : "default"}
+                onConfirm={() => { void confirmBulkAction(); }}
+                loading={bulkActionLoading}
             />
 
             <ActionFeedbackDialog

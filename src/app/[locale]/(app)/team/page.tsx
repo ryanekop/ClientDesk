@@ -3,11 +3,12 @@
 import * as React from "react";
 import { Plus, Edit2, Trash2, Users, MessageCircle, X, Search, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
 import { useStickyTableColumns } from "@/components/ui/use-sticky-table-columns";
@@ -34,6 +35,13 @@ import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
+import {
+    type BulkActionKind,
+    areAllVisibleSelected,
+    pruneSelection,
+    toggleSelectAllVisible,
+    toggleSelection,
+} from "@/lib/manage-selection";
 
 
 type Freelancer = {
@@ -104,14 +112,22 @@ const TEAM_COLUMN_DEFAULTS: TableColumnPreference[] = lockBoundaryColumns([
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ]);
-const TEAM_NON_RESIZABLE_COLUMN_IDS = ["row_number", "actions"];
+const TEAM_NON_RESIZABLE_COLUMN_IDS = ["select", "row_number", "actions"];
 const TEAM_COLUMN_MIN_WIDTHS: Record<string, number> = {
+    select: 52,
     name: 180,
     role: 128,
     tags: 160,
     pricelist_summary: 140,
     whatsapp: 145,
     status: 116,
+};
+const TEAM_MANAGE_SELECT_COLUMN: TableColumnPreference = {
+    id: "select",
+    label: "Select",
+    visible: true,
+    locked: true,
+    pin: "left",
 };
 const TEAM_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:team:items_per_page";
 const TEAM_FILTER_STORAGE_PREFIX = "clientdesk:team:filters";
@@ -537,8 +553,10 @@ function PricelistBuilder({ value, onChange, inputClass }: PricelistBuilderProps
 
 export default function TeamPage() {
     const supabase = createClient();
+    const locale = useLocale();
     const t = useTranslations("Team");
     const tt = useTranslations("TeamPage");
+    const tc = useTranslations("Common");
     const [members, setMembers] = React.useState<Freelancer[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [refreshing, setRefreshing] = React.useState(false);
@@ -578,6 +596,13 @@ export default function TeamPage() {
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
     const [resettingColumnWidths, setResettingColumnWidths] = React.useState(false);
+    const [isManageMode, setIsManageMode] = React.useState(false);
+    const [selectedMemberIds, setSelectedMemberIds] = React.useState<string[]>([]);
+    const [bulkActionDialog, setBulkActionDialog] = React.useState<{
+        open: boolean;
+        action: BulkActionKind | null;
+    }>({ open: false, action: null });
+    const [bulkActionLoading, setBulkActionLoading] = React.useState(false);
     const [deleteConfirmDialog, setDeleteConfirmDialog] = React.useState<{
         open: boolean;
         member: Freelancer | null;
@@ -593,6 +618,11 @@ export default function TeamPage() {
         } catch {
             // Best effort cache invalidation.
         }
+    }, []);
+    const closeManageMode = React.useCallback(() => {
+        setIsManageMode(false);
+        setSelectedMemberIds([]);
+        setBulkActionDialog({ open: false, action: null });
     }, []);
 
     const fetchMembers = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
@@ -888,11 +918,28 @@ export default function TeamPage() {
         setDeleteConfirmDialog({ open: true, member });
     }
 
+    async function deleteMemberById(id: string) {
+        await supabase.from("freelance").delete().eq("id", id);
+    }
+
     async function confirmDeleteMember() {
         const member = deleteConfirmDialog.member;
         if (!member) return;
         setDeleteConfirmDialog({ open: false, member: null });
-        await supabase.from("freelance").delete().eq("id", member.id);
+        await deleteMemberById(member.id);
+        void fetchMembers("refresh");
+    }
+
+    async function confirmBulkAction() {
+        if (bulkActionDialog.action !== "delete" || selectedMemberIds.length === 0) return;
+        setBulkActionLoading(true);
+        const selectedMembers = members.filter((member) => selectedMemberIdSet.has(member.id));
+        for (const member of selectedMembers) {
+            await deleteMemberById(member.id);
+        }
+        setBulkActionLoading(false);
+        setBulkActionDialog({ open: false, action: null });
+        setSelectedMemberIds([]);
         void fetchMembers("refresh");
     }
 
@@ -938,6 +985,13 @@ export default function TeamPage() {
         () => columns.filter((column) => column.visible),
         [columns],
     );
+    const tableVisibleColumns = React.useMemo(
+        () =>
+            isManageMode
+                ? [TEAM_MANAGE_SELECT_COLUMN, ...orderedVisibleColumns]
+                : orderedVisibleColumns,
+        [isManageMode, orderedVisibleColumns],
+    );
     const {
         getColumnWidthStyle,
         getResizeHandleProps,
@@ -950,7 +1004,7 @@ export default function TeamPage() {
         enabled: !columnManagerOpen,
         menuKey: "team",
         userId: currentUserId,
-        columns: orderedVisibleColumns,
+        columns: tableVisibleColumns,
         nonResizableColumnIds: TEAM_NON_RESIZABLE_COLUMN_IDS,
         minWidthByColumnId: TEAM_COLUMN_MIN_WIDTHS,
     });
@@ -958,7 +1012,7 @@ export default function TeamPage() {
         tableRef,
         getStickyColumnStyle,
         getStickyColumnClassName,
-    } = useStickyTableColumns(orderedVisibleColumns, {
+    } = useStickyTableColumns(tableVisibleColumns, {
         enabled: !columnManagerOpen,
         isResizing,
     });
@@ -1039,6 +1093,25 @@ export default function TeamPage() {
         isLoading: loading,
         isRefreshing: refreshing,
     }), [currentPage, itemsPerPage, totalItems, loading, refreshing]);
+    const visibleMemberIds = React.useMemo(
+        () => members.map((member) => member.id),
+        [members],
+    );
+    const allVisibleSelected = React.useMemo(
+        () => areAllVisibleSelected(selectedMemberIds, visibleMemberIds),
+        [selectedMemberIds, visibleMemberIds],
+    );
+    const selectedCount = selectedMemberIds.length;
+    const selectedMemberIdSet = React.useMemo(
+        () => new Set(selectedMemberIds),
+        [selectedMemberIds],
+    );
+    React.useEffect(() => {
+        setSelectedMemberIds((current) => {
+            const next = pruneSelection(current, visibleMemberIds);
+            return next.length === current.length ? current : next;
+        });
+    }, [visibleMemberIds]);
     const roleColorLabels = React.useMemo(
         () =>
             normalizeTagList([
@@ -1192,6 +1265,24 @@ export default function TeamPage() {
 
     function renderDesktopHeader(column: TableColumnPreference) {
         switch (column.id) {
+            case "select":
+                return renderDesktopHeaderCell(
+                    column,
+                    "w-12 px-3 py-4 font-medium text-muted-foreground text-center",
+                    (
+                        <div className="flex justify-center">
+                            <AppCheckbox
+                                checked={allVisibleSelected}
+                                onCheckedChange={() =>
+                                    setSelectedMemberIds((current) =>
+                                        toggleSelectAllVisible(current, visibleMemberIds),
+                                    )
+                                }
+                                aria-label={tc("pilihSemua")}
+                            />
+                        </div>
+                    ),
+                );
             case "name":
                 return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("nama"));
             case "row_number":
@@ -1219,6 +1310,26 @@ export default function TeamPage() {
         rowNumber: number,
     ) {
         switch (column.id) {
+            case "select":
+                return (
+                    <td
+                        key={column.id}
+                        style={getDesktopColumnStyle(column.id)}
+                        className={getDesktopCellClassName(column.id, "w-12 px-3 py-4 text-center")}
+                    >
+                        <div className="flex justify-center">
+                            <AppCheckbox
+                                checked={selectedMemberIdSet.has(member.id)}
+                                onCheckedChange={() =>
+                                    setSelectedMemberIds((current) =>
+                                        toggleSelection(current, member.id),
+                                    )
+                                }
+                                aria-label={tc("modeKelola")}
+                            />
+                        </div>
+                    </td>
+                );
             case "name":
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
@@ -1290,6 +1401,7 @@ export default function TeamPage() {
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
                         <button
                             onClick={() => handleToggleStatus(member)}
+                            disabled={isManageMode}
                             className={`text-xs font-medium px-2 py-0.5 rounded-full cursor-pointer transition-colors ${member.status === "active"
                                 ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-500/20"
                                 : "bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-500/20"
@@ -1303,6 +1415,8 @@ export default function TeamPage() {
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[120px] px-4 py-4 whitespace-nowrap text-right")}>
                         <div className="flex items-center justify-end gap-2.5 pr-2">
+                            {isManageMode ? null : (
+                                <>
                             <ActionIconButton tone="green" title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)}>
                                 <MessageCircle className="w-4 h-4" />
                             </ActionIconButton>
@@ -1321,6 +1435,8 @@ export default function TeamPage() {
                             <ActionIconButton tone="red" title="Hapus" onClick={() => handleDelete(member.id)}>
                                 <Trash2 className="w-4 h-4" />
                             </ActionIconButton>
+                                </>
+                            )}
                         </div>
                     </td>
                 );
@@ -1632,6 +1748,49 @@ export default function TeamPage() {
                         mobileTitle={tt("filterTagsTitle")}
                         disabled={tagFilterOptions.length === 0}
                     />
+                    {!isManageMode ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full sm:w-auto"
+                            onClick={() => setIsManageMode(true)}
+                        >
+                            {tc("kelola")}
+                        </Button>
+                    ) : (
+                        <div className="flex w-full flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-foreground">
+                                {tc("nDipilih", { count: selectedCount })}
+                            </span>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                    setSelectedMemberIds((current) =>
+                                        toggleSelectAllVisible(current, visibleMemberIds),
+                                    )
+                                }
+                            >
+                                {tc("pilihSemua")}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="destructive"
+                                onClick={() => setBulkActionDialog({ open: true, action: "delete" })}
+                                disabled={selectedCount === 0}
+                            >
+                                {tc("hapusTerpilih")}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className="h-9 px-2"
+                                onClick={closeManageMode}
+                            >
+                                <X className="w-4 h-4" />
+                            </Button>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -1645,13 +1804,13 @@ export default function TeamPage() {
                             <table ref={tableRef} className="min-w-full w-max border-separate border-spacing-0 text-left text-sm">
                                 <thead className="text-xs uppercase bg-card border-b">
                                     <tr>
-                                        {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
+                                        {tableVisibleColumns.map((column) => renderDesktopHeader(column))}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
                                     <TableRowsSkeleton
                                         rows={Math.min(queryState.perPage, 6)}
-                                        columns={orderedVisibleColumns.length}
+                                        columns={tableVisibleColumns.length}
                                     />
                                 </tbody>
                             </table>
@@ -1671,8 +1830,25 @@ export default function TeamPage() {
                         {members.map((member) => {
                             const roleStyle = buildBadgeStyle(teamBadgeColors.roles, member.role);
                             return (
-                            <div key={member.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+                            <div
+                                key={member.id}
+                                className={cn(
+                                    "rounded-xl border bg-card shadow-sm p-4 space-y-3",
+                                    isManageMode && selectedMemberIdSet.has(member.id) && "ring-1 ring-foreground/20",
+                                )}
+                            >
                                 <div className="flex items-center gap-3">
+                                    {isManageMode ? (
+                                        <AppCheckbox
+                                            checked={selectedMemberIdSet.has(member.id)}
+                                            onCheckedChange={() =>
+                                                setSelectedMemberIds((current) =>
+                                                    toggleSelection(current, member.id),
+                                                )
+                                            }
+                                            aria-label={tc("modeKelola")}
+                                        />
+                                    ) : null}
                                     <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium shrink-0">
                                         {member.name.charAt(0).toUpperCase()}
                                     </div>
@@ -1689,6 +1865,7 @@ export default function TeamPage() {
                                         </span>
                                     </div>
                                     <button onClick={() => handleToggleStatus(member)}
+                                        disabled={isManageMode}
                                         className={`text-xs font-medium px-2 py-0.5 rounded-full cursor-pointer ${member.status === "active"
                                             ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
                                             : "bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-400"}`}>
@@ -1744,6 +1921,7 @@ export default function TeamPage() {
                                             </div>
                                         ))}
                                 </div>
+                                {!isManageMode ? (
                                 <div className="flex items-center gap-2.5 pt-1 border-t">
                                     <ActionIconButton tone="green" title={tt("sendWA")} onClick={() => sendWhatsApp(member.whatsapp_number)}>
                                         <MessageCircle className="w-4 h-4" />
@@ -1764,6 +1942,7 @@ export default function TeamPage() {
                                         <Trash2 className="w-4 h-4" />
                                     </ActionIconButton>
                                 </div>
+                                ) : null}
                             </div>
                             );
                         })}
@@ -1785,7 +1964,7 @@ export default function TeamPage() {
                             <table ref={tableRef} className="min-w-full w-max border-separate border-spacing-0 text-left text-sm">
                                 <thead className="text-xs uppercase bg-card border-b">
                                     <tr>
-                                        {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
+                                        {tableVisibleColumns.map((column) => renderDesktopHeader(column))}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
@@ -1794,7 +1973,7 @@ export default function TeamPage() {
                                             (currentPage - 1) * itemsPerPage + rowIndex + 1;
                                         return (
                                             <tr key={member.id} className="group hover:bg-muted/50 transition-colors">
-                                                {orderedVisibleColumns.map((column) =>
+                                                {tableVisibleColumns.map((column) =>
                                                     renderDesktopCell(member, column, rowNumber),
                                                 )}
                                             </tr>
@@ -1873,6 +2052,26 @@ export default function TeamPage() {
                 </DialogContent>
             </Dialog>
 
+            <ActionConfirmDialog
+                open={bulkActionDialog.open}
+                onOpenChange={(open) =>
+                    setBulkActionDialog({
+                        open,
+                        action: open ? bulkActionDialog.action : null,
+                    })
+                }
+                title={locale === "en" ? "Confirmation" : "Konfirmasi"}
+                message={
+                    locale === "en"
+                        ? `${selectedCount} team member(s) will be deleted.`
+                        : `${selectedCount} anggota tim akan dihapus.`
+                }
+                cancelLabel={tc("batal")}
+                confirmLabel={bulkActionLoading ? (locale === "en" ? "Deleting..." : "Menghapus...") : tc("hapusTerpilih")}
+                confirmVariant="destructive"
+                onConfirm={() => { void confirmBulkAction(); }}
+                loading={bulkActionLoading}
+            />
             <ActionConfirmDialog
                 open={deleteConfirmDialog.open}
                 onOpenChange={(open) =>

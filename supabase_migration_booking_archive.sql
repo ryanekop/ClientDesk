@@ -19,6 +19,90 @@ AS $$
   END;
 $$;
 
+DROP FUNCTION IF EXISTS public.cd_get_finance_metadata(TEXT);
+DROP FUNCTION IF EXISTS public.cd_get_finance_metadata();
+DROP FUNCTION IF EXISTS public.cd_get_finance_page(
+  INTEGER,
+  INTEGER,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  JSONB,
+  JSONB,
+  BOOLEAN,
+  TEXT,
+  JSONB,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT
+);
+DROP FUNCTION IF EXISTS public.cd_get_finance_page(
+  INTEGER,
+  INTEGER,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  JSONB,
+  JSONB,
+  BOOLEAN,
+  TEXT,
+  JSONB,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT
+);
+DROP FUNCTION IF EXISTS public.cd_get_bookings_metadata(TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.cd_get_bookings_metadata(TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.cd_get_bookings_page(
+  INTEGER,
+  INTEGER,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  JSONB,
+  JSONB,
+  JSONB,
+  JSONB,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  JSONB,
+  BOOLEAN,
+  TEXT
+);
+DROP FUNCTION IF EXISTS public.cd_get_bookings_page(
+  INTEGER,
+  INTEGER,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  JSONB,
+  JSONB,
+  JSONB,
+  JSONB,
+  TEXT,
+  TEXT,
+  TEXT,
+  TEXT,
+  JSONB,
+  BOOLEAN
+);
+DROP FUNCTION IF EXISTS public.cd_booking_listing_payload_rows(UUID[]);
+DROP FUNCTION IF EXISTS public.cd_booking_listing_filter_rows();
+DROP FUNCTION IF EXISTS public.cd_booking_listing_rows();
+
 CREATE OR REPLACE FUNCTION public.cd_booking_listing_rows()
 RETURNS TABLE (
   id UUID,

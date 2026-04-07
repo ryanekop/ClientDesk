@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Clock, CheckCircle2, FileText, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown, Copy, ClipboardCheck, Search, ListOrdered, Settings2, X, Archive, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -86,6 +87,14 @@ import { buildBookingWhatsAppTemplateVars } from "@/lib/booking-whatsapp-templat
 import { useMoneyVisibility } from "@/hooks/use-money-visibility";
 import { normalizeHexColor, withAlpha } from "@/lib/service-colors";
 import { normalizeSafeExternalUrl } from "@/utils/safe-link";
+import { deleteBookingWithDependencies } from "@/lib/client-booking-delete";
+import {
+    type BulkActionKind,
+    areAllVisibleSelected,
+    pruneSelection,
+    toggleSelectAllVisible,
+    toggleSelection,
+} from "@/lib/manage-selection";
 
 type BookingFinance = {
     id: string;
@@ -154,8 +163,9 @@ const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ];
-const FINANCE_NON_RESIZABLE_COLUMN_IDS = ["row_number", "actions"];
+const FINANCE_NON_RESIZABLE_COLUMN_IDS = ["select", "row_number", "actions"];
 const FINANCE_COLUMN_MIN_WIDTHS: Record<string, number> = {
+    select: 52,
     name: 180,
     event_type: 140,
     total_price: 140,
@@ -165,6 +175,13 @@ const FINANCE_COLUMN_MIN_WIDTHS: Record<string, number> = {
     dp_paid: 128,
     remaining: 132,
     status: 116,
+};
+const FINANCE_MANAGE_SELECT_COLUMN: TableColumnPreference = {
+    id: "select",
+    label: "Select",
+    visible: true,
+    locked: true,
+    pin: "left",
 };
 const FINANCE_FILTER_VALUES = ["all", "pending", "paid"] as const;
 const FINANCE_SORT_ORDERS = [
@@ -330,6 +347,13 @@ export default function FinancePage() {
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
     const [resettingColumnWidths, setResettingColumnWidths] = React.useState(false);
+    const [isManageMode, setIsManageMode] = React.useState(false);
+    const [selectedBookingIds, setSelectedBookingIds] = React.useState<string[]>([]);
+    const [bulkActionDialog, setBulkActionDialog] = React.useState<{
+        open: boolean;
+        action: BulkActionKind | null;
+    }>({ open: false, action: null });
+    const [bulkActionLoading, setBulkActionLoading] = React.useState(false);
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
     const [metadataRows, setMetadataRows] = React.useState<Array<{ event_type?: string | null; extra_fields?: Record<string, unknown> | null }>>([]);
     const [packageOptions, setPackageOptions] = React.useState<string[]>([]);
@@ -424,6 +448,14 @@ export default function FinancePage() {
         setInvoiceMenuAnchorEl(null);
         setCopyMenuAnchorEl(null);
         setWaMenuAnchorEl(null);
+    }, []);
+    const closeManageMode = React.useCallback(() => {
+        setIsManageMode(false);
+        setSelectedBookingIds([]);
+        setBulkActionDialog({ open: false, action: null });
+    }, []);
+    const openBulkActionDialog = React.useCallback((action: BulkActionKind) => {
+        setBulkActionDialog({ open: true, action });
     }, []);
 
     const resetFilters = React.useCallback(() => {
@@ -764,10 +796,21 @@ export default function FinancePage() {
             document.removeEventListener("keydown", handleEscape);
         };
     }, [closeDesktopMenus, copyMenuBookingId, invoiceMenuBookingId, waMenuBookingId]);
+    React.useEffect(() => {
+        if (!isManageMode) return;
+        closeDesktopMenus();
+    }, [closeDesktopMenus, isManageMode]);
 
     const orderedVisibleColumns = React.useMemo(
         () => columns.filter((column) => column.visible),
         [columns],
+    );
+    const tableVisibleColumns = React.useMemo(
+        () =>
+            isManageMode
+                ? [FINANCE_MANAGE_SELECT_COLUMN, ...orderedVisibleColumns]
+                : orderedVisibleColumns,
+        [isManageMode, orderedVisibleColumns],
     );
     const {
         getColumnWidthStyle,
@@ -781,7 +824,7 @@ export default function FinancePage() {
         enabled: !columnManagerOpen,
         menuKey: "finance",
         userId: currentUserId,
-        columns: orderedVisibleColumns,
+        columns: tableVisibleColumns,
         nonResizableColumnIds: FINANCE_NON_RESIZABLE_COLUMN_IDS,
         minWidthByColumnId: FINANCE_COLUMN_MIN_WIDTHS,
     });
@@ -789,7 +832,7 @@ export default function FinancePage() {
         tableRef,
         getStickyColumnStyle,
         getStickyColumnClassName,
-    } = useStickyTableColumns(orderedVisibleColumns, {
+    } = useStickyTableColumns(tableVisibleColumns, {
         enabled: !columnManagerOpen,
         isResizing,
     });
@@ -930,6 +973,41 @@ export default function FinancePage() {
         void fetchFinancePage("refresh", { forceIncludeMetadata: true });
     }
 
+    function formatDeleteWarnings(
+        warnings: Awaited<ReturnType<typeof deleteBookingWithDependencies>>["warnings"],
+    ) {
+        return warnings.map((warning) => {
+            switch (warning.type) {
+                case "googleCalendarDeleteFailed":
+                    return tb("googleCalendarDeleteFailed", { reason: warning.reason });
+                case "googleCalendarDeletePartial":
+                    return tb("googleCalendarDeletePartial", {
+                        firstError: warning.firstError ? ` ${warning.firstError}` : "",
+                    });
+                case "googleCalendarDeleteFailedGeneric":
+                    return tb("googleCalendarDeleteFailedGeneric");
+                case "fastpikProjectDeleteFailed":
+                    return tb("fastpikProjectDeleteFailed", { reason: warning.reason });
+                case "fastpikProjectDeleteFailedGeneric":
+                    return tb("fastpikProjectDeleteFailedGeneric");
+                default:
+                    return tb("failedDeleteBooking");
+            }
+        });
+    }
+
+    async function deleteSingleBooking(booking: BookingFinance) {
+        const result = await deleteBookingWithDependencies({
+            supabase,
+            booking,
+            locale,
+        });
+        return {
+            ok: result.ok,
+            warningDetails: formatDeleteWarnings(result.warnings),
+        } as const;
+    }
+
     function openArchiveConfirmation(booking: BookingFinance) {
         setArchiveDialog({
             open: true,
@@ -938,14 +1016,7 @@ export default function FinancePage() {
         });
     }
 
-    async function confirmArchiveToggle() {
-        if (!requireBookingWrite()) return;
-        if (!archiveDialog.booking) return;
-
-        const booking = archiveDialog.booking;
-        const nextArchived = archiveDialog.nextArchived;
-        setArchiveSavingId(booking.id);
-
+    async function archiveSingleBooking(booking: BookingFinance, nextArchived: boolean) {
         const { error } = await supabase
             .from("bookings")
             .update(
@@ -961,9 +1032,21 @@ export default function FinancePage() {
             )
             .eq("id", booking.id);
 
+        return !error;
+    }
+
+    async function confirmArchiveToggle() {
+        if (!requireBookingWrite()) return;
+        if (!archiveDialog.booking) return;
+
+        const booking = archiveDialog.booking;
+        const nextArchived = archiveDialog.nextArchived;
+        setArchiveSavingId(booking.id);
+
+        const ok = await archiveSingleBooking(booking, nextArchived);
         setArchiveSavingId(null);
 
-        if (error) {
+        if (!ok) {
             setFeedbackDialog({
                 open: true,
                 message: locale === "en"
@@ -974,6 +1057,62 @@ export default function FinancePage() {
         }
 
         setArchiveDialog({ open: false, booking: null, nextArchived: false });
+        void fetchFinancePage("refresh", { forceIncludeMetadata: true });
+    }
+
+    async function confirmBulkAction() {
+        if (!requireBookingWrite()) return;
+        if (!bulkActionDialog.action || selectedBookingIds.length === 0) return;
+
+        const selectedBookings = bookings.filter((booking) =>
+            selectedBookingIdSet.has(booking.id),
+        );
+        if (selectedBookings.length === 0) return;
+
+        setBulkActionLoading(true);
+        let failedCount = 0;
+        const warningMessages: string[] = [];
+
+        if (bulkActionDialog.action === "archive" || bulkActionDialog.action === "restore") {
+            const nextArchived = bulkActionDialog.action === "archive";
+            for (const booking of selectedBookings) {
+                const ok = await archiveSingleBooking(booking, nextArchived);
+                if (!ok) {
+                    failedCount += 1;
+                }
+            }
+        } else {
+            for (const booking of selectedBookings) {
+                const result = await deleteSingleBooking(booking);
+                if (!result.ok) {
+                    failedCount += 1;
+                }
+                warningMessages.push(...result.warningDetails);
+            }
+        }
+
+        setBulkActionLoading(false);
+        setBulkActionDialog({ open: false, action: null });
+
+        if (failedCount > 0 || warningMessages.length > 0) {
+            const detailParts: string[] = [];
+            if (failedCount > 0) {
+                detailParts.push(
+                    locale === "en"
+                        ? `${failedCount} booking${failedCount > 1 ? "s" : ""} failed to process.`
+                        : `${failedCount} booking gagal diproses.`,
+                );
+            }
+            if (warningMessages.length > 0) {
+                detailParts.push(warningMessages.join(" "));
+            }
+            setFeedbackDialog({
+                open: true,
+                message: detailParts.join(" "),
+            });
+        }
+
+        setSelectedBookingIds([]);
         void fetchFinancePage("refresh", { forceIncludeMetadata: true });
     }
 
@@ -1410,6 +1549,24 @@ export default function FinancePage() {
 
     function renderDesktopHeader(column: TableColumnPreference) {
         switch (column.id) {
+            case "select":
+                return renderDesktopHeaderCell(
+                    column,
+                    "w-12 px-3 py-4 font-medium text-muted-foreground text-center",
+                    (
+                        <div className="flex justify-center">
+                            <AppCheckbox
+                                checked={allVisibleSelected}
+                                onCheckedChange={() =>
+                                    setSelectedBookingIds((current) =>
+                                        toggleSelectAllVisible(current, visibleBookingIds),
+                                    )
+                                }
+                                aria-label={tc("pilihSemua")}
+                            />
+                        </div>
+                    ),
+                );
             case "name":
                 return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("klien"));
             case "row_number":
@@ -1448,6 +1605,26 @@ export default function FinancePage() {
         discountAmount: number,
     ) {
         switch (column.id) {
+            case "select":
+                return (
+                    <td
+                        key={column.id}
+                        style={getDesktopColumnStyle(column.id)}
+                        className={getDesktopCellClassName(column.id, "w-12 px-3 py-4 text-center")}
+                    >
+                        <div className="flex justify-center">
+                            <AppCheckbox
+                                checked={selectedBookingIdSet.has(booking.id)}
+                                onCheckedChange={() =>
+                                    setSelectedBookingIds((current) =>
+                                        toggleSelection(current, booking.id),
+                                    )
+                                }
+                                aria-label={tc("modeKelola")}
+                            />
+                        </div>
+                    </td>
+                );
             case "name":
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 max-w-[180px]")}>
@@ -1502,7 +1679,7 @@ export default function FinancePage() {
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-6 py-4 whitespace-nowrap")}>
                         <button
                             onClick={() => booking.is_fully_paid ? handleMarkUnpaid(booking.id) : handleMarkPaid(booking.id)}
-                            disabled={!canWriteBookings}
+                            disabled={!canWriteBookings || isManageMode}
                             title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
                             className={`text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer transition-colors ${booking.is_fully_paid
                                 ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400 hover:bg-green-200"
@@ -1517,6 +1694,8 @@ export default function FinancePage() {
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[420px] px-4 py-4 text-right")}>
                         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap pr-1">
+                            {isManageMode ? null : (
+                                <>
                             <Link href={`/bookings/${booking.id}`}>
                                 <ActionIconButton tone="slate" title={tf("detailBooking")}>
                                     <Info className="w-4 h-4" />
@@ -1742,6 +1921,8 @@ export default function FinancePage() {
                                     <Archive className="w-4 h-4" />
                                 )}
                             </ActionIconButton>
+                                </>
+                            )}
                         </div>
                     </td>
                 );
@@ -1867,6 +2048,25 @@ export default function FinancePage() {
         isLoading: loading,
         isRefreshing: refreshing,
     }), [currentPage, itemsPerPage, totalItems, loading, refreshing]);
+    const visibleBookingIds = React.useMemo(
+        () => bookings.map((booking) => booking.id),
+        [bookings],
+    );
+    const allVisibleSelected = React.useMemo(
+        () => areAllVisibleSelected(selectedBookingIds, visibleBookingIds),
+        [selectedBookingIds, visibleBookingIds],
+    );
+    const selectedCount = selectedBookingIds.length;
+    const selectedBookingIdSet = React.useMemo(
+        () => new Set(selectedBookingIds),
+        [selectedBookingIds],
+    );
+    React.useEffect(() => {
+        setSelectedBookingIds((current) => {
+            const next = pruneSelection(current, visibleBookingIds);
+            return next.length === current.length ? current : next;
+        });
+    }, [visibleBookingIds]);
 
     async function exportFinance() {
         try {
@@ -2204,7 +2404,7 @@ export default function FinancePage() {
                         )}
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <Button
                         type="button"
                         variant={!isArchiveView ? "default" : "outline"}
@@ -2221,6 +2421,64 @@ export default function FinancePage() {
                     >
                         {archiveToggleLabels.archived}
                     </Button>
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                        {!isManageMode ? (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="h-9 px-3"
+                                onClick={() => setIsManageMode(true)}
+                                disabled={!canWriteBookings}
+                                title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
+                            >
+                                {tc("kelola")}
+                            </Button>
+                        ) : (
+                            <>
+                                <span className="text-sm font-medium text-foreground">
+                                    {tc("nDipilih", { count: selectedCount })}
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-9 px-3"
+                                    onClick={() =>
+                                        setSelectedBookingIds((current) =>
+                                            toggleSelectAllVisible(current, visibleBookingIds),
+                                        )
+                                    }
+                                >
+                                    {tc("pilihSemua")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-9 px-3"
+                                    onClick={() => openBulkActionDialog(isArchiveView ? "restore" : "archive")}
+                                    disabled={selectedCount === 0}
+                                >
+                                    {isArchiveView ? tc("kembalikanTerpilih") : tc("arsipkanTerpilih")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    className="h-9 px-3"
+                                    onClick={() => openBulkActionDialog("delete")}
+                                    disabled={selectedCount === 0}
+                                >
+                                    {tc("hapusTerpilih")}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="h-9 px-2"
+                                    onClick={closeManageMode}
+                                >
+                                    <X className="w-4 h-4" />
+                                </Button>
+                            </>
+                        )}
+                    </div>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:hidden">
                     <FilterSingleSelect
@@ -2359,13 +2617,30 @@ export default function FinancePage() {
                     return (
                         <div
                             key={b.id}
-                            className="rounded-xl border bg-card shadow-sm p-4 space-y-3"
+                            className={cn(
+                                "rounded-xl border bg-card shadow-sm p-4 space-y-3",
+                                isManageMode && selectedBookingIdSet.has(b.id) && "ring-1 ring-foreground/20",
+                            )}
                             style={mobileCardStyle}
                         >
                             <div className="flex items-start justify-between">
-                                <div>
-                                    <p className="font-semibold">{b.client_name}</p>
-                                    <p className="text-xs text-muted-foreground">{b.booking_code} · {b.service_label || b.services?.name || "-"}</p>
+                                <div className="flex items-start gap-3">
+                                    {isManageMode ? (
+                                        <AppCheckbox
+                                            checked={selectedBookingIdSet.has(b.id)}
+                                            onCheckedChange={() =>
+                                                setSelectedBookingIds((current) =>
+                                                    toggleSelection(current, b.id),
+                                                )
+                                            }
+                                            aria-label={tc("modeKelola")}
+                                            className="mt-0.5"
+                                        />
+                                    ) : null}
+                                    <div>
+                                        <p className="font-semibold">{b.client_name}</p>
+                                        <p className="text-xs text-muted-foreground">{b.booking_code} · {b.service_label || b.services?.name || "-"}</p>
+                                    </div>
                                 </div>
                                 {isCancelledBooking(b) ? (
                                     <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${b.dp_refund_amount > 0
@@ -2376,7 +2651,7 @@ export default function FinancePage() {
                                 ) : (
                                     <button
                                         onClick={() => b.is_fully_paid ? handleMarkUnpaid(b.id) : handleMarkPaid(b.id)}
-                                        disabled={!canWriteBookings}
+                                        disabled={!canWriteBookings || isManageMode}
                                         title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
                                         className={`text-xs font-medium px-2.5 py-1 rounded-full cursor-pointer ${b.is_fully_paid
                                             ? "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
@@ -2409,6 +2684,7 @@ export default function FinancePage() {
                                         );
                                     })}
                             </div>
+                            {!isManageMode ? (
                             <div className="flex flex-wrap items-center gap-1 pt-1 border-t">
                                 <Link href={`/bookings/${b.id}`}>
                                     <ActionIconButton tone="slate" title={tf("detailBooking")}>
@@ -2464,6 +2740,7 @@ export default function FinancePage() {
                                     )}
                                 </ActionIconButton>
                             </div>
+                            ) : null}
                         </div>
                     );
                 })}
@@ -2586,6 +2863,49 @@ export default function FinancePage() {
                 loading={archiveSavingId !== null}
             />
 
+            <ActionConfirmDialog
+                open={bulkActionDialog.open}
+                onOpenChange={(open) =>
+                    setBulkActionDialog({
+                        open,
+                        action: open ? bulkActionDialog.action : null,
+                    })
+                }
+                title={
+                    bulkActionDialog.action === "delete"
+                        ? (locale === "en" ? "Delete selected bookings?" : "Hapus booking terpilih?")
+                        : bulkActionDialog.action === "restore"
+                            ? (locale === "en" ? "Restore selected bookings?" : "Kembalikan booking terpilih?")
+                            : (locale === "en" ? "Archive selected bookings?" : "Arsipkan booking terpilih?")
+                }
+                message={
+                    bulkActionDialog.action === "delete"
+                        ? (locale === "en"
+                            ? `${selectedCount} booking(s) will be permanently deleted.`
+                            : `${selectedCount} booking akan dihapus permanen.`)
+                        : bulkActionDialog.action === "restore"
+                            ? (locale === "en"
+                                ? `${selectedCount} booking(s) will return to the active lists.`
+                                : `${selectedCount} booking akan kembali ke daftar aktif.`)
+                            : (locale === "en"
+                                ? `${selectedCount} booking(s) will be moved to the archive lists.`
+                                : `${selectedCount} booking akan dipindahkan ke daftar arsip.`)
+                }
+                cancelLabel={tc("batal")}
+                confirmLabel={
+                    bulkActionLoading
+                        ? (locale === "en" ? "Processing..." : "Memproses...")
+                        : bulkActionDialog.action === "delete"
+                            ? tc("hapusTerpilih")
+                            : bulkActionDialog.action === "restore"
+                                ? tc("kembalikanTerpilih")
+                                : tc("arsipkanTerpilih")
+                }
+                confirmVariant={bulkActionDialog.action === "delete" ? "destructive" : "default"}
+                onConfirm={() => { void confirmBulkAction(); }}
+                loading={bulkActionLoading}
+            />
+
             <ActionFeedbackDialog
                 open={feedbackDialog.open}
                 onOpenChange={(open) => setFeedbackDialog((prev) => ({ ...prev, open }))}
@@ -2601,17 +2921,17 @@ export default function FinancePage() {
                         <table ref={tableRef} className="min-w-full w-max border-separate border-spacing-0 text-left text-sm">
                             <thead className="text-xs uppercase bg-card border-b">
                                 <tr>
-                                    {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
+                                    {tableVisibleColumns.map((column) => renderDesktopHeader(column))}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/70 dark:divide-white/20">
                                 {queryState.isLoading || queryState.isRefreshing ? (
                                     <TableRowsSkeleton
                                         rows={Math.min(queryState.perPage, 6)}
-                                        columns={orderedVisibleColumns.length}
+                                        columns={tableVisibleColumns.length}
                                     />
                                 ) : queryState.totalItems === 0 ? (
-                                    <tr><td colSpan={columns.filter((column) => column.visible).length} className="px-6 py-12 text-center text-muted-foreground">
+                                    <tr><td colSpan={tableVisibleColumns.length} className="px-6 py-12 text-center text-muted-foreground">
                                         {t("tidakAdaData")}
                                     </td></tr>
                                 ) : bookings.map((b, rowIndex) => {
@@ -2643,7 +2963,7 @@ export default function FinancePage() {
                                                     : undefined
                                             }
                                         >
-                                            {orderedVisibleColumns.map((column) =>
+                                            {tableVisibleColumns.map((column) =>
                                                 renderDesktopCell(
                                                     b,
                                                     column,

@@ -43,6 +43,7 @@ import {
   MoveVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { CityMultiSelect } from "@/components/ui/city-multi-select";
 import { useSuccessToast } from "@/components/ui/success-toast";
 import {
@@ -60,7 +61,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { FilterSingleSelect } from "@/components/ui/filter-single-select";
 import {
@@ -82,6 +83,14 @@ import {
   buildServiceSoftPalette,
   resolveHexColor,
 } from "@/lib/service-colors";
+import { cn } from "@/lib/utils";
+import {
+  type BulkActionKind,
+  areAllVisibleSelected,
+  pruneSelection,
+  toggleSelectAllVisible,
+  toggleSelection,
+} from "@/lib/manage-selection";
 
 type Service = {
   id: string;
@@ -471,6 +480,9 @@ function ServiceCard({
   formatCurrency,
   durationLabel,
   fallbackColor,
+  manageMode,
+  selected,
+  onToggleSelect,
   onEdit,
   onToggleActive,
   onTogglePublic,
@@ -484,6 +496,9 @@ function ServiceCard({
   formatCurrency: (n: number) => string;
   durationLabel: string | null;
   fallbackColor: string;
+  manageMode: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
   onEdit: () => void;
   onToggleActive: () => void;
   onTogglePublic: () => void;
@@ -499,10 +514,17 @@ function ServiceCard({
     selected: true,
   });
   return (
-    <div className="flex h-full flex-col rounded-xl border bg-card p-5 shadow-sm">
+    <div className={cn("flex h-full flex-col rounded-xl border bg-card p-5 shadow-sm", manageMode && selected && "ring-1 ring-foreground/20")}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
+            {manageMode ? (
+              <AppCheckbox
+                checked={selected}
+                onCheckedChange={onToggleSelect}
+                aria-label="Manage selection"
+              />
+            ) : null}
             <h3 className="text-base font-semibold">{service.name}</h3>
             <span
               className="inline-flex h-3 w-3 rounded-full border"
@@ -598,6 +620,7 @@ function ServiceCard({
         ) : null}
       </div>
 
+      {!manageMode ? (
       <div className="mt-auto flex items-center gap-2 border-t pt-3">
         <Button variant="outline" size="sm" className="flex-1 gap-1.5" onClick={onEdit}>
           <Edit2 className="h-3.5 w-3.5" /> Edit
@@ -661,6 +684,7 @@ function ServiceCard({
           </Button>
         </div>
       </div>
+      ) : null}
     </div>
   );
 }
@@ -682,8 +706,10 @@ function EmptySectionState({
 
 export default function ServicesPage() {
   const supabase = React.useMemo(() => createClient(), []);
+  const locale = useLocale();
   const t = useTranslations("Services");
   const ts = useTranslations("ServicesPage");
+  const tc = useTranslations("Common");
   const [services, setServices] = React.useState<Service[]>([]);
   const [mainServices, setMainServices] = React.useState<Service[]>([]);
   const [addonServices, setAddonServices] = React.useState<Service[]>([]);
@@ -714,6 +740,13 @@ export default function ServicesPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedEventFilter, setSelectedEventFilter] = React.useState("");
   const [isReorderMode, setIsReorderMode] = React.useState(false);
+  const [isManageMode, setIsManageMode] = React.useState(false);
+  const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
+  const [bulkActionDialog, setBulkActionDialog] = React.useState<{
+    open: boolean;
+    action: BulkActionKind | null;
+  }>({ open: false, action: null });
+  const [bulkActionLoading, setBulkActionLoading] = React.useState(false);
   const [savingOrderGroup, setSavingOrderGroup] =
     React.useState<ServiceGroupKey | null>(null);
   const [activeDragId, setActiveDragId] = React.useState<string | null>(null);
@@ -741,6 +774,11 @@ export default function ServicesPage() {
   const [isDuplicatingService, setIsDuplicatingService] = React.useState(false);
   const hasLoadedPagedServicesRef = React.useRef(false);
   const { showSuccessToast, successToastNode } = useSuccessToast();
+  const closeManageMode = React.useCallback(() => {
+    setIsManageMode(false);
+    setSelectedServiceIds([]);
+    setBulkActionDialog({ open: false, action: null });
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1384,22 +1422,56 @@ export default function ServicesPage() {
     setDuplicateConfirmDialog({ open: true, service });
   }
 
+  async function deleteServiceById(service: Service) {
+    const { error } = await supabase
+      .from("services")
+      .delete()
+      .eq("id", service.id);
+    if (error) {
+      throw error;
+    }
+  }
+
   async function confirmDeleteService() {
     const currentService = deleteConfirmDialog.service;
     if (!currentService) return;
     setDeleteConfirmDialog({ open: false, service: null });
-
-    const { error } = await supabase
-      .from("services")
-      .delete()
-      .eq("id", currentService.id);
-    if (error) {
-      setPageError(error.message);
+    try {
+      await deleteServiceById(currentService);
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Gagal menghapus layanan.");
       return;
     }
 
     await normalizeGroupAfterMutation(getServiceGroupKey(currentService));
     await refreshVisibleData();
+  }
+
+  async function confirmBulkAction() {
+    if (bulkActionDialog.action !== "delete" || selectedServiceIds.length === 0) return;
+    setBulkActionLoading(true);
+    setPageError("");
+    const selectedServices = [...displayedMainServices, ...displayedAddonServices].filter(
+      (service) => selectedServiceIdSet.has(service.id),
+    );
+    const affectedGroups = new Set<ServiceGroupKey>();
+
+    try {
+      for (const service of selectedServices) {
+        await deleteServiceById(service);
+        affectedGroups.add(getServiceGroupKey(service));
+      }
+      for (const groupKey of affectedGroups) {
+        await normalizeGroupAfterMutation(groupKey);
+      }
+      await refreshVisibleData();
+      setSelectedServiceIds([]);
+      setBulkActionDialog({ open: false, action: null });
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Gagal menghapus layanan.");
+    } finally {
+      setBulkActionLoading(false);
+    }
   }
 
   async function confirmDuplicateService() {
@@ -1624,6 +1696,25 @@ export default function ServicesPage() {
   const displayedAddonServices = isReorderMode
     ? groupedServices.addon
     : addonServices;
+  const visibleServiceIds = React.useMemo(
+    () => [...displayedMainServices, ...displayedAddonServices].map((service) => service.id),
+    [displayedAddonServices, displayedMainServices],
+  );
+  const allVisibleSelected = React.useMemo(
+    () => areAllVisibleSelected(selectedServiceIds, visibleServiceIds),
+    [selectedServiceIds, visibleServiceIds],
+  );
+  const selectedCount = selectedServiceIds.length;
+  const selectedServiceIdSet = React.useMemo(
+    () => new Set(selectedServiceIds),
+    [selectedServiceIds],
+  );
+  React.useEffect(() => {
+    setSelectedServiceIds((current) => {
+      const next = pruneSelection(current, visibleServiceIds);
+      return next.length === current.length ? current : next;
+    });
+  }, [visibleServiceIds]);
 
   const reorderSaving = savingOrderGroup !== null;
   const mainQueryState = React.useMemo<PaginatedQueryState>(() => ({
@@ -1652,10 +1743,11 @@ export default function ServicesPage() {
               variant={isReorderMode ? "default" : "outline"}
               className="w-full lg:w-auto"
               onClick={() => {
+                if (isManageMode) return;
                 setIsReorderMode((current) => !current);
                 setPageError("");
               }}
-              disabled={loading || !hasAnyServices || reorderSaving}
+              disabled={loading || !hasAnyServices || reorderSaving || isManageMode}
             >
               {reorderSaving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1663,6 +1755,22 @@ export default function ServicesPage() {
                 <MoveVertical className="h-4 w-4" />
               )}
               {isReorderMode ? ts("finishReorder") : ts("reorderPackages")}
+            </Button>
+            <Button
+              type="button"
+              variant={isManageMode ? "default" : "outline"}
+              className="w-full lg:w-auto"
+              onClick={() => {
+                if (isManageMode) {
+                  closeManageMode();
+                  return;
+                }
+                setIsManageMode(true);
+                setPageError("");
+              }}
+              disabled={loading || !hasAnyServices || isReorderMode}
+            >
+              {tc("kelola")}
             </Button>
             <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
               <DialogTrigger asChild>
@@ -1939,6 +2047,41 @@ export default function ServicesPage() {
         </div>
       ) : null}
 
+      {isManageMode && !isReorderMode ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card px-4 py-3 shadow-sm">
+          <span className="text-sm font-medium text-foreground">
+            {tc("nDipilih", { count: selectedCount })}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              setSelectedServiceIds((current) =>
+                toggleSelectAllVisible(current, visibleServiceIds),
+              )
+            }
+          >
+            {tc("pilihSemua")}
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => setBulkActionDialog({ open: true, action: "delete" })}
+            disabled={selectedCount === 0}
+          >
+            {tc("hapusTerpilih")}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-9 px-2"
+            onClick={closeManageMode}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : null}
+
       {isReorderMode && services.length > 0 ? (
         <div className="rounded-2xl border border-dashed bg-muted/20 px-4 py-4 text-sm text-muted-foreground">
           {ts("reorderHint")}
@@ -2096,6 +2239,13 @@ export default function ServicesPage() {
                     formatCurrency={formatCurrency}
                     durationLabel={formatDuration(service)}
                     fallbackColor={profileBrandColor}
+                    manageMode={isManageMode}
+                    selected={selectedServiceIdSet.has(service.id)}
+                    onToggleSelect={() =>
+                      setSelectedServiceIds((current) =>
+                        toggleSelection(current, service.id),
+                      )
+                    }
                     onEdit={() => openEditDialog(service)}
                     onToggleActive={() => handleToggleActive(service)}
                     onTogglePublic={() => handleTogglePublic(service)}
@@ -2154,6 +2304,13 @@ export default function ServicesPage() {
                     formatCurrency={formatCurrency}
                     durationLabel={formatDuration(service)}
                     fallbackColor={profileBrandColor}
+                    manageMode={isManageMode}
+                    selected={selectedServiceIdSet.has(service.id)}
+                    onToggleSelect={() =>
+                      setSelectedServiceIds((current) =>
+                        toggleSelection(current, service.id),
+                      )
+                    }
                     onEdit={() => openEditDialog(service)}
                     onToggleActive={() => handleToggleActive(service)}
                     onTogglePublic={() => handleTogglePublic(service)}
@@ -2428,6 +2585,22 @@ export default function ServicesPage() {
         </DialogContent>
       </Dialog>
 
+      <ActionConfirmDialog
+        open={bulkActionDialog.open}
+        onOpenChange={(open) =>
+          setBulkActionDialog({
+            open,
+            action: open ? bulkActionDialog.action : null,
+          })
+        }
+        title={locale === "en" ? "Confirmation" : "Konfirmasi"}
+        message={locale === "en" ? `${selectedCount} service(s) will be deleted.` : `${selectedCount} layanan akan dihapus.`}
+        cancelLabel={tc("batal")}
+        confirmLabel={bulkActionLoading ? (locale === "en" ? "Deleting..." : "Menghapus...") : tc("hapusTerpilih")}
+        confirmVariant="destructive"
+        onConfirm={confirmBulkAction}
+        loading={bulkActionLoading}
+      />
       <ActionConfirmDialog
         open={deleteConfirmDialog.open}
         onOpenChange={(open) =>

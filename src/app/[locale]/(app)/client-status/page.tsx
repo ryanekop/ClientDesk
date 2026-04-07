@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { createClient } from "@/utils/supabase/client";
-import { Activity, Copy, ClipboardCheck, ExternalLink, Search, ListOrdered, X, Archive, Loader2 } from "lucide-react";
+import { Activity, Copy, ClipboardCheck, ExternalLink, Search, ListOrdered, X, Archive, Loader2, Trash2 } from "lucide-react";
+import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -59,6 +60,14 @@ import { buildAutoDpVerificationPatch } from "@/lib/final-settlement";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
+import { deleteBookingWithDependencies } from "@/lib/client-booking-delete";
+import {
+    type BulkActionKind,
+    areAllVisibleSelected,
+    pruneSelection,
+    toggleSelectAllVisible,
+    toggleSelection,
+} from "@/lib/manage-selection";
 
 type BookingStatus = {
     id: string;
@@ -121,13 +130,21 @@ const BASE_CLIENT_STATUS_COLUMNS: TableColumnPreference[] = [
     { id: "queue", label: "Antrian", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ];
-const CLIENT_STATUS_NON_RESIZABLE_COLUMN_IDS = ["row_number", "actions"];
+const CLIENT_STATUS_NON_RESIZABLE_COLUMN_IDS = ["select", "row_number", "actions"];
 const CLIENT_STATUS_COLUMN_MIN_WIDTHS: Record<string, number> = {
+    select: 52,
     name: 150,
     package: 140,
     event_type: 140,
     status: 232,
     queue: 104,
+};
+const CLIENT_STATUS_MANAGE_SELECT_COLUMN: TableColumnPreference = {
+    id: "select",
+    label: "Select",
+    visible: true,
+    locked: true,
+    pin: "left",
 };
 const CLIENT_STATUS_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:client_status:items_per_page";
 const CLIENT_STATUS_FILTER_STORAGE_PREFIX = "clientdesk:client_status:filters";
@@ -261,6 +278,13 @@ export default function ClientStatusPage() {
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
     const [resettingColumnWidths, setResettingColumnWidths] = React.useState(false);
+    const [isManageMode, setIsManageMode] = React.useState(false);
+    const [selectedBookingIds, setSelectedBookingIds] = React.useState<string[]>([]);
+    const [bulkActionDialog, setBulkActionDialog] = React.useState<{
+        open: boolean;
+        action: BulkActionKind | null;
+    }>({ open: false, action: null });
+    const [bulkActionLoading, setBulkActionLoading] = React.useState(false);
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
     const [metadataRows, setMetadataRows] = React.useState<Array<{ event_type?: string | null; extra_fields?: Record<string, unknown> | null }>>([]);
     const [totalItems, setTotalItems] = React.useState(0);
@@ -306,6 +330,14 @@ export default function ClientStatusPage() {
             message,
         });
     }, [locale]);
+    const closeManageMode = React.useCallback(() => {
+        setIsManageMode(false);
+        setSelectedBookingIds([]);
+        setBulkActionDialog({ open: false, action: null });
+    }, []);
+    const openBulkActionDialog = React.useCallback((action: BulkActionKind) => {
+        setBulkActionDialog({ open: true, action });
+    }, []);
 
     const invalidateBookingPublicCache = React.useCallback(
         async (options: { bookingCode?: string | null; trackingUuid?: string | null }) => {
@@ -893,6 +925,41 @@ export default function ClientStatusPage() {
         });
     }
 
+    function formatDeleteWarnings(
+        warnings: Awaited<ReturnType<typeof deleteBookingWithDependencies>>["warnings"],
+    ) {
+        return warnings.map((warning) => {
+            switch (warning.type) {
+                case "googleCalendarDeleteFailed":
+                    return tb("googleCalendarDeleteFailed", { reason: warning.reason });
+                case "googleCalendarDeletePartial":
+                    return tb("googleCalendarDeletePartial", {
+                        firstError: warning.firstError ? ` ${warning.firstError}` : "",
+                    });
+                case "googleCalendarDeleteFailedGeneric":
+                    return tb("googleCalendarDeleteFailedGeneric");
+                case "fastpikProjectDeleteFailed":
+                    return tb("fastpikProjectDeleteFailed", { reason: warning.reason });
+                case "fastpikProjectDeleteFailedGeneric":
+                    return tb("fastpikProjectDeleteFailedGeneric");
+                default:
+                    return tb("failedDeleteBooking");
+            }
+        });
+    }
+
+    async function deleteSingleBooking(booking: BookingStatus) {
+        const result = await deleteBookingWithDependencies({
+            supabase,
+            booking,
+            locale,
+        });
+        return {
+            ok: result.ok,
+            warningDetails: formatDeleteWarnings(result.warnings),
+        } as const;
+    }
+
     function openArchiveConfirmation(booking: BookingStatus) {
         setArchiveDialog({
             open: true,
@@ -901,14 +968,7 @@ export default function ClientStatusPage() {
         });
     }
 
-    async function confirmArchiveToggle() {
-        if (!requireBookingWrite()) return;
-        if (!archiveDialog.booking) return;
-
-        const booking = archiveDialog.booking;
-        const nextArchived = archiveDialog.nextArchived;
-        setArchiveSavingId(booking.id);
-
+    async function archiveSingleBooking(booking: BookingStatus, nextArchived: boolean) {
         const { error } = await supabase
             .from("bookings")
             .update(
@@ -924,9 +984,21 @@ export default function ClientStatusPage() {
             )
             .eq("id", booking.id);
 
+        return !error;
+    }
+
+    async function confirmArchiveToggle() {
+        if (!requireBookingWrite()) return;
+        if (!archiveDialog.booking) return;
+
+        const booking = archiveDialog.booking;
+        const nextArchived = archiveDialog.nextArchived;
+        setArchiveSavingId(booking.id);
+
+        const ok = await archiveSingleBooking(booking, nextArchived);
         setArchiveSavingId(null);
 
-        if (error) {
+        if (!ok) {
             showFeedback(
                 locale === "en"
                     ? "Failed to update archive status."
@@ -937,6 +1009,62 @@ export default function ClientStatusPage() {
         }
 
         setArchiveDialog({ open: false, booking: null, nextArchived: false });
+        void fetchBookingsPage("refresh");
+    }
+
+    async function confirmBulkAction() {
+        if (!requireBookingWrite()) return;
+        if (!bulkActionDialog.action || selectedBookingIds.length === 0) return;
+
+        const selectedBookings = bookings.filter((booking) =>
+            selectedBookingIdSet.has(booking.id),
+        );
+        if (selectedBookings.length === 0) return;
+
+        setBulkActionLoading(true);
+        let failedCount = 0;
+        const warningMessages: string[] = [];
+
+        if (bulkActionDialog.action === "archive" || bulkActionDialog.action === "restore") {
+            const nextArchived = bulkActionDialog.action === "archive";
+            for (const booking of selectedBookings) {
+                const ok = await archiveSingleBooking(booking, nextArchived);
+                if (!ok) {
+                    failedCount += 1;
+                }
+            }
+        } else {
+            for (const booking of selectedBookings) {
+                const result = await deleteSingleBooking(booking);
+                if (!result.ok) {
+                    failedCount += 1;
+                }
+                warningMessages.push(...result.warningDetails);
+            }
+        }
+
+        setBulkActionLoading(false);
+        setBulkActionDialog({ open: false, action: null });
+
+        if (failedCount > 0 || warningMessages.length > 0) {
+            const details: string[] = [];
+            if (failedCount > 0) {
+                details.push(
+                    locale === "en"
+                        ? `${failedCount} booking${failedCount > 1 ? "s" : ""} failed to process.`
+                        : `${failedCount} booking gagal diproses.`,
+                );
+            }
+            if (warningMessages.length > 0) {
+                details.push(warningMessages.join(" "));
+            }
+            showFeedback(
+                details.join(" "),
+                locale === "en" ? "Warning" : t("warningTitle"),
+            );
+        }
+
+        setSelectedBookingIds([]);
         void fetchBookingsPage("refresh");
     }
 
@@ -983,6 +1111,13 @@ export default function ClientStatusPage() {
         () => columns.filter((column) => column.visible),
         [columns],
     );
+    const tableVisibleColumns = React.useMemo(
+        () =>
+            isManageMode
+                ? [CLIENT_STATUS_MANAGE_SELECT_COLUMN, ...orderedVisibleColumns]
+                : orderedVisibleColumns,
+        [isManageMode, orderedVisibleColumns],
+    );
     const {
         getColumnWidthStyle,
         getResizeHandleProps,
@@ -995,7 +1130,7 @@ export default function ClientStatusPage() {
         enabled: !columnManagerOpen,
         menuKey: "client_status",
         userId: currentUserId,
-        columns: orderedVisibleColumns,
+        columns: tableVisibleColumns,
         nonResizableColumnIds: CLIENT_STATUS_NON_RESIZABLE_COLUMN_IDS,
         minWidthByColumnId: CLIENT_STATUS_COLUMN_MIN_WIDTHS,
     });
@@ -1003,7 +1138,7 @@ export default function ClientStatusPage() {
         tableRef,
         getStickyColumnStyle,
         getStickyColumnClassName,
-    } = useStickyTableColumns(orderedVisibleColumns, {
+    } = useStickyTableColumns(tableVisibleColumns, {
         enabled: !columnManagerOpen,
         isResizing,
     });
@@ -1092,6 +1227,25 @@ export default function ClientStatusPage() {
         isLoading: loading,
         isRefreshing: refreshing,
     }), [currentPage, itemsPerPage, totalItems, loading, refreshing]);
+    const visibleBookingIds = React.useMemo(
+        () => bookings.map((booking) => booking.id),
+        [bookings],
+    );
+    const allVisibleSelected = React.useMemo(
+        () => areAllVisibleSelected(selectedBookingIds, visibleBookingIds),
+        [selectedBookingIds, visibleBookingIds],
+    );
+    const selectedCount = selectedBookingIds.length;
+    const selectedBookingIdSet = React.useMemo(
+        () => new Set(selectedBookingIds),
+        [selectedBookingIds],
+    );
+    React.useEffect(() => {
+        setSelectedBookingIds((current) => {
+            const next = pruneSelection(current, visibleBookingIds);
+            return next.length === current.length ? current : next;
+        });
+    }, [visibleBookingIds]);
     const handleColumnManagerOpenChange = React.useCallback((nextOpen: boolean) => {
         setColumnManagerOpen(nextOpen);
     }, []);
@@ -1198,6 +1352,24 @@ export default function ClientStatusPage() {
 
     function renderDesktopHeader(column: TableColumnPreference) {
         switch (column.id) {
+            case "select":
+                return renderDesktopHeaderCell(
+                    column,
+                    "w-12 px-3 py-3 font-semibold text-muted-foreground whitespace-nowrap text-center",
+                    (
+                        <div className="flex justify-center">
+                            <AppCheckbox
+                                checked={allVisibleSelected}
+                                onCheckedChange={() =>
+                                    setSelectedBookingIds((current) =>
+                                        toggleSelectAllVisible(current, visibleBookingIds),
+                                    )
+                                }
+                                aria-label={tc("pilihSemua")}
+                            />
+                        </div>
+                    ),
+                );
             case "name":
                 return renderDesktopHeaderCell(column, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap", locale === "en" ? "Client" : "Klien");
             case "row_number":
@@ -1223,6 +1395,26 @@ export default function ClientStatusPage() {
         rowNumber: number,
     ) {
         switch (column.id) {
+            case "select":
+                return (
+                    <td
+                        key={column.id}
+                        style={getDesktopColumnStyle(column.id)}
+                        className={getDesktopCellClassName(column.id, "w-12 px-3 py-3 text-center")}
+                    >
+                        <div className="flex justify-center">
+                            <AppCheckbox
+                                checked={selectedBookingIdSet.has(booking.id)}
+                                onCheckedChange={() =>
+                                    setSelectedBookingIds((current) =>
+                                        toggleSelection(current, booking.id),
+                                    )
+                                }
+                                aria-label={tc("modeKelola")}
+                            />
+                        </div>
+                    </td>
+                );
             case "name":
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
@@ -1250,7 +1442,7 @@ export default function ClientStatusPage() {
                             onChange={(nextValue) => void updateStatus(booking.id, nextValue)}
                             options={statusSelectOptions}
                             placeholder={t("belumDiset")}
-                            disabled={savingId === booking.id || !canWriteBookings}
+                            disabled={savingId === booking.id || !canWriteBookings || isManageMode}
                             title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
                             className="inline-block w-[172px] align-middle"
                             triggerClassName={inlineStatusTriggerClass}
@@ -1276,7 +1468,7 @@ export default function ClientStatusPage() {
                                 updateQueue(booking.id, val);
                             }}
                             placeholder="-"
-                            disabled={!canWriteBookings}
+                            disabled={!canWriteBookings || isManageMode}
                             title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
                             className={inputClass}
                         />
@@ -1286,6 +1478,8 @@ export default function ClientStatusPage() {
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[96px] px-4 py-3 text-right")}>
                         <div className="flex items-center justify-end gap-1.5">
+                            {isManageMode ? null : (
+                                <>
                             {booking.tracking_uuid && (
                                 <>
                                     <ActionIconButton
@@ -1320,6 +1514,8 @@ export default function ClientStatusPage() {
                                     <Archive className="w-4 h-4" />
                                 )}
                             </ActionIconButton>
+                                </>
+                            )}
                         </div>
                     </td>
                 );
@@ -1420,7 +1616,7 @@ export default function ClientStatusPage() {
                         )}
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <button
                         type="button"
                         className={cn(
@@ -1445,6 +1641,62 @@ export default function ClientStatusPage() {
                     >
                         {archiveToggleLabels.archived}
                     </button>
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                        {!isManageMode ? (
+                            <button
+                                type="button"
+                                className={cn(
+                                    "inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm transition-colors",
+                                    "border-input bg-background/50 text-foreground hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60",
+                                )}
+                                onClick={() => setIsManageMode(true)}
+                                disabled={!canWriteBookings}
+                                title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
+                            >
+                                {tc("kelola")}
+                            </button>
+                        ) : (
+                            <>
+                                <span className="text-sm font-medium text-foreground">
+                                    {tc("nDipilih", { count: selectedCount })}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background/50 px-3 text-sm transition-colors hover:bg-muted/40"
+                                    onClick={() =>
+                                        setSelectedBookingIds((current) =>
+                                            toggleSelectAllVisible(current, visibleBookingIds),
+                                        )
+                                    }
+                                >
+                                    {tc("pilihSemua")}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background/50 px-3 text-sm transition-colors hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60"
+                                    onClick={() => openBulkActionDialog(isArchiveView ? "restore" : "archive")}
+                                    disabled={selectedCount === 0}
+                                >
+                                    {isArchiveView ? tc("kembalikanTerpilih") : tc("arsipkanTerpilih")}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="inline-flex h-9 items-center justify-center rounded-md bg-destructive px-3 text-sm text-destructive-foreground transition-colors hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-60"
+                                    onClick={() => openBulkActionDialog("delete")}
+                                    disabled={selectedCount === 0}
+                                >
+                                    {tc("hapusTerpilih")}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background/50 text-foreground transition-colors hover:bg-muted/40"
+                                    onClick={closeManageMode}
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:hidden">
                     <FilterSingleSelect
@@ -1552,12 +1804,32 @@ export default function ClientStatusPage() {
                 ) : queryState.totalItems === 0 ? (
                     <div className="text-center py-12 text-muted-foreground text-sm">{hasActiveFilters ? t("tidakAdaHasil") : t("belumAdaBooking")}</div>
                 ) : bookings.map(b => (
-                    <div key={b.id} className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+                    <div
+                        key={b.id}
+                        className={cn(
+                            "rounded-xl border bg-card shadow-sm p-4 space-y-3",
+                            isManageMode && selectedBookingIdSet.has(b.id) && "ring-1 ring-foreground/20",
+                        )}
+                    >
                         <div className="flex items-start justify-between">
-                            <Link href={`/bookings/${b.id}`} className="hover:underline">
-                                <p className="font-semibold">{b.client_name}</p>
-                                <p className="text-xs text-muted-foreground">{b.booking_code}</p>
-                            </Link>
+                            <div className="flex items-start gap-3">
+                                {isManageMode ? (
+                                    <AppCheckbox
+                                        checked={selectedBookingIdSet.has(b.id)}
+                                        onCheckedChange={() =>
+                                            setSelectedBookingIds((current) =>
+                                                toggleSelection(current, b.id),
+                                            )
+                                        }
+                                        aria-label={tc("modeKelola")}
+                                        className="mt-0.5"
+                                    />
+                                ) : null}
+                                <Link href={`/bookings/${b.id}`} className="hover:underline">
+                                    <p className="font-semibold">{b.client_name}</p>
+                                    <p className="text-xs text-muted-foreground">{b.booking_code}</p>
+                                </Link>
+                            </div>
                             {b.client_status && (
                                 <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusColors[b.client_status] || "bg-muted text-muted-foreground"}`}>
                                     {b.client_status}
@@ -1582,7 +1854,7 @@ export default function ClientStatusPage() {
                                     onChange={(nextValue) => void updateStatus(b.id, nextValue)}
                                     options={statusSelectOptions}
                                     placeholder={t("belumDiset")}
-                                    disabled={savingId === b.id || !canWriteBookings}
+                                    disabled={savingId === b.id || !canWriteBookings || isManageMode}
                                     title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
                                     className="flex-1"
                                     triggerClassName={inlineStatusTriggerClass}
@@ -1592,9 +1864,10 @@ export default function ClientStatusPage() {
                             </div>
                             <div className="flex items-center gap-3">
                                 <label className="text-xs text-muted-foreground shrink-0 w-14">{t("antrian")}</label>
-                                <input type="number" min={0} value={b.queue_position ?? ""} onChange={e => updateQueue(b.id, e.target.value === "" ? null : parseInt(e.target.value, 10))} placeholder="-" disabled={!canWriteBookings} title={!canWriteBookings ? bookingWriteBlockedMessage : undefined} className={`${inputClass} flex-1`} />
+                                <input type="number" min={0} value={b.queue_position ?? ""} onChange={e => updateQueue(b.id, e.target.value === "" ? null : parseInt(e.target.value, 10))} placeholder="-" disabled={!canWriteBookings || isManageMode} title={!canWriteBookings ? bookingWriteBlockedMessage : undefined} className={`${inputClass} flex-1`} />
                             </div>
                         </div>
+                        {!isManageMode ? (
                         <div className="flex items-center gap-1 pt-1 border-t">
                             {b.tracking_uuid && (
                                 <>
@@ -1623,6 +1896,7 @@ export default function ClientStatusPage() {
                                 )}
                             </ActionIconButton>
                         </div>
+                        ) : null}
                     </div>
                 ))}
             </div>
@@ -1645,18 +1919,18 @@ export default function ClientStatusPage() {
                     <table ref={tableRef} className="min-w-full w-max border-separate border-spacing-0 text-left text-sm">
                         <thead className="text-[11px] uppercase bg-card border-b">
                             <tr>
-                                {orderedVisibleColumns.map((column) => renderDesktopHeader(column))}
+                                {tableVisibleColumns.map((column) => renderDesktopHeader(column))}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border/50">
                             {queryState.isLoading || queryState.isRefreshing ? (
                                 <TableRowsSkeleton
                                     rows={Math.min(queryState.perPage, 6)}
-                                    columns={orderedVisibleColumns.length}
+                                    columns={tableVisibleColumns.length}
                                 />
                             ) : queryState.totalItems === 0 ? (
                                 <tr>
-                                    <td colSpan={columns.filter((column) => column.visible).length} className="text-center py-12 text-sm text-muted-foreground">
+                                    <td colSpan={tableVisibleColumns.length} className="text-center py-12 text-sm text-muted-foreground">
                                         {hasActiveFilters ? t("tidakAdaHasil") : t("belumAdaBooking")}
                                     </td>
                                 </tr>
@@ -1666,7 +1940,7 @@ export default function ClientStatusPage() {
                                         (currentPage - 1) * itemsPerPage + rowIndex + 1;
                                     return (
                                         <tr key={b.id} className="group hover:bg-muted/30 transition-colors">
-                                            {orderedVisibleColumns.map((column) =>
+                                            {tableVisibleColumns.map((column) =>
                                                 renderDesktopCell(b, column, rowNumber),
                                             )}
                                         </tr>
@@ -1725,6 +1999,48 @@ export default function ClientStatusPage() {
                         : tc("kembalikan")}
                 onConfirm={() => { void confirmArchiveToggle(); }}
                 loading={archiveSavingId !== null}
+            />
+            <ActionConfirmDialog
+                open={bulkActionDialog.open}
+                onOpenChange={(open) =>
+                    setBulkActionDialog({
+                        open,
+                        action: open ? bulkActionDialog.action : null,
+                    })
+                }
+                title={
+                    bulkActionDialog.action === "delete"
+                        ? (locale === "en" ? "Delete selected bookings?" : "Hapus booking terpilih?")
+                        : bulkActionDialog.action === "restore"
+                            ? (locale === "en" ? "Restore selected bookings?" : "Kembalikan booking terpilih?")
+                            : (locale === "en" ? "Archive selected bookings?" : "Arsipkan booking terpilih?")
+                }
+                message={
+                    bulkActionDialog.action === "delete"
+                        ? (locale === "en"
+                            ? `${selectedCount} booking(s) will be permanently deleted.`
+                            : `${selectedCount} booking akan dihapus permanen.`)
+                        : bulkActionDialog.action === "restore"
+                            ? (locale === "en"
+                                ? `${selectedCount} booking(s) will return to the active lists.`
+                                : `${selectedCount} booking akan kembali ke daftar aktif.`)
+                            : (locale === "en"
+                                ? `${selectedCount} booking(s) will be moved to the archive lists.`
+                                : `${selectedCount} booking akan dipindahkan ke daftar arsip.`)
+                }
+                cancelLabel={tc("batal")}
+                confirmLabel={
+                    bulkActionLoading
+                        ? (locale === "en" ? "Processing..." : "Memproses...")
+                        : bulkActionDialog.action === "delete"
+                            ? tc("hapusTerpilih")
+                            : bulkActionDialog.action === "restore"
+                                ? tc("kembalikanTerpilih")
+                                : tc("arsipkanTerpilih")
+                }
+                confirmVariant={bulkActionDialog.action === "delete" ? "destructive" : "default"}
+                onConfirm={() => { void confirmBulkAction(); }}
+                loading={bulkActionLoading}
             />
 
             <ActionFeedbackDialog
