@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { createClient } from "@/utils/supabase/client";
-import { Activity, Copy, ClipboardCheck, ExternalLink, Search, ListOrdered, X, Archive, Loader2, Trash2 } from "lucide-react";
+import { Activity, Copy, ClipboardCheck, ExternalLink, Search, ListOrdered, X, Archive, Loader2 } from "lucide-react";
 import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
@@ -22,6 +22,7 @@ import { useResizableTableColumns } from "@/components/ui/use-resizable-table-co
 import { useTranslations, useLocale } from "next-intl";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
 import { PageHeader } from "@/components/ui/page-header";
+import { ManageActionToolbar } from "@/components/ui/manage-action-toolbar";
 import { FilterSingleSelect } from "@/components/ui/filter-single-select";
 import { FilterMultiSelect } from "@/components/ui/filter-multi-select";
 import { BookingDateRangePicker } from "@/components/ui/booking-date-range-picker";
@@ -1236,6 +1237,19 @@ export default function ClientStatusPage() {
         [selectedBookingIds, visibleBookingIds],
     );
     const selectedCount = selectedBookingIds.length;
+    const manageToolbarLabels = React.useMemo(
+        () => ({
+            ...archiveToggleLabels,
+            manage: tc("kelola"),
+            selectAll: tc("pilihSemua"),
+            archiveSelected: tc("arsipkanTerpilih"),
+            restoreSelected: tc("kembalikanTerpilih"),
+            deleteSelected: tc("hapusTerpilih"),
+            selectedCount: tc("nDipilih", { count: selectedCount }),
+            closeManage: locale === "en" ? "Close manage mode" : "Tutup mode kelola",
+        }),
+        [archiveToggleLabels, locale, selectedCount, tc],
+    );
     const selectedBookingIdSet = React.useMemo(
         () => new Set(selectedBookingIds),
         [selectedBookingIds],
@@ -1616,88 +1630,30 @@ export default function ClientStatusPage() {
                         )}
                     </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        className={cn(
-                            "inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm transition-colors",
-                            !isArchiveView
-                                ? "border-foreground bg-foreground text-background"
-                                : "border-input bg-background/50 text-foreground hover:bg-muted/40",
-                        )}
-                        onClick={() => setArchiveMode("active")}
-                    >
-                        {archiveToggleLabels.active}
-                    </button>
-                    <button
-                        type="button"
-                        className={cn(
-                            "inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm transition-colors",
-                            isArchiveView
-                                ? "border-foreground bg-foreground text-background"
-                                : "border-input bg-background/50 text-foreground hover:bg-muted/40",
-                        )}
-                        onClick={() => setArchiveMode("archived")}
-                    >
-                        {archiveToggleLabels.archived}
-                    </button>
-                    <div className="ml-auto flex flex-wrap items-center gap-2">
-                        {!isManageMode ? (
-                            <button
-                                type="button"
-                                className={cn(
-                                    "inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm transition-colors",
-                                    "border-input bg-background/50 text-foreground hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60",
-                                )}
-                                onClick={() => setIsManageMode(true)}
-                                disabled={!canWriteBookings}
-                                title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
-                            >
-                                {tc("kelola")}
-                            </button>
-                        ) : (
-                            <>
-                                <span className="text-sm font-medium text-foreground">
-                                    {tc("nDipilih", { count: selectedCount })}
-                                </span>
-                                <button
-                                    type="button"
-                                    className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background/50 px-3 text-sm transition-colors hover:bg-muted/40"
-                                    onClick={() =>
-                                        setSelectedBookingIds((current) =>
-                                            toggleSelectAllVisible(current, visibleBookingIds),
-                                        )
-                                    }
-                                >
-                                    {tc("pilihSemua")}
-                                </button>
-                                <button
-                                    type="button"
-                                    className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background/50 px-3 text-sm transition-colors hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60"
-                                    onClick={() => openBulkActionDialog(isArchiveView ? "restore" : "archive")}
-                                    disabled={selectedCount === 0}
-                                >
-                                    {isArchiveView ? tc("kembalikanTerpilih") : tc("arsipkanTerpilih")}
-                                </button>
-                                <button
-                                    type="button"
-                                    className="inline-flex h-9 items-center justify-center rounded-md bg-destructive px-3 text-sm text-destructive-foreground transition-colors hover:bg-destructive/90 disabled:cursor-not-allowed disabled:opacity-60"
-                                    onClick={() => openBulkActionDialog("delete")}
-                                    disabled={selectedCount === 0}
-                                >
-                                    {tc("hapusTerpilih")}
-                                </button>
-                                <button
-                                    type="button"
-                                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background/50 text-foreground transition-colors hover:bg-muted/40"
-                                    onClick={closeManageMode}
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </>
-                        )}
-                    </div>
-                </div>
+                <ManageActionToolbar
+                    variant="archive-capable"
+                    archiveMode={archiveMode}
+                    isManageMode={isManageMode}
+                    labels={manageToolbarLabels}
+                    selectedCount={selectedCount}
+                    manageDisabled={!canWriteBookings}
+                    manageDisabledReason={bookingWriteBlockedMessage}
+                    primaryBulkDisabled={selectedCount === 0 || !canWriteBookings}
+                    deleteDisabled={selectedCount === 0 || !canWriteBookings}
+                    selectAllDisabled={!canWriteBookings}
+                    onArchiveModeChange={setArchiveMode}
+                    onEnterManage={() => setIsManageMode(true)}
+                    onToggleSelectAll={() =>
+                        setSelectedBookingIds((current) =>
+                            toggleSelectAllVisible(current, visibleBookingIds),
+                        )
+                    }
+                    onPrimaryBulkAction={() =>
+                        openBulkActionDialog(isArchiveView ? "restore" : "archive")
+                    }
+                    onDelete={() => openBulkActionDialog("delete")}
+                    onCloseManage={closeManageMode}
+                />
                 <div className="flex w-full flex-col gap-2 sm:hidden">
                     <FilterSingleSelect
                         value={sortOrder}

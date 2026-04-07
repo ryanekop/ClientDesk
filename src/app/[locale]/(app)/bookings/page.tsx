@@ -30,6 +30,7 @@ import {
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
 import { useSuccessToast } from "@/components/ui/success-toast";
+import { ManageActionToolbar } from "@/components/ui/manage-action-toolbar";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import { useStickyTableColumns } from "@/components/ui/use-sticky-table-columns";
 import { useResizableTableColumns } from "@/components/ui/use-resizable-table-columns";
@@ -2126,6 +2127,19 @@ export default function BookingsPage() {
             return next.length === current.length ? current : next;
         });
     }, [visibleBookingIds]);
+    const manageToolbarLabels = React.useMemo(
+        () => ({
+            ...archiveToggleLabels,
+            manage: tc("kelola"),
+            selectAll: tc("pilihSemua"),
+            archiveSelected: tc("arsipkanTerpilih"),
+            restoreSelected: tc("kembalikanTerpilih"),
+            deleteSelected: tc("hapusTerpilih"),
+            selectedCount: tc("nDipilih", { count: selectedCount }),
+            closeManage: locale === "en" ? "Close manage mode" : "Tutup mode kelola",
+        }),
+        [archiveToggleLabels, locale, selectedCount, tc],
+    );
 
     async function exportBookings() {
         const singleStatusFilter = statusFilter[0] || "All";
@@ -2392,82 +2406,30 @@ export default function BookingsPage() {
                         )}
                     </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                        type="button"
-                        variant={!isArchiveView ? "default" : "outline"}
-                        className="h-9 px-3"
-                        onClick={() => setArchiveMode("active")}
-                    >
-                        {archiveToggleLabels.active}
-                    </Button>
-                    <Button
-                        type="button"
-                        variant={isArchiveView ? "default" : "outline"}
-                        className="h-9 px-3"
-                        onClick={() => setArchiveMode("archived")}
-                    >
-                        {archiveToggleLabels.archived}
-                    </Button>
-                    <div className="ml-auto flex flex-wrap items-center gap-2">
-                        {!isManageMode ? (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="h-9 px-3"
-                                onClick={() => setIsManageMode(true)}
-                                disabled={!canWriteBookings}
-                                title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
-                            >
-                                {tc("kelola")}
-                            </Button>
-                        ) : (
-                            <>
-                                <span className="text-sm font-medium text-foreground">
-                                    {tc("nDipilih", { count: selectedCount })}
-                                </span>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-9 px-3"
-                                    onClick={() =>
-                                        setSelectedBookingIds((current) =>
-                                            toggleSelectAllVisible(current, visibleBookingIds),
-                                        )
-                                    }
-                                >
-                                    {tc("pilihSemua")}
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="h-9 px-3"
-                                    onClick={() => openBulkActionDialog(isArchiveView ? "restore" : "archive")}
-                                    disabled={selectedCount === 0}
-                                >
-                                    {isArchiveView ? tc("kembalikanTerpilih") : tc("arsipkanTerpilih")}
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="destructive"
-                                    className="h-9 px-3"
-                                    onClick={() => openBulkActionDialog("delete")}
-                                    disabled={selectedCount === 0}
-                                >
-                                    {tc("hapusTerpilih")}
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    className="h-9 px-2"
-                                    onClick={closeManageMode}
-                                >
-                                    <X className="w-4 h-4" />
-                                </Button>
-                            </>
-                        )}
-                    </div>
-                </div>
+                <ManageActionToolbar
+                    variant="archive-capable"
+                    archiveMode={archiveMode}
+                    isManageMode={isManageMode}
+                    labels={manageToolbarLabels}
+                    selectedCount={selectedCount}
+                    manageDisabled={!canWriteBookings}
+                    manageDisabledReason={bookingWriteBlockedMessage}
+                    primaryBulkDisabled={selectedCount === 0 || !canWriteBookings}
+                    deleteDisabled={selectedCount === 0 || !canWriteBookings}
+                    selectAllDisabled={!canWriteBookings}
+                    onArchiveModeChange={setArchiveMode}
+                    onEnterManage={() => setIsManageMode(true)}
+                    onToggleSelectAll={() =>
+                        setSelectedBookingIds((current) =>
+                            toggleSelectAllVisible(current, visibleBookingIds),
+                        )
+                    }
+                    onPrimaryBulkAction={() =>
+                        openBulkActionDialog(isArchiveView ? "restore" : "archive")
+                    }
+                    onDelete={() => openBulkActionDialog("delete")}
+                    onCloseManage={closeManageMode}
+                />
                 <div className="flex w-full flex-col gap-2 sm:hidden">
                     <FilterSingleSelect
                         value={sortOrder}

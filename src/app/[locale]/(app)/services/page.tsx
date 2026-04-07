@@ -51,6 +51,7 @@ import {
   PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME,
 } from "@/components/ui/page-header";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
+import { ManageActionToolbar } from "@/components/ui/manage-action-toolbar";
 import {
   Dialog,
   DialogContent,
@@ -86,7 +87,6 @@ import {
 import { cn } from "@/lib/utils";
 import {
   type BulkActionKind,
-  areAllVisibleSelected,
   pruneSelection,
   toggleSelectAllVisible,
   toggleSelection,
@@ -1700,11 +1700,17 @@ export default function ServicesPage() {
     () => [...displayedMainServices, ...displayedAddonServices].map((service) => service.id),
     [displayedAddonServices, displayedMainServices],
   );
-  const allVisibleSelected = React.useMemo(
-    () => areAllVisibleSelected(selectedServiceIds, visibleServiceIds),
-    [selectedServiceIds, visibleServiceIds],
-  );
   const selectedCount = selectedServiceIds.length;
+  const manageToolbarLabels = React.useMemo(
+    () => ({
+      manage: tc("kelola"),
+      selectAll: tc("pilihSemua"),
+      deleteSelected: tc("hapusTerpilih"),
+      selectedCount: tc("nDipilih", { count: selectedCount }),
+      closeManage: locale === "en" ? "Close manage mode" : "Tutup mode kelola",
+    }),
+    [locale, selectedCount, tc],
+  );
   const selectedServiceIdSet = React.useMemo(
     () => new Set(selectedServiceIds),
     [selectedServiceIds],
@@ -1756,22 +1762,28 @@ export default function ServicesPage() {
               )}
               {isReorderMode ? ts("finishReorder") : ts("reorderPackages")}
             </Button>
-            <Button
-              type="button"
-              variant={isManageMode ? "default" : "outline"}
-              className="w-full lg:w-auto"
-              onClick={() => {
-                if (isManageMode) {
-                  closeManageMode();
-                  return;
-                }
-                setIsManageMode(true);
-                setPageError("");
-              }}
-              disabled={loading || !hasAnyServices || isReorderMode}
-            >
-              {tc("kelola")}
-            </Button>
+            {!isManageMode ? (
+              <ManageActionToolbar
+                variant="simple-manage"
+                isManageMode={false}
+                labels={manageToolbarLabels}
+                selectedCount={selectedCount}
+                className="contents"
+                manageButtonClassName="w-full lg:w-auto"
+                manageDisabled={loading || !hasAnyServices || isReorderMode}
+                onEnterManage={() => {
+                  setIsManageMode(true);
+                  setPageError("");
+                }}
+                onToggleSelectAll={() => {
+                  setSelectedServiceIds((current) =>
+                    toggleSelectAllVisible(current, visibleServiceIds),
+                  );
+                }}
+                onDelete={() => setBulkActionDialog({ open: true, action: "delete" })}
+                onCloseManage={closeManageMode}
+              />
+            ) : null}
             <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
               <DialogTrigger asChild>
                 <Button className="w-full lg:w-auto">
@@ -2048,38 +2060,25 @@ export default function ServicesPage() {
       ) : null}
 
       {isManageMode && !isReorderMode ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card px-4 py-3 shadow-sm">
-          <span className="text-sm font-medium text-foreground">
-            {tc("nDipilih", { count: selectedCount })}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              setSelectedServiceIds((current) =>
-                toggleSelectAllVisible(current, visibleServiceIds),
-              )
-            }
-          >
-            {tc("pilihSemua")}
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={() => setBulkActionDialog({ open: true, action: "delete" })}
-            disabled={selectedCount === 0}
-          >
-            {tc("hapusTerpilih")}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-9 px-2"
-            onClick={closeManageMode}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+        <ManageActionToolbar
+          variant="simple-manage"
+          isManageMode
+          labels={manageToolbarLabels}
+          selectedCount={selectedCount}
+          className="rounded-2xl border bg-card px-4 py-3 shadow-sm"
+          deleteDisabled={selectedCount === 0}
+          onEnterManage={() => {
+            setIsManageMode(true);
+            setPageError("");
+          }}
+          onToggleSelectAll={() =>
+            setSelectedServiceIds((current) =>
+              toggleSelectAllVisible(current, visibleServiceIds),
+            )
+          }
+          onDelete={() => setBulkActionDialog({ open: true, action: "delete" })}
+          onCloseManage={closeManageMode}
+        />
       ) : null}
 
       {isReorderMode && services.length > 0 ? (

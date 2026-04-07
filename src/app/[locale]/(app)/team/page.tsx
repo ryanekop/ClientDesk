@@ -11,6 +11,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useLocale, useTranslations } from "next-intl";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TableColumnManager } from "@/components/ui/table-column-manager";
+import { ManageActionToolbar } from "@/components/ui/manage-action-toolbar";
 import { useStickyTableColumns } from "@/components/ui/use-sticky-table-columns";
 import { useResizableTableColumns } from "@/components/ui/use-resizable-table-columns";
 import { FilterMultiSelect } from "@/components/ui/filter-multi-select";
@@ -1102,6 +1103,16 @@ export default function TeamPage() {
         [selectedMemberIds, visibleMemberIds],
     );
     const selectedCount = selectedMemberIds.length;
+    const manageToolbarLabels = React.useMemo(
+        () => ({
+            manage: tc("kelola"),
+            selectAll: tc("pilihSemua"),
+            deleteSelected: tc("hapusTerpilih"),
+            selectedCount: tc("nDipilih", { count: selectedCount }),
+            closeManage: locale === "en" ? "Close manage mode" : "Tutup mode kelola",
+        }),
+        [locale, selectedCount, tc],
+    );
     const selectedMemberIdSet = React.useMemo(
         () => new Set(selectedMemberIds),
         [selectedMemberIds],
@@ -1748,49 +1759,23 @@ export default function TeamPage() {
                         mobileTitle={tt("filterTagsTitle")}
                         disabled={tagFilterOptions.length === 0}
                     />
-                    {!isManageMode ? (
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="w-full sm:w-auto"
-                            onClick={() => setIsManageMode(true)}
-                        >
-                            {tc("kelola")}
-                        </Button>
-                    ) : (
-                        <div className="flex w-full flex-wrap items-center gap-2">
-                            <span className="text-sm font-medium text-foreground">
-                                {tc("nDipilih", { count: selectedCount })}
-                            </span>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() =>
-                                    setSelectedMemberIds((current) =>
-                                        toggleSelectAllVisible(current, visibleMemberIds),
-                                    )
-                                }
-                            >
-                                {tc("pilihSemua")}
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="destructive"
-                                onClick={() => setBulkActionDialog({ open: true, action: "delete" })}
-                                disabled={selectedCount === 0}
-                            >
-                                {tc("hapusTerpilih")}
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                className="h-9 px-2"
-                                onClick={closeManageMode}
-                            >
-                                <X className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    )}
+                    <ManageActionToolbar
+                        variant="simple-manage"
+                        isManageMode={isManageMode}
+                        labels={manageToolbarLabels}
+                        selectedCount={selectedCount}
+                        className={isManageMode ? "flex w-full flex-wrap items-center gap-2" : "contents"}
+                        manageButtonClassName="w-full sm:w-auto"
+                        deleteDisabled={selectedCount === 0}
+                        onEnterManage={() => setIsManageMode(true)}
+                        onToggleSelectAll={() =>
+                            setSelectedMemberIds((current) =>
+                                toggleSelectAllVisible(current, visibleMemberIds),
+                            )
+                        }
+                        onDelete={() => setBulkActionDialog({ open: true, action: "delete" })}
+                        onCloseManage={closeManageMode}
+                    />
                 </div>
             )}
 
