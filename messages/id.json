@@ -375,6 +375,8 @@
         "verifiedDpHint": "Total DP yang sudah diverifikasi.",
         "outstandingBalance": "Sisa Tagihan",
         "outstandingBalanceHint": "Sisa tagihan booking pada periode terpilih.",
+        "totalBookings": "Total Booking",
+        "totalBookingsHint": "Jumlah booking yang masuk dalam periode ini.",
         "sourceBreakdown": "Sumber Keuangan",
         "sourceEmpty": "Belum ada transaksi pada periode ini.",
         "monthlyChartTitle": "Grafik Pemasukan Bulanan",

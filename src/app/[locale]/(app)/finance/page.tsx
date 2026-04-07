@@ -9,12 +9,12 @@ import {
   Clock3,
   RefreshCcw,
   Package2,
+  Layers3,
 } from "lucide-react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,7 +29,9 @@ import {
   type FilterSingleSelectOption,
 } from "@/components/ui/filter-single-select";
 import { Button } from "@/components/ui/button";
+import { ShimmerBlock } from "@/components/ui/shimmer-block";
 import { useMoneyVisibility } from "@/hooks/use-money-visibility";
+import { cn } from "@/lib/utils";
 
 type DashboardSummary = {
   grossRevenue: number;
@@ -123,6 +125,7 @@ function SummaryCard({
   icon,
   tone,
   isMoneyVisible,
+  valueType = "currency",
 }: {
   title: string;
   hint: string;
@@ -130,12 +133,16 @@ function SummaryCard({
   icon: React.ReactNode;
   tone: string;
   isMoneyVisible: boolean;
+  valueType?: "currency" | "count";
 }) {
-  const formattedAmount = new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(amount || 0);
+  const formattedAmount =
+    valueType === "count"
+      ? new Intl.NumberFormat("id-ID").format(amount || 0)
+      : new Intl.NumberFormat("id-ID", {
+          style: "currency",
+          currency: "IDR",
+          minimumFractionDigits: 0,
+        }).format(amount || 0);
 
   return (
     <div className="rounded-2xl border bg-card p-5 shadow-sm">
@@ -146,9 +153,102 @@ function SummaryCard({
         </span>
       </div>
       <div className="text-2xl font-bold tracking-tight">
-        {isMoneyVisible ? formattedAmount : "Rp •••••••"}
+        {valueType === "count" || isMoneyVisible ? formattedAmount : "Rp •••••••"}
       </div>
       <p className="mt-2 text-sm text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+function FinanceDashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={`finance-summary-skeleton-${index}`} className="rounded-2xl border bg-card p-5 shadow-sm">
+            <div className="mb-4 flex items-center gap-3">
+              <ShimmerBlock className="h-10 w-10 rounded-xl" />
+              <ShimmerBlock className="h-3 w-24" />
+            </div>
+            <ShimmerBlock className="h-8 w-32" />
+            <ShimmerBlock className="mt-3 h-4 w-40" />
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-12">
+        <div className="rounded-2xl border bg-card p-5 shadow-sm xl:col-span-8">
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="space-y-2">
+              <ShimmerBlock className="h-6 w-48" />
+              <ShimmerBlock className="h-4 w-56" />
+            </div>
+            <div className="flex gap-2">
+              <ShimmerBlock className="h-6 w-28 rounded-full" />
+              <ShimmerBlock className="h-6 w-24 rounded-full" />
+            </div>
+          </div>
+          <div className="h-[360px] space-y-4">
+            <ShimmerBlock className="h-full w-full rounded-2xl" />
+          </div>
+        </div>
+
+        <div className="space-y-6 xl:col-span-4">
+          <div className="rounded-2xl border bg-card p-5 shadow-sm">
+            <div className="mb-4 space-y-2">
+              <ShimmerBlock className="h-6 w-32" />
+              <ShimmerBlock className="h-4 w-24" />
+            </div>
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={`finance-source-skeleton-${index}`} className="rounded-xl border bg-muted/20 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <ShimmerBlock className="h-4 w-24" />
+                    <ShimmerBlock className="h-4 w-20" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-card p-5 shadow-sm">
+            <div className="mb-4 space-y-2">
+              <ShimmerBlock className="h-6 w-36" />
+              <ShimmerBlock className="h-4 w-48" />
+            </div>
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={`finance-package-skeleton-${index}`} className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <ShimmerBlock className="h-4 w-28" />
+                    <ShimmerBlock className="h-4 w-14" />
+                  </div>
+                  <ShimmerBlock className="h-2.5 w-full rounded-full" />
+                  <div className="flex items-center justify-between gap-3">
+                    <ShimmerBlock className="h-3 w-24" />
+                    <ShimmerBlock className="h-3 w-20" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LegendChip({
+  colorClassName,
+  label,
+}: {
+  colorClassName: string;
+  label: string;
+}) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border bg-background/80 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+      <span className={cn("h-2.5 w-2.5 rounded-full", colorClassName)} />
+      <span>{label}</span>
     </div>
   );
 }
@@ -163,6 +263,8 @@ export default function FinanceDashboardPage() {
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [hasLoadedDashboard, setHasLoadedDashboard] = React.useState(false);
+  const cacheRef = React.useRef(new Map<string, FinanceDashboardPayload>());
 
   React.useEffect(() => {
     try {
@@ -176,8 +278,21 @@ export default function FinanceDashboardPage() {
   }, []);
 
   const loadDashboard = React.useCallback(
-    async (period: string, options?: { preserveData?: boolean }) => {
-      if (options?.preserveData) {
+    async (period: string, options?: { preserveData?: boolean; force?: boolean }) => {
+      const cacheKey = `${period}__${timeZone}`;
+      const preserveData = options?.preserveData ?? hasLoadedDashboard;
+      const cachedPayload = options?.force ? null : cacheRef.current.get(cacheKey);
+
+      if (cachedPayload) {
+        setPayload(cachedPayload);
+        setError("");
+        setLoading(false);
+        setRefreshing(false);
+        setHasLoadedDashboard(true);
+        return;
+      }
+
+      if (preserveData) {
         setRefreshing(true);
       } else {
         setLoading(true);
@@ -202,7 +317,7 @@ export default function FinanceDashboardPage() {
           throw new Error(errorMessage || t("failedLoad"));
         }
 
-        setPayload({
+        const nextPayload = {
           selectedPeriod:
             typeof result.selectedPeriod === "string" ? result.selectedPeriod : period,
           currentPeriod:
@@ -214,7 +329,11 @@ export default function FinanceDashboardPage() {
           sourceBreakdown: Array.isArray(result.sourceBreakdown) ? result.sourceBreakdown : [],
           monthlyChart: Array.isArray(result.monthlyChart) ? result.monthlyChart : [],
           topPackages: Array.isArray(result.topPackages) ? result.topPackages : [],
-        });
+        };
+
+        cacheRef.current.set(cacheKey, nextPayload);
+        setPayload(nextPayload);
+        setHasLoadedDashboard(true);
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : t("failedLoad"));
       } finally {
@@ -222,11 +341,11 @@ export default function FinanceDashboardPage() {
         setRefreshing(false);
       }
     },
-    [t, timeZone],
+    [hasLoadedDashboard, t, timeZone],
   );
 
   React.useEffect(() => {
-    void loadDashboard(selectedPeriod);
+    void loadDashboard(selectedPeriod, { preserveData: hasLoadedDashboard });
   }, [loadDashboard, selectedPeriod]);
 
   const periodOptions = React.useMemo<FilterSingleSelectOption[]>(() => {
@@ -264,6 +383,11 @@ export default function FinanceDashboardPage() {
     [locale, payload.monthlyChart],
   );
 
+  const topPackageMaxCount = React.useMemo(() => {
+    const counts = payload.topPackages.map((item) => item.bookingCount);
+    return counts.length > 0 ? Math.max(...counts, 1) : 1;
+  }, [payload.topPackages]);
+
   const formatCurrency = React.useCallback(
     (amount: number) =>
       new Intl.NumberFormat("id-ID", {
@@ -286,6 +410,7 @@ export default function FinanceDashboardPage() {
 
   const activePeriodLabel =
     selectedPeriod === "all" ? t("allPeriods") : formatMonthLabel(selectedPeriod, locale);
+  const showInitialSkeleton = loading && !hasLoadedDashboard;
 
   return (
     <div className="space-y-6">
@@ -306,7 +431,7 @@ export default function FinanceDashboardPage() {
               variant="outline"
               className="w-full gap-2 md:w-auto"
               onClick={() => {
-                void loadDashboard(selectedPeriod, { preserveData: true });
+                void loadDashboard(selectedPeriod, { preserveData: true, force: true });
               }}
               disabled={loading || refreshing}
             >
@@ -346,7 +471,11 @@ export default function FinanceDashboardPage() {
         {activePeriodLabel}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      {showInitialSkeleton ? <FinanceDashboardSkeleton /> : null}
+
+      {!showInitialSkeleton ? (
+        <>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <SummaryCard
           title={t("grossRevenue")}
           hint={t("grossRevenueHint")}
@@ -387,19 +516,45 @@ export default function FinanceDashboardPage() {
           tone="bg-slate-100 text-slate-700 dark:bg-slate-500/10 dark:text-slate-300"
           icon={<Clock3 className="h-5 w-5" />}
         />
+        <SummaryCard
+          title={t("totalBookings")}
+          hint={t("totalBookingsHint")}
+          amount={payload.summary.bookingCount}
+          valueType="count"
+          isMoneyVisible={isMoneyVisible}
+          tone="bg-violet-100 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300"
+          icon={<Layers3 className="h-5 w-5" />}
+        />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.7fr_1fr]">
-        <div className="rounded-2xl border bg-card p-5 shadow-sm">
-          <div className="mb-4">
-            <h3 className="font-semibold">{t("monthlyChartTitle")}</h3>
-            <p className="text-sm text-muted-foreground">{t("monthlyChartSubtitle")}</p>
+      <div className="grid gap-6 xl:grid-cols-12">
+        <div
+          className={cn(
+            "rounded-2xl border bg-card p-5 shadow-sm xl:col-span-8",
+            refreshing && "opacity-80 transition-opacity",
+          )}
+        >
+          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h3 className="font-semibold">{t("monthlyChartTitle")}</h3>
+              <p className="text-sm text-muted-foreground">{t("monthlyChartSubtitle")}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <LegendChip colorClassName="bg-cyan-600" label={t("chartNetRevenue")} />
+              <LegendChip colorClassName="bg-rose-400" label={t("chartOperationalCosts")} />
+            </div>
           </div>
-          <div className="h-[320px] w-full">
+          <div className="h-[360px] w-full 2xl:h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartRows} margin={{ top: 12, right: 16, left: 0, bottom: 0 }}>
+              <BarChart data={chartRows} margin={{ top: 12, right: 8, left: -12, bottom: 0 }} barGap={10}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="shortLabel" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                <XAxis
+                  dataKey="shortLabel"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 11 }}
+                  dy={8}
+                />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
@@ -425,16 +580,32 @@ export default function FinanceDashboardPage() {
                     );
                   }}
                 />
-                <Legend />
-                <Bar dataKey="netRevenue" name={t("chartNetRevenue")} fill="#0891b2" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="operationalCosts" name={t("chartOperationalCosts")} fill="#fb7185" radius={[6, 6, 0, 0]} />
+                <Bar
+                  dataKey="netRevenue"
+                  name={t("chartNetRevenue")}
+                  fill="#0891b2"
+                  radius={[8, 8, 0, 0]}
+                  maxBarSize={28}
+                />
+                <Bar
+                  dataKey="operationalCosts"
+                  name={t("chartOperationalCosts")}
+                  fill="#fb7185"
+                  radius={[8, 8, 0, 0]}
+                  maxBarSize={28}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="rounded-2xl border bg-card p-5 shadow-sm">
+        <div className="space-y-6 xl:col-span-4">
+          <div
+            className={cn(
+              "rounded-2xl border bg-card p-5 shadow-sm",
+              refreshing && "opacity-80 transition-opacity",
+            )}
+          >
             <div className="mb-4">
               <h3 className="font-semibold">{t("sourceBreakdown")}</h3>
               <p className="text-sm text-muted-foreground">{activePeriodLabel}</p>
@@ -459,7 +630,12 @@ export default function FinanceDashboardPage() {
             )}
           </div>
 
-          <div className="rounded-2xl border bg-card p-5 shadow-sm">
+          <div
+            className={cn(
+              "rounded-2xl border bg-card p-5 shadow-sm",
+              refreshing && "opacity-80 transition-opacity",
+            )}
+          >
             <div className="mb-4 flex items-start gap-3">
               <div className="rounded-xl bg-amber-100 p-2 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
                 <Package2 className="h-5 w-5" />
@@ -471,24 +647,32 @@ export default function FinanceDashboardPage() {
             </div>
 
             {payload.topPackages.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {payload.topPackages.map((item, index) => (
-                  <div key={`${item.packageName}-${index}`} className="rounded-xl border bg-muted/20 px-4 py-3">
+                  <div key={`${item.packageName}-${index}`} className="space-y-2 rounded-xl border bg-muted/20 px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold">{item.packageName}</p>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold">{item.packageName}</p>
                         <p className="text-sm text-muted-foreground">
                           {t("packageCount", { count: item.bookingCount })}
                         </p>
                       </div>
-                      <div className="text-right text-sm">
+                      <div className="shrink-0 text-right text-sm">
                         <p className="font-semibold">
                           {isMoneyVisible ? formatCurrency(item.netRevenue) : "Rp •••••••"}
                         </p>
-                        <p className="text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           {isMoneyVisible ? formatCurrency(item.grossRevenue) : "Rp •••••••"}
                         </p>
                       </div>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-background">
+                      <div
+                        className="h-full rounded-full bg-amber-500 transition-[width] duration-500"
+                        style={{
+                          width: `${Math.max((item.bookingCount / topPackageMaxCount) * 100, 14)}%`,
+                        }}
+                      />
                     </div>
                   </div>
                 ))}
@@ -501,6 +685,8 @@ export default function FinanceDashboardPage() {
           </div>
         </div>
       </div>
+        </>
+      ) : null}
     </div>
   );
 }

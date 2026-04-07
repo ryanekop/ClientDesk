@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 ALTER TABLE public.bookings
 ADD COLUMN IF NOT EXISTS operational_costs JSONB NOT NULL DEFAULT '[]'::jsonb;
 
@@ -24,7 +26,7 @@ AS $$
   ),
   normalized AS (
     SELECT
-      COALESCE(NULLIF(btrim(item ->> 'id'), ''), uuid_generate_v4()::text) AS id,
+      COALESCE(NULLIF(btrim(item ->> 'id'), ''), gen_random_uuid()::text) AS id,
       btrim(COALESCE(item ->> 'label', '')) AS label,
       GREATEST(
         COALESCE(

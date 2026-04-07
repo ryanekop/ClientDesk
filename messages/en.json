@@ -375,6 +375,8 @@
         "verifiedDpHint": "Total down payments already verified.",
         "outstandingBalance": "Outstanding Balance",
         "outstandingBalanceHint": "Remaining balance for bookings in the selected period.",
+        "totalBookings": "Total Bookings",
+        "totalBookingsHint": "Number of bookings included in this period.",
         "sourceBreakdown": "Payment Sources",
         "sourceEmpty": "No transactions for this period yet.",
         "monthlyChartTitle": "Monthly Revenue Chart",
