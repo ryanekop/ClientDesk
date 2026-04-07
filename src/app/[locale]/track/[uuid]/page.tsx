@@ -16,6 +16,11 @@ import {
     type FastpikLinkDisplayMode,
 } from "@/lib/fastpik-link-display";
 import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
+import {
+    getBookingServiceLabel,
+    normalizeBookingServiceSelections,
+    type BookingServiceSelection,
+} from "@/lib/booking-services";
 import { resolveFastpikProjectInfoFromExtraFields } from "@/lib/fastpik-project-info";
 import {
     hydrateFastpikLiveData,
@@ -66,6 +71,7 @@ type BookingRow = {
     created_at: string;
     user_id: string;
     services: { name?: string } | null;
+    booking_services?: BookingServiceSelection[] | unknown[] | null;
 };
 
 async function getBookingData(
@@ -223,6 +229,13 @@ export default async function TrackingPage({ params }: PageProps) {
         extraFields: booking.extra_fields,
         defaultLocation: booking.location,
     });
+    const serviceSelections = normalizeBookingServiceSelections(
+        booking.booking_services,
+        booking.services,
+    );
+    const serviceName = getBookingServiceLabel(serviceSelections, {
+        fallback: booking.event_type || "Booking",
+    });
 
     const bookingData = {
         bookingCode: booking.booking_code,
@@ -236,7 +249,7 @@ export default async function TrackingPage({ params }: PageProps) {
         trackingHideQueueNumber: Boolean(result.trackingHideQueueNumber),
         queuePosition: booking.queue_position,
         status: booking.status,
-        serviceName: (booking.services as { name?: string } | null)?.name || null,
+        serviceName,
         invoiceUrlInitial: buildSignedInvoicePath({
             bookingCode: booking.booking_code,
             stage: "initial",

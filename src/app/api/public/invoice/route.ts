@@ -374,21 +374,25 @@ export async function GET(request: NextRequest) {
   const mappedServiceRows: InvoiceServiceRow[] = [
     ...mainServiceSelections.map((selection) => ({
       id: selection.id,
-      name: selection.service.name || t.defaultServiceName,
+      name:
+        (selection.service.name || t.defaultServiceName) +
+        (selection.quantity > 1 ? ` x${selection.quantity}` : ""),
       description: selection.service.description?.trim() || "",
       price:
         typeof selection.service.price === "number"
-          ? Math.max(selection.service.price, 0)
+          ? Math.max(selection.service.price, 0) * Math.max(selection.quantity || 1, 1)
           : 0,
       group: "main" as const,
     })),
     ...addonServiceSelections.map((selection) => ({
       id: selection.id,
-      name: selection.service.name || t.defaultServiceName,
+      name:
+        (selection.service.name || t.defaultServiceName) +
+        (selection.quantity > 1 ? ` x${selection.quantity}` : ""),
       description: selection.service.description?.trim() || "",
       price:
         typeof selection.service.price === "number"
-          ? Math.max(selection.service.price, 0)
+          ? Math.max(selection.service.price, 0) * Math.max(selection.quantity || 1, 1)
           : 0,
       group: "addon" as const,
     })),

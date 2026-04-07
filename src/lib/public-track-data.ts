@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import type { BookingServiceSelection } from "@/lib/booking-services";
 import {
   buildTrackCacheTag,
   buildTrackUserCacheTag,
@@ -45,6 +46,7 @@ export type TrackBookingRow = {
   location: string | null;
   extra_fields: Record<string, unknown> | null;
   services: { name?: string } | null;
+  booking_services?: BookingServiceSelection[] | unknown[] | null;
   created_at: string;
 };
 
@@ -123,7 +125,7 @@ async function fetchTrackBasePayload(trackingUuid: string) {
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, user_id, booking_code, tracking_uuid, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, location, extra_fields, services(name), created_at",
+      "id, user_id, booking_code, tracking_uuid, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, location, extra_fields, services(name), booking_services(id, kind, sort_order, quantity, service:services(id, name, price, duration_minutes, is_addon, affects_schedule)), created_at",
     )
     .eq("tracking_uuid", trackingUuid)
     .maybeSingle<TrackBookingRow>();

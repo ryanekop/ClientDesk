@@ -239,7 +239,7 @@ async function syncImportedBookings(
   const { data: bookings } = await supabase
     .from("bookings")
     .select(
-      "id, booking_code, client_name, client_whatsapp, instagram, session_date, location, location_lat, location_lng, location_detail, notes, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))",
+      "id, booking_code, client_name, client_whatsapp, instagram, session_date, location, location_lat, location_lng, location_detail, notes, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, quantity, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))",
     )
     .eq("user_id", userId)
     .in("id", bookingIds);

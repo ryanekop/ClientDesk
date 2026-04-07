@@ -98,7 +98,7 @@ async function fetchInvoicePayload(bookingCode: string) {
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, booking_code, client_name, client_whatsapp, booking_date, session_date, event_type, extra_fields, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, user_id, services(id, name, price, description, is_addon), booking_services(id, kind, sort_order, service:services(id, name, price, description, is_addon))",
+      "id, booking_code, client_name, client_whatsapp, booking_date, session_date, event_type, extra_fields, total_price, dp_paid, is_fully_paid, status, settlement_status, final_adjustments, final_payment_amount, final_paid_at, user_id, services(id, name, price, description, is_addon), booking_services(id, kind, sort_order, quantity, service:services(id, name, price, description, is_addon))",
     )
     .eq("booking_code", bookingCode)
     .maybeSingle<InvoiceBookingRow>();

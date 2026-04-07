@@ -7,17 +7,19 @@ import {
   AtSign,
   Banknote,
   CalendarDays,
-  Loader2,
   CheckCircle2,
   Clock3,
   CreditCard,
+  Loader2,
   MapPin,
   MessageCircle,
   FileText,
+  LayoutGrid,
+  List,
+  Minus,
   Package,
   Phone,
-  List,
-  LayoutGrid,
+  Plus,
   Tag,
   User,
   type LucideIcon,
@@ -72,7 +74,11 @@ import {
 } from "@/lib/event-type-config";
 import { fillWhatsAppTemplate } from "@/lib/whatsapp-template";
 import {
+  buildBookingServicePayloadItemsFromSelection,
   getBookingDurationMinutes,
+  normalizeBookingServiceQuantity,
+  normalizeBookingServiceQuantityMap,
+  type BookingServiceQuantityMap,
   type BookingServiceSelection,
 } from "@/lib/booking-services";
 import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
@@ -615,7 +621,11 @@ export function BookingFormClient({
   const [sessionDate, setSessionDate] = React.useState("");
   const [selectedCityCode, setSelectedCityCode] = React.useState("");
   const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
+  const [selectedServiceQuantities, setSelectedServiceQuantities] =
+    React.useState<BookingServiceQuantityMap>({});
   const [selectedAddons, setSelectedAddons] = React.useState<Set<string>>(new Set());
+  const [selectedAddonQuantities, setSelectedAddonQuantities] =
+    React.useState<BookingServiceQuantityMap>({});
   const [dpDisplay, setDpDisplay] = React.useState("");
   const [location, setLocation] = React.useState("");
   const [locationCoords, setLocationCoords] = React.useState<LocationCoordinates>({
@@ -706,6 +716,7 @@ export function BookingFormClient({
       !isSpecialOfferActive
     ) {
       setSelectedAddons(new Set());
+      setSelectedAddonQuantities({});
     }
     if (effectiveVendor.form_show_addons === false && addonDialogOpen) {
       setAddonDialogOpen(false);
@@ -730,6 +741,17 @@ export function BookingFormClient({
         }
         return [...specialPackageServiceIds];
       });
+      setSelectedServiceQuantities(
+        normalizeBookingServiceQuantityMap(
+          Object.fromEntries(
+            specialPackageServiceIds.map((serviceId) => [serviceId, 1]),
+          ),
+          {
+            selectedIds: specialPackageServiceIds,
+            forceSingleUnit: true,
+          },
+        ),
+      );
     }
     if (addonLocked) {
       setSelectedAddons((prev) => {
@@ -742,6 +764,17 @@ export function BookingFormClient({
         }
         return new Set(specialAddonServiceIds);
       });
+      setSelectedAddonQuantities(
+        normalizeBookingServiceQuantityMap(
+          Object.fromEntries(
+            specialAddonServiceIds.map((serviceId) => [serviceId, 1]),
+          ),
+          {
+            selectedIds: specialAddonServiceIds,
+            forceSingleUnit: true,
+          },
+        ),
+      );
     }
   }, [
     addonLocked,
@@ -823,6 +856,18 @@ export function BookingFormClient({
         ? prev.filter((serviceId) => serviceId !== id)
         : [...prev, id];
     });
+    setSelectedServiceQuantities((prev) => {
+      if (!allowMultiplePackages) {
+        return id in prev && Object.keys(prev).length === 1 ? {} : { [id]: 1 };
+      }
+      const next = { ...prev };
+      if (id in next) {
+        delete next[id];
+      } else {
+        next[id] = 1;
+      }
+      return next;
+    });
   }
 
   function handleAddonToggle(id: string) {
@@ -839,6 +884,94 @@ export function BookingFormClient({
       else next.add(id);
       return next;
     });
+    setSelectedAddonQuantities((prev) => {
+      if (!allowMultipleAddons) {
+        return id in prev && Object.keys(prev).length === 1 ? {} : { [id]: 1 };
+      }
+      const next = { ...prev };
+      if (id in next) {
+        delete next[id];
+      } else {
+        next[id] = 1;
+      }
+      return next;
+    });
+  }
+
+  function changeServiceQuantity(
+    kind: "main" | "addon",
+    serviceId: string,
+    nextQuantity: number,
+  ) {
+    const normalizedQuantity = normalizeBookingServiceQuantity(nextQuantity);
+    if (kind === "main") {
+      if (!allowMultiplePackages || packageLocked) return;
+      setSelectedServiceIds((prev) =>
+        prev.includes(serviceId) ? prev : [...prev, serviceId],
+      );
+      setSelectedServiceQuantities((prev) => ({
+        ...prev,
+        [serviceId]: normalizedQuantity,
+      }));
+      return;
+    }
+    if (!allowMultipleAddons || addonLocked) return;
+    setSelectedAddons((prev) => new Set(prev).add(serviceId));
+    setSelectedAddonQuantities((prev) => ({
+      ...prev,
+      [serviceId]: normalizedQuantity,
+    }));
+  }
+
+  function renderQuantityControl(
+    kind: "main" | "addon",
+    serviceId: string,
+    quantity: number,
+  ) {
+    const canAdjust =
+      kind === "main"
+        ? allowMultiplePackages && !packageLocked
+        : allowMultipleAddons && !addonLocked;
+    const normalizedQuantity = normalizeBookingServiceQuantity(quantity);
+
+    if (!canAdjust) {
+      return normalizedQuantity > 1 ? (
+        <span className="text-xs font-medium text-muted-foreground">
+          x{normalizedQuantity}
+        </span>
+      ) : null;
+    }
+
+    return (
+      <div className="inline-flex items-center gap-1 rounded-full border px-1 py-0.5">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            changeServiceQuantity(kind, serviceId, normalizedQuantity - 1);
+          }}
+          disabled={normalizedQuantity <= 1}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="Kurangi jumlah"
+        >
+          <Minus className="h-3.5 w-3.5" />
+        </button>
+        <span className="min-w-6 text-center text-xs font-semibold">
+          {normalizedQuantity}
+        </span>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            changeServiceQuantity(kind, serviceId, normalizedQuantity + 1);
+          }}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted/60"
+          aria-label="Tambah jumlah"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
   }
 
   async function handleProofFile(file: File | null) {
@@ -1136,9 +1269,14 @@ export function BookingFormClient({
     const activeSelectedService = activeSelectedMainServices[0] || null;
     const activeSelectedAddonTotal = services
       .filter((service) => service.is_addon && selectedAddons.has(service.id))
-      .reduce((sum, service) => sum + service.price, 0);
+      .reduce(
+        (sum, service) =>
+          sum + service.price * (selectedAddonQuantityMap[service.id] || 1),
+        0,
+      );
     const activeSelectedPackageTotal = activeSelectedMainServices.reduce(
-      (sum, service) => sum + service.price,
+      (sum, service) =>
+        sum + service.price * (selectedMainQuantities[service.id] || 1),
       0,
     );
     const activeSelectedBookingTotal = computeSpecialOfferTotal({
@@ -1225,6 +1363,21 @@ export function BookingFormClient({
       formData.append("eventType", eventType || "");
       formData.append("sessionDate", finalSessionDate);
       formData.append("serviceId", selectedServiceIds[0] || "");
+      formData.append(
+        "serviceSelections",
+        JSON.stringify([
+          ...buildBookingServicePayloadItemsFromSelection(
+            selectedServiceIds,
+            selectedMainQuantities,
+            "main",
+          ),
+          ...buildBookingServicePayloadItemsFromSelection(
+            Array.from(selectedAddons),
+            selectedAddonQuantityMap,
+            "addon",
+          ),
+        ]),
+      );
       formData.append("serviceIds", JSON.stringify(selectedServiceIds));
       formData.append("cityCode", isCityScopedEvent ? normalizedSelectedCityCode : "");
       formData.append(
@@ -1247,7 +1400,10 @@ export function BookingFormClient({
           ...(selectedAddons.size > 0
             ? {
                 addon_ids: Array.from(selectedAddons),
-                addon_names: selectedAddonServices.map((service) => service.name),
+                addon_names: selectedAddonServices.map((service) => {
+                  const quantity = selectedAddonQuantityMap[service.id] || 1;
+                  return quantity > 1 ? `${service.name} x${quantity}` : service.name;
+                }),
               }
             : {}),
           ...(hasTerms
@@ -1326,7 +1482,13 @@ export function BookingFormClient({
       .replace(/^0/, "62")
       .replace(/[^0-9]/g, "");
     const clientWhatsapp = `${countryCode}${phone}`.replace(/[^0-9+]/g, "") || "-";
-    const svcName = selectedMainServices.map((service) => service.name).join(", ") || "-";
+    const svcName =
+      selectedMainServices
+        .map((service) => {
+          const quantity = selectedMainQuantities[service.id] || 1;
+          return quantity > 1 ? `${service.name} x${quantity}` : service.name;
+        })
+        .join(", ") || "-";
     const isWeddingEvent = eventType === "Wedding";
     const isWisudaEvent = eventType === "Wisuda";
     const isSplitSessionEnabled =
@@ -1431,6 +1593,7 @@ export function BookingFormClient({
         booking_service_id: null,
         kind: "main" as const,
         sort_order: index,
+        quantity: selectedMainQuantities[service.id] || 1,
         service: {
           id: service.id,
           name: service.name,
@@ -1444,6 +1607,7 @@ export function BookingFormClient({
         booking_service_id: null,
         kind: "addon" as const,
         sort_order: index,
+        quantity: selectedAddonQuantityMap[service.id] || 1,
         service: {
           id: service.id,
           name: service.name,
@@ -1873,6 +2037,20 @@ export function BookingFormClient({
       (service.description || "").toLowerCase().includes(query),
     );
   }, [addonServices, addonSearchQuery]);
+  const selectedMainQuantities = React.useMemo(
+    () =>
+      normalizeBookingServiceQuantityMap(selectedServiceQuantities, {
+        selectedIds: selectedServiceIds,
+      }),
+    [selectedServiceIds, selectedServiceQuantities],
+  );
+  const selectedAddonQuantityMap = React.useMemo(
+    () =>
+      normalizeBookingServiceQuantityMap(selectedAddonQuantities, {
+        selectedIds: Array.from(selectedAddons),
+      }),
+    [selectedAddonQuantities, selectedAddons],
+  );
   const selectedMainServices = sortedServices.filter(
     (service) => !service.is_addon && selectedServiceIds.includes(service.id),
   );
@@ -1903,7 +2081,13 @@ export function BookingFormClient({
       }
       return next;
     });
-  }, [filteredServices, isSpecialOfferActive, packageLocked]);
+    setSelectedServiceQuantities((prev) =>
+      normalizeBookingServiceQuantityMap(prev, {
+        selectedIds: selectedServiceIds,
+        validIds: availableMainIds,
+      }),
+    );
+  }, [filteredServices, isSpecialOfferActive, packageLocked, selectedServiceIds]);
 
   React.useEffect(() => {
     if (isSpecialOfferActive && addonLocked) return;
@@ -1924,12 +2108,24 @@ export function BookingFormClient({
       }
       return next;
     });
-  }, [addonLocked, addonServices, isSpecialOfferActive]);
+    setSelectedAddonQuantities((prev) =>
+      normalizeBookingServiceQuantityMap(prev, {
+        selectedIds: Array.from(selectedAddons),
+        validIds: availableAddonIds,
+      }),
+    );
+  }, [addonLocked, addonServices, isSpecialOfferActive, selectedAddons]);
 
   React.useEffect(() => {
     if (packageLocked || allowMultiplePackages) return;
     setSelectedServiceIds((prev) => (prev.length <= 1 ? prev : [prev[0]]));
-  }, [allowMultiplePackages, packageLocked]);
+    setSelectedServiceQuantities((prev) =>
+      normalizeBookingServiceQuantityMap(prev, {
+        selectedIds: selectedServiceIds.slice(0, 1),
+        forceSingleUnit: true,
+      }),
+    );
+  }, [allowMultiplePackages, packageLocked, selectedServiceIds]);
 
   React.useEffect(() => {
     if (addonLocked || allowMultipleAddons) return;
@@ -1938,14 +2134,22 @@ export function BookingFormClient({
       const first = prev.values().next().value as string | undefined;
       return first ? new Set([first]) : new Set<string>();
     });
-  }, [addonLocked, allowMultipleAddons]);
+    setSelectedAddonQuantities((prev) =>
+      normalizeBookingServiceQuantityMap(prev, {
+        selectedIds: Array.from(selectedAddons).slice(0, 1),
+        forceSingleUnit: true,
+      }),
+    );
+  }, [addonLocked, allowMultipleAddons, selectedAddons]);
 
   const selectedPackageTotal = selectedMainServices.reduce(
-    (sum, service) => sum + service.price,
+    (sum, service) =>
+      sum + service.price * (selectedMainQuantities[service.id] || 1),
     0,
   );
   const selectedAddonTotal = selectedAddonServices.reduce(
-    (sum, service) => sum + service.price,
+    (sum, service) =>
+      sum + service.price * (selectedAddonQuantityMap[service.id] || 1),
     0,
   );
   const selectedBookingTotal = computeSpecialOfferTotal({
@@ -3207,7 +3411,9 @@ export function BookingFormClient({
                     {selectedMainServices.length > 0
                       ? allowMultiplePackages
                         ? `${selectedMainServices.length} paket dipilih`
-                        : selectedMainServices[0]?.name || "1 paket dipilih"
+                        : selectedMainServices[0]
+                          ? `${selectedMainServices[0].name}${(selectedMainQuantities[selectedMainServices[0].id] || 1) > 1 ? ` x${selectedMainQuantities[selectedMainServices[0].id] || 1}` : ""}`
+                          : "1 paket dipilih"
                       : "Pilih Paket / Layanan"}
                   </span>
                   <span className="text-xs font-medium text-primary">
@@ -3224,6 +3430,7 @@ export function BookingFormClient({
             {selectedMainServices.length > 0 && (
               <div className="space-y-2">
                 {selectedMainServices.map((service) => {
+                  const quantity = selectedMainQuantities[service.id] || 1;
                   const tone = buildServiceSoftPalette({
                     serviceColor: service.color,
                     fallbackColor: brandColor,
@@ -3240,7 +3447,13 @@ export function BookingFormClient({
                       }}
                     >
                       <div className="min-w-0">
-                        <p className="text-sm font-medium">{service.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-medium">
+                            {service.name}
+                            {quantity > 1 ? ` x${quantity}` : ""}
+                          </p>
+                          {renderQuantityControl("main", service.id, quantity)}
+                        </div>
                         {service.description ? (
                           <p className="text-xs text-muted-foreground whitespace-pre-line break-words">{service.description}</p>
                         ) : null}
@@ -3248,10 +3461,10 @@ export function BookingFormClient({
                       {!shouldHideServicePrices ? (
                         <div className="shrink-0 text-right">
                           <p className="text-lg font-bold" style={{ color: tone.color }}>
-                            {formatCurrency(service.price)}
+                            {formatCurrency(service.price * quantity)}
                           </p>
                           {service.original_price && service.original_price > service.price ? (
-                            <p className="text-[11px] text-muted-foreground line-through">{formatCurrency(service.original_price)}</p>
+                            <p className="text-[11px] text-muted-foreground line-through">{formatCurrency(service.original_price * quantity)}</p>
                           ) : null}
                         </div>
                       ) : null}
@@ -3294,7 +3507,9 @@ export function BookingFormClient({
                 {selectedAddonServices.length > 0
                   ? allowMultipleAddons
                     ? `${selectedAddonServices.length} add-on dipilih`
-                    : selectedAddonServices[0]?.name || "1 add-on dipilih"
+                    : selectedAddonServices[0]
+                      ? `${selectedAddonServices[0].name}${(selectedAddonQuantityMap[selectedAddonServices[0].id] || 1) > 1 ? ` x${selectedAddonQuantityMap[selectedAddonServices[0].id] || 1}` : ""}`
+                      : "1 add-on dipilih"
                   : "Pilih Add-on"}
               </span>
               <span className="text-xs font-medium text-primary">
@@ -3309,6 +3524,7 @@ export function BookingFormClient({
             {selectedAddonServices.length > 0 && (
               <div className="space-y-2">
                 {selectedAddonServices.map((addon) => {
+                  const quantity = selectedAddonQuantityMap[addon.id] || 1;
                   const tone = buildServiceSoftPalette({
                     serviceColor: addon.color,
                     fallbackColor: brandColor,
@@ -3325,7 +3541,13 @@ export function BookingFormClient({
                       }}
                     >
                       <div className="min-w-0">
-                        <p className="font-medium">{addon.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium">
+                            {addon.name}
+                            {quantity > 1 ? ` x${quantity}` : ""}
+                          </p>
+                          {renderQuantityControl("addon", addon.id, quantity)}
+                        </div>
                         {addon.description ? (
                           <p className="text-[11px] text-muted-foreground whitespace-pre-line break-words">
                             {addon.description}
@@ -3337,7 +3559,7 @@ export function BookingFormClient({
                           className="font-semibold whitespace-nowrap"
                           style={{ color: tone.color }}
                         >
-                          +{formatCurrency(addon.price)}
+                          +{formatCurrency(addon.price * quantity)}
                         </span>
                       ) : null}
                     </div>
@@ -3348,6 +3570,7 @@ export function BookingFormClient({
             {(selectedMainServices.length > 0 && (selectedAddons.size > 0 || isSpecialOfferActive)) && (
               <div className="rounded-lg bg-muted/50 p-3 text-sm">
                 {selectedMainServices.map((service) => {
+                  const quantity = selectedMainQuantities[service.id] || 1;
                   const tone = buildServiceSoftPalette({
                     serviceColor: service.color,
                     fallbackColor: brandColor,
@@ -3361,12 +3584,18 @@ export function BookingFormClient({
                         borderColor: tone.summaryBorderColor,
                       }}
                     >
-                      <span>{service.name}</span>
-                      <span style={{ color: tone.color }}>{formatCurrency(service.price)}</span>
+                      <span>
+                        {service.name}
+                        {quantity > 1 ? ` x${quantity}` : ""}
+                      </span>
+                      <span style={{ color: tone.color }}>
+                        {formatCurrency(service.price * quantity)}
+                      </span>
                     </div>
                   );
                 })}
                 {selectedAddonServices.map((service) => {
+                  const quantity = selectedAddonQuantityMap[service.id] || 1;
                   const tone = buildServiceSoftPalette({
                     serviceColor: service.color,
                     fallbackColor: brandColor,
@@ -3380,8 +3609,13 @@ export function BookingFormClient({
                         borderColor: tone.summaryBorderColor,
                       }}
                     >
-                      <span>+ {service.name}</span>
-                      <span style={{ color: tone.color }}>{formatCurrency(service.price)}</span>
+                      <span>
+                        + {service.name}
+                        {quantity > 1 ? ` x${quantity}` : ""}
+                      </span>
+                      <span style={{ color: tone.color }}>
+                        {formatCurrency(service.price * quantity)}
+                      </span>
                     </div>
                   );
                 })}
@@ -3717,6 +3951,7 @@ export function BookingFormClient({
         booking_service_id: null,
         kind: "main" as const,
         sort_order: index,
+        quantity: selectedMainQuantities[service.id] || 1,
         service: {
           id: service.id,
           name: service.name,
@@ -3730,6 +3965,7 @@ export function BookingFormClient({
         booking_service_id: null,
         kind: "addon" as const,
         sort_order: index,
+        quantity: selectedAddonQuantityMap[service.id] || 1,
         service: {
           id: service.id,
           name: service.name,
@@ -3739,7 +3975,12 @@ export function BookingFormClient({
         },
       })),
     ],
-    [selectedAddonServices, selectedMainServices],
+    [
+      selectedAddonQuantityMap,
+      selectedAddonServices,
+      selectedMainQuantities,
+      selectedMainServices,
+    ],
   );
   const summarySessionRows = React.useMemo(() => {
     const totalDurationMinutes = getBookingDurationMinutes(summaryServiceSelections);
@@ -3936,16 +4177,33 @@ export function BookingFormClient({
       [
         {
           label: getBuiltInDisplayLabel("service_package", t("summaryMainPackage")),
-          value: selectedMainServices.map((service) => service.name).join(", "),
+          value: selectedMainServices
+            .map((service) => {
+              const quantity = selectedMainQuantities[service.id] || 1;
+              return quantity > 1 ? `${service.name} x${quantity}` : service.name;
+            })
+            .join(", "),
           icon: getBuiltInFieldIcon("service_package"),
         },
         {
           label: getBuiltInDisplayLabel("addon_packages", t("summaryAddon")),
-          value: selectedAddonServices.map((service) => service.name).join(", "),
+          value: selectedAddonServices
+            .map((service) => {
+              const quantity = selectedAddonQuantityMap[service.id] || 1;
+              return quantity > 1 ? `${service.name} x${quantity}` : service.name;
+            })
+            .join(", "),
           icon: getBuiltInFieldIcon("addon_packages"),
         },
       ].filter((row) => row.value.length > 0),
-    [selectedAddonServices, selectedMainServices, t, getBuiltInDisplayLabel],
+    [
+      selectedAddonQuantityMap,
+      selectedAddonServices,
+      selectedMainQuantities,
+      selectedMainServices,
+      t,
+      getBuiltInDisplayLabel,
+    ],
   );
   const summaryCostRows = React.useMemo(() => {
     const rows: Array<{
@@ -3956,19 +4214,21 @@ export function BookingFormClient({
     }> = [];
 
     selectedMainServices.forEach((service) => {
+      const quantity = selectedMainQuantities[service.id] || 1;
       rows.push({
         id: `package:${service.id}`,
-        label: `${t("summaryCostPackageItem")} • ${service.name}`,
-        value: formatCurrency(service.price),
+        label: `${t("summaryCostPackageItem")} • ${service.name}${quantity > 1 ? ` x${quantity}` : ""}`,
+        value: formatCurrency(service.price * quantity),
         tone: "item",
       });
     });
 
     selectedAddonServices.forEach((service) => {
+      const quantity = selectedAddonQuantityMap[service.id] || 1;
       rows.push({
         id: `addon:${service.id}`,
-        label: `${t("summaryCostAddonItem")} • ${service.name}`,
-        value: `+ ${formatCurrency(service.price)}`,
+        label: `${t("summaryCostAddonItem")} • ${service.name}${quantity > 1 ? ` x${quantity}` : ""}`,
+        value: `+ ${formatCurrency(service.price * quantity)}`,
         tone: "item",
       });
     });
@@ -4015,9 +4275,11 @@ export function BookingFormClient({
   }, [
     accommodationFee,
     discountAmount,
+    selectedAddonQuantityMap,
     selectedAddonServices,
     selectedAddonTotal,
     selectedBookingTotal,
+    selectedMainQuantities,
     selectedMainServices,
     selectedPackageTotal,
     t,
@@ -4532,6 +4794,7 @@ export function BookingFormClient({
                 ) : (
                   searchedMainServices.map((service) => {
                     const selected = selectedServiceIds.includes(service.id);
+                    const quantity = selectedMainQuantities[service.id] || 1;
                     const tone = buildServiceSoftPalette({
                       serviceColor: service.color,
                       fallbackColor: brandColor,
@@ -4568,7 +4831,16 @@ export function BookingFormClient({
                             <CheckCircle2 className="h-3.5 w-3.5" />
                           </span>
                           <div className="min-w-0">
-                            <p className="text-sm font-medium">{service.name}</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-medium">
+                                {service.name}
+                              </p>
+                              {selected && quantity > 1 ? (
+                                <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                  x{quantity}
+                                </span>
+                              ) : null}
+                            </div>
                             {service.description ? (
                               <p className="text-[11px] text-muted-foreground whitespace-pre-line break-words">
                                 {service.description}
@@ -4582,12 +4854,12 @@ export function BookingFormClient({
                               className="text-sm font-semibold"
                               style={{ color: tone.color }}
                             >
-                              {formatCurrency(service.price)}
+                              {formatCurrency(service.price * quantity)}
                             </p>
                             {service.original_price &&
                             service.original_price > service.price ? (
                               <p className="text-[11px] text-muted-foreground line-through">
-                                {formatCurrency(service.original_price)}
+                                {formatCurrency(service.original_price * quantity)}
                               </p>
                             ) : null}
                           </div>
@@ -4677,6 +4949,7 @@ export function BookingFormClient({
                 ) : (
                   searchedAddonServices.map((addon) => {
                     const selected = selectedAddons.has(addon.id);
+                    const quantity = selectedAddonQuantityMap[addon.id] || 1;
                     const tone = buildServiceSoftPalette({
                       serviceColor: addon.color,
                       fallbackColor: brandColor,
@@ -4713,7 +4986,14 @@ export function BookingFormClient({
                             <CheckCircle2 className="h-3.5 w-3.5" />
                           </span>
                           <div className="min-w-0">
-                            <p className="text-sm font-medium">{addon.name}</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-medium">{addon.name}</p>
+                              {selected && quantity > 1 ? (
+                                <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                  x{quantity}
+                                </span>
+                              ) : null}
+                            </div>
                             {addon.description ? (
                               <p className="text-[11px] text-muted-foreground whitespace-pre-line break-words">
                                 {addon.description}
@@ -4727,7 +5007,7 @@ export function BookingFormClient({
                               className="text-sm font-semibold"
                               style={{ color: tone.color }}
                             >
-                              +{formatCurrency(addon.price)}
+                              +{formatCurrency(addon.price * quantity)}
                             </p>
                           </div>
                         ) : null}
