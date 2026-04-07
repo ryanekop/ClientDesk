@@ -145,19 +145,17 @@ function SummaryCard({
         }).format(amount || 0);
 
   return (
-    <div className="flex h-full min-h-[220px] flex-col rounded-2xl border bg-card p-5 shadow-sm">
+    <div className="flex h-full min-h-[180px] flex-col rounded-2xl border bg-card p-5 shadow-sm">
       <div className="mb-3 flex items-center gap-3">
         <div className={`rounded-xl p-2 ${tone}`}>{icon}</div>
         <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           {title}
         </span>
       </div>
-      <div className="mt-auto">
-        <div className="text-2xl font-bold tracking-tight">
-          {valueType === "count" || isMoneyVisible ? formattedAmount : "Rp •••••••"}
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">{hint}</p>
+      <div className="text-2xl font-bold tracking-tight">
+        {valueType === "count" || isMoneyVisible ? formattedAmount : "Rp •••••••"}
       </div>
+      <p className="mt-2 text-sm text-muted-foreground">{hint}</p>
     </div>
   );
 }
@@ -167,7 +165,10 @@ function FinanceDashboardSkeleton() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 2xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, index) => (
-          <div key={`finance-summary-skeleton-${index}`} className="rounded-2xl border bg-card p-5 shadow-sm">
+          <div
+            key={`finance-summary-skeleton-${index}`}
+            className="flex min-h-[180px] flex-col rounded-2xl border bg-card p-5 shadow-sm"
+          >
             <div className="mb-4 flex items-center gap-3">
               <ShimmerBlock className="h-10 w-10 rounded-xl" />
               <ShimmerBlock className="h-3 w-24" />
