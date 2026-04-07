@@ -114,6 +114,16 @@
 
 @layer components {
     .group[data-row-tone="service"] {
+        --table-row-bg: color-mix(
+            in oklab,
+            var(--color-card) 86%,
+            var(--table-row-accent) 14%
+        );
+        --table-row-hover-bg: color-mix(
+            in oklab,
+            var(--color-card) 74%,
+            var(--table-row-accent) 26%
+        );
         background-color: var(--table-row-bg);
     }
 

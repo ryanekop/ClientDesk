@@ -2423,8 +2423,7 @@ export default function BookingsPage() {
                                             style={
                                                 serviceColor
                                                     ? ({
-                                                        "--table-row-bg": withAlpha(serviceColor, 0.075),
-                                                        "--table-row-hover-bg": withAlpha(serviceColor, 0.13),
+                                                        "--table-row-accent": serviceColor,
                                                     } as React.CSSProperties)
                                                     : undefined
                                             }
