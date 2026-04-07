@@ -169,7 +169,7 @@ type BatchColumn = {
     | "freelancer"
     | "serviceMain"
     | "serviceAddon";
-  normalizeMode?: "whatsapp" | "date" | "time";
+  normalizeMode?: "whatsapp" | "date" | "time" | "money_id";
 };
 
 type BatchRow = Record<string, string>;
@@ -216,7 +216,13 @@ const TABLE_COLUMNS: BatchColumn[] = [
     normalizeMode: "date",
   },
   { key: "location", label: "Lokasi", placeholder: "Lokasi utama", inputType: "location" },
-  { key: "dp_paid", label: "DP", required: true, placeholder: "1000000" },
+  {
+    key: "dp_paid",
+    label: "DP",
+    required: true,
+    placeholder: "1.000.000",
+    normalizeMode: "money_id",
+  },
   { key: "status", label: "Status", placeholder: "Default otomatis" , advanced: true },
   {
     key: "addon_services",
@@ -491,6 +497,13 @@ function normalizeTimeForCell(raw: string): string | null {
   return null;
 }
 
+function normalizeMoneyIdForCell(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  const sanitized = digits.replace(/^0+(?=\d)/, "");
+  return (sanitized || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
 function normalizeCellValueByColumn(column: BatchColumn, rawValue: string) {
   const trimmed = rawValue.trim();
   if (!column.normalizeMode) return trimmed;
@@ -503,6 +516,9 @@ function normalizeCellValueByColumn(column: BatchColumn, rawValue: string) {
   }
   if (column.normalizeMode === "time") {
     return normalizeTimeForCell(trimmed) ?? trimmed;
+  }
+  if (column.normalizeMode === "money_id") {
+    return normalizeMoneyIdForCell(trimmed);
   }
   return trimmed;
 }
@@ -1050,7 +1066,7 @@ export function BatchImportButton({
                                       }
                                     }}
                                     placeholder={column.placeholder || ""}
-                                    inputClassName="h-8 rounded-md border bg-background px-2 py-1.5 text-xs"
+                                    inputClassName="h-8 rounded-md border bg-background px-2 py-1.5 text-xs pr-8"
                                     onPaste={(event) =>
                                       handlePasteAtCell(event, rowIndex, columnIndex)
                                     }
@@ -1073,9 +1089,13 @@ export function BatchImportButton({
                                 ) : (
                                   <input
                                     value={row[column.key] || ""}
-                                    onChange={(event) =>
-                                      updateCell(rowIndex, column.key, event.target.value)
-                                    }
+                                    onChange={(event) => {
+                                      const nextValue =
+                                        column.normalizeMode === "money_id"
+                                          ? normalizeMoneyIdForCell(event.target.value)
+                                          : event.target.value;
+                                      updateCell(rowIndex, column.key, nextValue);
+                                    }}
                                     onBlur={(event) => {
                                       if (!column.normalizeMode) return;
                                       autoNormalizeCell(rowIndex, column, event.target.value);

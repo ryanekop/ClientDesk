@@ -33,8 +33,12 @@ export type UniversityReferenceItem = {
   displayName?: string;
 };
 
+function normalizeUniversityApostrophes(value: string) {
+  return value.replace(/[‘’`]/g, "'");
+}
+
 export function cleanUniversityName(value: string) {
-  return value.replace(/\s+/g, " ").trim();
+  return normalizeUniversityApostrophes(value).replace(/\s+/g, " ").trim();
 }
 
 export function normalizeUniversityName(value: string) {
@@ -42,7 +46,9 @@ export function normalizeUniversityName(value: string) {
 }
 
 export function cleanUniversityAbbreviation(value: string | null | undefined) {
-  return String(value || "").replace(/\s+/g, " ").trim();
+  return normalizeUniversityApostrophes(String(value || ""))
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function normalizeUniversityAbbreviation(

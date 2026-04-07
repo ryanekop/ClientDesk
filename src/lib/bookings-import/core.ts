@@ -158,17 +158,57 @@ function normalizeMoneyNumber(rawValue: string): number | null {
   const raw = rawValue.trim();
   if (!raw) return null;
 
-  const stripped = raw.replace(/[^0-9,.-]/g, "");
+  const stripped = raw.replace(/\s+/g, "").replace(/[^0-9,.\-+]/g, "");
   if (!stripped) return null;
 
-  let normalized = stripped;
-  if (normalized.includes(".") && normalized.includes(",")) {
-    normalized = normalized.replace(/\./g, "").replace(/,/g, ".");
-  } else if (normalized.includes(",")) {
-    normalized = normalized.replace(/,/g, ".");
+  let negative = false;
+  let unsigned = stripped;
+  if (unsigned.startsWith("-")) {
+    negative = true;
+    unsigned = unsigned.slice(1);
+  } else if (unsigned.startsWith("+")) {
+    unsigned = unsigned.slice(1);
+  }
+  unsigned = unsigned.replace(/[+-]/g, "");
+  if (!unsigned) return null;
+
+  let normalized = unsigned;
+  if (unsigned.includes(".") && unsigned.includes(",")) {
+    const lastDotIndex = unsigned.lastIndexOf(".");
+    const lastCommaIndex = unsigned.lastIndexOf(",");
+    const decimalSeparator = lastDotIndex > lastCommaIndex ? "." : ",";
+    const thousandSeparator = decimalSeparator === "." ? "," : ".";
+
+    normalized = unsigned.replace(new RegExp(`\\${thousandSeparator}`, "g"), "");
+    if (decimalSeparator === ",") {
+      normalized = normalized.replace(/,/g, ".");
+    }
+  } else if (unsigned.includes(".") || unsigned.includes(",")) {
+    const separator = unsigned.includes(".") ? "." : ",";
+    const parts = unsigned.split(separator);
+    if (parts.some((part) => part.length === 0)) return null;
+
+    const trailingParts = parts.slice(1);
+    const looksLikeThousandsFormat =
+      trailingParts.length > 0 &&
+      /^\d+$/.test(parts[0] || "") &&
+      trailingParts.every((part) => /^\d{3}$/.test(part));
+
+    if (looksLikeThousandsFormat) {
+      normalized = parts.join("");
+    } else if (
+      parts.length === 2 &&
+      /^\d+$/.test(parts[0] || "") &&
+      /^\d+$/.test(parts[1] || "")
+    ) {
+      normalized = `${parts[0]}.${parts[1]}`;
+    } else {
+      return null;
+    }
   }
 
-  const parsed = Number(normalized);
+  if (!/^\d+(\.\d+)?$/.test(normalized)) return null;
+  const parsed = Number(negative ? `-${normalized}` : normalized);
   if (!Number.isFinite(parsed)) return null;
   return parsed;
 }
@@ -439,7 +479,7 @@ function normalizeCoordinateInput(
 
 function isValidUuid(value: string | null | undefined) {
   const candidate = String(value || "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     candidate,
   );
 }
@@ -2221,6 +2261,7 @@ async function attachUniversityReferenceValidation(
         UNIVERSITY_REFERENCE_EXTRA_KEY,
       ),
   );
+  const strictRowsNeedingFallback = new Set<number>();
 
   if (strictSuggestionRows.length > 0) {
     const referenceIds = new Set<string>();
@@ -2237,11 +2278,7 @@ async function attachUniversityReferenceValidation(
         continue;
       }
       if (!isValidUuid(submittedReferenceId)) {
-        pushIssue(
-          row,
-          "error",
-          "Universitas yang dipilih tidak valid. Pilih ulang dari suggestion.",
-        );
+        strictRowsNeedingFallback.add(row.rowNumber);
         continue;
       }
       referenceIds.add(submittedReferenceId);
@@ -2278,11 +2315,7 @@ async function attachUniversityReferenceValidation(
 
       const chosen = byReferenceId.get(submittedReferenceId);
       if (!chosen) {
-        pushIssue(
-          row,
-          "error",
-          "Universitas yang dipilih tidak valid. Pilih ulang dari suggestion.",
-        );
+        strictRowsNeedingFallback.add(row.rowNumber);
         continue;
       }
 
@@ -2294,7 +2327,11 @@ async function attachUniversityReferenceValidation(
     }
   }
 
-  if (legacyRows.length === 0) return;
+  const rowsNeedingLookup = [
+    ...legacyRows,
+    ...strictSuggestionRows.filter((row) => strictRowsNeedingFallback.has(row.rowNumber)),
+  ];
+  if (rowsNeedingLookup.length === 0) return;
 
   const rowCandidates = new Map<
     number,
@@ -2303,7 +2340,7 @@ async function attachUniversityReferenceValidation(
   const normalizedNames = new Set<string>();
   const normalizedAbbreviations = new Set<string>();
 
-  for (const row of legacyRows) {
+  for (const row of rowsNeedingLookup) {
     const submitted = normalizeText(row.builtInExtraFields[UNIVERSITY_EXTRA_FIELD_KEY]);
     if (!submitted) continue;
 
@@ -2357,23 +2394,41 @@ async function attachUniversityReferenceValidation(
       error instanceof Error
         ? error.message
         : "Gagal memvalidasi referensi universitas.";
-    for (const row of legacyRows) {
+    for (const row of rowsNeedingLookup) {
       pushIssue(row, "error", `Gagal memvalidasi universitas: ${message}`);
     }
     return;
   }
 
-  for (const row of legacyRows) {
+  for (const row of rowsNeedingLookup) {
+    const strictFallbackMode = strictRowsNeedingFallback.has(row.rowNumber);
     const submitted = normalizeText(row.builtInExtraFields[UNIVERSITY_EXTRA_FIELD_KEY]);
-    if (!submitted) continue;
+    if (!submitted) {
+      if (strictFallbackMode) {
+        pushIssue(
+          row,
+          "error",
+          "Universitas yang dipilih tidak valid. Pilih ulang dari suggestion.",
+        );
+      }
+      continue;
+    }
 
     const candidates = rowCandidates.get(row.rowNumber);
     if (!candidates) {
-      pushIssue(
-        row,
-        "error",
-        `Universitas '${submitted}' tidak ditemukan pada referensi.`,
-      );
+      if (strictFallbackMode) {
+        pushIssue(
+          row,
+          "error",
+          "Universitas yang dipilih tidak valid. Pilih ulang dari suggestion.",
+        );
+      } else {
+        pushIssue(
+          row,
+          "error",
+          `Universitas '${submitted}' tidak ditemukan pada referensi.`,
+        );
+      }
       continue;
     }
 
@@ -2404,20 +2459,36 @@ async function attachUniversityReferenceValidation(
     });
 
     if (resolvedRows.length === 0) {
-      pushIssue(
-        row,
-        "error",
-        `Universitas '${submitted}' tidak ditemukan pada referensi.`,
-      );
+      if (strictFallbackMode) {
+        pushIssue(
+          row,
+          "error",
+          "Universitas yang dipilih tidak valid. Pilih ulang dari suggestion.",
+        );
+      } else {
+        pushIssue(
+          row,
+          "error",
+          `Universitas '${submitted}' tidak ditemukan pada referensi.`,
+        );
+      }
       continue;
     }
 
     if (resolvedRows.length > 1) {
-      pushIssue(
-        row,
-        "error",
-        `Universitas '${submitted}' ambigu. Gunakan nama/display universitas yang lebih spesifik.`,
-      );
+      if (strictFallbackMode) {
+        pushIssue(
+          row,
+          "error",
+          "Universitas yang dipilih tidak valid. Pilih ulang dari suggestion.",
+        );
+      } else {
+        pushIssue(
+          row,
+          "error",
+          `Universitas '${submitted}' ambigu. Gunakan nama/display universitas yang lebih spesifik.`,
+        );
+      }
       continue;
     }
 
