@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { normalizeBookingArchiveMode } from "@/lib/booking-archive";
 import { requireRouteUser } from "@/lib/pagination/route-user";
 import {
   getBookingServiceLabel,
@@ -39,6 +40,8 @@ type BookingFinance = {
   tracking_uuid: string | null;
   client_status: string | null;
   settlement_status: string | null;
+  archived_at?: string | null;
+  archived_by?: string | null;
   final_adjustments: unknown;
   final_payment_amount: number;
   final_paid_at: string | null;
@@ -169,6 +172,10 @@ function parseIncludeMetadata(value: string | null) {
     return false;
   }
   return true;
+}
+
+function parseArchiveMode(value: string | null) {
+  return normalizeBookingArchiveMode(value);
 }
 
 function isInvalidEscapeStringError(message: string) {
@@ -306,6 +313,7 @@ export async function GET(request: NextRequest) {
   const dateBasis = parseDateBasis(searchParams.get("dateBasis"));
   const timeZone = parseTimeZone(searchParams.get("timeZone"));
   const includeMetadata = parseIncludeMetadata(searchParams.get("includeMetadata"));
+  const archiveMode = parseArchiveMode(searchParams.get("archiveMode"));
   const sortOrder = searchParams.get("sortOrder")?.trim() || "booking_newest";
   const exportAll = searchParams.get("export") === "1";
   const pageRpcArgsBase = {
@@ -328,10 +336,13 @@ export async function GET(request: NextRequest) {
     p_date_basis: dateBasis,
     p_time_zone: timeZone,
     p_sort_order: sortOrder,
+    p_archive_mode: archiveMode,
   };
 
   const metadataPromise = includeMetadata
-    ? supabase.rpc("cd_get_finance_metadata")
+    ? supabase.rpc("cd_get_finance_metadata", {
+      p_archive_mode: archiveMode,
+    })
     : Promise.resolve({ data: null, error: null });
   const profileSettingsPromise = includeMetadata && user?.id
     ? supabase
@@ -356,7 +367,8 @@ export async function GET(request: NextRequest) {
       message.includes("p_date_to") ||
       message.includes("p_date_basis") ||
       message.includes("p_time_zone") ||
-      message.includes("p_sort_order");
+      message.includes("p_sort_order") ||
+      message.includes("p_archive_mode");
 
     if (isLikelyOldRpcSignature) {
       pageResult = await supabase.rpc("cd_get_finance_page", pageRpcArgsBase);

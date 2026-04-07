@@ -8,6 +8,10 @@
         "hapus": "Hapus",
         "edit": "Edit",
         "aktif": "Aktif",
+        "arsip": "Arsip",
+        "arsipkan": "Arsipkan",
+        "kembalikan": "Kembalikan",
+        "diarsipkan": "Diarsipkan",
         "nonaktif": "Nonaktif",
         "belumAdaData": "Belum ada data.",
         "booking": "Booking"

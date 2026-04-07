@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered, ChevronDown, Zap } from "lucide-react";
+import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered, ChevronDown, Zap, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
+import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
 import { formatSessionDate } from "@/utils/format-date";
@@ -63,6 +64,11 @@ import {
     getBookingMetadataValue,
 } from "@/lib/booking-table-columns";
 import {
+    type BookingArchiveMode,
+    isArchivedBooking,
+    normalizeBookingArchiveMode,
+} from "@/lib/booking-archive";
+import {
     getWhatsAppTemplateContent,
     resolveWhatsAppTemplateMode,
 } from "@/lib/whatsapp-template";
@@ -120,6 +126,8 @@ type Booking = {
     freelance?: FreelancerInfo | null; // old single FK (backward compat)
     booking_freelancers: FreelancerInfo[]; // new junction data
     tracking_uuid: string | null;
+    archived_at?: string | null;
+    archived_by?: string | null;
     location_detail: string | null;
     extra_fields?: Record<string, unknown> | null;
     booking_services?: unknown[];
@@ -193,6 +201,7 @@ type BookingDateBasis = "booking_date" | "session_date";
 
 type BookingFilterStoragePayload = {
     searchQuery: string;
+    archiveMode?: BookingArchiveMode | string;
     statusFilter: string[] | string;
     packageFilter: string[] | string;
     freelanceFilter: string[] | string;
@@ -381,6 +390,7 @@ export default function BookingsPage() {
     const supabase = createClient();
     const t = useTranslations("Bookings");
     const tb = useTranslations("BookingsPage");
+    const tc = useTranslations("Common");
     const tBatchImport = useTranslations("BatchImport");
     const locale = useLocale();
     const eventTypeLabel = normalizeEventTypeTerminology(tb("eventTypeLabel"));
@@ -424,6 +434,7 @@ export default function BookingsPage() {
     const [extraFieldFilters, setExtraFieldFilters] = React.useState<Record<string, string>>({});
     const [sortOrder, setSortOrder] = React.useState<BookingSortOrder>("booking_newest");
     const [showFilterPanel, setShowFilterPanel] = React.useState(false);
+    const [archiveMode, setArchiveMode] = React.useState<BookingArchiveMode>("active");
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
@@ -450,6 +461,12 @@ export default function BookingsPage() {
 
     const [deleteModal, setDeleteModal] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [isDeleting, setIsDeleting] = React.useState(false);
+    const [archiveDialog, setArchiveDialog] = React.useState<{
+        open: boolean;
+        booking: Booking | null;
+        nextArchived: boolean;
+    }>({ open: false, booking: null, nextArchived: false });
+    const [archiveSavingId, setArchiveSavingId] = React.useState<string | null>(null);
 
     // Drive link popup
     const [driveLinkPopup, setDriveLinkPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
@@ -609,7 +626,10 @@ export default function BookingsPage() {
             const singlePackageFilter = packageFilter[0] || "All";
             const singleFreelanceFilter = freelanceFilter[0] || "All";
             const singleEventTypeFilter = eventTypeFilter[0] || "All";
-            const metadataEventTypeFilterKey = JSON.stringify([...eventTypeFilter].sort());
+            const metadataEventTypeFilterKey = JSON.stringify({
+                archiveMode,
+                eventTypeFilter: [...eventTypeFilter].sort(),
+            });
             const includeMetadata =
                 !bookingMetadataCacheRef.current ||
                 bookingMetadataEventTypeFilterKeyRef.current !== metadataEventTypeFilterKey;
@@ -631,6 +651,7 @@ export default function BookingsPage() {
                 timeZone: browserTimeZone,
                 sortOrder,
                 extraFilters: JSON.stringify(extraFieldFilters),
+                archiveMode,
                 includeMetadata: includeMetadata ? "1" : "0",
             });
 
@@ -717,6 +738,7 @@ export default function BookingsPage() {
         sortOrder,
         statusFilter,
         browserTimeZone,
+        archiveMode,
         applyBookingColumnLabelNormalization,
     ]);
 
@@ -788,12 +810,14 @@ export default function BookingsPage() {
         try {
             const raw = window.localStorage.getItem(storageKey);
             if (!raw) {
+                setArchiveMode("active");
                 resetFilters();
                 return;
             }
 
             const parsed = JSON.parse(raw) as unknown;
             if (!isObjectRecord(parsed)) {
+                setArchiveMode("active");
                 resetFilters();
                 return;
             }
@@ -806,6 +830,7 @@ export default function BookingsPage() {
             const hydratedSearchQuery = readString("searchQuery", "");
             setSearchQuery(hydratedSearchQuery);
             setDebouncedSearchQuery(hydratedSearchQuery);
+            setArchiveMode(normalizeBookingArchiveMode(parsed.archiveMode));
             setStatusFilter(parseLegacyOrMultiFilterValue(parsed.statusFilter));
             setPackageFilter(parseLegacyOrMultiFilterValue(parsed.packageFilter));
             setFreelanceFilter(parseLegacyOrMultiFilterValue(parsed.freelanceFilter));
@@ -828,6 +853,7 @@ export default function BookingsPage() {
 
             setSortOrder(parseSortOrderValue(parsed.sortOrder));
         } catch {
+            setArchiveMode("active");
             resetFilters();
         } finally {
             setFiltersHydrated(true);
@@ -1090,6 +1116,54 @@ export default function BookingsPage() {
             setFeedbackDialog({ open: true, message: tb("failedDeleteBooking") });
         }
         setIsDeleting(false);
+    }
+
+    function openArchiveConfirmation(booking: Booking) {
+        const nextArchived = !isArchivedBooking(booking);
+        setArchiveDialog({
+            open: true,
+            booking,
+            nextArchived,
+        });
+    }
+
+    async function confirmArchiveToggle() {
+        if (!requireBookingWrite()) return;
+        if (!archiveDialog.booking) return;
+
+        const booking = archiveDialog.booking;
+        const nextArchived = archiveDialog.nextArchived;
+        setArchiveSavingId(booking.id);
+
+        const patch = nextArchived
+            ? {
+                archived_at: new Date().toISOString(),
+                archived_by: currentUserId,
+            }
+            : {
+                archived_at: null,
+                archived_by: null,
+            };
+
+        const { error } = await supabase
+            .from("bookings")
+            .update(patch)
+            .eq("id", booking.id);
+
+        setArchiveSavingId(null);
+
+        if (error) {
+            setFeedbackDialog({
+                open: true,
+                message: locale === "en"
+                    ? "Failed to update archive status."
+                    : "Gagal memperbarui status arsip.",
+            });
+            return;
+        }
+
+        setArchiveDialog({ open: false, booking: null, nextArchived: false });
+        void fetchData("refresh");
     }
 
     function sendWhatsAppClient(booking: Booking) {
@@ -1581,6 +1655,22 @@ export default function BookingsPage() {
                                 </ActionIconButton>
                             )}
                             <ActionIconButton
+                                tone={isArchivedBooking(booking) ? "amber" : "slate"}
+                                title={!canWriteBookings
+                                    ? bookingWriteBlockedMessage
+                                    : isArchivedBooking(booking)
+                                        ? tc("kembalikan")
+                                        : tc("arsipkan")}
+                                onClick={() => openArchiveConfirmation(booking)}
+                                disabled={!canWriteBookings || archiveSavingId === booking.id}
+                            >
+                                {archiveSavingId === booking.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Archive className="w-4 h-4" />
+                                )}
+                            </ActionIconButton>
+                            <ActionIconButton
                                 tone="red"
                                 title={!canWriteBookings ? bookingWriteBlockedMessage : tb("deleteBtn")}
                                 onClick={() => setDeleteModal({ open: true, booking })}
@@ -1752,6 +1842,7 @@ export default function BookingsPage() {
         const storageKey = `${BOOKING_FILTER_STORAGE_PREFIX}:${currentUserId}`;
         const payload: BookingFilterStoragePayload = {
             searchQuery,
+            archiveMode,
             statusFilter,
             packageFilter,
             freelanceFilter,
@@ -1777,6 +1868,7 @@ export default function BookingsPage() {
         extraFieldFilters,
         filtersHydrated,
         freelanceFilter,
+        archiveMode,
         packageFilter,
         searchQuery,
         sortOrder,
@@ -1785,7 +1877,7 @@ export default function BookingsPage() {
 
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [debouncedSearchQuery, statusFilter, packageFilter, freelanceFilter, eventTypeFilter, dateFromFilter, dateToFilter, dateBasis, extraFieldFilters, sortOrder, itemsPerPage]);
+    }, [debouncedSearchQuery, statusFilter, packageFilter, freelanceFilter, eventTypeFilter, dateFromFilter, dateToFilter, dateBasis, extraFieldFilters, sortOrder, itemsPerPage, archiveMode]);
 
     React.useEffect(() => {
         const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
@@ -1872,6 +1964,7 @@ export default function BookingsPage() {
     }, [applyBookingColumnLabelNormalization, formSectionsByEventType, metadataRows]);
 
     const filteredBookings = bookings;
+    const isArchiveView = archiveMode === "archived";
     const queryState = React.useMemo<PaginatedQueryState>(() => ({
         page: currentPage,
         perPage: itemsPerPage,
@@ -1890,6 +1983,13 @@ export default function BookingsPage() {
         Object.values(extraFieldFilters).some(Boolean) ||
         Boolean(searchQuery) ||
         sortOrder !== "booking_newest";
+    const archiveToggleLabels = React.useMemo(
+        () => ({
+            active: tc("aktif"),
+            archived: tc("arsip"),
+        }),
+        [tc],
+    );
 
     async function exportBookings() {
         const singleStatusFilter = statusFilter[0] || "All";
@@ -1914,6 +2014,7 @@ export default function BookingsPage() {
             timeZone: browserTimeZone,
             sortOrder,
             extraFilters: JSON.stringify(extraFieldFilters),
+            archiveMode,
             export: "1",
         });
         const response = await fetchPaginatedJson<Booking, BookingPageMetadata>(
@@ -2155,6 +2256,24 @@ export default function BookingsPage() {
                         )}
                     </div>
                 </div>
+                <div className="flex items-center gap-2">
+                    <Button
+                        type="button"
+                        variant={!isArchiveView ? "default" : "outline"}
+                        className="h-9 px-3"
+                        onClick={() => setArchiveMode("active")}
+                    >
+                        {archiveToggleLabels.active}
+                    </Button>
+                    <Button
+                        type="button"
+                        variant={isArchiveView ? "default" : "outline"}
+                        className="h-9 px-3"
+                        onClick={() => setArchiveMode("archived")}
+                    >
+                        {archiveToggleLabels.archived}
+                    </Button>
+                </div>
                 <div className="flex w-full flex-col gap-2 sm:hidden">
                     <FilterSingleSelect
                         value={sortOrder}
@@ -2360,6 +2479,22 @@ export default function BookingsPage() {
                                 ) : (
                                     <ActionIconButton tone="indigo" disabled title={bookingWriteBlockedMessage}><Edit2 className="w-4 h-4" /></ActionIconButton>
                                 )}
+                                <ActionIconButton
+                                    tone={isArchivedBooking(booking) ? "amber" : "slate"}
+                                    onClick={() => openArchiveConfirmation(booking)}
+                                    disabled={!canWriteBookings || archiveSavingId === booking.id}
+                                    title={!canWriteBookings
+                                        ? bookingWriteBlockedMessage
+                                        : isArchivedBooking(booking)
+                                            ? tc("kembalikan")
+                                            : tc("arsipkan")}
+                                >
+                                    {archiveSavingId === booking.id ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Archive className="w-4 h-4" />
+                                    )}
+                                </ActionIconButton>
                                 <ActionIconButton
                                     tone="red"
                                     onClick={() => setDeleteModal({ open: true, booking })}
@@ -2604,6 +2739,35 @@ export default function BookingsPage() {
                         cancelPayment: { policy, refundAmount },
                     });
                 }}
+            />
+
+            <ActionConfirmDialog
+                open={archiveDialog.open}
+                onOpenChange={(open) =>
+                    setArchiveDialog((prev) => ({
+                        open,
+                        booking: open ? prev.booking : null,
+                        nextArchived: open ? prev.nextArchived : false,
+                    }))
+                }
+                title={archiveDialog.nextArchived
+                    ? (locale === "en" ? "Archive this booking?" : "Arsipkan booking ini?")
+                    : (locale === "en" ? "Restore this booking?" : "Kembalikan booking ini?")}
+                message={archiveDialog.nextArchived
+                    ? (locale === "en"
+                        ? "This booking will be removed from the active Booking, Booking Status, and Invoice & Settlement lists. Public tracking, invoice, and settlement links will stay active."
+                        : "Booking ini akan hilang dari daftar aktif Booking, Status Booking, dan Invoice & Pelunasan. Link tracking, invoice, dan pelunasan tetap aktif.")
+                    : (locale === "en"
+                        ? "This booking will appear again in the active Booking, Booking Status, and Invoice & Settlement lists."
+                        : "Booking ini akan muncul lagi di daftar aktif Booking, Status Booking, dan Invoice & Pelunasan.")}
+                cancelLabel={tc("batal")}
+                confirmLabel={archiveSavingId
+                    ? (locale === "en" ? "Saving..." : "Menyimpan...")
+                    : archiveDialog.nextArchived
+                        ? tc("arsipkan")
+                        : tc("kembalikan")}
+                onConfirm={() => { void confirmArchiveToggle(); }}
+                loading={archiveSavingId !== null}
             />
 
             <ActionFeedbackDialog

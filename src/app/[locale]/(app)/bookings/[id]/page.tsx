@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink, Upload, FileText, Trash2, AlertCircle, Image as ImageIcon, RefreshCcw } from "lucide-react";
+import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink, Upload, FileText, Trash2, AlertCircle, Image as ImageIcon, RefreshCcw, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FileDropzone } from "@/components/public/file-dropzone";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -111,6 +111,7 @@ import {
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
 import { FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY } from "@/lib/freelancer-session-assignments";
+import { isArchivedBooking } from "@/lib/booking-archive";
 
 const EXTRA_FIELD_LABEL_KEYS: Record<string, string> = {
     universitas: "extraFieldLabels.university",
@@ -218,6 +219,8 @@ type Booking = {
     freelancers: FreelancerDetail | null; // old single FK
     booking_freelancers: FreelancerDetail[]; // new junction
     tracking_uuid: string | null;
+    archived_at?: string | null;
+    archived_by?: string | null;
     client_status: string | null;
     queue_position: number | null;
     service_selections?: BookingServiceSelection[];
@@ -649,6 +652,7 @@ export default function BookingDetailPage() {
     const supabase = createClient();
     const locale = useLocale();
     const tBookingDetail = useTranslations("BookingDetail");
+    const tCommon = useTranslations("Common");
     const bookingsPath = `/${locale}/bookings`;
     const bookingDetailPath = `/${locale}/bookings/${id}`;
     const postSaveState = searchParams.get("saved");
@@ -708,6 +712,8 @@ export default function BookingDetailPage() {
     const [waFreelancePopup, setWaFreelancePopup] = React.useState(false);
     const [deleteBookingModalOpen, setDeleteBookingModalOpen] = React.useState(false);
     const [deletingBooking, setDeletingBooking] = React.useState(false);
+    const [archiveBookingDialogOpen, setArchiveBookingDialogOpen] = React.useState(false);
+    const [archivingBooking, setArchivingBooking] = React.useState(false);
     const [pendingRedirect, setPendingRedirect] = React.useState<string | null>(null);
     const [feedbackDialog, setFeedbackDialog] = React.useState<{
         open: boolean;
@@ -1174,7 +1180,7 @@ export default function BookingDetailPage() {
 
             const [{ data }, { data: profile }, { data: addonServiceRows }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, operational_costs, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, admin_notes, extra_fields, tracking_uuid, client_status, queue_position, services(id, name, price, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, quantity, service:services(id, name, price, duration_minutes, is_addon, affects_schedule)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, operational_costs, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, admin_notes, extra_fields, tracking_uuid, archived_at, archived_by, client_status, queue_position, services(id, name, price, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, quantity, service:services(id, name, price, duration_minutes, is_addon, affects_schedule)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
                     .eq("id", id).single(),
                 supabase.from("profiles").select("studio_name, custom_client_statuses, dp_verify_trigger_status, queue_trigger_status, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof").eq("id", user.id).single(),
                 supabase.from("services")
@@ -2339,6 +2345,61 @@ export default function BookingDetailPage() {
         router.refresh();
     }
 
+    async function handleArchiveBookingToggle() {
+        if (!requireBookingWrite()) return;
+        if (!booking) return;
+
+        const nextArchived = !isArchivedBooking(booking);
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+        const archivedBy = nextArchived ? user?.id || null : null;
+        setArchivingBooking(true);
+
+        const { error } = await supabase
+            .from("bookings")
+            .update(
+                nextArchived
+                    ? {
+                        archived_at: new Date().toISOString(),
+                        archived_by: archivedBy,
+                    }
+                    : {
+                        archived_at: null,
+                        archived_by: null,
+                    },
+            )
+            .eq("id", booking.id);
+
+        setArchivingBooking(false);
+
+        if (error) {
+            showFeedback(
+                locale === "en"
+                    ? "Failed to update archive status."
+                    : "Gagal memperbarui status arsip.",
+                warningTitle,
+            );
+            return;
+        }
+
+        setArchiveBookingDialogOpen(false);
+        setBooking((prev) =>
+            prev
+                ? {
+                    ...prev,
+                    archived_at: nextArchived ? new Date().toISOString() : null,
+                    archived_by: archivedBy,
+                }
+                : prev,
+        );
+        showSuccessToast(
+            nextArchived
+                ? (locale === "en" ? "Booking archived." : "Booking berhasil diarsipkan.")
+                : (locale === "en" ? "Booking restored." : "Booking berhasil dikembalikan."),
+        );
+    }
+
     if (loading) return (
         <div className="flex items-center justify-center py-24">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -2642,6 +2703,11 @@ export default function BookingDetailPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                             <h2 className="break-words text-2xl font-bold tracking-tight">{booking.client_name}</h2>
                             <StatusBadge status={booking.status} />
+                            {isArchivedBooking(booking) ? (
+                                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                    {tCommon("diarsipkan")}
+                                </span>
+                            ) : null}
                         </div>
                         <p className="break-words text-muted-foreground text-sm">
                             {booking.booking_code}
@@ -2650,6 +2716,18 @@ export default function BookingDetailPage() {
                     </div>
                 </div>
                 <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:shrink-0">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
+                        onClick={() => setArchiveBookingDialogOpen(true)}
+                        disabled={!canWriteBookings || archivingBooking}
+                    >
+                        {archivingBooking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+                        {isArchivedBooking(booking)
+                            ? (locale === "en" ? "Restore from Archive" : "Kembalikan dari Arsip")
+                            : tCommon("arsipkan")}
+                    </Button>
                     <Button
                         variant="destructive"
                         size="sm"
@@ -3747,6 +3825,29 @@ export default function BookingDetailPage() {
                 onConfirm={() => { void handleDeletePaymentProof(); }}
                 confirmVariant="destructive"
                 loading={deletingProofStage !== null}
+            />
+
+            <ActionConfirmDialog
+                open={archiveBookingDialogOpen}
+                onOpenChange={setArchiveBookingDialogOpen}
+                title={isArchivedBooking(booking)
+                    ? (locale === "en" ? "Restore this booking?" : "Kembalikan booking ini?")
+                    : (locale === "en" ? "Archive this booking?" : "Arsipkan booking ini?")}
+                message={isArchivedBooking(booking)
+                    ? (locale === "en"
+                        ? "This booking will appear again in the active Booking, Booking Status, and Invoice & Settlement lists."
+                        : "Booking ini akan muncul lagi di daftar aktif Booking, Status Booking, dan Invoice & Pelunasan.")
+                    : (locale === "en"
+                        ? "This booking will be removed from the active Booking, Booking Status, and Invoice & Settlement lists. Public tracking, invoice, and settlement links will stay active."
+                        : "Booking ini akan hilang dari daftar aktif Booking, Status Booking, dan Invoice & Pelunasan. Link tracking, invoice, dan pelunasan tetap aktif.")}
+                cancelLabel={tCommon("batal")}
+                confirmLabel={archivingBooking
+                    ? (locale === "en" ? "Saving..." : "Menyimpan...")
+                    : isArchivedBooking(booking)
+                        ? tCommon("kembalikan")
+                        : tCommon("arsipkan")}
+                onConfirm={() => { void handleArchiveBookingToggle(); }}
+                loading={archivingBooking}
             />
 
             <ActionConfirmDialog

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { normalizeBookingArchiveMode } from "@/lib/booking-archive";
 import { requireRouteUser } from "@/lib/pagination/route-user";
 import {
   getBookingServiceLabel,
@@ -63,6 +64,8 @@ type BookingRow = {
   booking_freelancers: FreelancerInfo[];
   tracking_uuid: string | null;
   location_detail: string | null;
+  archived_at?: string | null;
+  archived_by?: string | null;
   extra_fields?: Record<string, unknown> | null;
   booking_services?: unknown[];
   service_selections?: BookingServiceSelection[];
@@ -193,6 +196,10 @@ function parseIncludeMetadata(value: string | null) {
     return false;
   }
   return true;
+}
+
+function parseArchiveMode(value: string | null) {
+  return normalizeBookingArchiveMode(value);
 }
 
 function isInvalidEscapeStringError(message: string) {
@@ -353,6 +360,7 @@ export async function GET(request: NextRequest) {
   const dateBasis = parseDateBasis(searchParams.get("dateBasis"));
   const timeZone = parseTimeZone(searchParams.get("timeZone"));
   const includeMetadata = parseIncludeMetadata(searchParams.get("includeMetadata"));
+  const archiveMode = parseArchiveMode(searchParams.get("archiveMode"));
   const sortOrder = searchParams.get("sortOrder")?.trim() || "booking_newest";
   const exportAll = searchParams.get("export") === "1";
   const extraFieldFilters = parseExtraFilters(searchParams.get("extraFilters"));
@@ -371,12 +379,14 @@ export async function GET(request: NextRequest) {
     p_sort_order: sortOrder,
     p_extra_filters: extraFieldFilters,
     p_export_all: exportAll,
+    p_archive_mode: archiveMode,
   };
 
   const metadataPromise = includeMetadata
     ? supabase.rpc("cd_get_bookings_metadata", {
       p_event_type_filter: singleEventTypeFilter,
       p_table_menu: "bookings",
+      p_archive_mode: archiveMode,
     })
     : Promise.resolve({ data: null, error: null });
   const profileSettingsPromise = includeMetadata && user?.id
@@ -395,6 +405,7 @@ export async function GET(request: NextRequest) {
       p_event_type_filters: eventTypeFilters,
       p_date_basis: dateBasis,
       p_time_zone: timeZone,
+      p_archive_mode: archiveMode,
     }),
     metadataPromise,
     profileSettingsPromise,
@@ -410,7 +421,8 @@ export async function GET(request: NextRequest) {
       message.includes("p_freelance_filters") ||
       message.includes("p_event_type_filters") ||
       message.includes("p_date_basis") ||
-      message.includes("p_time_zone");
+      message.includes("p_time_zone") ||
+      message.includes("p_archive_mode");
 
     if (isLikelyOldRpcSignature) {
       pageResult = await supabase.rpc("cd_get_bookings_page", basePageRpcArgs);
@@ -424,6 +436,7 @@ export async function GET(request: NextRequest) {
   ) {
     metadataResult = await supabase.rpc("cd_get_bookings_metadata", {
       p_event_type_filter: singleEventTypeFilter,
+      p_archive_mode: archiveMode,
     });
   }
 

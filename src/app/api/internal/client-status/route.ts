@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { normalizeBookingArchiveMode } from "@/lib/booking-archive";
 import { requireRouteUser } from "@/lib/pagination/route-user";
 import {
   CANCELLED_BOOKING_STATUS,
@@ -100,6 +101,10 @@ function parseIncludeMetadata(value: string | null) {
   return true;
 }
 
+function parseArchiveMode(value: string | null) {
+  return normalizeBookingArchiveMode(value);
+}
+
 function isInvalidEscapeStringError(message: string) {
   return message.toLowerCase().includes("invalid escape string");
 }
@@ -148,6 +153,8 @@ type BookingStatusRow = {
   dp_refund_amount?: number | null;
   dp_refunded_at?: string | null;
   tracking_uuid: string | null;
+  archived_at?: string | null;
+  archived_by?: string | null;
   event_type?: string | null;
   extra_fields?: Record<string, unknown> | null;
   services: {
@@ -207,11 +214,12 @@ export async function GET(request: NextRequest) {
   const profileClientStatusTablePreferences =
     profileData?.table_column_preferences?.client_status ?? null;
 
-  const defaultVisibleStatusFilters = getBookingStatusOptions(profileStatuses).filter(
-    (status) => status !== CANCELLED_BOOKING_STATUS,
-  );
-
   const searchParams = request.nextUrl.searchParams;
+  const archiveMode = parseArchiveMode(searchParams.get("archiveMode"));
+
+  const defaultVisibleStatusFilters = getBookingStatusOptions(profileStatuses).filter(
+    (status) => archiveMode === "archived" || status !== CANCELLED_BOOKING_STATUS,
+  );
   const page = parsePositiveInt(searchParams.get("page"), DEFAULT_PAGE);
   const perPage = Math.min(
     parsePositiveInt(searchParams.get("perPage"), DEFAULT_PER_PAGE),
@@ -230,7 +238,11 @@ export async function GET(request: NextRequest) {
 
   const effectiveStatusFilters =
     statusFilters.length > 0
-      ? statusFilters.filter((status) => status !== CANCELLED_BOOKING_STATUS)
+      ? (
+        archiveMode === "archived"
+          ? statusFilters
+          : statusFilters.filter((status) => status !== CANCELLED_BOOKING_STATUS)
+      )
       : defaultVisibleStatusFilters;
   const normalizedStatusFilters =
     statusFilters.length > 0 && effectiveStatusFilters.length === 0
@@ -256,12 +268,14 @@ export async function GET(request: NextRequest) {
     p_event_type_filters: eventTypeFilters,
     p_date_basis: dateBasis,
     p_time_zone: timeZone,
+    p_archive_mode: archiveMode,
   };
 
   const metadataPromise = includeMetadata
     ? supabase.rpc("cd_get_bookings_metadata", {
       p_event_type_filter: eventTypeFilters[0] || "All",
       p_table_menu: "client_status",
+      p_archive_mode: archiveMode,
     })
     : Promise.resolve({ data: null, error: null });
 
@@ -281,7 +295,8 @@ export async function GET(request: NextRequest) {
       message.includes("p_freelance_filters") ||
       message.includes("p_event_type_filters") ||
       message.includes("p_date_basis") ||
-      message.includes("p_time_zone");
+      message.includes("p_time_zone") ||
+      message.includes("p_archive_mode");
 
     if (isLikelyOldRpcSignature) {
       pageResult = await supabase.rpc("cd_get_bookings_page", {
@@ -331,6 +346,7 @@ export async function GET(request: NextRequest) {
   ) {
     metadataResult = await supabase.rpc("cd_get_bookings_metadata", {
       p_event_type_filter: eventTypeFilters[0] || "All",
+      p_archive_mode: archiveMode,
     });
   }
 
