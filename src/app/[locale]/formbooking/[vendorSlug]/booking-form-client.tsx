@@ -491,6 +491,7 @@ export function BookingFormClient({
   const previewMode = searchParams.get("preview") === "1";
   const previewStorageKey = searchParams.get("previewKey") || "";
   const [previewVendor, setPreviewVendor] = React.useState<PreviewVendorPayload | null>(null);
+  const lastAppliedPreviewEditorSyncKeyRef = React.useRef<string | null>(null);
   const previewEditorEventTypeRaw =
     typeof previewVendor?.preview_editor_event_type === "string"
       ? previewVendor.preview_editor_event_type.trim()
@@ -1725,21 +1726,33 @@ export function BookingFormClient({
 
   React.useEffect(() => {
     if (!previewMode) return;
-    if (!previewEditorEventType || !previewEditorLayoutMode) return;
+    if (!previewEditorEventType || !previewEditorLayoutMode) {
+      lastAppliedPreviewEditorSyncKeyRef.current = null;
+      return;
+    }
     if (!eventTypeOptions.includes(previewEditorEventType)) return;
+    const syncKey = `${previewEditorEventType}:${previewEditorLayoutMode}`;
+    if (lastAppliedPreviewEditorSyncKeyRef.current === syncKey) return;
+    lastAppliedPreviewEditorSyncKeyRef.current = syncKey;
+    const resolvedEventTypeForSync =
+      eventType === previewEditorEventType
+        ? eventType
+        : previewEditorEventType;
 
     if (eventType !== previewEditorEventType) {
       setEventType(previewEditorEventType);
-      return;
     }
 
-    if (eventType !== "Wedding" && eventType !== "Wisuda") {
+    if (
+      resolvedEventTypeForSync !== "Wedding" &&
+      resolvedEventTypeForSync !== "Wisuda"
+    ) {
       if (splitDates) setSplitDates(false);
       return;
     }
 
     const splitAllowed =
-      eventType === "Wedding"
+      resolvedEventTypeForSync === "Wedding"
         ? effectiveVendor.form_show_wedding_split !== false
         : effectiveVendor.form_show_wisuda_split !== false;
     const desiredSplit = previewEditorLayoutMode === "split" && splitAllowed;
