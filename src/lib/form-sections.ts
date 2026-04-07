@@ -70,6 +70,18 @@ export function normalizeModeAwareFormSectionsByEventType(
           return acc;
         }
 
+        if (isSplitCapableEventType(normalizedKey)) {
+          acc[normalizedKey] = {
+            normal: normalizeStoredFormLayout(value, normalizedKey, {
+              layoutMode: "normal",
+            }),
+            split: normalizeStoredFormLayout(value, normalizedKey, {
+              layoutMode: "split",
+            }),
+          };
+          return acc;
+        }
+
         acc[normalizedKey] = normalizeStoredFormLayout(value, normalizedKey);
         return acc;
       },

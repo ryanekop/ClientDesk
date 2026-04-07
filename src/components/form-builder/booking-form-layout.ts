@@ -970,6 +970,109 @@ function normalizeCustomSectionItem(item: CustomSectionItem): CustomSectionItem 
   };
 }
 
+function filterOrderToPresentIds(
+  order: BuiltInFieldId[],
+  presentIds: BuiltInFieldId[],
+) {
+  const presentSet = new Set(presentIds);
+  return order.filter((builtinId) => presentSet.has(builtinId));
+}
+
+function buildLegacySplitRegressionOrderCandidates(
+  eventType: string,
+  options: BuiltInFieldDefinitionOptions,
+): BuiltInFieldId[][] {
+  const extraFieldKeys = new Set<string>(
+    (EVENT_EXTRA_FIELDS[eventType] || []).map((field) => field.key),
+  );
+  (options.extraFieldKeys || []).forEach((key) => {
+    if (getExtraFieldDefinitionByKey(key)) {
+      extraFieldKeys.add(key);
+    }
+  });
+
+  const sessionFieldGroups = buildSessionFieldGroups(
+    eventType,
+    extraFieldKeys,
+    options.layoutMode,
+  );
+  const splitToggleIds = getSplitToggleFields(eventType).map(
+    (field) => field.builtinId,
+  );
+  const splitScheduleIds = sessionFieldGroups.schedule.map(
+    (field) => field.builtinId,
+  );
+  const splitLocationIds = sessionFieldGroups.split_location.map(
+    (field) => field.builtinId,
+  );
+  const locationDetailId = sessionFieldGroups.location.find(
+    (field) => field.builtinId === "location_detail",
+  )?.builtinId;
+  const extraNonLocationIds = sessionFieldGroups.extra_non_location.map(
+    (field) => field.builtinId,
+  );
+  const visibleNormalCoreIds = [
+    ...(locationDetailId ? [locationDetailId] : []),
+    ...extraNonLocationIds,
+    SESSION_NOTES_FIELD.builtinId,
+  ];
+
+  const candidateOrders: BuiltInFieldId[][] = [
+    getSessionBuiltInOrderIds(eventType, options, "legacy_regressed"),
+    [
+      "event_type",
+      ...splitToggleIds,
+      ...DEFAULT_SESSION_FIELDS.map((field) => field.builtinId),
+      "location",
+      ...visibleNormalCoreIds,
+      ...splitScheduleIds,
+      ...splitLocationIds,
+    ],
+    [
+      "event_type",
+      ...DEFAULT_SESSION_FIELDS.map((field) => field.builtinId),
+      "location",
+      ...visibleNormalCoreIds,
+      ...splitToggleIds,
+      ...splitScheduleIds,
+      ...splitLocationIds,
+    ],
+    [
+      "event_type",
+      ...visibleNormalCoreIds,
+      ...splitToggleIds,
+      ...splitScheduleIds,
+      ...splitLocationIds,
+    ],
+    [
+      "event_type",
+      ...(locationDetailId ? [locationDetailId] : []),
+      SESSION_NOTES_FIELD.builtinId,
+      ...splitToggleIds,
+      ...splitScheduleIds,
+      ...splitLocationIds,
+      ...extraNonLocationIds,
+    ],
+    [
+      "event_type",
+      ...splitToggleIds,
+      ...(locationDetailId ? [locationDetailId] : []),
+      ...extraNonLocationIds,
+      SESSION_NOTES_FIELD.builtinId,
+      ...splitScheduleIds,
+      ...splitLocationIds,
+    ],
+  ];
+
+  const seen = new Set<string>();
+  return candidateOrders.filter((order) => {
+    const key = order.join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function maybeMigrateSessionBuiltInOrder(
   items: SectionContentItem[],
   eventType: string,
@@ -977,34 +1080,54 @@ function maybeMigrateSessionBuiltInOrder(
 ): SectionContentItem[] {
   const isSplitEvent = eventType === "Wedding" || eventType === "Wisuda";
   if (!isSplitEvent) return items;
-  if (items.some((item) => item.kind !== "builtin_field")) return items;
+  const resolvedLayoutMode = resolveLayoutModeForEvent(eventType, options.layoutMode);
+  if (resolvedLayoutMode !== "split") return items;
 
-  const builtInItems = items as BuiltInFieldItem[];
+  const builtInItems = items.filter(
+    (item): item is BuiltInFieldItem => item.kind === "builtin_field",
+  );
+  if (builtInItems.length === 0) return items;
   const currentOrderIds = builtInItems.map((item) => item.builtinId);
   const desiredOrderIds = getSessionBuiltInOrderIds(eventType, options, "desired");
-  const legacyRegressedOrderIds = getSessionBuiltInOrderIds(
-    eventType,
-    options,
-    "legacy_regressed",
-  );
   const desiredOrderSet = new Set(desiredOrderIds);
 
   if (currentOrderIds.some((id) => !desiredOrderSet.has(id))) {
     return items;
   }
 
-  if (currentOrderIds.join("|") !== legacyRegressedOrderIds.join("|")) {
+  const matchesLegacyRegression = buildLegacySplitRegressionOrderCandidates(
+    eventType,
+    options,
+  ).some((candidateOrder) => {
+    const filteredCandidate = filterOrderToPresentIds(candidateOrder, currentOrderIds);
+    return filteredCandidate.join("|") === currentOrderIds.join("|");
+  });
+
+  if (!matchesLegacyRegression) {
     return items;
   }
 
   const itemById = new Map(
     builtInItems.map((item) => [item.builtinId, item] as const),
   );
-  const reordered = desiredOrderIds
+  const reorderedBuiltIns = filterOrderToPresentIds(
+    desiredOrderIds,
+    currentOrderIds,
+  )
     .map((builtinId) => itemById.get(builtinId))
     .filter((item): item is BuiltInFieldItem => Boolean(item));
 
-  return reordered.length === items.length ? reordered : items;
+  if (reorderedBuiltIns.length !== builtInItems.length) {
+    return items;
+  }
+
+  let reorderedIndex = 0;
+  return items.map((item) => {
+    if (item.kind !== "builtin_field") return item;
+    const nextItem = reorderedBuiltIns[reorderedIndex];
+    reorderedIndex += 1;
+    return nextItem || item;
+  });
 }
 
 function normalizeNewLayout(
