@@ -17,6 +17,55 @@ function withOrigin(origin: string, path: string) {
     return `${origin}${resolvedPath}`
 }
 
+function getRequestIp(request: Request): string {
+    return request.headers.get('cf-connecting-ip')
+        || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        || request.headers.get('x-real-ip')
+        || 'unknown'
+}
+
+function buildLocalizedCallbackUrl(request: Request, locale: string, publicOrigin: string) {
+    const currentUrl = new URL(request.url)
+    const targetUrl = new URL(withOrigin(publicOrigin, `/${locale}/auth/callback`))
+
+    currentUrl.searchParams.forEach((value, key) => {
+        targetUrl.searchParams.set(key, value)
+    })
+
+    return targetUrl.toString()
+}
+
+function createLocalizedCallbackRedirect(localizedCallbackUrl: string) {
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Redirecting...</title></head>
+<body>
+<p>Redirecting...</p>
+<script>
+  window.location.replace(${JSON.stringify(localizedCallbackUrl)} + window.location.hash);
+</script>
+</body>
+</html>`
+
+    return new NextResponse(html, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' },
+    })
+}
+
+function classifyAuthCallbackError(message: string) {
+    if (/code verifier not found/i.test(message)) {
+        return 'missing_pkce_verifier'
+    }
+    if (/code challenge does not match/i.test(message)) {
+        return 'pkce_code_challenge_mismatch'
+    }
+    if (/expired/i.test(message)) {
+        return 'expired_code'
+    }
+    return 'unknown'
+}
+
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const code = searchParams.get('code')
@@ -24,6 +73,7 @@ export async function GET(request: Request) {
     const locale = normalizeAuthLocale(searchParams.get('locale'))
     const next = resolveSafeNextPath(searchParams.get('next'), locale)
     const publicOrigin = resolvePublicOrigin(request)
+    const localizedCallbackUrl = buildLocalizedCallbackUrl(request, locale, publicOrigin)
 
     if (code) {
         const supabase = await createClient()
@@ -41,22 +91,26 @@ export async function GET(request: Request) {
 
                 const existingSub = await getSubscription(userId)
                 if (!existingSub) {
-                    await createTrialSubscription(userId)
-                    // Notify admin via Telegram (fire-and-forget)
-                    const ip = request.headers.get('cf-connecting-ip')
-                        || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-                        || request.headers.get('x-real-ip')
-                        || 'unknown'
-                    const device = request.headers.get('user-agent') || ''
-                    const isInvite = type === 'invite'
-                    notifyNewSignup({
-                        email: userEmail,
-                        fullName,
-                        type: isInvite ? 'invite' : 'signup',
-                        trialDays: 5,
-                        ip,
-                        device,
-                    }).catch(() => { })
+                    const createdTrial = await createTrialSubscription(userId)
+                    if (createdTrial) {
+                        // Notify admin via Telegram (fire-and-forget)
+                        const device = request.headers.get('user-agent') || ''
+                        const isInvite = type === 'invite'
+                        notifyNewSignup({
+                            email: userEmail,
+                            fullName,
+                            type: isInvite ? 'invite' : 'signup',
+                            trialDays: 5,
+                            ip: getRequestIp(request),
+                            device,
+                        }).catch(() => { })
+                    } else {
+                        console.warn('[Auth Callback] Trial creation failed after successful code exchange', {
+                            userId,
+                            type: type || 'unknown',
+                            route: 'GET',
+                        })
+                    }
                 }
 
                 // Sync full_name to profiles table (upsert to ensure row exists)
@@ -104,8 +158,20 @@ export async function GET(request: Request) {
             }
             return NextResponse.redirect(withOrigin(publicOrigin, redirectPath))
         } else {
-            console.error('Auth callback error:', error.message)
+            console.warn('[Auth Callback] Code exchange failed, falling back to localized callback:', {
+                message: error.message,
+                reason: classifyAuthCallbackError(error.message),
+                type: type || 'unknown',
+                locale,
+                publicOrigin,
+                fallback: localizedCallbackUrl,
+            })
+            return NextResponse.redirect(localizedCallbackUrl)
         }
+    }
+
+    if (type === 'signup' || type === 'invite' || type === 'recovery') {
+        return createLocalizedCallbackRedirect(localizedCallbackUrl)
     }
 
     return NextResponse.redirect(withOrigin(publicOrigin, `/${locale}/login?error=auth_code_error`))
@@ -147,21 +213,24 @@ export async function POST(request: Request) {
 
         const existingSub = await getSubscription(userId)
         if (!existingSub) {
-            await createTrialSubscription(userId)
-            // Notify admin via Telegram (fire-and-forget)
-            const ip = request.headers.get('cf-connecting-ip')
-                || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-                || request.headers.get('x-real-ip')
-                || 'unknown'
-            const device = request.headers.get('user-agent') || ''
-            notifyNewSignup({
-                email: userEmail,
-                fullName: fullName || '',
-                type: 'signup',
-                trialDays: 5,
-                ip,
-                device,
-            }).catch(() => { })
+            const createdTrial = await createTrialSubscription(userId)
+            if (createdTrial) {
+                // Notify admin via Telegram (fire-and-forget)
+                const device = request.headers.get('user-agent') || ''
+                notifyNewSignup({
+                    email: userEmail,
+                    fullName: fullName || '',
+                    type: 'signup',
+                    trialDays: 5,
+                    ip: getRequestIp(request),
+                    device,
+                }).catch(() => { })
+            } else {
+                console.warn('[Callback POST] Trial creation failed after authenticated callback', {
+                    userId,
+                    hasRequestedUserId: !!requestedUserId,
+                })
+            }
         }
 
         // Sync full_name to profiles table (upsert to ensure row exists)
