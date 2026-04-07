@@ -58,10 +58,13 @@ import {
     buildUniversityDisplayName,
     cleanUniversityName,
     isUniversityEventType,
-    matchesUniversityDisplayValue,
     UNIVERSITY_EXTRA_FIELD_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
+import {
+    resolveUniversityReferenceSelection,
+    type UniversityReferenceLookupRow,
+} from "@/lib/university-reference-resolver";
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 import { resolveNormalizedLayoutFromStoredSections } from "@/lib/form-sections";
 import {
@@ -117,12 +120,6 @@ type AvailableServiceRow = {
     event_types?: string[] | null;
 };
 
-type UniversityReferenceRow = {
-    id: string;
-    name: string;
-    abbreviation?: string | null;
-};
-
 type BookingRequestBody = {
     vendorId?: string | null;
     vendorSlug: string;
@@ -151,7 +148,7 @@ type BookingRequestBody = {
 
 function isValidUuid(value: string | null | undefined) {
     if (!value) return false;
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
 function normalizeSlugCandidate(value: string | null | undefined) {
@@ -869,7 +866,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        let resolvedUniversityReference: UniversityReferenceRow | null = null;
+        let resolvedUniversityReference: UniversityReferenceLookupRow | null = null;
         if (shouldRequireUniversitySelection) {
             const submittedUniversityName = cleanUniversityName(
                 typeof rawExtraData[UNIVERSITY_EXTRA_FIELD_KEY] === "string"
@@ -881,7 +878,15 @@ export async function POST(request: NextRequest) {
                     ? rawExtraData[UNIVERSITY_REFERENCE_EXTRA_KEY].trim()
                     : "";
 
-            if (!submittedUniversityName || !isValidUuid(submittedUniversityRefId)) {
+            const universityResolution = await resolveUniversityReferenceSelection({
+                submittedValue: submittedUniversityName,
+                submittedReferenceId: submittedUniversityRefId,
+            });
+
+            if (
+                universityResolution.status === "missing-input" ||
+                universityResolution.status === "missing-reference"
+            ) {
                 return NextResponse.json(
                     {
                         success: false,
@@ -891,14 +896,11 @@ export async function POST(request: NextRequest) {
                 );
             }
 
-            const { data: universityReference, error: universityReferenceError } =
-                await supabaseAdmin
-                    .from("university_references")
-                    .select("id, name, abbreviation")
-                    .eq("id", submittedUniversityRefId)
-                    .maybeSingle<UniversityReferenceRow>();
-
-            if (universityReferenceError || !universityReference) {
+            if (
+                universityResolution.status === "not-found" ||
+                universityResolution.status === "ambiguous" ||
+                universityResolution.status === "mismatch"
+            ) {
                 return NextResponse.json(
                     {
                         success: false,
@@ -908,21 +910,7 @@ export async function POST(request: NextRequest) {
                 );
             }
 
-            if (!matchesUniversityDisplayValue({
-                submittedValue: submittedUniversityName,
-                name: universityReference.name,
-                abbreviation: universityReference.abbreviation,
-            })) {
-                return NextResponse.json(
-                    {
-                        success: false,
-                        error: "Universitas yang dipilih tidak valid.",
-                    },
-                    { status: 400 },
-                );
-            }
-
-            resolvedUniversityReference = universityReference;
+            resolvedUniversityReference = universityResolution.reference;
         }
 
         const availablePaymentMethods = normalizePaymentMethods(vendor.form_payment_methods);

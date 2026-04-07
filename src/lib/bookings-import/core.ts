@@ -17,13 +17,18 @@ import { parseSessionDateParts } from "@/utils/format-date";
 import {
   buildUniversityDisplayName,
   cleanUniversityName,
-  matchesUniversityDisplayValue,
-  normalizeUniversityAbbreviation,
-  normalizeUniversityName,
   UNIVERSITY_EVENT_TYPE,
   UNIVERSITY_EXTRA_FIELD_KEY,
   UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
+import {
+  buildUniversityLookupCandidates,
+  fetchUniversityReferenceLookupMaps,
+  fetchUniversityReferencesByIds,
+  isUniversityReferenceUuid,
+  resolveUniversityReferenceMatches,
+  type UniversityReferenceLookupRow,
+} from "@/lib/university-reference-resolver";
 import {
   computeSpecialOfferTotal,
   buildEditableSpecialOfferSnapshot,
@@ -116,14 +121,6 @@ type ServiceImportRow = {
 type FreelancerImportRow = {
   id: string;
   name: string;
-};
-
-type UniversityReferenceLookupRow = {
-  id: string;
-  name: string;
-  abbreviation: string | null;
-  normalized_name: string;
-  normalized_abbreviation: string | null;
 };
 
 type ValidationOptions = {
@@ -475,13 +472,6 @@ function normalizeCoordinateInput(
   if (!Number.isFinite(parsed)) return null;
   if (type === "lat") return parsed >= -90 && parsed <= 90 ? parsed : null;
   return parsed >= -180 && parsed <= 180 ? parsed : null;
-}
-
-function isValidUuid(value: string | null | undefined) {
-  const candidate = String(value || "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    candidate,
-  );
 }
 
 function normalizeStatusInput(value: unknown, statusOptions: string[]): string | null {
@@ -2188,59 +2178,7 @@ async function attachExistingExternalIdErrors(
   }
 }
 
-function buildUniversityLookupCandidates(submittedValue: string) {
-  const cleaned = cleanUniversityName(submittedValue);
-  const normalizedNameCandidates = new Set<string>();
-  const normalizedAbbreviationCandidates = new Set<string>();
-  if (!cleaned) {
-    return {
-      cleaned,
-      normalizedNameCandidates,
-      normalizedAbbreviationCandidates,
-    };
-  }
-
-  normalizedNameCandidates.add(normalizeUniversityName(cleaned));
-
-  const displayMatch = cleaned.match(/^(.*)\(([^()]+)\)\s*$/);
-  if (displayMatch) {
-    const parsedName = cleanUniversityName(displayMatch[1] || "");
-    const parsedAbbreviation = normalizeUniversityAbbreviation(
-      displayMatch[2] || "",
-    );
-
-    if (parsedName) {
-      normalizedNameCandidates.add(normalizeUniversityName(parsedName));
-    }
-    if (parsedAbbreviation) {
-      normalizedAbbreviationCandidates.add(parsedAbbreviation);
-    }
-  }
-
-  const normalizedAbbreviation = normalizeUniversityAbbreviation(cleaned);
-  if (normalizedAbbreviation && normalizedAbbreviation.length <= 24) {
-    normalizedAbbreviationCandidates.add(normalizedAbbreviation);
-  }
-
-  return {
-    cleaned,
-    normalizedNameCandidates,
-    normalizedAbbreviationCandidates,
-  };
-}
-
-function getUniversityLookupRows(
-  map: Map<string, UniversityReferenceLookupRow>,
-  token: string,
-) {
-  const value = token.trim();
-  if (!value) return [] as UniversityReferenceLookupRow[];
-  const row = map.get(value);
-  return row ? [row] : [];
-}
-
 async function attachUniversityReferenceValidation(
-  supabase: SupabaseClient,
   rows: NormalizedImportRow[],
 ) {
   const wisudaRows = rows.filter(
@@ -2277,24 +2215,32 @@ async function attachUniversityReferenceValidation(
         );
         continue;
       }
-      if (!isValidUuid(submittedReferenceId)) {
+      if (!isUniversityReferenceUuid(submittedReferenceId)) {
         strictRowsNeedingFallback.add(row.rowNumber);
         continue;
       }
       referenceIds.add(submittedReferenceId);
     }
 
-    const byReferenceId = new Map<string, UniversityReferenceLookupRow>();
     try {
-      if (referenceIds.size > 0) {
-        const { data, error } = await supabase
-          .from("university_references")
-          .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
-          .in("id", Array.from(referenceIds));
-        if (error) throw error;
-        for (const row of (data || []) as UniversityReferenceLookupRow[]) {
-          byReferenceId.set(row.id, row);
+      const byReferenceId = await fetchUniversityReferencesByIds(referenceIds);
+      for (const row of strictSuggestionRows) {
+        const submittedReferenceId = normalizeText(
+          row.builtInExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY],
+        );
+        if (!submittedReferenceId || !isUniversityReferenceUuid(submittedReferenceId)) continue;
+
+        const chosen = byReferenceId.get(submittedReferenceId);
+        if (!chosen) {
+          strictRowsNeedingFallback.add(row.rowNumber);
+          continue;
         }
+
+        row.builtInExtraFields[UNIVERSITY_EXTRA_FIELD_KEY] = buildUniversityDisplayName(
+          chosen.name,
+          chosen.abbreviation,
+        );
+        row.builtInExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY] = chosen.id;
       }
     } catch (error) {
       const message =
@@ -2305,25 +2251,6 @@ async function attachUniversityReferenceValidation(
         pushIssue(row, "error", `Gagal memvalidasi universitas: ${message}`);
       }
       return;
-    }
-
-    for (const row of strictSuggestionRows) {
-      const submittedReferenceId = normalizeText(
-        row.builtInExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY],
-      );
-      if (!submittedReferenceId || !isValidUuid(submittedReferenceId)) continue;
-
-      const chosen = byReferenceId.get(submittedReferenceId);
-      if (!chosen) {
-        strictRowsNeedingFallback.add(row.rowNumber);
-        continue;
-      }
-
-      row.builtInExtraFields[UNIVERSITY_EXTRA_FIELD_KEY] = buildUniversityDisplayName(
-        chosen.name,
-        chosen.abbreviation,
-      );
-      row.builtInExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY] = chosen.id;
     }
   }
 
@@ -2355,40 +2282,16 @@ async function attachUniversityReferenceValidation(
     });
   }
 
-  const byNormalizedName = new Map<string, UniversityReferenceLookupRow>();
-  const byNormalizedAbbreviation = new Map<string, UniversityReferenceLookupRow>();
+  let lookupMaps = {
+    byNormalizedName: new Map<string, UniversityReferenceLookupRow>(),
+    byNormalizedAbbreviation: new Map<string, UniversityReferenceLookupRow>(),
+  };
 
   try {
-    if (normalizedNames.size > 0) {
-      const { data, error } = await supabase
-        .from("university_references")
-        .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
-        .in("normalized_name", Array.from(normalizedNames));
-
-      if (error) throw error;
-      for (const row of (data || []) as UniversityReferenceLookupRow[]) {
-        if (!row.normalized_name) continue;
-        byNormalizedName.set(row.normalized_name, row);
-      }
-    }
-
-    if (normalizedAbbreviations.size > 0) {
-      const { data, error } = await supabase
-        .from("university_references")
-        .select("id, name, abbreviation, normalized_name, normalized_abbreviation")
-        .in("normalized_abbreviation", Array.from(normalizedAbbreviations));
-
-      if (error) throw error;
-      for (const row of (data || []) as UniversityReferenceLookupRow[]) {
-        if (!row.normalized_abbreviation) continue;
-        if (!byNormalizedAbbreviation.has(row.normalized_abbreviation)) {
-          byNormalizedAbbreviation.set(row.normalized_abbreviation, row);
-        } else {
-          // Mark ambiguous abbreviation by clearing the deterministic mapping.
-          byNormalizedAbbreviation.delete(row.normalized_abbreviation);
-        }
-      }
-    }
+    lookupMaps = await fetchUniversityReferenceLookupMaps({
+      normalizedNames,
+      normalizedAbbreviations,
+    });
   } catch (error) {
     const message =
       error instanceof Error
@@ -2432,33 +2335,21 @@ async function attachUniversityReferenceValidation(
       continue;
     }
 
-    const matchedRows = new Map<string, UniversityReferenceLookupRow>();
-    candidates.normalizedNameCandidates.forEach((token) => {
-      getUniversityLookupRows(byNormalizedName, token).forEach((item) => {
-        matchedRows.set(item.id, item);
-      });
-    });
-    candidates.normalizedAbbreviationCandidates.forEach((token) => {
-      getUniversityLookupRows(byNormalizedAbbreviation, token).forEach((item) => {
-        matchedRows.set(item.id, item);
-      });
-    });
-
-    const resolvedRows = Array.from(matchedRows.values()).filter((item) => {
-      if (
-        normalizeUniversityAbbreviation(submitted) &&
-        item.normalized_abbreviation === normalizeUniversityAbbreviation(submitted)
-      ) {
-        return true;
-      }
-      return matchesUniversityDisplayValue({
-        submittedValue: submitted,
-        name: item.name,
-        abbreviation: item.abbreviation,
-      });
+    const resolvedRows = resolveUniversityReferenceMatches({
+      submittedValue: submitted,
+      ...lookupMaps,
     });
 
     if (resolvedRows.length === 0) {
+      if (strictFallbackMode) {
+        console.warn("[batch-import] university strict validation miss", {
+          rowNumber: row.rowNumber,
+          hasUniversitasRefId: Boolean(
+            normalizeText(row.builtInExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY]),
+          ),
+          result: "not-found",
+        });
+      }
       if (strictFallbackMode) {
         pushIssue(
           row,
@@ -2476,6 +2367,15 @@ async function attachUniversityReferenceValidation(
     }
 
     if (resolvedRows.length > 1) {
+      if (strictFallbackMode) {
+        console.warn("[batch-import] university strict validation miss", {
+          rowNumber: row.rowNumber,
+          hasUniversitasRefId: Boolean(
+            normalizeText(row.builtInExtraFields[UNIVERSITY_REFERENCE_EXTRA_KEY]),
+          ),
+          result: "ambiguous",
+        });
+      }
       if (strictFallbackMode) {
         pushIssue(
           row,
@@ -2589,7 +2489,7 @@ export async function validateImportWorkbook(
 
   attachDuplicateExternalIdErrors(normalizedRows);
   await attachExistingExternalIdErrors(supabase, userId, normalizedRows);
-  await attachUniversityReferenceValidation(supabase, normalizedRows);
+  await attachUniversityReferenceValidation(normalizedRows);
 
   const summary = summarizeValidationRows(normalizedRows);
   const previewRows = toPreviewRows(normalizedRows);
