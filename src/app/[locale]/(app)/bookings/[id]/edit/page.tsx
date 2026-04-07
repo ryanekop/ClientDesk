@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2, CheckCircle2, Search, List, LayoutGrid } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2, CheckCircle2, Search, List, LayoutGrid, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
@@ -62,6 +62,12 @@ import {
     getVerifiedDpAmount,
     normalizeFinalAdjustments,
 } from "@/lib/final-settlement";
+import {
+    getNetRevenueAfterOperationalCosts,
+    getOperationalCostsTotal,
+    normalizeOperationalCosts,
+    type OperationalCost,
+} from "@/lib/operational-costs";
 import {
     buildEditableSpecialOfferSnapshot,
     computeSpecialOfferTotal,
@@ -244,6 +250,13 @@ type TeamBadgeColors = {
     tags: BadgeColorMap;
 };
 
+type EditableOperationalCost = {
+    id: string;
+    label: string;
+    amount: number | "";
+    created_at: string;
+};
+
 const DEFAULT_TEAM_BADGE_COLORS: TeamBadgeColors = {
     roles: {},
     tags: {},
@@ -368,6 +381,29 @@ function normalizeColorRecord(value: unknown): BadgeColorMap {
     return next;
 }
 
+function toEditableOperationalCosts(items: OperationalCost[]): EditableOperationalCost[] {
+    return items.map((item) => ({
+        id: item.id,
+        label: item.label,
+        amount: item.amount || "",
+        created_at: item.created_at,
+    }));
+}
+
+function normalizeEditableOperationalCosts(items: EditableOperationalCost[]): OperationalCost[] {
+    return items
+        .map((item) => ({
+            id: item.id || crypto.randomUUID(),
+            label: item.label.trim(),
+            amount: Math.max(
+                Number(typeof item.amount === "number" ? item.amount : parseFloat(String(item.amount || 0))) || 0,
+                0,
+            ),
+            created_at: item.created_at || new Date().toISOString(),
+        }))
+        .filter((item) => item.label.length > 0 && item.amount > 0);
+}
+
 function normalizeTeamBadgeColors(value: unknown): TeamBadgeColors {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
         return { ...DEFAULT_TEAM_BADGE_COLORS };
@@ -451,6 +487,7 @@ export default function EditBookingPage() {
     const [settlementStatusValue, setSettlementStatusValue] = React.useState("draft");
     const [isFullyPaid, setIsFullyPaid] = React.useState(false);
     const [finalAdjustmentsRaw, setFinalAdjustmentsRaw] = React.useState<unknown>(null);
+    const [operationalCostItems, setOperationalCostItems] = React.useState<EditableOperationalCost[]>([]);
     const [finalPaymentAmount, setFinalPaymentAmount] = React.useState(0);
     const [finalPaidAt, setFinalPaidAt] = React.useState<string | null>(null);
     const [baseExtraFieldsObject, setBaseExtraFieldsObject] = React.useState<Record<string, unknown> | null>(null);
@@ -714,6 +751,11 @@ export default function EditBookingPage() {
                 );
                 setIsFullyPaid(Boolean((booking as Record<string, unknown>).is_fully_paid));
                 setFinalAdjustmentsRaw((booking as Record<string, unknown>).final_adjustments ?? null);
+                setOperationalCostItems(
+                    toEditableOperationalCosts(
+                        normalizeOperationalCosts((booking as Record<string, unknown>).operational_costs ?? null),
+                    ),
+                );
                 setFinalPaymentAmount(Number((booking as Record<string, unknown>).final_payment_amount) || 0);
                 setFinalPaidAt(((booking as Record<string, unknown>).final_paid_at as string | null) || null);
                 const unifiedStatus = resolveUnifiedBookingStatus({
@@ -1672,6 +1714,7 @@ export default function EditBookingPage() {
                 admin_notes: adminNotes || null,
                 drive_folder_url: driveFolderUrl || null,
                 portfolio_url: portfolioUrl || null,
+                operational_costs: normalizedOperationalCosts,
                 extra_fields: nextExtraFieldsPayload,
                 updated_at: new Date().toISOString(),
             }).eq("id", id);
@@ -1851,6 +1894,42 @@ export default function EditBookingPage() {
         setDpRefundedAt(null);
     }
 
+    function addOperationalCostItem() {
+        setOperationalCostItems((prev) => [
+            ...prev,
+            {
+                id: crypto.randomUUID(),
+                label: "",
+                amount: "",
+                created_at: new Date().toISOString(),
+            },
+        ]);
+    }
+
+    function updateOperationalCostItem(
+        id: string,
+        field: "label" | "amount",
+        value: string,
+    ) {
+        setOperationalCostItems((prev) =>
+            prev.map((item) =>
+                item.id === id
+                    ? {
+                        ...item,
+                        [field]:
+                            field === "amount"
+                                ? parseFormattedNumber(value)
+                                : value,
+                    }
+                    : item,
+            ),
+        );
+    }
+
+    function removeOperationalCostItem(id: string) {
+        setOperationalCostItems((prev) => prev.filter((item) => item.id !== id));
+    }
+
     const packageTotalValue = selectedMainServices.reduce(
         (sum, service) => sum + (service.price || 0),
         0,
@@ -1873,6 +1952,8 @@ export default function EditBookingPage() {
     const fullyPaidByCurrentDp = dpPaidValue >= totalPriceValue && totalPriceValue > 0;
     const normalizedFinalAdjustments = normalizeFinalAdjustments(finalAdjustmentsRaw);
     const finalAdjustmentsTotal = getFinalAdjustmentsTotal(normalizedFinalAdjustments);
+    const normalizedOperationalCosts = normalizeEditableOperationalCosts(operationalCostItems);
+    const operationalCostsTotal = getOperationalCostsTotal(normalizedOperationalCosts);
     const finalInvoiceTotal = getFinalInvoiceTotal(totalPriceValue, normalizedFinalAdjustments);
     const verifiedPaymentInput = {
         total_price: totalPriceValue,
@@ -1891,6 +1972,10 @@ export default function EditBookingPage() {
     const resolvedDpRefundAmount = getDpRefundAmount(verifiedPaymentInput);
     const verifiedFinalPayment = finalPaidAt ? finalPaymentAmount || 0 : 0;
     const netVerifiedRevenue = getNetVerifiedRevenueAmount(verifiedPaymentInput);
+    const netRevenueAfterOperationalCosts = getNetRevenueAfterOperationalCosts({
+        ...verifiedPaymentInput,
+        operational_costs: normalizedOperationalCosts,
+    });
     const remainingPayment = getRemainingFinalPayment(verifiedPaymentInput);
     const initialPaymentStatus = fullyPaidByCurrentDp || isFullyPaid
         ? "Lunas"
@@ -2771,6 +2856,80 @@ export default function EditBookingPage() {
                             />
                         )}
                     </div>
+                    <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h4 className="text-sm font-semibold">Biaya Operasional</h4>
+                                <p className="text-xs text-muted-foreground">
+                                    Biaya ini hanya mengurangi pemasukan bersih internal, tidak mengubah invoice klien.
+                                </p>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={addOperationalCostItem}
+                            >
+                                <Plus className="w-3.5 h-3.5" />
+                                Tambah Biaya
+                            </Button>
+                        </div>
+
+                        {operationalCostItems.length > 0 ? (
+                            <div className="space-y-3">
+                                {operationalCostItems.map((item, index) => (
+                                    <div
+                                        key={item.id}
+                                        className="grid gap-3 rounded-lg border bg-background/80 p-3 md:grid-cols-[minmax(0,1fr)_220px_auto]"
+                                    >
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">
+                                                Nama Biaya {index + 1}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={item.label}
+                                                onChange={(event) => updateOperationalCostItem(item.id, "label", event.target.value)}
+                                                placeholder="Contoh: Biaya Freelance"
+                                                className={inputClass}
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-medium text-muted-foreground">Nominal (Rp)</label>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={formatNumber(item.amount)}
+                                                    onChange={(event) => updateOperationalCostItem(item.id, "amount", event.target.value)}
+                                                    placeholder="0"
+                                                    className={cn(inputClass, "flex-1")}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-end">
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                className="text-destructive hover:text-destructive"
+                                                onClick={() => removeOperationalCostItem(item.id)}
+                                                aria-label={`Hapus biaya operasional ${index + 1}`}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="rounded-lg border border-dashed bg-background/60 px-4 py-5 text-sm text-muted-foreground">
+                                Belum ada biaya operasional.
+                            </div>
+                        )}
+                    </div>
                     <div className="rounded-xl border bg-muted/30 p-4 space-y-3 text-sm">
                         <div className="flex justify-between gap-4">
                             <span className="text-muted-foreground">Status Pembayaran Awal</span>
@@ -2810,8 +2969,16 @@ export default function EditBookingPage() {
                         <div className="border-t pt-3 space-y-2">
                             <div className="flex justify-between gap-4"><span className="text-muted-foreground">Pelunasan Terverifikasi</span><span>{formatCurrency(verifiedFinalPayment)}</span></div>
                             <div className="flex justify-between gap-4">
-                                <span className="font-semibold text-green-700 dark:text-green-400">Total Terverifikasi Bersih</span>
+                                <span className="font-semibold text-green-700 dark:text-green-400">Total Terverifikasi</span>
                                 <span className="font-semibold text-green-700 dark:text-green-400">{formatCurrency(netVerifiedRevenue)}</span>
+                            </div>
+                            <div className="flex justify-between gap-4">
+                                <span className="text-muted-foreground">Biaya Operasional</span>
+                                <span>- {formatCurrency(operationalCostsTotal)}</span>
+                            </div>
+                            <div className="flex justify-between gap-4">
+                                <span className="font-semibold text-green-700 dark:text-green-400">Pemasukan Bersih</span>
+                                <span className="font-semibold text-green-700 dark:text-green-400">{formatCurrency(netRevenueAfterOperationalCosts)}</span>
                             </div>
                         </div>
 

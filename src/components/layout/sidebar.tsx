@@ -37,6 +37,7 @@ const mainNavItems = [
     { titleKey: "calendar" as const, href: "/calendar", icon: CalendarDays },
     { titleKey: "services" as const, href: "/services", icon: Briefcase },
     { titleKey: "finance" as const, href: "/finance", icon: Wallet },
+    { titleKey: "invoiceSettlement" as const, href: "/invoice-pelunasan", icon: ReceiptText },
     { titleKey: "team" as const, href: "/team", icon: Users },
     { titleKey: "formBooking" as const, href: "/form-booking", icon: FileEdit },
     { titleKey: "formSettlement" as const, href: "/settlement-form", icon: ReceiptText },
