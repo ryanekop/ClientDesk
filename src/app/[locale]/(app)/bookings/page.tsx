@@ -2414,6 +2414,7 @@ export default function BookingsPage() {
                                     return (
                                         <tr
                                             key={booking.id}
+                                            data-row-tone={serviceColor ? "service" : undefined}
                                             className={
                                                 serviceColor
                                                     ? "transition-colors group"
@@ -2422,7 +2423,8 @@ export default function BookingsPage() {
                                             style={
                                                 serviceColor
                                                     ? ({
-                                                        backgroundColor: withAlpha(serviceColor, 0.075),
+                                                        "--table-row-bg": withAlpha(serviceColor, 0.075),
+                                                        "--table-row-hover-bg": withAlpha(serviceColor, 0.13),
                                                     } as React.CSSProperties)
                                                     : undefined
                                             }

@@ -113,9 +113,17 @@
 }
 
 @layer components {
+    .group[data-row-tone="service"] {
+        background-color: var(--table-row-bg);
+    }
+
+    .group[data-row-tone="service"]:hover {
+        background-color: var(--table-row-hover-bg);
+    }
+
     .sticky-table-cell {
         isolation: isolate;
-        background-color: var(--color-card);
+        background-color: var(--table-row-bg, var(--color-card));
         background-image: none;
         background-clip: padding-box;
         /* Prevent box-shadow transition inherited from [class*="border"] */
@@ -127,11 +135,17 @@
     }
 
     .group:hover .sticky-table-cell:not(.sticky-table-cell--header) {
-        background-color: color-mix(in oklab, var(--color-card) 58%, var(--color-muted) 42%);
+        background-color: var(
+            --table-row-hover-bg,
+            color-mix(in oklab, var(--color-card) 58%, var(--color-muted) 42%)
+        );
     }
 
     .dark .group:hover .sticky-table-cell:not(.sticky-table-cell--header) {
-        background-color: color-mix(in oklab, var(--color-card) 62%, var(--color-foreground) 38%);
+        background-color: var(
+            --table-row-hover-bg,
+            color-mix(in oklab, var(--color-card) 62%, var(--color-foreground) 38%)
+        );
     }
 
     /* Reduce paint/composition glitches on some browsers/devices inside map modal UI */

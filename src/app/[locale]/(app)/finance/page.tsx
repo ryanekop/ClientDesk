@@ -2464,6 +2464,7 @@ export default function FinancePage() {
                                     return (
                                         <tr
                                             key={b.id}
+                                            data-row-tone={serviceColor ? "service" : undefined}
                                             className={
                                                 serviceColor
                                                     ? "group transition-colors"
@@ -2472,7 +2473,8 @@ export default function FinancePage() {
                                             style={
                                                 serviceColor
                                                     ? ({
-                                                        backgroundColor: withAlpha(serviceColor, 0.075),
+                                                        "--table-row-bg": withAlpha(serviceColor, 0.075),
+                                                        "--table-row-hover-bg": withAlpha(serviceColor, 0.13),
                                                     } as React.CSSProperties)
                                                     : undefined
                                             }
