@@ -12,6 +12,10 @@ import {
     shouldShowFinalInvoiceForClientStatus,
 } from "@/lib/client-status";
 import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
+import {
+    getBookingServiceLabel,
+    normalizeBookingServiceSelections,
+} from "@/lib/booking-services";
 import { resolveFastpikProjectInfoFromExtraFields } from "@/lib/fastpik-project-info";
 import {
     hydrateFastpikLiveData,
@@ -100,6 +104,13 @@ export async function GET(request: NextRequest) {
         extraFields: effectiveBooking.extra_fields,
         defaultLocation: effectiveBooking.location,
     });
+    const serviceSelections = normalizeBookingServiceSelections(
+        effectiveBooking.booking_services,
+        effectiveBooking.services,
+    );
+    const serviceName = getBookingServiceLabel(serviceSelections, {
+        fallback: effectiveBooking.event_type || "Booking",
+    });
 
     return NextResponse.json(
         {
@@ -116,7 +127,7 @@ export async function GET(request: NextRequest) {
                 trackingHideQueueNumber: Boolean(trackingHideQueueNumber),
                 queuePosition: effectiveBooking.queue_position,
                 status: effectiveBooking.status,
-                serviceName: (effectiveBooking.services as { name?: string } | null)?.name || null,
+                serviceName,
                 invoiceUrlInitial: buildSignedInvoicePath({
                     bookingCode: effectiveBooking.booking_code,
                     stage: "initial",

@@ -84,6 +84,13 @@ import { securityErrorResponse } from "@/lib/security/error-response";
 import { validatePublicPaymentProofFile } from "@/lib/security/public-upload";
 import { enforceRateLimit } from "@/lib/security/rate-limit";
 import { validateExternalHttpsUrl } from "@/lib/security/url-validation";
+import {
+    mergeBookingServicePayloadItems,
+    normalizeBookingServicePayloadItems,
+    normalizeBookingServiceQuantity,
+    toBookingServicesPayload,
+    type BookingServicePayloadItem,
+} from "@/lib/booking-services";
 
 type VendorRecord = {
     id: string;
@@ -128,6 +135,7 @@ type BookingRequestBody = {
     clientWhatsapp: string;
     eventType: string | null;
     sessionDate: string;
+    serviceSelections?: unknown;
     serviceIds?: string[] | null;
     serviceId: string;
     cityCode?: string | null;
@@ -442,6 +450,9 @@ export async function POST(request: NextRequest) {
                 clientWhatsapp: String(formData.get("clientWhatsapp") || ""),
                 eventType: formData.get("eventType") ? String(formData.get("eventType")) : null,
                 sessionDate: String(formData.get("sessionDate") || ""),
+                serviceSelections: formData.get("serviceSelections")
+                    ? JSON.parse(String(formData.get("serviceSelections")))
+                    : null,
                 serviceIds: formData.get("serviceIds")
                     ? JSON.parse(String(formData.get("serviceIds")))
                     : null,
@@ -493,6 +504,7 @@ export async function POST(request: NextRequest) {
             clientWhatsapp,
             eventType,
             sessionDate,
+            serviceSelections,
             serviceIds,
             serviceId,
             cityCode,
@@ -980,25 +992,46 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const mainServiceIds = Array.isArray(serviceIds)
+        const payloadServiceSelections = mergeBookingServicePayloadItems(
+            normalizeBookingServicePayloadItems(serviceSelections),
+        );
+        const legacyMainServiceIds = Array.isArray(serviceIds)
             ? serviceIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
             : [];
-        let normalizedMainServiceIds = normalizeUuidList(
-            mainServiceIds.length > 0 ? mainServiceIds : (serviceId ? [serviceId] : []),
-        );
+        let mainServiceSelections: BookingServicePayloadItem[] =
+            payloadServiceSelections.filter((selection) => selection.kind === "main");
+
+        if (mainServiceSelections.length === 0) {
+            const normalizedMainServiceIds = normalizeUuidList(
+                legacyMainServiceIds.length > 0 ? legacyMainServiceIds : (serviceId ? [serviceId] : []),
+            );
+            mainServiceSelections = normalizedMainServiceIds.map((id) => ({
+                serviceId: id,
+                kind: "main" as const,
+                quantity: 1,
+            }));
+        }
 
         if (specialOfferRule) {
             if (specialOfferRule.packageLocked) {
-                normalizedMainServiceIds = normalizeUuidList(
+                mainServiceSelections = normalizeUuidList(
                     specialOfferRule.packageServiceIds,
-                );
+                ).map((id) => ({
+                    serviceId: id,
+                    kind: "main" as const,
+                    quantity: 1,
+                }));
             } else if (
-                normalizedMainServiceIds.length === 0 &&
+                mainServiceSelections.length === 0 &&
                 specialOfferRule.packageServiceIds.length > 0
             ) {
-                normalizedMainServiceIds = normalizeUuidList(
+                mainServiceSelections = normalizeUuidList(
                     specialOfferRule.packageServiceIds,
-                );
+                ).map((id) => ({
+                    serviceId: id,
+                    kind: "main" as const,
+                    quantity: 1,
+                }));
             }
         }
 
@@ -1006,7 +1039,7 @@ export async function POST(request: NextRequest) {
         if (
             !allowMultiplePackages &&
             !specialOfferRule?.packageLocked &&
-            normalizedMainServiceIds.length > 1
+            mainServiceSelections.length > 1
         ) {
             return NextResponse.json(
                 {
@@ -1017,14 +1050,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        if (normalizedMainServiceIds.length === 0 && shouldRequireServicePackage) {
+        if (mainServiceSelections.length === 0 && shouldRequireServicePackage) {
             return NextResponse.json(
                 { success: false, error: "Silakan pilih paket layanan terlebih dahulu." },
                 { status: 400 },
             );
         }
 
-        if (normalizedMainServiceIds.length === 0) {
+        if (mainServiceSelections.length === 0) {
             const { data: availableMainServices } = await supabaseAdmin
                 .from("services")
                 .select("id, event_types")
@@ -1087,26 +1120,47 @@ export async function POST(request: NextRequest) {
                 : cityFilteredAvailableMainServices[0];
 
             if (preferredService?.id) {
-                normalizedMainServiceIds = [preferredService.id];
+                mainServiceSelections = [{
+                    serviceId: preferredService.id,
+                    kind: "main",
+                    quantity: 1,
+                }];
             }
         }
 
-        if (normalizedMainServiceIds.length === 0) {
+        if (mainServiceSelections.length === 0) {
             return NextResponse.json({ success: false, error: "Paket utama tidak tersedia." }, { status: 400 });
         }
 
-        const addonIdsRaw = Array.isArray(rawExtraData.addon_ids)
+        const legacyAddonIds = Array.isArray(rawExtraData.addon_ids)
             ? rawExtraData.addon_ids.filter((value): value is string => typeof value === "string")
             : [];
-        let addonIds = (vendor.form_show_addons ?? true)
-            ? normalizeUuidList(addonIdsRaw)
-            : [];
+        let addonSelections: BookingServicePayloadItem[] =
+            payloadServiceSelections.filter((selection) => selection.kind === "addon");
+        if (addonSelections.length === 0 && (vendor.form_show_addons ?? true)) {
+            addonSelections = normalizeUuidList(legacyAddonIds).map((id) => ({
+                serviceId: id,
+                kind: "addon",
+                quantity: 1,
+            }));
+        }
+        if (!(vendor.form_show_addons ?? true)) {
+            addonSelections = [];
+        }
 
         if (specialOfferRule) {
             if (specialOfferRule.addonLocked) {
-                addonIds = normalizeUuidList(specialOfferRule.addonServiceIds);
-            } else if (addonIds.length === 0 && specialOfferRule.addonServiceIds.length > 0) {
-                addonIds = normalizeUuidList(specialOfferRule.addonServiceIds);
+                addonSelections = normalizeUuidList(specialOfferRule.addonServiceIds).map((id) => ({
+                    serviceId: id,
+                    kind: "addon",
+                    quantity: 1,
+                }));
+            } else if (addonSelections.length === 0 && specialOfferRule.addonServiceIds.length > 0) {
+                addonSelections = normalizeUuidList(specialOfferRule.addonServiceIds).map((id) => ({
+                    serviceId: id,
+                    kind: "addon",
+                    quantity: 1,
+                }));
             }
         }
 
@@ -1114,7 +1168,7 @@ export async function POST(request: NextRequest) {
         if (
             !allowMultipleAddons &&
             !specialOfferRule?.addonLocked &&
-            addonIds.length > 1
+            addonSelections.length > 1
         ) {
             return NextResponse.json(
                 {
@@ -1126,8 +1180,8 @@ export async function POST(request: NextRequest) {
         }
 
         const requestedServiceIds = normalizeUuidList([
-            ...normalizedMainServiceIds,
-            ...addonIds,
+            ...mainServiceSelections.map((selection) => selection.serviceId),
+            ...addonSelections.map((selection) => selection.serviceId),
         ]);
         const { data: selectedServices } = await supabaseAdmin
             .from("services")
@@ -1172,22 +1226,48 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        const mainServices = normalizedMainServiceIds
-            .map((id) => selectedServices?.find((service) => service.id === id && !service.is_addon) ?? null)
-            .filter((service): service is NonNullable<typeof selectedServices>[number] => Boolean(service));
+        const mainServiceSelectionMap = new Map(
+            mainServiceSelections.map((selection) => [selection.serviceId, normalizeBookingServiceQuantity(selection.quantity)]),
+        );
+        const mainServices = mainServiceSelections
+            .map((selection) => {
+                const service = selectedServices?.find(
+                    (candidate) =>
+                        candidate.id === selection.serviceId && !candidate.is_addon,
+                );
+                if (!service) return null;
+                return {
+                    ...service,
+                    quantity: mainServiceSelectionMap.get(selection.serviceId) || 1,
+                };
+            })
+            .filter((service): service is NonNullable<typeof selectedServices>[number] & { quantity: number } => Boolean(service));
         if (mainServices.length === 0) {
             return NextResponse.json({ success: false, error: "Paket utama tidak ditemukan." }, { status: 400 });
         }
 
-        const addonServices = selectedServices?.filter(
-            (service) => addonIds.includes(service.id) && service.is_addon,
-        ) ?? [];
+        const addonSelectionMap = new Map(
+            addonSelections.map((selection) => [selection.serviceId, normalizeBookingServiceQuantity(selection.quantity)]),
+        );
+        const addonServices = addonSelections
+            .map((selection) => {
+                const service = selectedServices?.find(
+                    (candidate) =>
+                        candidate.id === selection.serviceId && candidate.is_addon,
+                );
+                if (!service) return null;
+                return {
+                    ...service,
+                    quantity: addonSelectionMap.get(selection.serviceId) || 1,
+                };
+            })
+            .filter((service): service is NonNullable<typeof selectedServices>[number] & { quantity: number } => Boolean(service));
         const resolvedMainServiceIds = mainServices.map((service) => service.id);
         const resolvedAddonServiceIds = addonServices.map((service) => service.id);
         const packageTotal =
-            mainServices.reduce((sum, service) => sum + service.price, 0);
+            mainServices.reduce((sum, service) => sum + (service.price * service.quantity), 0);
         const addonTotal =
-            addonServices.reduce((sum, service) => sum + service.price, 0);
+            addonServices.reduce((sum, service) => sum + (service.price * service.quantity), 0);
         const accommodationFee = specialOfferRule?.accommodationFee || 0;
         const discountAmount = specialOfferRule?.discountAmount || 0;
         const computedTotalPrice = computeSpecialOfferTotal({
@@ -1246,7 +1326,9 @@ export async function POST(request: NextRequest) {
         delete sanitizedExtraData.universitas_abbreviation_draft;
         if (addonServices.length > 0) {
             sanitizedExtraData.addon_ids = addonServices.map((service) => service.id);
-            sanitizedExtraData.addon_names = addonServices.map((service) => service.name);
+            sanitizedExtraData.addon_names = addonServices.map((service) =>
+                service.quantity > 1 ? `${service.name} x${service.quantity}` : service.name,
+            );
         } else {
             delete sanitizedExtraData.addon_ids;
             delete sanitizedExtraData.addon_names;
@@ -1328,20 +1410,23 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const { error: bookingServicesError } = await supabaseAdmin.from("booking_services").insert([
-            ...mainServices.map((service, index) => ({
+        const { error: bookingServicesError } = await supabaseAdmin.from("booking_services").insert(
+            toBookingServicesPayload([
+                ...mainServices.map((service) => ({
+                    serviceId: service.id,
+                    kind: "main" as const,
+                    quantity: service.quantity,
+                })),
+                ...addonServices.map((service) => ({
+                    serviceId: service.id,
+                    kind: "addon" as const,
+                    quantity: service.quantity,
+                })),
+            ]).map((item) => ({
                 booking_id: booking.id,
-                service_id: service.id,
-                kind: "main",
-                sort_order: index,
+                ...item,
             })),
-            ...addonServices.map((service, index) => ({
-                booking_id: booking.id,
-                service_id: service.id,
-                kind: "addon",
-                sort_order: index,
-            })),
-        ]);
+        );
         if (bookingServicesError) {
             await supabaseAdmin.from("bookings").delete().eq("id", booking.id);
             return NextResponse.json(

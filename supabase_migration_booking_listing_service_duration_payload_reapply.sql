@@ -111,6 +111,7 @@ AS $$
             'id', bs.id,
             'kind', COALESCE(bs.kind, 'main'),
             'sort_order', COALESCE(bs.sort_order, 0),
+            'quantity', GREATEST(COALESCE(bs.quantity, 1), 1),
             'service', CASE
               WHEN svc.id IS NULL THEN NULL
               ELSE jsonb_build_object(

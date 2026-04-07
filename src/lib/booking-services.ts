@@ -19,8 +19,17 @@ export type BookingServiceSelection = {
   booking_service_id?: string | null;
   kind: BookingServiceKind;
   sort_order: number;
+  quantity: number;
   service: BookingServiceRecord;
 };
+
+export type BookingServicePayloadItem = {
+  serviceId: string;
+  kind: BookingServiceKind;
+  quantity?: number | null;
+};
+
+export type BookingServiceQuantityMap = Record<string, number>;
 
 type LegacyBookingServiceRecord = {
   id?: string | null;
@@ -42,9 +51,137 @@ type RawBookingServiceRow = {
   service_id?: string | null;
   kind?: string | null;
   sort_order?: number | null;
+  quantity?: number | string | null;
   service?: BookingServiceRecord | null;
   services?: BookingServiceRecord | null;
 };
+
+type RawBookingServicePayloadItem = {
+  serviceId?: unknown;
+  service_id?: unknown;
+  kind?: unknown;
+  quantity?: unknown;
+};
+
+export function normalizeBookingServiceQuantity(value: unknown): number {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value.trim())
+        : Number.NaN;
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.max(Math.floor(parsed), 1);
+}
+
+export function normalizeBookingServicePayloadItems(
+  value: unknown,
+  options?: {
+    fallbackKind?: BookingServiceKind;
+  },
+): BookingServicePayloadItem[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized: Array<BookingServicePayloadItem | null> = value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const raw = item as RawBookingServicePayloadItem;
+      const serviceIdCandidate =
+        typeof raw.serviceId === "string"
+          ? raw.serviceId
+          : typeof raw.service_id === "string"
+            ? raw.service_id
+            : "";
+      const serviceId = serviceIdCandidate.trim();
+      if (!serviceId) return null;
+
+      return {
+        serviceId,
+        kind:
+          raw.kind === "addon" || raw.kind === "main"
+            ? raw.kind
+            : options?.fallbackKind || "main",
+        quantity: normalizeBookingServiceQuantity(raw.quantity),
+      } satisfies BookingServicePayloadItem;
+    });
+
+  return normalized.filter((item): item is BookingServicePayloadItem => item !== null);
+}
+
+export function mergeBookingServicePayloadItems(
+  selections: BookingServicePayloadItem[],
+): BookingServicePayloadItem[] {
+  const merged = new Map<string, BookingServicePayloadItem>();
+
+  selections.forEach((selection) => {
+    const key = `${selection.kind}:${selection.serviceId}`;
+    const current = merged.get(key);
+    if (!current) {
+      merged.set(key, {
+        ...selection,
+        quantity: normalizeBookingServiceQuantity(selection.quantity),
+      });
+      return;
+    }
+
+    merged.set(key, {
+      ...current,
+      quantity:
+        normalizeBookingServiceQuantity(current.quantity) +
+        normalizeBookingServiceQuantity(selection.quantity),
+    });
+  });
+
+  return Array.from(merged.values());
+}
+
+export function normalizeBookingServiceQuantityMap(
+  value: BookingServiceQuantityMap,
+  options?: {
+    selectedIds?: string[];
+    validIds?: Iterable<string>;
+    forceSingleUnit?: boolean;
+  },
+): BookingServiceQuantityMap {
+  const selectedIdSet = options?.selectedIds
+    ? new Set(options.selectedIds.filter(Boolean))
+    : null;
+  const validIdSet = options?.validIds ? new Set(options.validIds) : null;
+  const next: BookingServiceQuantityMap = {};
+
+  Object.entries(value || {}).forEach(([serviceId, quantity]) => {
+    if (!serviceId) return;
+    if (selectedIdSet && !selectedIdSet.has(serviceId)) return;
+    if (validIdSet && !validIdSet.has(serviceId)) return;
+    next[serviceId] = options?.forceSingleUnit
+      ? 1
+      : normalizeBookingServiceQuantity(quantity);
+  });
+
+  if (selectedIdSet) {
+    selectedIdSet.forEach((serviceId) => {
+      if (!serviceId) return;
+      if (validIdSet && !validIdSet.has(serviceId)) return;
+      next[serviceId] = options?.forceSingleUnit ? 1 : next[serviceId] || 1;
+    });
+  }
+
+  return next;
+}
+
+export function buildBookingServicePayloadItemsFromSelection(
+  selectedIds: string[],
+  quantityMap: BookingServiceQuantityMap,
+  kind: BookingServiceKind,
+): BookingServicePayloadItem[] {
+  return selectedIds
+    .filter(Boolean)
+    .map((serviceId) => ({
+      serviceId,
+      kind,
+      quantity: normalizeBookingServiceQuantity(quantityMap[serviceId]),
+    }));
+}
 
 export function normalizeBookingServiceSelections(
   rows: unknown,
@@ -73,6 +210,7 @@ export function normalizeBookingServiceSelections(
       booking_service_id: null,
       kind: normalizedLegacyService.is_addon ? "addon" : "main",
       sort_order: 0,
+      quantity: 1,
       service: normalizedLegacyService,
     },
   ];
@@ -119,6 +257,7 @@ function normalizeBookingServiceRow(
     booking_service_id: raw.id || null,
     kind: raw.kind === "addon" ? "addon" : "main",
     sort_order: typeof raw.sort_order === "number" ? raw.sort_order : index,
+    quantity: normalizeBookingServiceQuantity(raw.quantity),
     service,
   };
 }
@@ -135,7 +274,11 @@ export function getBookingServiceNames(
   kind?: BookingServiceKind,
 ): string[] {
   return (kind ? getBookingServicesByKind(selections, kind) : selections)
-    .map((selection) => selection.service.name)
+    .map((selection) =>
+      selection.quantity > 1
+        ? `${selection.service.name} x${selection.quantity}`
+        : selection.service.name,
+    )
     .filter(Boolean);
 }
 
@@ -167,7 +310,8 @@ export function getBookingServicesTotal(
   kind?: BookingServiceKind,
 ): number {
   return (kind ? getBookingServicesByKind(selections, kind) : selections).reduce(
-    (sum, selection) => sum + (selection.service.price || 0),
+    (sum, selection) =>
+      sum + (selection.service.price || 0) * normalizeBookingServiceQuantity(selection.quantity),
     0,
   );
 }
@@ -193,14 +337,19 @@ export function getBookingDurationMinutes(
   fallbackMinutes = 120,
 ): number {
   const mainDuration = getBookingServicesByKind(selections, "main").reduce(
-    (sum, selection) => sum + toPositiveMinutes(selection.service.duration_minutes),
+    (sum, selection) =>
+      sum +
+      toPositiveMinutes(selection.service.duration_minutes) *
+        normalizeBookingServiceQuantity(selection.quantity),
     0,
   );
   const addonDuration = getBookingServicesByKind(selections, "addon").reduce(
     (sum, selection) =>
       selection.service.affects_schedule === false
         ? sum
-        : sum + toPositiveMinutes(selection.service.duration_minutes),
+        : sum +
+          toPositiveMinutes(selection.service.duration_minutes) *
+            normalizeBookingServiceQuantity(selection.quantity),
     0,
   );
   const totalDuration = mainDuration + addonDuration;
@@ -213,12 +362,13 @@ export function getBookingDurationMinutes(
 }
 
 export function toBookingServicesPayload(
-  selections: Array<{ serviceId: string; kind: BookingServiceKind }>,
+  selections: BookingServicePayloadItem[],
 ) {
   return selections.map((selection, index) => ({
     service_id: selection.serviceId,
     kind: selection.kind,
     sort_order: index,
+    quantity: normalizeBookingServiceQuantity(selection.quantity),
   }));
 }
 

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Link2, CheckCircle2, Search, List, LayoutGrid } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Minus, Link2, CheckCircle2, Search, List, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { createClient } from "@/utils/supabase/client";
@@ -55,7 +55,12 @@ import {
 } from "@/lib/university-references";
 import { normalizeFormSectionsByEventType } from "@/lib/form-sections";
 import {
+    buildBookingServicePayloadItemsFromSelection,
     getBookingDurationMinutes,
+    normalizeBookingServiceQuantity,
+    normalizeBookingServiceQuantityMap,
+    toBookingServicesPayload,
+    type BookingServiceQuantityMap,
     type BookingServiceSelection,
 } from "@/lib/booking-services";
 import {
@@ -386,7 +391,9 @@ export default function NewBookingPage() {
     const [accommodationFee, setAccommodationFee] = React.useState<number | "">("");
     const [discountAmount, setDiscountAmount] = React.useState<number | "">("");
     const [selectedServiceIds, setSelectedServiceIds] = React.useState<string[]>([]);
+    const [selectedServiceQuantities, setSelectedServiceQuantities] = React.useState<BookingServiceQuantityMap>({});
     const [selectedAddonIds, setSelectedAddonIds] = React.useState<string[]>([]);
+    const [selectedAddonQuantities, setSelectedAddonQuantities] = React.useState<BookingServiceQuantityMap>({});
     const [defaultServiceColor, setDefaultServiceColor] = React.useState("#000000");
     const [teamBadgeColors, setTeamBadgeColors] = React.useState<TeamBadgeColors>(DEFAULT_TEAM_BADGE_COLORS);
     const [packageDialogOpen, setPackageDialogOpen] = React.useState(false);
@@ -719,6 +726,20 @@ export default function NewBookingPage() {
             ),
         [freelancers],
     );
+    const selectedMainQuantities = React.useMemo(
+        () =>
+            normalizeBookingServiceQuantityMap(selectedServiceQuantities, {
+                selectedIds: selectedServiceIds,
+            }),
+        [selectedServiceIds, selectedServiceQuantities],
+    );
+    const selectedAddonQuantityMap = React.useMemo(
+        () =>
+            normalizeBookingServiceQuantityMap(selectedAddonQuantities, {
+                selectedIds: selectedAddonIds,
+            }),
+        [selectedAddonIds, selectedAddonQuantities],
+    );
     const selectedMainServices = React.useMemo(
         () => mainServices.filter((service) => selectedServiceIds.includes(service.id)),
         [mainServices, selectedServiceIds],
@@ -739,6 +760,12 @@ export default function NewBookingPage() {
             }
             return next;
         });
+        setSelectedServiceQuantities((prev) =>
+            normalizeBookingServiceQuantityMap(prev, {
+                selectedIds: selectedServiceIds,
+                validIds: availableMainIds,
+            }),
+        );
     }, [mainServices]);
     React.useEffect(() => {
         const availableAddonIds = new Set(addonServices.map((service) => service.id));
@@ -752,6 +779,12 @@ export default function NewBookingPage() {
             }
             return next;
         });
+        setSelectedAddonQuantities((prev) =>
+            normalizeBookingServiceQuantityMap(prev, {
+                selectedIds: selectedAddonIds,
+                validIds: availableAddonIds,
+            }),
+        );
     }, [addonServices]);
     const selectedServiceSelections = React.useMemo<BookingServiceSelection[]>(
         () => [
@@ -760,6 +793,7 @@ export default function NewBookingPage() {
                 booking_service_id: null,
                 kind: "main" as const,
                 sort_order: index,
+                quantity: selectedMainQuantities[service.id] || 1,
                 service: {
                     id: service.id,
                     name: service.name,
@@ -778,6 +812,7 @@ export default function NewBookingPage() {
                 booking_service_id: null,
                 kind: "addon" as const,
                 sort_order: index,
+                quantity: selectedAddonQuantityMap[service.id] || 1,
                 service: {
                     id: service.id,
                     name: service.name,
@@ -792,7 +827,12 @@ export default function NewBookingPage() {
                 },
             })),
         ],
-        [selectedMainServices, selectedAddonServices],
+        [
+            selectedAddonQuantityMap,
+            selectedAddonServices,
+            selectedMainQuantities,
+            selectedMainServices,
+        ],
     );
     const selectedScheduleDurationMinutes = React.useMemo(
         () => getBookingDurationMinutes(selectedServiceSelections),
@@ -819,6 +859,15 @@ export default function NewBookingPage() {
                 ? prev.filter((item) => item !== serviceId)
                 : [...prev, serviceId],
         );
+        setSelectedServiceQuantities((prev) => {
+            const next = { ...prev };
+            if (serviceId in next) {
+                delete next[serviceId];
+            } else {
+                next[serviceId] = 1;
+            }
+            return next;
+        });
     };
 
     const toggleAddon = (serviceId: string) => {
@@ -827,11 +876,89 @@ export default function NewBookingPage() {
                 ? prev.filter((item) => item !== serviceId)
                 : [...prev, serviceId],
         );
+        setSelectedAddonQuantities((prev) => {
+            const next = { ...prev };
+            if (serviceId in next) {
+                delete next[serviceId];
+            } else {
+                next[serviceId] = 1;
+            }
+            return next;
+        });
     };
+
+    const changeServiceQuantity = React.useCallback((
+        kind: "main" | "addon",
+        serviceId: string,
+        nextQuantity: number,
+    ) => {
+        const normalizedQuantity = normalizeBookingServiceQuantity(nextQuantity);
+        if (kind === "main") {
+            setSelectedServiceIds((prev) =>
+                prev.includes(serviceId) ? prev : [...prev, serviceId],
+            );
+            setSelectedServiceQuantities((prev) => ({
+                ...prev,
+                [serviceId]: normalizedQuantity,
+            }));
+            return;
+        }
+        setSelectedAddonIds((prev) =>
+            prev.includes(serviceId) ? prev : [...prev, serviceId],
+        );
+        setSelectedAddonQuantities((prev) => ({
+            ...prev,
+            [serviceId]: normalizedQuantity,
+        }));
+    }, []);
+
+    const renderQuantityControl = React.useCallback((
+        kind: "main" | "addon",
+        serviceId: string,
+        quantity: number,
+    ) => {
+        const normalizedQuantity = normalizeBookingServiceQuantity(quantity);
+        return (
+            <div className="inline-flex items-center gap-1 rounded-full border px-1 py-0.5">
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        changeServiceQuantity(kind, serviceId, normalizedQuantity - 1);
+                    }}
+                    disabled={normalizedQuantity <= 1}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Kurangi jumlah"
+                >
+                    <Minus className="h-3.5 w-3.5" />
+                </button>
+                <span className="min-w-6 text-center text-xs font-semibold">
+                    {normalizedQuantity}
+                </span>
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        changeServiceQuantity(kind, serviceId, normalizedQuantity + 1);
+                    }}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted/60"
+                    aria-label="Tambah jumlah"
+                >
+                    <Plus className="h-3.5 w-3.5" />
+                </button>
+            </div>
+        );
+    }, [changeServiceQuantity]);
 
     React.useEffect(() => {
         setSelectedServiceIds((prev) =>
             prev.filter((id) => mainServices.some((service) => service.id === id)),
+        );
+        setSelectedServiceQuantities((prev) =>
+            normalizeBookingServiceQuantityMap(prev, {
+                selectedIds: selectedServiceIds,
+                validIds: mainServices.map((service) => service.id),
+            }),
         );
     }, [mainServices]);
 
@@ -839,15 +966,21 @@ export default function NewBookingPage() {
         setSelectedAddonIds((prev) =>
             prev.filter((id) => addonServices.some((service) => service.id === id)),
         );
+        setSelectedAddonQuantities((prev) =>
+            normalizeBookingServiceQuantityMap(prev, {
+                selectedIds: selectedAddonIds,
+                validIds: addonServices.map((service) => service.id),
+            }),
+        );
     }, [addonServices]);
 
     React.useEffect(() => {
         const packageTotal = selectedMainServices.reduce(
-            (sum, service) => sum + service.price,
+            (sum, service) => sum + service.price * (selectedMainQuantities[service.id] || 1),
             0,
         );
         const addonTotal = selectedAddonServices.reduce(
-            (sum, service) => sum + service.price,
+            (sum, service) => sum + service.price * (selectedAddonQuantityMap[service.id] || 1),
             0,
         );
         const accommodationFeeValue =
@@ -866,7 +999,9 @@ export default function NewBookingPage() {
         accommodationFee,
         discountAmount,
         selectedAddonServices,
+        selectedAddonQuantityMap,
         selectedMainServices,
+        selectedMainQuantities,
     ]);
 
     const normalizedEventType = React.useMemo(
@@ -1021,6 +1156,7 @@ export default function NewBookingPage() {
             const s = data as Service;
             setServices(prev => [...prev, s].sort(compareServicesByCatalogOrder));
             setSelectedServiceIds(prev => (prev.includes(s.id) ? prev : [...prev, s.id]));
+            setSelectedServiceQuantities((prev) => ({ ...prev, [s.id]: 1 }));
             setCustomServiceName(""); setCustomServicePrice(""); setCustomServiceDesc("");
             setShowCustomServicePopup(false);
         } else { showFeedback(tBookingEditor("failedSaveNewPackage")); }
@@ -1224,11 +1360,13 @@ export default function NewBookingPage() {
             };
 
             const packageTotalValue = selectedMainServices.reduce(
-                (sum, service) => sum + service.price,
+                (sum, service) =>
+                    sum + service.price * (selectedMainQuantities[service.id] || 1),
                 0,
             );
             const addonTotalValue = selectedAddonServices.reduce(
-                (sum, service) => sum + service.price,
+                (sum, service) =>
+                    sum + service.price * (selectedAddonQuantityMap[service.id] || 1),
                 0,
             );
             const accommodationFeeValue =
@@ -1373,20 +1511,21 @@ export default function NewBookingPage() {
             }
 
             // Insert into junction table
-            const bookingServiceRows = [
-                ...selectedServiceIds.map((serviceId, index) => ({
-                    booking_id: booking.id,
-                    service_id: serviceId,
-                    kind: "main" as const,
-                    sort_order: index,
-                })),
-                ...selectedAddonIds.map((serviceId, index) => ({
-                    booking_id: booking.id,
-                    service_id: serviceId,
-                    kind: "addon" as const,
-                    sort_order: index,
-                })),
-            ];
+            const bookingServiceRows = toBookingServicesPayload([
+                ...buildBookingServicePayloadItemsFromSelection(
+                    selectedServiceIds,
+                    selectedMainQuantities,
+                    "main",
+                ),
+                ...buildBookingServicePayloadItemsFromSelection(
+                    selectedAddonIds,
+                    selectedAddonQuantityMap,
+                    "addon",
+                ),
+            ]).map((row) => ({
+                booking_id: booking.id,
+                ...row,
+            }));
             if (bookingServiceRows.length > 0) {
                 await supabase.from("booking_services").insert(
                     bookingServiceRows,
@@ -1952,6 +2091,7 @@ export default function NewBookingPage() {
                             {selectedMainServices.length > 0 && (
                                 <div className="space-y-2">
                                     {selectedMainServices.map((service) => {
+                                        const quantity = selectedMainQuantities[service.id] || 1;
                                         const tone = buildServiceSoftPalette({
                                             serviceColor: service.color,
                                             fallbackColor: defaultServiceColor,
@@ -1968,15 +2108,21 @@ export default function NewBookingPage() {
                                                 }}
                                             >
                                                 <div className="min-w-0">
-                                                    <p className="text-sm font-medium">{service.name}</p>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <p className="text-sm font-medium">
+                                                            {service.name}
+                                                            {quantity > 1 ? ` x${quantity}` : ""}
+                                                        </p>
+                                                        {renderQuantityControl("main", service.id, quantity)}
+                                                    </div>
                                                     {service.description ? (
                                                         <p className="text-xs text-muted-foreground whitespace-pre-line break-words">{service.description}</p>
                                                     ) : null}
                                                 </div>
                                                 <div className="shrink-0 text-right">
-                                                    <p className="text-lg font-bold" style={{ color: tone.color }}>{formatCurrency(service.price)}</p>
+                                                    <p className="text-lg font-bold" style={{ color: tone.color }}>{formatCurrency(service.price * quantity)}</p>
                                                     {service.original_price && service.original_price > service.price ? (
-                                                        <p className="text-[11px] text-muted-foreground line-through">{formatCurrency(service.original_price)}</p>
+                                                        <p className="text-[11px] text-muted-foreground line-through">{formatCurrency(service.original_price * quantity)}</p>
                                                     ) : null}
                                                 </div>
                                             </div>
@@ -2010,6 +2156,7 @@ export default function NewBookingPage() {
                             {selectedAddonServices.length > 0 && (
                                 <div className="space-y-2">
                                     {selectedAddonServices.map((addon) => {
+                                        const quantity = selectedAddonQuantityMap[addon.id] || 1;
                                         const tone = buildServiceSoftPalette({
                                             serviceColor: addon.color,
                                             fallbackColor: defaultServiceColor,
@@ -2026,7 +2173,13 @@ export default function NewBookingPage() {
                                                 }}
                                             >
                                                 <div className="min-w-0">
-                                                    <p className="font-medium">{addon.name}</p>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <p className="font-medium">
+                                                            {addon.name}
+                                                            {quantity > 1 ? ` x${quantity}` : ""}
+                                                        </p>
+                                                        {renderQuantityControl("addon", addon.id, quantity)}
+                                                    </div>
                                                     {addon.description ? (
                                                         <p className="text-[11px] text-muted-foreground whitespace-pre-line break-words">
                                                             {addon.description}
@@ -2034,7 +2187,7 @@ export default function NewBookingPage() {
                                                     ) : null}
                                                 </div>
                                                 <span className="font-semibold whitespace-nowrap" style={{ color: tone.color }}>
-                                                    +{formatCurrency(addon.price)}
+                                                    +{formatCurrency(addon.price * quantity)}
                                                 </span>
                                             </div>
                                         );
@@ -2044,6 +2197,7 @@ export default function NewBookingPage() {
                             {selectedAddonServices.length > 0 && selectedMainServices.length > 0 && (
                                 <div className="rounded-lg bg-muted/50 p-3 text-sm">
                                     {selectedMainServices.map((service) => {
+                                        const quantity = selectedMainQuantities[service.id] || 1;
                                         const tone = buildServiceSoftPalette({
                                             serviceColor: service.color,
                                             fallbackColor: defaultServiceColor,
@@ -2057,12 +2211,13 @@ export default function NewBookingPage() {
                                                     borderColor: tone.summaryBorderColor,
                                                 }}
                                             >
-                                                <span>{service.name}</span>
-                                                <span style={{ color: tone.color }}>{formatCurrency(service.price)}</span>
+                                                <span>{service.name}{quantity > 1 ? ` x${quantity}` : ""}</span>
+                                                <span style={{ color: tone.color }}>{formatCurrency(service.price * quantity)}</span>
                                             </div>
                                         );
                                     })}
                                     {selectedAddonServices.map((service) => {
+                                        const quantity = selectedAddonQuantityMap[service.id] || 1;
                                         const tone = buildServiceSoftPalette({
                                             serviceColor: service.color,
                                             fallbackColor: defaultServiceColor,
@@ -2076,8 +2231,8 @@ export default function NewBookingPage() {
                                                     borderColor: tone.summaryBorderColor,
                                                 }}
                                             >
-                                                <span>+ {service.name}</span>
-                                                <span style={{ color: tone.color }}>{formatCurrency(service.price)}</span>
+                                                <span>+ {service.name}{quantity > 1 ? ` x${quantity}` : ""}</span>
+                                                <span style={{ color: tone.color }}>{formatCurrency(service.price * quantity)}</span>
                                             </div>
                                         );
                                     })}
@@ -2590,6 +2745,7 @@ export default function NewBookingPage() {
                             ) : (
                                 searchedMainServices.map((service) => {
                                     const selected = selectedServiceIds.includes(service.id);
+                                    const quantity = selectedMainQuantities[service.id] || 1;
                                     const tone = buildServiceSoftPalette({
                                         serviceColor: service.color,
                                         fallbackColor: defaultServiceColor,
@@ -2619,7 +2775,14 @@ export default function NewBookingPage() {
                                                     <CheckCircle2 className="h-3.5 w-3.5" />
                                                 </span>
                                                 <div className="min-w-0">
-                                                    <p className="text-sm font-medium">{service.name}</p>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <p className="text-sm font-medium">{service.name}</p>
+                                                        {selected && quantity > 1 ? (
+                                                            <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                                                x{quantity}
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
                                                     {service.description ? (
                                                         <p className="text-[11px] text-muted-foreground whitespace-pre-line break-words">
                                                             {service.description}
@@ -2629,11 +2792,11 @@ export default function NewBookingPage() {
                                             </div>
                                             <div className="shrink-0 text-right">
                                                 <p className="text-sm font-semibold" style={{ color: tone.color }}>
-                                                    {formatCurrency(service.price)}
+                                                    {formatCurrency(service.price * quantity)}
                                                 </p>
                                                 {service.original_price && service.original_price > service.price ? (
                                                     <p className="text-[11px] text-muted-foreground line-through">
-                                                        {formatCurrency(service.original_price)}
+                                                        {formatCurrency(service.original_price * quantity)}
                                                     </p>
                                                 ) : null}
                                             </div>
@@ -2727,6 +2890,7 @@ export default function NewBookingPage() {
                             ) : (
                                 searchedAddonServices.map((addon) => {
                                     const selected = selectedAddonIds.includes(addon.id);
+                                    const quantity = selectedAddonQuantityMap[addon.id] || 1;
                                     const tone = buildServiceSoftPalette({
                                         serviceColor: addon.color,
                                         fallbackColor: defaultServiceColor,
@@ -2756,7 +2920,14 @@ export default function NewBookingPage() {
                                                     <CheckCircle2 className="h-3.5 w-3.5" />
                                                 </span>
                                                 <div className="min-w-0">
-                                                    <p className="text-sm font-medium">{addon.name}</p>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <p className="text-sm font-medium">{addon.name}</p>
+                                                        {selected && quantity > 1 ? (
+                                                            <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                                                x{quantity}
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
                                                     {addon.description ? (
                                                         <p className="text-[11px] text-muted-foreground whitespace-pre-line break-words">
                                                             {addon.description}
@@ -2766,7 +2937,7 @@ export default function NewBookingPage() {
                                             </div>
                                             <div className="shrink-0 text-right">
                                                 <p className="text-sm font-semibold" style={{ color: tone.color }}>
-                                                    +{formatCurrency(addon.price)}
+                                                    +{formatCurrency(addon.price * quantity)}
                                                 </p>
                                             </div>
                                         </button>
