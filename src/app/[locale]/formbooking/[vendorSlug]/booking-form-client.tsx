@@ -336,6 +336,249 @@ type SummaryRow = {
   icon?: LucideIcon;
 };
 
+const BOOKING_FORM_DRAFT_VERSION = 1;
+const BOOKING_FORM_DRAFT_WRITE_DELAY_MS = 250;
+
+type BookingFormDraft = {
+  version: typeof BOOKING_FORM_DRAFT_VERSION;
+  clientName: string;
+  countryCode: string;
+  phone: string;
+  eventType: string;
+  sessionDate: string;
+  selectedCityCode: string;
+  selectedServiceIds: string[];
+  selectedServiceQuantities: BookingServiceQuantityMap;
+  selectedAddons: string[];
+  selectedAddonQuantities: BookingServiceQuantityMap;
+  dpDisplay: string;
+  location: string;
+  locationCoords: LocationCoordinates;
+  locationDetail: string;
+  notes: string;
+  instagram: string;
+  customFields: Record<string, string>;
+  extraData: Record<string, string>;
+  extraLocationCoords: Record<string, LocationCoordinates>;
+  splitDates: boolean;
+  akadDate: string;
+  resepsiDate: string;
+  wisudaSession1Date: string;
+  wisudaSession2Date: string;
+  selectedPaymentMethod: PaymentMethod | null;
+  selectedPaymentSource: PaymentSource | null;
+  termsAccepted: boolean;
+  termsViewedOnce: boolean;
+  currentStep: BookingStep;
+  maxUnlockedStep: BookingStep;
+};
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function normalizeStringRecord(value: unknown): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(asRecord(value)).flatMap(([key, rawValue]) =>
+      typeof rawValue === "string" ? [[key, rawValue]] : [],
+    ),
+  );
+}
+
+function normalizeNullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeLocationCoordinatesValue(value: unknown): LocationCoordinates {
+  const record = asRecord(value);
+  return {
+    lat: normalizeNullableNumber(record.lat),
+    lng: normalizeNullableNumber(record.lng),
+  };
+}
+
+function normalizeExtraLocationCoordinatesValue(
+  value: unknown,
+): Record<string, LocationCoordinates> {
+  return Object.fromEntries(
+    Object.entries(asRecord(value)).map(([key, rawValue]) => [
+      key,
+      normalizeLocationCoordinatesValue(rawValue),
+    ]),
+  );
+}
+
+function normalizeBookingServiceQuantityRecord(
+  value: unknown,
+): BookingServiceQuantityMap {
+  return Object.fromEntries(
+    Object.entries(asRecord(value)).map(([key, rawValue]) => [
+      key,
+      normalizeBookingServiceQuantity(rawValue),
+    ]),
+  );
+}
+
+function normalizeBookingStepValue(value: unknown): BookingStep {
+  if (value === 2 || value === 3 || value === 4) return value;
+  return 1;
+}
+
+function normalizePaymentMethodValue(value: unknown): PaymentMethod | null {
+  if (value === "bank" || value === "qris" || value === "cash") {
+    return value;
+  }
+  return null;
+}
+
+function normalizePaymentSourceValue(value: unknown): PaymentSource | null {
+  const record = asRecord(value);
+  const type = normalizePaymentMethodValue(record.type);
+  if (!type) return null;
+
+  if (type === "bank") {
+    const bankId =
+      typeof record.bank_id === "string" && record.bank_id.trim().length > 0
+        ? record.bank_id.trim()
+        : "";
+    const bankName =
+      typeof record.bank_name === "string" ? record.bank_name : "";
+    const accountNumber =
+      typeof record.account_number === "string" ? record.account_number : "";
+    const accountName =
+      typeof record.account_name === "string" ? record.account_name : "";
+    const label =
+      typeof record.label === "string" && record.label.trim().length > 0
+        ? record.label
+        : bankName;
+
+    if (!bankId) return null;
+
+    return {
+      type,
+      bank_id: bankId,
+      bank_name: bankName,
+      account_number: accountNumber,
+      account_name: accountName,
+      label,
+    };
+  }
+
+  return {
+    type,
+    label:
+      typeof record.label === "string" && record.label.trim().length > 0
+        ? record.label
+        : getPaymentMethodLabel(type),
+  };
+}
+
+function buildBookingFormDraftStorageKey({
+  vendorId,
+  slug,
+  offerToken,
+}: {
+  vendorId: string;
+  slug: string;
+  offerToken?: string | null;
+}) {
+  return [
+    "clientdesk",
+    "booking-form-draft",
+    String(BOOKING_FORM_DRAFT_VERSION),
+    vendorId.trim() || "unknown-vendor",
+    slug.trim() || "slugless",
+    offerToken?.trim() || "default",
+  ]
+    .map((part) => encodeURIComponent(part))
+    .join(":");
+}
+
+function parseBookingFormDraft(raw: string | null): BookingFormDraft | null {
+  if (!raw) return null;
+
+  try {
+    const parsed = asRecord(JSON.parse(raw));
+    if (parsed.version !== BOOKING_FORM_DRAFT_VERSION) {
+      return null;
+    }
+
+    const selectedServiceIds = normalizeUuidList(parsed.selectedServiceIds);
+    const selectedAddons = normalizeUuidList(parsed.selectedAddons);
+    const maxUnlockedStep = normalizeBookingStepValue(parsed.maxUnlockedStep);
+    const currentStep = normalizeBookingStepValue(parsed.currentStep);
+    const normalizedCurrentStep =
+      currentStep > maxUnlockedStep ? maxUnlockedStep : currentStep;
+    const termsAccepted = parsed.termsAccepted === true;
+    const termsViewedOnce =
+      parsed.termsViewedOnce === true || termsAccepted;
+
+    return {
+      version: BOOKING_FORM_DRAFT_VERSION,
+      clientName:
+        typeof parsed.clientName === "string" ? parsed.clientName : "",
+      countryCode:
+        typeof parsed.countryCode === "string" && parsed.countryCode.trim().length > 0
+          ? parsed.countryCode
+          : "+62",
+      phone: typeof parsed.phone === "string" ? parsed.phone : "",
+      eventType: typeof parsed.eventType === "string" ? parsed.eventType : "",
+      sessionDate:
+        typeof parsed.sessionDate === "string" ? parsed.sessionDate : "",
+      selectedCityCode:
+        typeof parsed.selectedCityCode === "string" ? parsed.selectedCityCode : "",
+      selectedServiceIds,
+      selectedServiceQuantities: normalizeBookingServiceQuantityMap(
+        normalizeBookingServiceQuantityRecord(parsed.selectedServiceQuantities),
+        { selectedIds: selectedServiceIds },
+      ),
+      selectedAddons,
+      selectedAddonQuantities: normalizeBookingServiceQuantityMap(
+        normalizeBookingServiceQuantityRecord(parsed.selectedAddonQuantities),
+        { selectedIds: selectedAddons },
+      ),
+      dpDisplay: typeof parsed.dpDisplay === "string" ? parsed.dpDisplay : "",
+      location: typeof parsed.location === "string" ? parsed.location : "",
+      locationCoords: normalizeLocationCoordinatesValue(parsed.locationCoords),
+      locationDetail:
+        typeof parsed.locationDetail === "string" ? parsed.locationDetail : "",
+      notes: typeof parsed.notes === "string" ? parsed.notes : "",
+      instagram: typeof parsed.instagram === "string" ? parsed.instagram : "",
+      customFields: normalizeStringRecord(parsed.customFields),
+      extraData: normalizeStringRecord(parsed.extraData),
+      extraLocationCoords: normalizeExtraLocationCoordinatesValue(
+        parsed.extraLocationCoords,
+      ),
+      splitDates: parsed.splitDates === true,
+      akadDate: typeof parsed.akadDate === "string" ? parsed.akadDate : "",
+      resepsiDate:
+        typeof parsed.resepsiDate === "string" ? parsed.resepsiDate : "",
+      wisudaSession1Date:
+        typeof parsed.wisudaSession1Date === "string"
+          ? parsed.wisudaSession1Date
+          : "",
+      wisudaSession2Date:
+        typeof parsed.wisudaSession2Date === "string"
+          ? parsed.wisudaSession2Date
+          : "",
+      selectedPaymentMethod: normalizePaymentMethodValue(
+        parsed.selectedPaymentMethod,
+      ),
+      selectedPaymentSource: normalizePaymentSourceValue(
+        parsed.selectedPaymentSource,
+      ),
+      termsAccepted,
+      termsViewedOnce,
+      currentStep: normalizedCurrentStep,
+      maxUnlockedStep,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function compareServicesByCatalogOrder(a: Service, b: Service) {
   const aSort = typeof a.sort_order === "number" ? a.sort_order : Number.MAX_SAFE_INTEGER;
   const bSort = typeof b.sort_order === "number" ? b.sort_order : Number.MAX_SAFE_INTEGER;
@@ -496,6 +739,17 @@ export function BookingFormClient({
   const normalizedOfferToken = normalizeSpecialOfferToken(specialOfferToken);
   const previewMode = searchParams.get("preview") === "1";
   const previewStorageKey = searchParams.get("previewKey") || "";
+  const draftStorageKey = React.useMemo(
+    () =>
+      previewMode
+        ? ""
+        : buildBookingFormDraftStorageKey({
+            vendorId: vendor.id,
+            slug,
+            offerToken: normalizedOfferToken,
+          }),
+    [normalizedOfferToken, previewMode, slug, vendor.id],
+  );
   const [previewVendor, setPreviewVendor] = React.useState<PreviewVendorPayload | null>(null);
   const lastAppliedPreviewEditorSyncKeyRef = React.useRef<string | null>(null);
   const previewEditorEventTypeRaw =
@@ -662,6 +916,7 @@ export function BookingFormClient({
   const [error, setError] = React.useState("");
   const [currentStep, setCurrentStep] = React.useState<BookingStep>(1);
   const [maxUnlockedStep, setMaxUnlockedStep] = React.useState<BookingStep>(1);
+  const [draftHydrated, setDraftHydrated] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement | null>(null);
 
   const autoDpAmountRef = React.useRef<number | null>(null);
@@ -708,6 +963,56 @@ export function BookingFormClient({
     if (!specialOfferStatus) return;
     setResolvedSpecialOfferStatus(specialOfferStatus);
   }, [specialOfferStatus]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!draftStorageKey) {
+      setDraftHydrated(true);
+      return;
+    }
+
+    const raw = window.sessionStorage.getItem(draftStorageKey);
+    const draft = parseBookingFormDraft(raw);
+    if (!draft) {
+      if (raw) {
+        window.sessionStorage.removeItem(draftStorageKey);
+      }
+      setDraftHydrated(true);
+      return;
+    }
+
+    setClientName(draft.clientName);
+    setCountryCode(draft.countryCode);
+    setPhone(draft.phone);
+    setEventType(draft.eventType);
+    setSessionDate(draft.sessionDate);
+    setSelectedCityCode(draft.selectedCityCode);
+    setSelectedServiceIds(draft.selectedServiceIds);
+    setSelectedServiceQuantities(draft.selectedServiceQuantities);
+    setSelectedAddons(new Set(draft.selectedAddons));
+    setSelectedAddonQuantities(draft.selectedAddonQuantities);
+    setDpDisplay(draft.dpDisplay);
+    setLocation(draft.location);
+    setLocationCoords(draft.locationCoords);
+    setLocationDetail(draft.locationDetail);
+    setNotes(draft.notes);
+    setInstagram(draft.instagram);
+    setCustomFields(draft.customFields);
+    setExtraData(draft.extraData);
+    setExtraLocationCoords(draft.extraLocationCoords);
+    setSplitDates(draft.splitDates);
+    setAkadDate(draft.akadDate);
+    setResepsiDate(draft.resepsiDate);
+    setWisudaSession1Date(draft.wisudaSession1Date);
+    setWisudaSession2Date(draft.wisudaSession2Date);
+    setSelectedPaymentMethod(draft.selectedPaymentMethod);
+    setSelectedPaymentSource(draft.selectedPaymentSource);
+    setTermsAccepted(draft.termsAccepted);
+    setTermsViewedOnce(draft.termsViewedOnce);
+    setCurrentStep(draft.currentStep);
+    setMaxUnlockedStep(draft.maxUnlockedStep);
+    setDraftHydrated(true);
+  }, [draftStorageKey]);
 
   React.useEffect(() => {
     if (
@@ -1460,6 +1765,9 @@ export function BookingFormClient({
       }
 
       if (payload?.success) {
+        if (draftStorageKey && typeof window !== "undefined") {
+          window.sessionStorage.removeItem(draftStorageKey);
+        }
         setSubmitted(true);
         setResultData(payload);
       } else if (payload?.code === SPECIAL_LINK_EXPIRED_ERROR_CODE) {
@@ -1997,11 +2305,7 @@ export function BookingFormClient({
       setTermsAccepted(false);
       setTermsViewedOnce(false);
       setTermsDialogOpen(false);
-      return;
     }
-
-    setTermsAccepted(false);
-    setTermsViewedOnce(false);
   }, [hasTerms]);
   const filteredServices = React.useMemo(
     () =>
@@ -2051,6 +2355,88 @@ export function BookingFormClient({
       }),
     [selectedAddonQuantities, selectedAddons],
   );
+  const bookingFormDraft = React.useMemo<BookingFormDraft>(
+    () => ({
+      version: BOOKING_FORM_DRAFT_VERSION,
+      clientName,
+      countryCode,
+      phone,
+      eventType,
+      sessionDate,
+      selectedCityCode,
+      selectedServiceIds,
+      selectedServiceQuantities: selectedMainQuantities,
+      selectedAddons: Array.from(selectedAddons),
+      selectedAddonQuantities: selectedAddonQuantityMap,
+      dpDisplay,
+      location,
+      locationCoords,
+      locationDetail,
+      notes,
+      instagram,
+      customFields,
+      extraData,
+      extraLocationCoords,
+      splitDates,
+      akadDate,
+      resepsiDate,
+      wisudaSession1Date,
+      wisudaSession2Date,
+      selectedPaymentMethod,
+      selectedPaymentSource,
+      termsAccepted,
+      termsViewedOnce,
+      currentStep,
+      maxUnlockedStep,
+    }),
+    [
+      akadDate,
+      clientName,
+      countryCode,
+      currentStep,
+      customFields,
+      dpDisplay,
+      eventType,
+      extraData,
+      extraLocationCoords,
+      instagram,
+      location,
+      locationCoords,
+      locationDetail,
+      maxUnlockedStep,
+      notes,
+      phone,
+      resepsiDate,
+      selectedAddonQuantityMap,
+      selectedAddons,
+      selectedCityCode,
+      selectedMainQuantities,
+      selectedPaymentMethod,
+      selectedPaymentSource,
+      selectedServiceIds,
+      sessionDate,
+      splitDates,
+      termsAccepted,
+      termsViewedOnce,
+      wisudaSession1Date,
+      wisudaSession2Date,
+    ],
+  );
+
+  React.useEffect(() => {
+    if (!draftHydrated || !draftStorageKey || submitted || typeof window === "undefined") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      window.sessionStorage.setItem(
+        draftStorageKey,
+        JSON.stringify(bookingFormDraft),
+      );
+    }, BOOKING_FORM_DRAFT_WRITE_DELAY_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [bookingFormDraft, draftHydrated, draftStorageKey, submitted]);
   const selectedMainServices = sortedServices.filter(
     (service) => !service.is_addon && selectedServiceIds.includes(service.id),
   );
@@ -3856,6 +4242,27 @@ export function BookingFormClient({
 
   const summaryLocale = localeCode === "en" ? "en" : "id";
   const summaryFullWhatsapp = phone ? `${countryCode}${phone}` : "";
+  const buildSummarySessionFieldLabel = React.useCallback(
+    (sessionLabel: string, kind: "date" | "time" | "location") => {
+      const normalizedSessionLabel = sessionLabel.trim();
+      if (!normalizedSessionLabel) {
+        if (kind === "date") return t("summaryDateLabel");
+        if (kind === "time") return t("summaryTimeLabel");
+        return t("summaryLocationLabel");
+      }
+
+      if (localeCode === "en") {
+        if (kind === "date") return `${normalizedSessionLabel} Date`;
+        if (kind === "time") return `${normalizedSessionLabel} Time`;
+        return `${normalizedSessionLabel} Location`;
+      }
+
+      if (kind === "date") return `Tanggal ${normalizedSessionLabel}`;
+      if (kind === "time") return `Jam ${normalizedSessionLabel}`;
+      return `Lokasi ${normalizedSessionLabel}`;
+    },
+    [localeCode, t],
+  );
   const summaryExtraData = React.useMemo(() => {
     const merged = { ...extraData };
     if (eventType === "Wedding" && splitDates) {
@@ -4000,7 +4407,7 @@ export function BookingFormClient({
       const durationMinutes =
         sessionDurationMinutesByKey[session.key] || totalDurationMinutes;
       return {
-        label: session.label || t("summarySessionLabel"),
+        label: session.label?.trim() || "",
         date: formatSessionDate(session.sessionDate, {
           locale: summaryLocale,
           withDay: false,
@@ -4018,7 +4425,6 @@ export function BookingFormClient({
     summaryLocale,
     summaryResolvedLocation.location,
     summaryServiceSelections,
-    t,
   ]);
   const summaryExtraFieldRows = React.useMemo<SummaryRow[]>(() => {
     const rows: SummaryRow[] = [];
@@ -4115,19 +4521,18 @@ export function BookingFormClient({
     const rows: SummaryRow[] = [];
 
     summarySessionRows.forEach((session) => {
-      const sessionLabel = session.label || t("summarySessionLabel");
       rows.push({
-        label: `${sessionLabel} • ${t("summaryDateLabel")}`,
+        label: buildSummarySessionFieldLabel(session.label, "date"),
         value: session.date,
         icon: CalendarDays,
       });
       rows.push({
-        label: `${sessionLabel} • ${t("summaryTimeLabel")}`,
+        label: buildSummarySessionFieldLabel(session.label, "time"),
         value: session.time,
         icon: Clock3,
       });
       rows.push({
-        label: `${sessionLabel} • ${t("summaryLocationLabel")}`,
+        label: buildSummarySessionFieldLabel(session.label, "location"),
         value: session.location,
         icon: MapPin,
       });
@@ -4150,27 +4555,21 @@ export function BookingFormClient({
     }
 
     summaryExtraFieldRows.forEach((row) => {
-      rows.push({
-        ...row,
-        label: `Extra • ${row.label}`,
-      });
+      rows.push(row);
     });
     summaryCustomFieldRows.forEach((row) => {
-      rows.push({
-        ...row,
-        label: `Extra • ${row.label}`,
-      });
+      rows.push(row);
     });
 
     return rows.filter((row) => row.value.length > 0);
   }, [
+    buildSummarySessionFieldLabel,
     getBuiltInDisplayLabel,
     locationDetail,
     notes,
     summaryCustomFieldRows,
     summaryExtraFieldRows,
     summarySessionRows,
-    t,
   ]);
   const summaryPackageRows = React.useMemo<SummaryRow[]>(
     () =>
