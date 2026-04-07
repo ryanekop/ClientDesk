@@ -1,4 +1,5 @@
 import {
+  createDefaultFormLayout,
   normalizeStoredFormLayout,
   type FormLayoutByMode,
   type FormLayoutItem,
@@ -35,6 +36,42 @@ function isModeAwareFormSectionValue(value: unknown): value is FormLayoutByMode 
   return "normal" in record || "split" in record;
 }
 
+function buildModeAwareLayoutValue(
+  eventType: string,
+  value: unknown,
+): FormLayoutItem[] | FormLayoutByMode {
+  if (!isSplitCapableEventType(eventType)) {
+    return normalizeStoredFormLayout(value, eventType, { layoutMode: "normal" });
+  }
+
+  if (isModeAwareFormSectionValue(value)) {
+    const normalizedNormal =
+      "normal" in value
+        ? normalizeStoredFormLayout(value.normal, eventType, {
+            layoutMode: "normal",
+          })
+        : createDefaultFormLayout(eventType, { layoutMode: "normal" });
+    const normalizedSplit =
+      "split" in value
+        ? normalizeStoredFormLayout(value.split, eventType, {
+            layoutMode: "split",
+          })
+        : createDefaultFormLayout(eventType, { layoutMode: "split" });
+
+    return {
+      normal: normalizedNormal,
+      split: normalizedSplit,
+    };
+  }
+
+  return {
+    normal: normalizeStoredFormLayout(value, eventType, {
+      layoutMode: "normal",
+    }),
+    split: createDefaultFormLayout(eventType, { layoutMode: "split" }),
+  };
+}
+
 export function normalizeModeAwareFormSectionsByEventType(
   rawFormSections: unknown,
 ): ModeAwareFormSectionsByEventType {
@@ -50,39 +87,7 @@ export function normalizeModeAwareFormSectionsByEventType(
           return acc;
         }
 
-        if (isModeAwareFormSectionValue(value)) {
-          const normalizedModeValue: FormLayoutByMode = {};
-          if ("normal" in value) {
-            normalizedModeValue.normal = normalizeStoredFormLayout(
-              value.normal,
-              normalizedKey,
-              { layoutMode: "normal" },
-            );
-          }
-          if ("split" in value) {
-            normalizedModeValue.split = normalizeStoredFormLayout(
-              value.split,
-              normalizedKey,
-              { layoutMode: "split" },
-            );
-          }
-          acc[normalizedKey] = normalizedModeValue;
-          return acc;
-        }
-
-        if (isSplitCapableEventType(normalizedKey)) {
-          acc[normalizedKey] = {
-            normal: normalizeStoredFormLayout(value, normalizedKey, {
-              layoutMode: "normal",
-            }),
-            split: normalizeStoredFormLayout(value, normalizedKey, {
-              layoutMode: "split",
-            }),
-          };
-          return acc;
-        }
-
-        acc[normalizedKey] = normalizeStoredFormLayout(value, normalizedKey);
+        acc[normalizedKey] = buildModeAwareLayoutValue(normalizedKey, value);
         return acc;
       },
       {} as ModeAwareFormSectionsByEventType,

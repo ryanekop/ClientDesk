@@ -41,6 +41,7 @@ Emergency toggle for security headers (set in `.env.local` and redeploy):
 - `DISABLE_SECURITY_HEADERS=false` (or unset) keeps security headers ON (default).
 
 Use `DISABLE_SECURITY_HEADERS=true` only for incident recovery, then switch it back off.
+For localhost admin previews that render public pages inside an `iframe` (for example Form Booking preview), set `DISABLE_SECURITY_HEADERS=true` during local development so CSP/X-Frame headers do not block the preview frame.
 
 Current CSP defaults include:
 
