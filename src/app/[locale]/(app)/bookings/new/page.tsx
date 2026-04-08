@@ -1023,7 +1023,7 @@ export default function NewBookingPage() {
         [activeFormLayout],
     );
     const sessionLocationExtraFields = React.useMemo(() => {
-        if (eventType === "Wedding") {
+        if (eventType === "Wedding" && splitDates) {
             return currentExtraFields.filter(
                 (field) =>
                     field.key === "tempat_akad" || field.key === "tempat_resepsi",
@@ -1245,6 +1245,7 @@ export default function NewBookingPage() {
 
             if (
                 isWeddingEvent &&
+                isSplitSessionEnabled &&
                 (!extraFields.tempat_akad || !extraFields.tempat_resepsi)
             ) {
                 showFeedback(tBookingEditor("errorWeddingLocationRequired"));
@@ -1311,6 +1312,12 @@ export default function NewBookingPage() {
                 } else {
                     finalSessionDate = akadDate || resepsiDate || null;
                 }
+            } else if (isWeddingEvent && !isSplitSessionEnabled) {
+                delete mergedExtra.tanggal_akad;
+                delete mergedExtra.tanggal_resepsi;
+                delete mergedExtra.tempat_akad;
+                delete mergedExtra.tempat_resepsi;
+                delete mergedExtra[FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY];
             } else if (isWisudaEvent && isSplitSessionEnabled) {
                 mergedExtra.tanggal_wisuda_1 = wisudaSession1Date || "";
                 mergedExtra.tanggal_wisuda_2 = wisudaSession2Date || "";
@@ -2010,7 +2017,8 @@ export default function NewBookingPage() {
                                 })}
                             </div>
                         )}
-                        {eventType !== "Wedding" && !(eventType === "Wisuda" && splitDates) && (
+                        {!(eventType === "Wedding" && splitDates) &&
+                            !(eventType === "Wisuda" && splitDates) && (
                             <div className="col-span-full space-y-1.5">
                                 <label className="text-xs font-medium text-muted-foreground">Lokasi Utama</label>
                                 <LocationAutocomplete
