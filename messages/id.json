@@ -388,7 +388,7 @@
         "outstandingBalance": "Sisa Tagihan",
         "outstandingBalanceHint": "Sisa tagihan booking pada periode terpilih.",
         "totalBookings": "Total Booking",
-        "totalBookingsHint": "Jumlah booking yang masuk dalam periode ini.",
+        "totalBookingsHint": "Jumlah booking berdasarkan tanggal booking pada periode ini.",
         "sourceBreakdown": "Sumber Keuangan",
         "sourceEmpty": "Belum ada transaksi pada periode ini.",
         "monthlyChartTitle": "Grafik Pemasukan Bulanan",
