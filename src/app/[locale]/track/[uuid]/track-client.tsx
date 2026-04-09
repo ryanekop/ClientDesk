@@ -1,7 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Check, Clock, HardDrive, ExternalLink, Download } from "lucide-react";
+import {
+    Check,
+    CheckCircle2,
+    Clock,
+    HardDrive,
+    ExternalLink,
+    Download,
+} from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
 import { resolveFastpikLinkDisplay } from "@/lib/fastpik-link-display";
@@ -178,6 +185,10 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
         fastpikUrl: booking.fastpikUrl,
         driveUrl: booking.driveUrl,
     });
+    const hasVisibleFileResults =
+        booking.showFileResults &&
+        ((galleryLinks.showFastpik && Boolean(galleryLinks.fastpikUrl)) ||
+            (galleryLinks.showDrive && Boolean(galleryLinks.driveUrl)));
     const handleCopyFastpikPassword = React.useCallback(() => {
         const password = booking.fastpikProjectInfo?.password || "";
         if (!password) return;
@@ -294,6 +305,27 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                         </div>
                     </div>
                 </div>
+
+                {hasVisibleFileResults && (
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-4 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                        <div className="flex items-start gap-3">
+                            <div className="mt-0.5 rounded-full bg-emerald-100 p-1.5 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                                <CheckCircle2 className="h-5 w-5" />
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+                                    {t("fileReadyBannerTitle")}
+                                </p>
+                                <p className="text-sm text-emerald-800/90 dark:text-emerald-200/90">
+                                    {t("fileReadyBannerDescription")}
+                                </p>
+                                <p className="text-xs font-medium text-emerald-700/90 dark:text-emerald-300/90">
+                                    {t("fileReadyBannerHint")}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Timeline */}
                 <div className="bg-background rounded-2xl shadow-lg border p-6">
