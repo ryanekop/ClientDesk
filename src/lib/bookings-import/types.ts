@@ -58,6 +58,7 @@ export type ImportServiceRow = {
   price: number;
   isAddon: boolean;
   eventTypes: string[];
+  cityCodes: string[];
   sortOrder: number;
 };
 
@@ -74,6 +75,12 @@ export type ImportContext = {
   mainServices: ImportServiceRow[];
   addonServices: ImportServiceRow[];
   freelancers: ImportFreelancerRow[];
+  cityOptions: Array<{
+    city_code: string;
+    city_name: string;
+    province_code: string;
+    province_name: string;
+  }>;
   customFieldsByEventType: Record<string, ImportCustomFieldDefinition[]>;
   customFieldUnion: ImportCustomFieldDefinition[];
   extraFieldUnion: Array<{
@@ -95,6 +102,8 @@ export type NormalizedImportRow = {
   status: string;
   sessionDate: string | null;
   bookingDate: string | null;
+  cityCode: string | null;
+  cityName: string | null;
   mainServiceIds: string[];
   addonServiceIds: string[];
   freelancerIds: string[];

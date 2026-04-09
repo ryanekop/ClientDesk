@@ -38,6 +38,7 @@ import {
 } from "@/lib/google-calendar-sync";
 import { buildBookingDetailLink } from "@/lib/booking-detail-link";
 import { clearGoogleCalendarConnection } from "@/lib/google-calendar-reauth";
+import { isCityScopedBookingEventType } from "@/lib/service-availability";
 
 export const runtime = "nodejs";
 
@@ -59,6 +60,7 @@ async function insertOneBooking(
 ): Promise<InsertedBooking> {
   const extraFields = buildImportedBookingExtraFields(row);
   const resolvedLocation = resolveImportedLocation(row);
+  const shouldPersistCity = isCityScopedBookingEventType(row.eventType);
 
   const bookingPayload: Record<string, unknown> = {
     user_id: userId,
@@ -73,6 +75,8 @@ async function insertOneBooking(
     location_lng: resolvedLocation.locationLng,
     location_detail: row.locationDetail,
     service_id: row.mainServiceIds[0] || null,
+    city_code: shouldPersistCity ? row.cityCode : null,
+    city_name: shouldPersistCity ? row.cityName : null,
     freelance_id: row.freelancerIds[0] || null,
     total_price: row.totalPrice,
     dp_paid: row.dpPaid,

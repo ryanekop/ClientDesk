@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CityAutocomplete } from "@/components/ui/city-autocomplete";
 import {
   Dialog,
   DialogContent,
@@ -164,6 +165,7 @@ type BatchColumn = {
   internal?: boolean;
   inputType?:
     | "text"
+    | "city"
     | "university"
     | "location"
     | "freelancer"
@@ -189,6 +191,18 @@ const TABLE_COLUMNS: BatchColumn[] = [
     required: true,
     placeholder: "Nama paket",
     inputType: "serviceMain",
+  },
+  {
+    key: "city_name",
+    label: "Kota / Kabupaten",
+    placeholder: "Khusus Wisuda",
+    inputType: "city",
+  },
+  {
+    key: "city_code",
+    label: "City Code",
+    placeholder: "4 digit kode kota",
+    advanced: true,
   },
   {
     key: "extra.universitas",
@@ -616,7 +630,11 @@ export function BatchImportButton({
     rowIndex: number,
     key: string,
     value: string,
-    options?: { keepLocationCoordinates?: boolean; keepUniversityReference?: boolean },
+    options?: {
+      keepLocationCoordinates?: boolean;
+      keepUniversityReference?: boolean;
+      keepCityCode?: boolean;
+    },
   ) {
     setRows((prev) => {
       const next = prev.map((row) => ({ ...row }));
@@ -632,6 +650,9 @@ export function BatchImportButton({
       }
       if (key === "extra.universitas" && !options?.keepUniversityReference) {
         next[rowIndex]["extra.universitas_ref_id"] = "";
+      }
+      if (key === "city_name" && !options?.keepCityCode) {
+        next[rowIndex].city_code = "";
       }
       return next;
     });
@@ -707,6 +728,9 @@ export function BatchImportButton({
           }
           if (column.key === "extra.universitas") {
             next[startRowIndex + rowOffset]["extra.universitas_ref_id"] = "";
+          }
+          if (column.key === "city_name") {
+            next[startRowIndex + rowOffset].city_code = "";
           }
         });
       });
@@ -959,6 +983,10 @@ export function BatchImportButton({
                       <p className="whitespace-normal break-words">{ui.guidanceSessionTime}</p>
                       <p className="whitespace-normal break-words">{ui.guidanceBookingDate}</p>
                       <p className="whitespace-normal break-words">{ui.guidanceWisudaOnly}</p>
+                      <p className="whitespace-normal break-words">
+                        Untuk Wisuda, pilih kota/kabupaten dari suggestion agar `city_code`
+                        ikut tersimpan dan paket sesuai scope kota.
+                      </p>
                     </div>
                   </div>
 
@@ -1003,6 +1031,37 @@ export function BatchImportButton({
                                         : "single"
                                     }
                                     eventType={row.event_type || ""}
+                                    usePortalMenu
+                                    portalMinWidth={480}
+                                    onPaste={(event) =>
+                                      handlePasteAtCell(event, rowIndex, columnIndex)
+                                    }
+                                  />
+                                ) : column.inputType === "city" ? (
+                                  <CityAutocomplete
+                                    value={row[column.key] || ""}
+                                    selectedCode={row.city_code || undefined}
+                                    onValueChange={(nextValue) =>
+                                      updateCell(rowIndex, column.key, nextValue)
+                                    }
+                                    onSelect={(item) => {
+                                      if (!item) {
+                                        updateCell(rowIndex, "city_code", "");
+                                        return;
+                                      }
+
+                                      updateCell(
+                                        rowIndex,
+                                        column.key,
+                                        item.display_name ||
+                                          `${item.city_name}, ${item.province_name}`,
+                                        { keepCityCode: true },
+                                      );
+                                      updateCell(rowIndex, "city_code", item.city_code);
+                                    }}
+                                    placeholder={column.placeholder || ""}
+                                    inputClassName="h-8 rounded-md border bg-background px-2 py-1.5 text-xs pr-8"
+                                    containerClassName="w-full"
                                     usePortalMenu
                                     portalMinWidth={480}
                                     onPaste={(event) =>

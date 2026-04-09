@@ -10,8 +10,16 @@ import {
   getActiveEventTypes,
   normalizeEventTypeList,
   normalizeEventTypeName,
-  isShowAllPackagesEventType,
 } from "@/lib/event-type-config";
+import {
+  buildCityDisplayName,
+  normalizeCityCode,
+  type CityReferenceItem,
+} from "@/lib/city-references";
+import {
+  isCityScopedBookingEventType,
+  isServiceAvailableForBookingSelection,
+} from "@/lib/service-availability";
 import { EVENT_EXTRA_FIELDS } from "@/utils/form-extra-fields";
 import { parseSessionDateParts } from "@/utils/format-date";
 import {
@@ -57,6 +65,8 @@ export const IMPORT_COLUMNS = {
   eventType: "event_type",
   mainServices: "main_services",
   mainServiceIds: "main_service_ids",
+  cityName: "city_name",
+  cityCode: "city_code",
   sessionDate: "session_date",
   sessionTime: "session_time",
   akadDate: "akad_date",
@@ -122,6 +132,8 @@ type FreelancerImportRow = {
   id: string;
   name: string;
 };
+
+type CityImportRow = CityReferenceItem;
 
 type ValidationOptions = {
   fileNamePrefix: string;
@@ -489,6 +501,98 @@ function normalizeEventTypeInput(value: unknown, eventTypes: string[]): string |
   return eventTypes.includes(normalized) ? normalized : null;
 }
 
+function normalizeCitySearchToken(value: unknown) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildCityLookupCandidates(city: CityReferenceItem) {
+  const displayName = buildCityDisplayName(city);
+  return Array.from(
+    new Set(
+      [
+        city.city_code,
+        city.city_name,
+        displayName,
+        `${city.city_name} ${city.province_name}`,
+      ]
+        .map((item) => normalizeCitySearchToken(item))
+        .filter(Boolean),
+    ),
+  );
+}
+
+function resolveCityFromInput(input: {
+  cityCodeValue: unknown;
+  cityNameValue: unknown;
+  cityOptions: CityReferenceItem[];
+}) {
+  const normalizedCityCode = normalizeCityCode(input.cityCodeValue);
+  const normalizedCityName = normalizeCitySearchToken(input.cityNameValue);
+
+  if (normalizedCityCode) {
+    const matched = input.cityOptions.find(
+      (item) => item.city_code === normalizedCityCode,
+    );
+    return {
+      city: matched || null,
+      usedCode: true,
+      hasCityInput: true,
+      isAmbiguous: false,
+    };
+  }
+
+  if (!normalizedCityName) {
+    return {
+      city: null,
+      usedCode: false,
+      hasCityInput: false,
+      isAmbiguous: false,
+    };
+  }
+
+  const exactMatches = input.cityOptions.filter((item) =>
+    buildCityLookupCandidates(item).includes(normalizedCityName),
+  );
+
+  if (exactMatches.length === 1) {
+    return {
+      city: exactMatches[0],
+      usedCode: false,
+      hasCityInput: true,
+      isAmbiguous: false,
+    };
+  }
+
+  const partialMatches =
+    exactMatches.length > 0
+      ? exactMatches
+      : input.cityOptions.filter((item) =>
+          buildCityLookupCandidates(item).some((candidate) =>
+            candidate.includes(normalizedCityName),
+          ),
+        );
+
+  if (partialMatches.length !== 1) {
+    return {
+      city: null,
+      usedCode: false,
+      hasCityInput: true,
+      isAmbiguous: partialMatches.length > 1,
+    };
+  }
+
+  return {
+    city: partialMatches[0],
+    usedCode: false,
+    hasCityInput: true,
+    isAmbiguous: false,
+  };
+}
+
 function getTemplateHeaders(context: ImportContext): string[] {
   const baseHeaders = [
     IMPORT_COLUMNS.clientName,
@@ -497,6 +601,8 @@ function getTemplateHeaders(context: ImportContext): string[] {
     IMPORT_COLUMNS.eventType,
     IMPORT_COLUMNS.mainServices,
     IMPORT_COLUMNS.mainServiceIds,
+    IMPORT_COLUMNS.cityName,
+    IMPORT_COLUMNS.cityCode,
     IMPORT_COLUMNS.sessionDate,
     IMPORT_COLUMNS.sessionTime,
     IMPORT_COLUMNS.akadDate,
@@ -561,6 +667,12 @@ function resolveHeaderAlias(
     paket_layanan: "mainServices",
     add_on: "addonServices",
     addon: "addonServices",
+    kota: "cityName",
+    kabupaten: "cityName",
+    kota_kabupaten: "cityName",
+    "kota_/_kabupaten": "cityName",
+    kode_kota: "cityCode",
+    kode_kabupaten: "cityCode",
     tanggal: "sessionDate",
     jadwal: "sessionDate",
     tanggal_sesi: "sessionDate",
@@ -844,6 +956,13 @@ function buildTemplateSampleRows(
       context.addonServices.find((service) =>
         isServiceAvailableForEvent(service, wisudaEventType),
       ) || context.addonServices[0];
+    const wisudaCity =
+      context.cityOptions.find((city) => {
+        if (!wisudaMainService || wisudaMainService.cityCodes.length === 0) {
+          return true;
+        }
+        return wisudaMainService.cityCodes.includes(city.city_code);
+      }) || context.cityOptions[0];
 
     const row3 = {
       ...baseRow,
@@ -853,6 +972,10 @@ function buildTemplateSampleRows(
       [IMPORT_COLUMNS.eventType]: wisudaEventType,
       [IMPORT_COLUMNS.mainServices]: wisudaMainService?.name || "",
       [IMPORT_COLUMNS.mainServiceIds]: "",
+      [IMPORT_COLUMNS.cityName]: wisudaCity
+        ? buildCityDisplayName(wisudaCity)
+        : "",
+      [IMPORT_COLUMNS.cityCode]: wisudaCity?.city_code || "",
       [IMPORT_COLUMNS.sessionDate]: "",
       [IMPORT_COLUMNS.sessionTime]: "",
       [IMPORT_COLUMNS.akadDate]: "",
@@ -905,13 +1028,29 @@ function normalizeServicePrice(value: number | string | null | undefined) {
 }
 
 function isServiceAvailableForEvent(service: ImportServiceRow, eventType: string) {
-  if (!eventType) return false;
-  if (isShowAllPackagesEventType(eventType)) return true;
-  if (!service.eventTypes || service.eventTypes.length === 0) return true;
-  const normalized = normalizeEventTypeName(eventType);
-  if (!normalized) return false;
-  return service.eventTypes.some(
-    (item) => normalizeEventTypeName(item) === normalized,
+  return isServiceAvailableForImportSelection(service, {
+    eventType,
+    cityCode: null,
+  });
+}
+
+function isServiceAvailableForImportSelection(
+  service: ImportServiceRow,
+  input: { eventType: string; cityCode?: string | null },
+) {
+  const normalizedCityCode = normalizeCityCode(input.cityCode);
+  return isServiceAvailableForBookingSelection(
+    {
+      is_addon: service.isAddon,
+      event_types: service.eventTypes,
+      city_codes: service.cityCodes,
+    },
+    {
+      eventType: input.eventType,
+      cityCode: normalizedCityCode,
+      allowCityFallbackWhenMissing:
+        isCityScopedBookingEventType(input.eventType) && !normalizedCityCode,
+    },
   );
 }
 
@@ -1123,7 +1262,12 @@ export async function loadImportContext(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<{ context: ImportContext | null; error: string | null }> {
-  const [{ data: profile, error: profileError }, { data: services, error: servicesError }, { data: freelancers, error: freelancersError }] =
+  const [
+    { data: profile, error: profileError },
+    { data: services, error: servicesError },
+    { data: freelancers, error: freelancersError },
+    { data: cityReferences, error: cityReferencesError },
+  ] =
     await Promise.all([
       supabase
         .from("profiles")
@@ -1141,6 +1285,11 @@ export async function loadImportContext(
         .select("id, name")
         .eq("user_id", userId)
         .eq("status", "active"),
+      supabase
+        .from("region_city_references")
+        .select("city_code, city_name, province_code, province_name")
+        .order("province_code", { ascending: true })
+        .order("city_name", { ascending: true }),
     ]);
 
   if (profileError || !profile) {
@@ -1154,6 +1303,12 @@ export async function loadImportContext(
   if (freelancersError) {
     return { context: null, error: freelancersError.message || "Gagal memuat freelance." };
   }
+  if (cityReferencesError) {
+    return {
+      context: null,
+      error: cityReferencesError.message || "Gagal memuat referensi kota.",
+    };
+  }
 
   const profileRow = profile as ProfileImportRow;
   const statusOptions = getBookingStatusOptions(
@@ -1165,6 +1320,46 @@ export async function loadImportContext(
     activeEventTypes: profileRow.form_event_types,
   });
 
+  const cityOptions = ((cityReferences || []) as CityImportRow[])
+    .map((city) => ({
+      city_code: normalizeCityCode(city.city_code),
+      city_name: city.city_name,
+      province_code: city.province_code,
+      province_name: city.province_name,
+    }))
+    .filter((city): city is CityReferenceItem => Boolean(city.city_code));
+
+  const serviceIdList = ((services || []) as ServiceImportRow[])
+    .map((service) => service.id)
+    .filter((serviceId): serviceId is string => Boolean(serviceId));
+  let serviceCityScopeRows: Array<{ service_id: string; city_code: string }> = [];
+  if (serviceIdList.length > 0) {
+    const { data: scopeRows, error: scopeError } = await supabase
+      .from("service_city_scopes")
+      .select("service_id, city_code")
+      .eq("user_id", userId)
+      .in("service_id", serviceIdList);
+    if (scopeError) {
+      return {
+        context: null,
+        error: scopeError.message || "Gagal memuat scope kota layanan.",
+      };
+    }
+    serviceCityScopeRows =
+      (scopeRows || []) as Array<{ service_id: string; city_code: string }>;
+  }
+
+  const serviceCityCodesByServiceId = new Map<string, string[]>();
+  serviceCityScopeRows.forEach((row) => {
+    const normalizedCode = normalizeCityCode(row.city_code);
+    if (!row.service_id || !normalizedCode) return;
+    const current = serviceCityCodesByServiceId.get(row.service_id) || [];
+    if (!current.includes(normalizedCode)) {
+      current.push(normalizedCode);
+    }
+    serviceCityCodesByServiceId.set(row.service_id, current);
+  });
+
   const serviceRows = ((services || []) as ServiceImportRow[])
     .map((service) => ({
       id: service.id,
@@ -1172,6 +1367,7 @@ export async function loadImportContext(
       price: normalizeServicePrice(service.price),
       isAddon: Boolean(service.is_addon),
       eventTypes: normalizeEventTypeList(service.event_types),
+      cityCodes: serviceCityCodesByServiceId.get(service.id) || [],
       sortOrder:
         typeof service.sort_order === "number" ? service.sort_order : Number.MAX_SAFE_INTEGER,
     }))
@@ -1203,6 +1399,7 @@ export async function loadImportContext(
       mainServices,
       addonServices,
       freelancers: freelancerRows,
+      cityOptions,
       customFieldsByEventType,
       customFieldUnion,
       extraFieldUnion,
@@ -1243,6 +1440,13 @@ export function buildTemplateWorkbookBuffer(context: ImportContext): Buffer {
       item.eventTypes.length > 0 ? item.eventTypes.join(" | ") : "Semua event",
     ]),
     ...context.freelancers.map((item) => ["freelancer", item.name, item.name, item.id, ""]),
+    ...context.cityOptions.map((item) => [
+      "city",
+      item.city_code,
+      buildCityDisplayName(item),
+      item.city_code,
+      item.province_name,
+    ]),
     ...context.extraFieldUnion.map((item) => [
       "extra_field",
       `extra.${item.key}`,
@@ -1277,16 +1481,17 @@ export function buildTemplateWorkbookBuffer(context: ImportContext): Buffer {
     ["4. Jam sesi opsional via session_time (contoh: 10:30, 10.30, 1030)."],
     ["5. Untuk Wedding: isi session_date ATAU isi lengkap akad_date + resepsi_date."],
     ["6. Untuk Wisuda: isi session_date ATAU isi lengkap wisuda_session_1_date + wisuda_session_2_date."],
-    ["7. Untuk event Wisuda, extra.universitas wajib terdaftar di referensi universitas."],
-    ["8. booking_date opsional; jika kosong akan otomatis mengikuti tanggal session_date."],
-    ["9. location_lat/location_lng opsional; jika diisi harus berpasangan dan dalam rentang valid."],
-    ["10. Gunakan pemisah | atau koma untuk multi-value (services/addons/freelancers)."],
-    ["11. Mapping Name + ID fallback: isi nama untuk mudah dibaca, pakai ID bila ada nama ganda."],
-    ["12. Kolom dynamic: extra.<key> untuk built-in extra fields, cf.<id> untuk custom fields."],
-    ["13. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
-    ["14. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
-    ["15. Batas maksimum 500 baris per file .xlsx."],
-    ["16. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
+    ["7. Untuk event Wisuda, city_name atau city_code wajib diisi dengan kota/kabupaten yang valid."],
+    ["8. Untuk event Wisuda, extra.universitas wajib terdaftar di referensi universitas."],
+    ["9. booking_date opsional; jika kosong akan otomatis mengikuti tanggal session_date."],
+    ["10. location_lat/location_lng opsional; jika diisi harus berpasangan dan dalam rentang valid."],
+    ["11. Gunakan pemisah | atau koma untuk multi-value (services/addons/freelancers)."],
+    ["12. Mapping Name + ID fallback: isi nama untuk mudah dibaca, pakai ID bila ada nama ganda."],
+    ["13. Kolom dynamic: extra.<key> untuk built-in extra fields, cf.<id> untuk custom fields."],
+    ["14. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
+    ["15. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
+    ["16. Batas maksimum 500 baris per file .xlsx."],
+    ["17. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
   ];
   const guideSheet = XLSX.utils.aoa_to_sheet(guideRows);
   guideSheet["!cols"] = [{ wch: 140 }];
@@ -1467,6 +1672,7 @@ function resolveServicesFromRow(input: {
   namesCell: string;
   row: NormalizedImportRow;
   eventType: string;
+  cityCode?: string | null;
   services: ImportServiceRow[];
   label: string;
 }) {
@@ -1489,11 +1695,18 @@ function resolveServicesFromRow(input: {
       pushIssue(input.row, "error", `${input.label}: service ID '${id}' tidak ditemukan.`);
       continue;
     }
-    if (!isServiceAvailableForEvent(service, input.eventType)) {
+    if (
+      !isServiceAvailableForImportSelection(service, {
+        eventType: input.eventType,
+        cityCode: input.cityCode,
+      })
+    ) {
       pushIssue(
         input.row,
         "error",
-        `${input.label}: service '${service.name}' tidak aktif untuk event '${input.eventType}'.`,
+        isCityScopedBookingEventType(input.eventType) && input.cityCode
+          ? `${input.label}: service '${service.name}' tidak tersedia untuk event '${input.eventType}' di kota/kabupaten terpilih.`
+          : `${input.label}: service '${service.name}' tidak aktif untuk event '${input.eventType}'.`,
       );
       continue;
     }
@@ -1509,7 +1722,13 @@ function resolveServicesFromRow(input: {
       pushIssue(input.row, "error", `${input.label}: service '${name}' tidak ditemukan.`);
       continue;
     }
-    if (candidates.length > 1) {
+    const availableCandidates = candidates.filter((service) =>
+      isServiceAvailableForImportSelection(service, {
+        eventType: input.eventType,
+        cityCode: input.cityCode,
+      }),
+    );
+    if (availableCandidates.length > 1) {
       pushIssue(
         input.row,
         "error",
@@ -1517,13 +1736,20 @@ function resolveServicesFromRow(input: {
       );
       continue;
     }
-
-    const service = candidates[0];
-    if (!isServiceAvailableForEvent(service, input.eventType)) {
+    const service =
+      availableCandidates.length === 1 ? availableCandidates[0] : candidates[0];
+    if (
+      !isServiceAvailableForImportSelection(service, {
+        eventType: input.eventType,
+        cityCode: input.cityCode,
+      })
+    ) {
       pushIssue(
         input.row,
         "error",
-        `${input.label}: service '${service.name}' tidak aktif untuk event '${input.eventType}'.`,
+        isCityScopedBookingEventType(input.eventType) && input.cityCode
+          ? `${input.label}: service '${service.name}' tidak tersedia untuk event '${input.eventType}' di kota/kabupaten terpilih.`
+          : `${input.label}: service '${service.name}' tidak aktif untuk event '${input.eventType}'.`,
       );
       continue;
     }
@@ -1609,6 +1835,8 @@ function buildEmptyNormalizedRow(rowNumber: number): NormalizedImportRow {
     status: "",
     sessionDate: null,
     bookingDate: null,
+    cityCode: null,
+    cityName: null,
     mainServiceIds: [],
     addonServiceIds: [],
     freelancerIds: [],
@@ -1848,6 +2076,57 @@ function validateOneRow(input: {
   normalized.adminNotes = normalizeNullableText(input.row[IMPORT_COLUMNS.adminNotes]);
 
   if (normalized.eventType) {
+    const resolvedCity = resolveCityFromInput({
+      cityCodeValue: input.row[IMPORT_COLUMNS.cityCode],
+      cityNameValue: input.row[IMPORT_COLUMNS.cityName],
+      cityOptions: input.context.cityOptions,
+    });
+    if (isCityScopedBookingEventType(normalized.eventType)) {
+      if (!resolvedCity.hasCityInput) {
+        pushIssue(
+          normalized,
+          "error",
+          "Kota/kabupaten wajib diisi untuk event Wisuda.",
+        );
+      } else if (!resolvedCity.city && resolvedCity.usedCode) {
+        pushIssue(
+          normalized,
+          "error",
+          "city_code tidak valid untuk event Wisuda. Pilih ulang dari suggestion kota/kabupaten.",
+        );
+      } else if (!resolvedCity.city && resolvedCity.isAmbiguous) {
+        pushIssue(
+          normalized,
+          "error",
+          "city_name ambigu untuk event Wisuda. Pilih suggestion kota/kabupaten atau isi city_code.",
+        );
+      } else if (!resolvedCity.city) {
+        pushIssue(
+          normalized,
+          "error",
+          "city_name tidak valid untuk event Wisuda. Pilih suggestion kota/kabupaten atau isi city_code.",
+        );
+      } else {
+        normalized.cityCode = resolvedCity.city.city_code;
+        normalized.cityName = resolvedCity.city.city_name;
+      }
+    } else if (resolvedCity.city) {
+      normalized.cityCode = resolvedCity.city.city_code;
+      normalized.cityName = resolvedCity.city.city_name;
+    } else if (resolvedCity.hasCityInput) {
+      pushIssue(
+        normalized,
+        "warning",
+        resolvedCity.usedCode
+          ? "city_code tidak valid dan diabaikan karena event bukan Wisuda."
+          : resolvedCity.isAmbiguous
+            ? "city_name ambigu dan diabaikan karena event bukan Wisuda."
+            : "city_name tidak valid dan diabaikan karena event bukan Wisuda.",
+      );
+    }
+  }
+
+  if (normalized.eventType) {
     applyExtraFieldsValidation({
       row: input.row,
       normalized,
@@ -2046,6 +2325,7 @@ function validateOneRow(input: {
       namesCell: normalizeCell(input.row, IMPORT_COLUMNS.mainServices),
       row: normalized,
       eventType: normalized.eventType,
+      cityCode: normalized.cityCode,
       services: input.context.mainServices,
       label: "main_services",
     });
@@ -2063,6 +2343,7 @@ function validateOneRow(input: {
       namesCell: normalizeCell(input.row, IMPORT_COLUMNS.addonServices),
       row: normalized,
       eventType: normalized.eventType,
+      cityCode: normalized.cityCode,
       services: input.context.addonServices,
       label: "addon_services",
     });
