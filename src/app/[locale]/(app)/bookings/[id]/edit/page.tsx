@@ -28,7 +28,6 @@ import {
     extractCustomFieldValueMap,
     getGroupedCustomLayoutSections,
     resolveNormalizedActiveFormLayout,
-    type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
 import { getLayoutExtraFields } from "@/utils/form-extra-fields";
 import {
@@ -80,7 +79,10 @@ import {
     UNIVERSITY_EXTRA_FIELD_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
-import { normalizeFormSectionsByEventType } from "@/lib/form-sections";
+import {
+    normalizeModeAwareFormSectionsByEventType,
+    type ModeAwareFormSectionsByEventType,
+} from "@/lib/form-sections";
 import {
     buildBookingServicePayloadItemsFromSelection,
     getBookingDurationMinutes,
@@ -524,7 +526,7 @@ export default function EditBookingPage() {
     const [extraFields, setExtraFields] = React.useState<Record<string, string>>({});
     const [extraLocationCoords, setExtraLocationCoords] = React.useState<Record<string, LocationCoords>>({});
     const [customFieldValues, setCustomFieldValues] = React.useState<Record<string, string>>({});
-    const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
+    const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<ModeAwareFormSectionsByEventType>({});
     const [splitDates, setSplitDates] = React.useState(false);
     const [akadDate, setAkadDate] = React.useState("");
     const [resepsiDate, setResepsiDate] = React.useState("");
@@ -669,7 +671,7 @@ export default function EditBookingPage() {
                 activeEventTypes: profileRow?.form_event_types,
             }));
             setFormSectionsByEventType(
-                normalizeFormSectionsByEventType(
+                normalizeModeAwareFormSectionsByEventType(
                     (prof as Record<string, unknown> | null)?.form_sections,
                 ),
             );
@@ -1425,14 +1427,19 @@ export default function EditBookingPage() {
         () => normalizeEventTypeName(eventType) || eventType,
         [eventType],
     );
+    const activeLayoutMode =
+        splitDates && (eventType === "Wedding" || eventType === "Wisuda")
+            ? "split"
+            : "normal";
 
     const activeFormLayout = React.useMemo(
         () =>
             resolveNormalizedActiveFormLayout(
                 formSectionsByEventType,
                 normalizedEventType,
+                { layoutMode: activeLayoutMode },
             ),
-        [formSectionsByEventType, normalizedEventType],
+        [activeLayoutMode, formSectionsByEventType, normalizedEventType],
     );
 
     const currentExtraFields = React.useMemo(
@@ -1463,8 +1470,9 @@ export default function EditBookingPage() {
         return getGroupedCustomLayoutSections(
             activeFormLayout,
             normalizedEventType || "Umum",
+            { layoutMode: activeLayoutMode },
         );
-    }, [activeFormLayout, normalizedEventType]);
+    }, [activeFormLayout, activeLayoutMode, normalizedEventType]);
 
     React.useEffect(() => {
         if (eventType === "Wisuda" && splitDates) {
@@ -1739,6 +1747,7 @@ export default function EditBookingPage() {
                 activeFormLayout,
                 normalizedEventType || "Umum",
                 customFieldValues,
+                { layoutMode: activeLayoutMode },
             );
             const existingSpecialOffer = resolveSpecialOfferSnapshotFromExtraFields(
                 baseExtraFieldsObject,

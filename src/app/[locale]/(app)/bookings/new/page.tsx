@@ -26,7 +26,6 @@ import {
     buildCustomFieldSnapshots,
     getGroupedCustomLayoutSections,
     resolveNormalizedActiveFormLayout,
-    type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
 import { getLayoutExtraFields } from "@/utils/form-extra-fields";
 import {
@@ -53,7 +52,10 @@ import {
     UNIVERSITY_EXTRA_FIELD_KEY,
     UNIVERSITY_REFERENCE_EXTRA_KEY,
 } from "@/lib/university-references";
-import { normalizeFormSectionsByEventType } from "@/lib/form-sections";
+import {
+    normalizeModeAwareFormSectionsByEventType,
+    type ModeAwareFormSectionsByEventType,
+} from "@/lib/form-sections";
 import {
     buildBookingServicePayloadItemsFromSelection,
     getBookingDurationMinutes,
@@ -432,7 +434,7 @@ export default function NewBookingPage() {
     const [adminNotes, setAdminNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
     const [portfolioUrl, setPortfolioUrl] = React.useState("");
-    const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<Record<string, FormLayoutItem[]>>({});
+    const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<ModeAwareFormSectionsByEventType>({});
     const [customFieldValues, setCustomFieldValues] = React.useState<Record<string, string>>({});
 
     // Custom popups
@@ -570,7 +572,7 @@ export default function NewBookingPage() {
                 activeEventTypes: profileRow?.form_event_types,
             }));
             setFormSectionsByEventType(
-                normalizeFormSectionsByEventType(
+                normalizeModeAwareFormSectionsByEventType(
                     (profileRow as Record<string, unknown> | null)?.form_sections,
                 ),
             );
@@ -1008,14 +1010,19 @@ export default function NewBookingPage() {
         () => normalizeEventTypeName(eventType) || eventType,
         [eventType],
     );
+    const activeLayoutMode =
+        splitDates && (eventType === "Wedding" || eventType === "Wisuda")
+            ? "split"
+            : "normal";
 
     const activeFormLayout = React.useMemo(
         () =>
             resolveNormalizedActiveFormLayout(
                 formSectionsByEventType,
                 normalizedEventType,
+                { layoutMode: activeLayoutMode },
             ),
-        [formSectionsByEventType, normalizedEventType],
+        [activeLayoutMode, formSectionsByEventType, normalizedEventType],
     );
 
     const currentExtraFields = React.useMemo(
@@ -1046,8 +1053,9 @@ export default function NewBookingPage() {
         return getGroupedCustomLayoutSections(
             activeFormLayout,
             normalizedEventType || "Umum",
+            { layoutMode: activeLayoutMode },
         );
-    }, [activeFormLayout, normalizedEventType]);
+    }, [activeFormLayout, activeLayoutMode, normalizedEventType]);
 
     React.useEffect(() => {
         if (eventType === "Wisuda" && splitDates) {
@@ -1390,6 +1398,7 @@ export default function NewBookingPage() {
                 activeFormLayout,
                 normalizedEventType || "Umum",
                 customFieldValues,
+                { layoutMode: activeLayoutMode },
             );
             const nextSpecialOffer = buildEditableSpecialOfferSnapshot({
                 existingSnapshot: null,
