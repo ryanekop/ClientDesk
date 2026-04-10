@@ -66,6 +66,26 @@ client_max_body_size 8M;
 
 After changing Nginx config, reload/restart Nginx.
 
+## Session-Time Status Sync Cron
+
+If you enable the "Trigger Otomatis Saat Jam Sesi Tiba" setting, add a server cron
+that calls the admin sync endpoint every minute after deploy:
+
+```bash
+curl -X POST \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
+  https://your-domain.com/api/admin/session-time-status-sync
+```
+
+Recommended schedule:
+
+```cron
+* * * * * /usr/bin/curl -fsS -X POST -H "x-admin-api-key: YOUR_ADMIN_API_KEY" https://your-domain.com/api/admin/session-time-status-sync >/dev/null
+```
+
+Keep this cron disabled until the app changes are deployed and the profile columns
+from `supabase_migration_session_time_trigger_status.sql` have been applied.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

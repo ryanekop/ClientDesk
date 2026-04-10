@@ -219,3 +219,47 @@
         cursor: pointer;
     }
 }
+
+@media (max-width: 767px) {
+    .admin-dashboard-scope :is(h1, [class*="text-5xl"], [class*="text-4xl"]) {
+        font-size: 1.6rem !important;
+        line-height: 1.95rem !important;
+    }
+
+    .admin-dashboard-scope :is(h2, [class*="text-3xl"], [class*="text-2xl"]) {
+        font-size: 1.3rem !important;
+        line-height: 1.7rem !important;
+    }
+
+    .admin-dashboard-scope :is(h3, [class*="text-xl"], [class*="text-lg"]) {
+        font-size: 1.05rem !important;
+        line-height: 1.45rem !important;
+    }
+
+    .admin-dashboard-scope :is(
+        .admin-dashboard-content,
+        input,
+        select,
+        textarea,
+        button,
+        [role="button"],
+        th,
+        td,
+        [class*="text-base"],
+        [class*="text-sm"]
+    ) {
+        font-size: 0.8125rem !important;
+        line-height: 1.2rem !important;
+    }
+
+    .admin-dashboard-scope :is(
+        label,
+        small,
+        [class*="text-xs"],
+        [class*="text-[11px]"],
+        [class*="text-[10px]"]
+    ) {
+        font-size: 0.72rem !important;
+        line-height: 1rem !important;
+    }
+}

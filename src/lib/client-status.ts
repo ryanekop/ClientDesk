@@ -129,7 +129,7 @@ export function resolveTrackingFileLinksVisibleFromStatus(
   return getDefaultTrackingFileLinksVisibleFromStatus(normalized);
 }
 
-export function resolveDpVerifyTriggerStatus(
+export function resolveOptionalClientProgressStatus(
   statuses?: string[] | null,
   selectedStatus?: string | null,
 ) {
@@ -137,7 +137,15 @@ export function resolveDpVerifyTriggerStatus(
   if (selectedStatus && normalized.includes(selectedStatus)) {
     return selectedStatus;
   }
-  return DEFAULT_DP_VERIFY_TRIGGER_STATUS;
+  return "";
+}
+
+export function resolveDpVerifyTriggerStatus(
+  statuses?: string[] | null,
+  selectedStatus?: string | null,
+) {
+  return resolveOptionalClientProgressStatus(statuses, selectedStatus)
+    || DEFAULT_DP_VERIFY_TRIGGER_STATUS;
 }
 
 export function shouldShowFinalInvoiceForClientStatus({

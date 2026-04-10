@@ -88,6 +88,7 @@ import {
   normalizeClientProgressStatuses,
   resolveDpVerifyTriggerStatus,
   resolveFinalInvoiceVisibleFromStatus,
+  resolveOptionalClientProgressStatus,
   resolveTrackingFileLinksVisibleFromStatus,
 } from "@/lib/client-status";
 import {
@@ -137,6 +138,8 @@ type Profile = {
   google_drive_refresh_token?: string | null;
   queue_trigger_status?: string | null;
   dp_verify_trigger_status?: string | null;
+  session_time_trigger_from_status?: string | null;
+  session_time_trigger_to_status?: string | null;
   final_invoice_visible_from_status?: string | null;
   tracking_file_links_visible_from_status?: string | null;
   tracking_hide_queue_number?: boolean | null;
@@ -573,6 +576,8 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "custom_client_statuses",
   "queue_trigger_status",
   "dp_verify_trigger_status",
+  "session_time_trigger_from_status",
+  "session_time_trigger_to_status",
   "default_wa_target",
   "booking_table_color_enabled",
   "finance_table_color_enabled",
@@ -924,6 +929,10 @@ export default function SettingsPage() {
   const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState(
     DEFAULT_DP_VERIFY_TRIGGER_STATUS,
   );
+  const [sessionTimeTriggerFromStatus, setSessionTimeTriggerFromStatus] =
+    React.useState("");
+  const [sessionTimeTriggerToStatus, setSessionTimeTriggerToStatus] =
+    React.useState("");
   const [finalInvoiceVisibleFromStatus, setFinalInvoiceVisibleFromStatus] =
     React.useState(DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS);
   const [
@@ -1538,6 +1547,18 @@ export default function SettingsPage() {
       resolveDpVerifyTriggerStatus(
         loadedClientStatuses,
         (prof as any)?.dp_verify_trigger_status,
+      ),
+    );
+    setSessionTimeTriggerFromStatus(
+      resolveOptionalClientProgressStatus(
+        loadedClientStatuses,
+        (prof as any)?.session_time_trigger_from_status,
+      ),
+    );
+    setSessionTimeTriggerToStatus(
+      resolveOptionalClientProgressStatus(
+        loadedClientStatuses,
+        (prof as any)?.session_time_trigger_to_status,
       ),
     );
     setFinalInvoiceVisibleFromStatus(
@@ -2265,7 +2286,6 @@ export default function SettingsPage() {
 
   async function handleSaveStatuses() {
     if (!profile) return;
-    setStatusSaving(true);
     const normalizedClientStatuses = normalizeClientProgressStatuses(
       customClientStatuses,
     );
@@ -2282,12 +2302,37 @@ export default function SettingsPage() {
       normalizedClientStatuses,
       dpVerifyTriggerStatus,
     );
+    const nextSessionTimeTriggerFromStatus = resolveOptionalClientProgressStatus(
+      normalizedClientStatuses,
+      sessionTimeTriggerFromStatus,
+    );
+    const nextSessionTimeTriggerToStatus = resolveOptionalClientProgressStatus(
+      normalizedClientStatuses,
+      sessionTimeTriggerToStatus,
+    );
+    const hasSessionTimeTriggerPair = Boolean(
+      nextSessionTimeTriggerFromStatus && nextSessionTimeTriggerToStatus,
+    );
+    if (
+      hasSessionTimeTriggerPair &&
+      nextSessionTimeTriggerFromStatus === nextSessionTimeTriggerToStatus
+    ) {
+      showFeedback("Status asal dan tujuan trigger jam sesi tidak boleh sama.");
+      return;
+    }
+    setStatusSaving(true);
     try {
       await saveProfilePatch({
         custom_statuses: normalizedClientStatuses,
         custom_client_statuses: normalizedClientStatuses,
         queue_trigger_status: queueTriggerStatus,
         dp_verify_trigger_status: nextDpVerifyTriggerStatus || null,
+        session_time_trigger_from_status: hasSessionTimeTriggerPair
+          ? nextSessionTimeTriggerFromStatus
+          : null,
+        session_time_trigger_to_status: hasSessionTimeTriggerPair
+          ? nextSessionTimeTriggerToStatus
+          : null,
         final_invoice_visible_from_status: nextVisibleFromStatus,
         tracking_file_links_visible_from_status:
           nextTrackingFileVisibleFromStatus,
@@ -2295,6 +2340,12 @@ export default function SettingsPage() {
       });
       setCustomClientStatuses(normalizedClientStatuses);
       setDpVerifyTriggerStatus(nextDpVerifyTriggerStatus);
+      setSessionTimeTriggerFromStatus(
+        hasSessionTimeTriggerPair ? nextSessionTimeTriggerFromStatus : "",
+      );
+      setSessionTimeTriggerToStatus(
+        hasSessionTimeTriggerPair ? nextSessionTimeTriggerToStatus : "",
+      );
       setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
       setTrackingFileLinksVisibleFromStatus(nextTrackingFileVisibleFromStatus);
       setStatusSaved(true);
@@ -2395,6 +2446,8 @@ export default function SettingsPage() {
     setCustomClientStatuses(nextClientStatuses);
     setQueueTriggerStatus(DEFAULT_QUEUE_TRIGGER_STATUS);
     setDpVerifyTriggerStatus(DEFAULT_DP_VERIFY_TRIGGER_STATUS);
+    setSessionTimeTriggerFromStatus("");
+    setSessionTimeTriggerToStatus("");
     setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
     setTrackingFileLinksVisibleFromStatus(nextTrackingFileVisibleFromStatus);
     setTrackingHideQueueNumber(false);
@@ -2404,6 +2457,8 @@ export default function SettingsPage() {
       custom_client_statuses: nextClientStatuses,
       queue_trigger_status: DEFAULT_QUEUE_TRIGGER_STATUS,
       dp_verify_trigger_status: DEFAULT_DP_VERIFY_TRIGGER_STATUS || null,
+      session_time_trigger_from_status: null,
+      session_time_trigger_to_status: null,
       final_invoice_visible_from_status: nextVisibleFromStatus,
       tracking_file_links_visible_from_status: nextTrackingFileVisibleFromStatus,
       tracking_hide_queue_number: false,
@@ -4876,6 +4931,67 @@ export default function SettingsPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">
+                      Trigger Otomatis Saat Jam Sesi Tiba
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Booking otomatis pindah status saat jam sesi sudah tiba.
+                      Untuk booking split, semua jam sesi valid diperiksa dan
+                      trigger jalan saat sesi pertama yang sudah due tercapai.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Dari status
+                      </span>
+                      <select
+                        value={resolveOptionalClientProgressStatus(
+                          customClientStatuses,
+                          sessionTimeTriggerFromStatus,
+                        )}
+                        onChange={(e) =>
+                          setSessionTimeTriggerFromStatus(e.target.value)
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      >
+                        <option value="">Off (Tidak ada trigger)</option>
+                        {customClientStatuses.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Ke status
+                      </span>
+                      <select
+                        value={resolveOptionalClientProgressStatus(
+                          customClientStatuses,
+                          sessionTimeTriggerToStatus,
+                        )}
+                        onChange={(e) =>
+                          setSessionTimeTriggerToStatus(e.target.value)
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      >
+                        <option value="">Off (Tidak ada trigger)</option>
+                        {customClientStatuses.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                 </div>
 
                 <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
