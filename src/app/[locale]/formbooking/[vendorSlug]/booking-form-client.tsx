@@ -4436,10 +4436,7 @@ export function BookingFormClient({
       .forEach((item) => {
         const key = item.builtinId.slice("extra:".length);
         const extraDefinition = currentExtraFields.find((field) => field.key === key);
-        if (eventType === "Wedding" && !splitDates && (key === "tempat_akad" || key === "tempat_resepsi")) {
-          return;
-        }
-        if (eventType === "Wisuda" && !splitDates && (key === "tempat_wisuda_1" || key === "tempat_wisuda_2")) {
+        if (isSplitLocationExtraBuiltinId(eventType, item.builtinId)) {
           return;
         }
         const value =
@@ -4459,7 +4456,7 @@ export function BookingFormClient({
         });
       });
     return rows;
-  }, [currentExtraFields, eventType, extraData, splitDates, visibleActiveLayout]);
+  }, [currentExtraFields, eventType, extraData, visibleActiveLayout]);
   const summaryCustomFieldRows = React.useMemo<SummaryRow[]>(() => {
     const rows: SummaryRow[] = [];
     visibleActiveLayout
