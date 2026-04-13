@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered, ChevronDown, Zap, Archive } from "lucide-react";
+import { Plus, Folder, Edit2, Trash2, Link2, Loader2, Info, Search, MapPin, RefreshCcw, CheckCircle2, AlertCircle, MessageCircle, Copy, ClipboardCheck, X, Download, ListOrdered, ChevronDown, Zap, Archive, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AppCheckbox } from "@/components/ui/app-checkbox";
@@ -74,6 +74,7 @@ import {
     getWhatsAppTemplateContent,
     resolveWhatsAppTemplateMode,
 } from "@/lib/whatsapp-template";
+import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import {
     DEFAULT_CLIENT_STATUSES,
     getBookingStatusOptions,
@@ -105,11 +106,40 @@ import {
     markOnboardingStepCompleted,
     ONBOARDING_ACTIVE_STEP_EVENT,
 } from "@/lib/onboarding";
+import {
+    FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY,
+    MAX_FREELANCERS_PER_SESSION,
+    SESSION_FREELANCER_LABELS,
+    buildSessionFreelancerUnion,
+    ensureAssignmentsForSessionKeys,
+    normalizeFreelancerIdList,
+    readSessionFreelancerAssignmentsFromExtraFields,
+    type SessionFreelancerAssignments,
+} from "@/lib/freelancer-session-assignments";
 import * as XLSX from "xlsx";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
 
 type FreelancerInfo = { id: string; name: string; whatsapp_number: string | null };
+
+type SetFreelanceOption = {
+    id: string;
+    name: string;
+    role: string | null;
+    tags: string[];
+    google_email: string | null;
+    status: string | null;
+};
+
+type SetFreelanceDialogState = {
+    open: boolean;
+    booking: Booking | null;
+};
+
+type BookingFreelanceSession = {
+    key: string;
+    label: string;
+};
 
 type Booking = {
     id: string;
@@ -150,6 +180,38 @@ type Booking = {
     service_label?: string;
     created_at?: string;
 };
+
+function normalizeFreelanceTags(value: unknown) {
+    return Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        : [];
+}
+
+function resolveBookingFreelanceSessions(booking: Booking): BookingFreelanceSession[] {
+    const sessions = resolveBookingCalendarSessions({
+        eventType: booking.event_type,
+        sessionDate: booking.session_date,
+        extraFields: booking.extra_fields,
+        defaultLocation: booking.location,
+    });
+
+    if (sessions.length > 1) {
+        return sessions.map((session) => ({
+            key: session.key,
+            label:
+                session.label ||
+                SESSION_FREELANCER_LABELS[session.key] ||
+                session.key,
+        }));
+    }
+
+    return [
+        {
+            key: "primary",
+            label: SESSION_FREELANCER_LABELS.primary,
+        },
+    ];
+}
 
 type BookingFilterField = {
     key: string;
@@ -502,6 +564,14 @@ export default function BookingsPage() {
     const [driveLinkPopup, setDriveLinkPopup] = React.useState<{ open: boolean; booking: Booking | null }>({ open: false, booking: null });
     const [driveLinkInput, setDriveLinkInput] = React.useState("");
     const [savingDriveLink, setSavingDriveLink] = React.useState(false);
+    const [setFreelanceDialog, setSetFreelanceDialog] = React.useState<SetFreelanceDialogState>({ open: false, booking: null });
+    const [setFreelanceOptions, setSetFreelanceOptions] = React.useState<SetFreelanceOption[]>([]);
+    const [setFreelanceLoading, setSetFreelanceLoading] = React.useState(false);
+    const [setFreelanceSaving, setSetFreelanceSaving] = React.useState(false);
+    const [setFreelanceLoadError, setSetFreelanceLoadError] = React.useState("");
+    const [setFreelanceSearchQuery, setSetFreelanceSearchQuery] = React.useState("");
+    const [setFreelanceActiveSessionKey, setSetFreelanceActiveSessionKey] = React.useState("primary");
+    const [setFreelanceAssignments, setSetFreelanceAssignments] = React.useState<SessionFreelancerAssignments>({});
     const statusColors = React.useMemo(() => {
         const map: Record<string, string> = {};
         statusOpts
@@ -594,6 +664,168 @@ export default function BookingsPage() {
         },
         [],
     );
+    const setFreelanceSessions = React.useMemo(
+        () =>
+            setFreelanceDialog.booking
+                ? resolveBookingFreelanceSessions(setFreelanceDialog.booking)
+                : [{ key: "primary", label: SESSION_FREELANCER_LABELS.primary }],
+        [setFreelanceDialog.booking],
+    );
+    const isSetFreelanceSplitMode = setFreelanceSessions.length > 1;
+    const setFreelanceSelectedIds = React.useMemo(() => {
+        const activeSession = setFreelanceActiveSessionKey || setFreelanceSessions[0]?.key || "primary";
+        return setFreelanceAssignments[activeSession] || [];
+    }, [setFreelanceActiveSessionKey, setFreelanceAssignments, setFreelanceSessions]);
+    const setFreelanceSelectedIdsSet = React.useMemo(
+        () => new Set(setFreelanceSelectedIds),
+        [setFreelanceSelectedIds],
+    );
+    const setFreelanceUnionIds = React.useMemo(() => {
+        if (!isSetFreelanceSplitMode) {
+            return normalizeFreelancerIdList(
+                setFreelanceAssignments.primary || setFreelanceSelectedIds,
+                { maxItems: MAX_FREELANCERS_PER_SESSION },
+            );
+        }
+
+        return buildSessionFreelancerUnion(
+            setFreelanceAssignments,
+            setFreelanceSessions.map((session) => session.key),
+        );
+    }, [
+        isSetFreelanceSplitMode,
+        setFreelanceAssignments,
+        setFreelanceSelectedIds,
+        setFreelanceSessions,
+    ]);
+    const filteredSetFreelanceOptions = React.useMemo(() => {
+        const query = setFreelanceSearchQuery.trim().toLowerCase();
+        if (!query) return setFreelanceOptions;
+
+        return setFreelanceOptions.filter((freelancer) => {
+            const haystack = [
+                freelancer.name,
+                freelancer.role || "",
+                freelancer.google_email || "",
+                freelancer.tags.join(" "),
+            ]
+                .join(" ")
+                .toLowerCase();
+            return haystack.includes(query);
+        });
+    }, [setFreelanceOptions, setFreelanceSearchQuery]);
+
+    const fetchSetFreelanceOptions = React.useCallback(async () => {
+        const resolvedUserId = currentUserId || (await supabase.auth.getUser()).data.user?.id || null;
+        if (!resolvedUserId) {
+            setSetFreelanceOptions([]);
+            return;
+        }
+
+        setSetFreelanceLoading(true);
+        setSetFreelanceLoadError("");
+        try {
+            const { data, error } = await supabase
+                .from("freelance")
+                .select("id, name, role, tags, google_email, status")
+                .eq("user_id", resolvedUserId)
+                .eq("status", "active")
+                .order("name", { ascending: true });
+
+            if (error) {
+                setSetFreelanceOptions([]);
+                setSetFreelanceLoadError(tb("setFreelanceLoadFailed"));
+                return;
+            }
+
+            const nextOptions = ((data || []) as Array<Record<string, unknown>>)
+                .filter((item) => typeof item.id === "string" && typeof item.name === "string")
+                .map((item) => ({
+                    id: String(item.id),
+                    name: String(item.name),
+                    role: typeof item.role === "string" && item.role.trim().length > 0
+                        ? item.role.trim()
+                        : null,
+                    tags: normalizeFreelanceTags(item.tags),
+                    google_email:
+                        typeof item.google_email === "string" && item.google_email.trim().length > 0
+                            ? item.google_email.trim()
+                            : null,
+                    status:
+                        typeof item.status === "string" && item.status.trim().length > 0
+                            ? item.status.trim()
+                            : null,
+                }));
+
+            setSetFreelanceOptions(nextOptions);
+        } catch {
+            setSetFreelanceOptions([]);
+            setSetFreelanceLoadError(tb("setFreelanceLoadFailed"));
+        } finally {
+            setSetFreelanceLoading(false);
+        }
+    }, [currentUserId, supabase, tb]);
+
+    const openSetFreelanceDialog = React.useCallback((booking: Booking) => {
+        const sessions = resolveBookingFreelanceSessions(booking);
+        const fallbackFreelancerIds = normalizeFreelancerIdList(
+            booking.booking_freelancers.map((freelancer) => freelancer.id),
+            { maxItems: MAX_FREELANCERS_PER_SESSION },
+        );
+        const nextAssignments =
+            sessions.length > 1
+                ? ensureAssignmentsForSessionKeys({
+                    assignments: readSessionFreelancerAssignmentsFromExtraFields(
+                        booking.extra_fields,
+                        { maxItems: MAX_FREELANCERS_PER_SESSION, preserveEmpty: true },
+                    ),
+                    sessionKeys: sessions.map((session) => session.key),
+                    fallbackFreelancerIds,
+                    maxPerSession: MAX_FREELANCERS_PER_SESSION,
+                })
+                : { primary: fallbackFreelancerIds };
+
+        setSetFreelanceDialog({ open: true, booking });
+        setSetFreelanceAssignments(nextAssignments);
+        setSetFreelanceActiveSessionKey(sessions[0]?.key || "primary");
+        setSetFreelanceSearchQuery("");
+        void fetchSetFreelanceOptions();
+    }, [fetchSetFreelanceOptions]);
+    const closeSetFreelanceDialog = React.useCallback(() => {
+        setSetFreelanceDialog({ open: false, booking: null });
+        setSetFreelanceSearchQuery("");
+        setSetFreelanceLoadError("");
+        setSetFreelanceAssignments({});
+        setSetFreelanceActiveSessionKey("primary");
+    }, []);
+
+    const toggleSetFreelanceSelection = React.useCallback((freelancerId: string) => {
+        const activeSessionKey = setFreelanceActiveSessionKey || "primary";
+        setSetFreelanceAssignments((current) => {
+            const existing = current[activeSessionKey] || [];
+            const nextValues = existing.includes(freelancerId)
+                ? existing.filter((id) => id !== freelancerId)
+                : normalizeFreelancerIdList([...existing, freelancerId], {
+                    maxItems: MAX_FREELANCERS_PER_SESSION,
+                });
+            return {
+                ...current,
+                [activeSessionKey]: nextValues,
+            };
+        });
+    }, [setFreelanceActiveSessionKey]);
+
+    const applySetFreelanceSelectionToAllSessions = React.useCallback(() => {
+        if (!isSetFreelanceSplitMode) return;
+        const sourceValues = [...setFreelanceSelectedIds];
+        setSetFreelanceAssignments((current) => {
+            const next: SessionFreelancerAssignments = { ...current };
+            setFreelanceSessions.forEach((session) => {
+                next[session.key] = [...sourceValues];
+            });
+            return next;
+        });
+    }, [isSetFreelanceSplitMode, setFreelanceSelectedIds, setFreelanceSessions]);
 
     const closeDesktopMenus = React.useCallback(() => {
         setWaMenuBookingId(null);
@@ -1196,6 +1428,146 @@ export default function BookingsPage() {
         void fetchData("refresh");
     }
 
+    async function saveSetFreelanceAssignments() {
+        if (!requireBookingWrite()) return;
+        const booking = setFreelanceDialog.booking;
+        if (!booking) return;
+        if (setFreelanceLoadError) return;
+
+        const validFreelancerIds = new Set(setFreelanceOptions.map((freelancer) => freelancer.id));
+        const sessionKeys = setFreelanceSessions.map((session) => session.key);
+        const normalizedAssignments = isSetFreelanceSplitMode
+            ? ensureAssignmentsForSessionKeys({
+                assignments: setFreelanceAssignments,
+                sessionKeys,
+                validFreelancerIds,
+                maxPerSession: MAX_FREELANCERS_PER_SESSION,
+            })
+            : {
+                primary: normalizeFreelancerIdList(
+                    setFreelanceAssignments.primary || [],
+                    {
+                        validFreelancerIds,
+                        maxItems: MAX_FREELANCERS_PER_SESSION,
+                    },
+                ),
+            };
+        const nextFreelancerIds = isSetFreelanceSplitMode
+            ? buildSessionFreelancerUnion(normalizedAssignments, sessionKeys)
+            : normalizedAssignments.primary || [];
+        const nextExtraFields = {
+            ...((booking.extra_fields && typeof booking.extra_fields === "object" && !Array.isArray(booking.extra_fields))
+                ? booking.extra_fields
+                : {}),
+        } as Record<string, unknown>;
+
+        if (isSetFreelanceSplitMode) {
+            nextExtraFields[FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY] = normalizedAssignments;
+        } else {
+            delete nextExtraFields[FREELANCER_ASSIGNMENTS_EXTRA_FIELD_KEY];
+        }
+
+        setSetFreelanceSaving(true);
+        try {
+            const { error: updateError } = await supabase
+                .from("bookings")
+                .update({
+                    freelance_id: nextFreelancerIds[0] || null,
+                    extra_fields: nextExtraFields,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("id", booking.id);
+
+            if (updateError) {
+                setFeedbackDialog({ open: true, message: tb("setFreelanceSaveFailed") });
+                return;
+            }
+
+            const { error: deleteError } = await supabase
+                .from("booking_freelance")
+                .delete()
+                .eq("booking_id", booking.id);
+            if (deleteError) {
+                setFeedbackDialog({ open: true, message: tb("setFreelanceSaveFailed") });
+                return;
+            }
+
+            if (nextFreelancerIds.length > 0) {
+                const { error: insertError } = await supabase
+                    .from("booking_freelance")
+                    .insert(
+                        nextFreelancerIds.map((freelancerId) => ({
+                            booking_id: booking.id,
+                            freelance_id: freelancerId,
+                        })),
+                    );
+                if (insertError) {
+                    setFeedbackDialog({ open: true, message: tb("setFreelanceSaveFailed") });
+                    return;
+                }
+            }
+
+            await invalidateBookingPublicCache({
+                bookingCode: booking.booking_code,
+                trackingUuid: booking.tracking_uuid,
+            });
+
+            let syncWarning: string | null = null;
+            const hasSessionSchedule = resolveBookingCalendarSessions({
+                eventType: booking.event_type,
+                sessionDate: booking.session_date,
+                extraFields: nextExtraFields,
+                defaultLocation: booking.location,
+            }).length > 0;
+            if (hasSessionSchedule) {
+                const selectedFreelancers = setFreelanceOptions.filter((freelancer) =>
+                    nextFreelancerIds.includes(freelancer.id),
+                );
+                const attendeeEmails = selectedFreelancers
+                    .map((freelancer) => freelancer.google_email)
+                    .filter((email): email is string => Boolean(email));
+                const missingEmailNames = selectedFreelancers
+                    .filter((freelancer) => !freelancer.google_email)
+                    .map((freelancer) => freelancer.name);
+
+                try {
+                    const response = await fetch("/api/google/calendar-invite", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            bookingId: booking.id,
+                            attendeeEmails,
+                        }),
+                    });
+                    const result = ((await response.json().catch(() => null)) as { error?: string } | null) || null;
+                    if (!response.ok) {
+                        syncWarning = tb("setFreelanceCalendarSyncFailed", {
+                            reason: result?.error || tb("setFreelanceCalendarUnknownError"),
+                        });
+                    } else if (missingEmailNames.length > 0) {
+                        syncWarning = tb("setFreelanceMissingEmails", {
+                            names: missingEmailNames.join(", "),
+                        });
+                    }
+                } catch {
+                    syncWarning = tb("setFreelanceCalendarSyncFailed", {
+                        reason: tb("setFreelanceCalendarUnknownError"),
+                    });
+                }
+            }
+
+            closeSetFreelanceDialog();
+            showSuccessToast(tb("setFreelanceSaved"));
+            void fetchData("refresh");
+
+            if (syncWarning) {
+                setFeedbackDialog({ open: true, message: syncWarning });
+            }
+        } finally {
+            setSetFreelanceSaving(false);
+        }
+    }
+
     async function confirmBulkAction() {
         if (!requireBookingWrite()) return;
         if (!bulkActionDialog.action || selectedBookingIds.length === 0) return;
@@ -1771,6 +2143,17 @@ export default function BookingsPage() {
                                     <Info className="w-4 h-4" />
                                 </ActionIconButton>
                             </Link>
+                            <ActionIconButton
+                                tone="cyan"
+                                title={!canWriteBookings ? bookingWriteBlockedMessage : tb("setFreelanceBtn")}
+                                onClick={() => {
+                                    closeAllActionMenus();
+                                    openSetFreelanceDialog(booking);
+                                }}
+                                disabled={!canWriteBookings}
+                            >
+                                <Users className="w-4 h-4" />
+                            </ActionIconButton>
                             <ActionIconButton
                                 tone="orange"
                                 title={!canWriteBookings ? bookingWriteBlockedMessage : tb("changeStatusBtn")}
@@ -2668,6 +3051,17 @@ export default function BookingsPage() {
                                 </ActionIconButton>
                                 <Link href={`/bookings/${booking.id}`}><ActionIconButton tone="slate"><Info className="w-4 h-4" /></ActionIconButton></Link>
                                 <ActionIconButton
+                                    tone="cyan"
+                                    onClick={() => {
+                                        closeAllActionMenus();
+                                        openSetFreelanceDialog(booking);
+                                    }}
+                                    disabled={!canWriteBookings}
+                                    title={!canWriteBookings ? bookingWriteBlockedMessage : tb("setFreelanceBtn")}
+                                >
+                                    <Users className="w-4 h-4" />
+                                </ActionIconButton>
+                                <ActionIconButton
                                     tone="orange"
                                     onClick={() => { setNewStatus(booking.client_status || booking.status); setStatusModal({ open: true, booking }); }}
                                     disabled={!canWriteBookings}
@@ -2942,6 +3336,209 @@ export default function BookingsPage() {
                     });
                 }}
             />
+
+            <Dialog
+                open={setFreelanceDialog.open}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        closeSetFreelanceDialog();
+                    }
+                }}
+            >
+                <DialogContent className="sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>{tb("setFreelanceTitle")}</DialogTitle>
+                        <DialogDescription>
+                            {tb("setFreelanceDesc", {
+                                name: setFreelanceDialog.booking?.client_name || "-",
+                            })}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        {isSetFreelanceSplitMode ? (
+                            <div className="space-y-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-xs font-medium text-muted-foreground">
+                                        {tb("setFreelancePerSessionLabel", {
+                                            max: MAX_FREELANCERS_PER_SESSION,
+                                        })}
+                                    </p>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={applySetFreelanceSelectionToAllSessions}
+                                    >
+                                        {tb("setFreelanceApplyAllSessions")}
+                                    </Button>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {setFreelanceSessions.map((session) => {
+                                        const active = setFreelanceActiveSessionKey === session.key;
+                                        const selectedCount = setFreelanceAssignments[session.key]?.length || 0;
+                                        return (
+                                            <button
+                                                key={session.key}
+                                                type="button"
+                                                onClick={() => setSetFreelanceActiveSessionKey(session.key)}
+                                                className={cn(
+                                                    "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                                                    active
+                                                        ? "border-foreground bg-foreground/5 text-foreground"
+                                                        : "border-input text-muted-foreground hover:bg-muted/50",
+                                                )}
+                                            >
+                                                <span>{session.label}</span>
+                                                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-foreground">
+                                                    {selectedCount}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ) : null}
+
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <input
+                                value={setFreelanceSearchQuery}
+                                onChange={(event) => setSetFreelanceSearchQuery(event.target.value)}
+                                placeholder={tb("setFreelanceSearchPlaceholder")}
+                                className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-10 w-full min-w-0 rounded-md border bg-transparent pl-9 pr-3 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                            />
+                        </div>
+
+                        <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+                            {setFreelanceLoading ? (
+                                <div className="flex items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-8 text-sm text-muted-foreground">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span>{tb("setFreelanceLoading")}</span>
+                                </div>
+                            ) : setFreelanceLoadError ? (
+                                <div className="rounded-lg border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                                    {setFreelanceLoadError}
+                                </div>
+                            ) : setFreelanceOptions.length === 0 ? (
+                                <div className="rounded-lg border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                                    {tb("setFreelanceEmptyState")}
+                                </div>
+                            ) : filteredSetFreelanceOptions.length === 0 ? (
+                                <div className="rounded-lg border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                                    {tb("setFreelanceNoResults")}
+                                </div>
+                            ) : (
+                                filteredSetFreelanceOptions.map((freelancer) => {
+                                    const selected = setFreelanceSelectedIdsSet.has(freelancer.id);
+                                    const limitReached =
+                                        !selected &&
+                                        setFreelanceSelectedIds.length >= MAX_FREELANCERS_PER_SESSION;
+                                    return (
+                                        <button
+                                            key={freelancer.id}
+                                            type="button"
+                                            onClick={() => toggleSetFreelanceSelection(freelancer.id)}
+                                            disabled={limitReached}
+                                            className={cn(
+                                                "flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all",
+                                                selected
+                                                    ? "border-foreground bg-foreground/5 text-foreground shadow-sm"
+                                                    : "border-input text-foreground hover:bg-muted/40",
+                                                limitReached ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+                                            )}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <span
+                                                    className={cn(
+                                                        "mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded border",
+                                                        selected
+                                                            ? "border-foreground bg-foreground text-background"
+                                                            : "border-input bg-transparent text-transparent",
+                                                    )}
+                                                >
+                                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium">{freelancer.name}</p>
+                                                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                                                        {freelancer.role ? (
+                                                            <span className="rounded-full border border-transparent bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                                                {freelancer.role}
+                                                            </span>
+                                                        ) : null}
+                                                        {freelancer.tags.slice(0, 3).map((tag) => (
+                                                            <span
+                                                                key={`${freelancer.id}-${tag}`}
+                                                                className="rounded-full border border-transparent bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+                                                            >
+                                                                {tag}
+                                                            </span>
+                                                        ))}
+                                                        {freelancer.tags.length > 3 ? (
+                                                            <span className="text-[10px] text-muted-foreground">
+                                                                +{freelancer.tags.length - 3}
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+                                                    {freelancer.google_email ? (
+                                                        <p className="mt-1 text-[11px] text-muted-foreground">
+                                                            {freelancer.google_email}
+                                                        </p>
+                                                    ) : (
+                                                        <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                                                            {tb("setFreelanceNoGoogleEmail")}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+                    <DialogFooter className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="text-xs text-muted-foreground">
+                            <div>
+                                {tb("setFreelanceSelectedCount", {
+                                    count: setFreelanceSelectedIds.length,
+                                    max: MAX_FREELANCERS_PER_SESSION,
+                                })}
+                            </div>
+                            {isSetFreelanceSplitMode ? (
+                                <div>
+                                    {tb("setFreelanceUnionCount", {
+                                        count: setFreelanceUnionIds.length,
+                                    })}
+                                </div>
+                            ) : null}
+                        </div>
+                        <div className="flex items-center justify-end gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={closeSetFreelanceDialog}
+                                disabled={setFreelanceSaving}
+                            >
+                                {tb("cancel")}
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={() => { void saveSetFreelanceAssignments(); }}
+                                disabled={setFreelanceSaving || setFreelanceLoading || Boolean(setFreelanceLoadError) || !canWriteBookings}
+                                className="gap-2"
+                            >
+                                {setFreelanceSaving ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Users className="h-4 w-4" />
+                                )}
+                                {setFreelanceSaving ? tb("setFreelanceSaving") : tb("save")}
+                            </Button>
+                        </div>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <ActionConfirmDialog
                 open={archiveDialog.open}
