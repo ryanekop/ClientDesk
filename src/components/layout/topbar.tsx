@@ -12,14 +12,16 @@ import {
   Settings,
   LogOut,
   Megaphone,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link, usePathname } from "@/i18n/routing";
+import { Link, usePathname, useRouter } from "@/i18n/routing";
 import { createClient } from "@/utils/supabase/client";
 import { signOut } from "@/app/actions/auth";
 import { useChangelogUnread } from "@/components/changelog-modal";
 import { clearClientDeskSessionOnlyState } from "@/lib/auth/session-only";
 import { resolveDashboardRouteTitle } from "@/lib/dashboard-route-title";
+import { requestOpenOnboardingReviewModal } from "@/lib/onboarding";
 
 function TopbarClock() {
   const locale = useLocale();
@@ -80,9 +82,11 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   } | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
   const t = useTranslations("Topbar");
+  const tOnboarding = useTranslations("Onboarding");
   const titleT = useTranslations("DashboardTitle");
   const locale = useLocale();
   const pathname = usePathname();
+  const router = useRouter();
   const { hasUnread } = useChangelogUnread();
 
   const pageTitle = React.useMemo(
@@ -164,6 +168,15 @@ export function Topbar({ onMenuClick }: TopbarProps) {
     void signOut(locale);
   }, [locale]);
 
+  const handleOpenOnboardingReview = React.useCallback(() => {
+    requestOpenOnboardingReviewModal();
+    setProfileOpen(false);
+
+    if (pathname !== "/dashboard") {
+      router.push("/dashboard");
+    }
+  }, [pathname, router]);
+
   return (
     <>
     {/* Topbar stays at top-0 here; announcement offset is already handled by DashboardLayout container. */}
@@ -244,7 +257,26 @@ export function Topbar({ onMenuClick }: TopbarProps) {
 
             {/* Menu Items */}
             <div className="py-1">
-              {menuItems.map((item) => (
+              {menuItems.slice(0, 3).map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setProfileOpen(false)}
+                  className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted/50 transition-colors"
+                >
+                  <item.icon className="w-4 h-4 text-muted-foreground" />
+                  {item.label}
+                </Link>
+              ))}
+              <button
+                type="button"
+                onClick={handleOpenOnboardingReview}
+                className="flex w-full items-center gap-3 px-4 py-2 text-sm hover:bg-muted/50 transition-colors"
+              >
+                <Sparkles className="w-4 h-4 text-muted-foreground" />
+                {tOnboarding("reviewSetup")}
+              </button>
+              {menuItems.slice(3).map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}

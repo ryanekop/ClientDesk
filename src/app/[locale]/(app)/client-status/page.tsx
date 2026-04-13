@@ -70,6 +70,11 @@ import {
     toggleSelectAllVisible,
     toggleSelection,
 } from "@/lib/manage-selection";
+import {
+    getOnboardingActiveStep,
+    markOnboardingStepCompleted,
+    ONBOARDING_ACTIVE_STEP_EVENT,
+} from "@/lib/onboarding";
 
 type BookingStatus = {
     id: string;
@@ -328,6 +333,29 @@ export default function ClientStatusPage() {
     const clientStatusMetadataCacheRef = React.useRef<ClientStatusPageMetadata | null>(null);
     const clientStatusMetadataEventTypeFilterKeyRef = React.useRef("");
     const activeFetchControllerRef = React.useRef<AbortController | null>(null);
+
+    React.useEffect(() => {
+        const syncClientStatusOnboarding = () => {
+            if (getOnboardingActiveStep() === "clientStatus") {
+                markOnboardingStepCompleted("clientStatus");
+            }
+        };
+
+        syncClientStatusOnboarding();
+        window.addEventListener("storage", syncClientStatusOnboarding);
+        window.addEventListener(
+            ONBOARDING_ACTIVE_STEP_EVENT,
+            syncClientStatusOnboarding as EventListener,
+        );
+
+        return () => {
+            window.removeEventListener("storage", syncClientStatusOnboarding);
+            window.removeEventListener(
+                ONBOARDING_ACTIVE_STEP_EVENT,
+                syncClientStatusOnboarding as EventListener,
+            );
+        };
+    }, []);
     const latestFetchRequestIdRef = React.useRef(0);
 
     const showFeedback = React.useCallback((message: string, title?: string) => {
@@ -1758,20 +1786,21 @@ export default function ClientStatusPage() {
                 )}
             </div>
 
-            {/* Mobile Cards */}
-            <div className="md:hidden space-y-3">
-                {queryState.isLoading || queryState.isRefreshing ? (
-                    <CardListSkeleton count={Math.min(queryState.perPage, 4)} />
-                ) : queryState.totalItems === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground text-sm">{hasActiveFilters ? t("tidakAdaHasil") : t("belumAdaBooking")}</div>
-                ) : bookings.map(b => (
-                    <div
-                        key={b.id}
-                        className={cn(
-                            "rounded-xl border bg-card shadow-sm p-4 space-y-3",
-                            isManageMode && selectedBookingIdSet.has(b.id) && "ring-1 ring-foreground/20",
-                        )}
-                    >
+            <div data-onboarding-target="client-status-table">
+                {/* Mobile Cards */}
+                <div className="md:hidden space-y-3">
+                    {queryState.isLoading || queryState.isRefreshing ? (
+                        <CardListSkeleton count={Math.min(queryState.perPage, 4)} />
+                    ) : queryState.totalItems === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground text-sm">{hasActiveFilters ? t("tidakAdaHasil") : t("belumAdaBooking")}</div>
+                    ) : bookings.map(b => (
+                        <div
+                            key={b.id}
+                            className={cn(
+                                "rounded-xl border bg-card shadow-sm p-4 space-y-3",
+                                isManageMode && selectedBookingIdSet.has(b.id) && "ring-1 ring-foreground/20",
+                            )}
+                        >
                         <div className="flex items-start justify-between">
                             <div className="flex items-start gap-3">
                                 {isManageMode ? (
@@ -1858,60 +1887,61 @@ export default function ClientStatusPage() {
                             </ActionIconButton>
                         </div>
                         ) : null}
+                        </div>
+                    ))}
+                </div>
+                {!queryState.isLoading && !queryState.isRefreshing && queryState.totalItems > 0 ? (
+                    <div className="md:hidden">
+                        <TablePagination
+                            totalItems={queryState.totalItems}
+                            currentPage={queryState.page}
+                            itemsPerPage={queryState.perPage}
+                            onPageChange={setCurrentPage}
+                            onItemsPerPageChange={setItemsPerPage}
+                            perPageOptions={[...CLIENT_STATUS_PER_PAGE_OPTIONS]}
+                        />
                     </div>
-                ))}
-            </div>
-            {!queryState.isLoading && !queryState.isRefreshing && queryState.totalItems > 0 ? (
-                <div className="md:hidden">
-                    <TablePagination
-                        totalItems={queryState.totalItems}
-                        currentPage={queryState.page}
-                        itemsPerPage={queryState.perPage}
-                        onPageChange={setCurrentPage}
-                        onItemsPerPageChange={setItemsPerPage}
-                        perPageOptions={[...CLIENT_STATUS_PER_PAGE_OPTIONS]}
-                    />
-                </div>
-            ) : null}
+                ) : null}
 
-            {/* Desktop Table */}
-            <div className="rounded-xl border bg-card shadow-sm overflow-hidden hidden md:block">
-                <div className="relative overflow-x-auto">
-                    <table ref={tableRef} className="min-w-full w-max border-separate border-spacing-0 text-left text-sm">
-                        <thead className="text-[11px] uppercase bg-card border-b">
-                            <tr>
-                                {tableVisibleColumns.map((column) => renderDesktopHeader(column))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border/50">
-                            {queryState.isLoading || queryState.isRefreshing ? (
-                                <TableRowsSkeleton
-                                    rows={Math.min(queryState.perPage, 6)}
-                                    columns={tableVisibleColumns.length}
-                                />
-                            ) : queryState.totalItems === 0 ? (
+                {/* Desktop Table */}
+                <div className="rounded-xl border bg-card shadow-sm overflow-hidden hidden md:block">
+                    <div className="relative overflow-x-auto">
+                        <table ref={tableRef} className="min-w-full w-max border-separate border-spacing-0 text-left text-sm">
+                            <thead className="text-[11px] uppercase bg-card border-b">
                                 <tr>
-                                    <td colSpan={tableVisibleColumns.length} className="text-center py-12 text-sm text-muted-foreground">
-                                        {hasActiveFilters ? t("tidakAdaHasil") : t("belumAdaBooking")}
-                                    </td>
+                                    {tableVisibleColumns.map((column) => renderDesktopHeader(column))}
                                 </tr>
-                            ) : (
-                                bookings.map((b, rowIndex) => {
-                                    const rowNumber =
-                                        (currentPage - 1) * itemsPerPage + rowIndex + 1;
-                                    return (
-                                        <tr key={b.id} className="group hover:bg-muted/30 transition-colors">
-                                            {tableVisibleColumns.map((column) =>
-                                                renderDesktopCell(b, column, rowNumber),
-                                            )}
-                                        </tr>
-                                    );
-                                })
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-border/50">
+                                {queryState.isLoading || queryState.isRefreshing ? (
+                                    <TableRowsSkeleton
+                                        rows={Math.min(queryState.perPage, 6)}
+                                        columns={tableVisibleColumns.length}
+                                    />
+                                ) : queryState.totalItems === 0 ? (
+                                    <tr>
+                                        <td colSpan={tableVisibleColumns.length} className="text-center py-12 text-sm text-muted-foreground">
+                                            {hasActiveFilters ? t("tidakAdaHasil") : t("belumAdaBooking")}
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    bookings.map((b, rowIndex) => {
+                                        const rowNumber =
+                                            (currentPage - 1) * itemsPerPage + rowIndex + 1;
+                                        return (
+                                            <tr key={b.id} className="group hover:bg-muted/30 transition-colors">
+                                                {tableVisibleColumns.map((column) =>
+                                                    renderDesktopCell(b, column, rowNumber),
+                                                )}
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    <TablePagination totalItems={queryState.totalItems} currentPage={queryState.page} itemsPerPage={queryState.perPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...CLIENT_STATUS_PER_PAGE_OPTIONS]} />
                 </div>
-                <TablePagination totalItems={queryState.totalItems} currentPage={queryState.page} itemsPerPage={queryState.perPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...CLIENT_STATUS_PER_PAGE_OPTIONS]} />
             </div>
 
             <CancelStatusPaymentDialog

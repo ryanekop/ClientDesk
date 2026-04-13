@@ -6,6 +6,7 @@ import { BookingWriteAccessProvider } from "@/lib/booking-write-access-context";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { DashboardTitleSync } from "./dashboard-title-sync";
+import { OnboardingTour } from "@/components/onboarding/onboarding-tour";
 import { useRouter } from "next/navigation";
 import { useLocale } from "next-intl";
 import { createClient } from "@/utils/supabase/client";
@@ -135,6 +136,7 @@ export function DashboardLayout({
                         {children}
                     </main>
                 </div>
+                <OnboardingTour />
             </div>
         </BookingWriteAccessProvider>
     );

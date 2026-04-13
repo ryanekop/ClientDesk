@@ -35,6 +35,8 @@ Isi kolom `Status` dengan `PASS` / `FAIL` / `BLOCKED` dan tambahkan bukti singka
 | 8 | Tracking non-Wedding | Buka tracking event non-Wedding | Tetap menampilkan jadwal tunggal |  |  |
 | 9 | Dashboard 30 hari by booking date | Gunakan data booking dengan `booking_date` berbeda dari `created_at` | Bucket chart harian ikut `booking_date` |  |  |
 | 10 | Dashboard 1 tahun fallback | Gunakan booking tanpa `booking_date` | Data tetap teragregasi via `created_at` |  |  |
+| 11 | Filter tanggal Wedding split day | Buat booking Wedding dengan `tanggal_akad` dan `tanggal_resepsi` berbeda, lalu filter Bookings/Status Booking/Keuangan dengan basis `Session Date` pada masing-masing tanggal | Booking muncul saat filter kena tanggal akad maupun tanggal resepsi |  |  |
+| 12 | Filter tanggal Wisuda split sessions | Buat booking Wisuda dengan `tanggal_wisuda_1` dan `tanggal_wisuda_2` berbeda, lalu filter Bookings/Status Booking/Keuangan dengan basis `Session Date` pada masing-masing tanggal | Booking muncul saat filter kena sesi 1 maupun sesi 2 |  |  |
 
 ## Verifikasi Teknis Otomatis (sudah dijalankan)
 

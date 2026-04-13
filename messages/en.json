@@ -1778,6 +1778,134 @@
             "memberCount": "Member Count"
         }
     },
+    "Onboarding": {
+        "badge": "Quick Setup",
+        "title": "Set up Client Desk step by step",
+        "description": "Complete these core steps so your dashboard, booking form, and main workflow are ready to use right away.",
+        "progressLabel": "{done} of {total} steps completed",
+        "progressBadge": "{percent}%",
+        "continueSetup": "Continue setup",
+        "done": "Done",
+        "pending": "Pending",
+        "viewAgain": "View again",
+        "openGuide": "Open guide",
+        "optionalTitle": "Optional integrations",
+        "optionalDescription": "Connect Google if you want calendar and file automations after the core setup is finished.",
+        "optionalBadge": "Optional",
+        "completeTitle": "Core setup is complete",
+        "completeDescription": "Your Client Desk workspace is ready to use. You can reopen this setup guide anytime.",
+        "reviewSetup": "Setup Guide",
+        "reviewModal": {
+            "title": "Client Desk setup progress",
+            "description": "Review the steps you've completed and reopen any guide you still want to follow.",
+            "progressDescription": "You can continue from the next step or reopen a specific guide anytime."
+        },
+        "tourLabel": "Guided step",
+        "back": "Back",
+        "skip": "Skip",
+        "next": "Next",
+        "finish": "Finish",
+        "fallbackMessage": "The highlighted element is not available on this screen right now. Use this guide as a hint and continue when you're ready.",
+        "overlay": {
+            "title": "Let's finish the initial setup",
+            "description": "To get Client Desk ready, complete these 8 core setup steps. We'll guide you to the most important area on each page.",
+            "dismissForever": "Don't show this again on this device",
+            "later": "Maybe later",
+            "start": "Start setup",
+            "close": "Close"
+        },
+        "steps": {
+            "profile": {
+                "label": "Complete Profile",
+                "description": "Fill in the basic account identity so your admin area and public pages look more polished.",
+                "tourTitle": "Complete your basic profile first",
+                "tourBody": "Complete your basic account identity first. This name will be used across the admin area and a few public-facing views.",
+                "tourAction": "Enter the name you want to use here, then save the changes before moving on."
+            },
+            "studioSettings": {
+                "label": "Set Studio Name",
+                "description": "Fill in your studio name in General Settings so the booking form identity and link are ready to use properly.",
+                "tourTitle": "Fill in your studio name first",
+                "tourBody": "Fill in your studio name first in General Settings. This name is used for your booking form identity and link.",
+                "tourAction": "Complete the studio name in this section, then save before moving on to the booking form."
+            },
+            "services": {
+                "label": "Create Services or Packages",
+                "description": "Add at least one service so the booking form and manual booking flow can work properly.",
+                "tourTitle": "Add your first service",
+                "tourBody": "Add at least one service or package so clients can use your booking form.",
+                "tourAction": "Use this add button to create your first main package. This step will continue after the package is saved successfully.",
+                "blockingMessage": "Save your first main package in this popup before continuing."
+            },
+            "team": {
+                "label": "Add Team/Freelancer",
+                "description": "Add at least one member so bookings can be assigned or managed collaboratively more cleanly.",
+                "tourTitle": "Add your first team member",
+                "tourBody": "Add at least one team member or freelancer so booking assignments and collaborative work stay organized.",
+                "tourAction": "Use this add button to create your first team member or freelancer. This step will continue after the member is saved successfully.",
+                "blockingMessage": "Save your first team member or freelancer in this popup before continuing."
+            },
+            "formBooking": {
+                "label": "Set Up Booking Form",
+                "description": "Prepare the booking form link and payment methods so clients can book on their own with a cleaner flow.",
+                "tourTitle": "Enable your booking form",
+                "tourBody": "Set the booking form slug or link and payment methods so clients can book on their own more smoothly.",
+                "tourAction": "Choose at least one payment method, save the settings, then check the form link or preview if needed."
+            },
+            "bookingFirst": {
+                "label": "Create First Booking",
+                "description": "Enter your first booking so you can see the Client Desk workflow end-to-end.",
+                "tourTitle": "Create your first booking",
+                "tourBody": "Create your first booking to start using the main Client Desk workflow.",
+                "tourAction": "Fill in the client details and the basic booking information here, then save the booking.",
+                "sequence": {
+                    "clientInfo": {
+                        "tourTitle": "Start with client details",
+                        "tourBody": "Fill in the client's basic identity first in this section, such as the name and WhatsApp number.",
+                        "tourAction": "Complete the main client details here before moving on to the session details."
+                    },
+                    "sessionDetails": {
+                        "tourTitle": "Continue to session details",
+                        "tourBody": "This section is where you set the event type, date, time, location, and main package for the booking.",
+                        "tourAction": "Complete the main session details here so your first booking is ready to save."
+                    },
+                    "submit": {
+                        "tourTitle": "Save your first booking",
+                        "tourBody": "Once the main details are filled in, save this booking to complete the onboarding step.",
+                        "tourAction": "Use this save button to create your first booking and move on to the next step."
+                    }
+                }
+            },
+            "bookingsOverview": {
+                "label": "Review Bookings Page",
+                "description": "See the booking you just saved and get familiar with the booking list and its main actions.",
+                "tourTitle": "See your first booking in the list",
+                "tourBody": "This page shows the bookings that have been saved, including the first booking you just created.",
+                "tourAction": "Use this area to get familiar with the booking list, search, and the main actions for each booking."
+            },
+            "clientStatus": {
+                "label": "Review Status Booking Page",
+                "description": "Once you have a booking, monitor booking progress and use the tracking link from the status page.",
+                "tourTitle": "Review booking status here",
+                "tourBody": "This page is where you monitor booking progress, queue status, and the tracking link you can share with clients.",
+                "tourAction": "Use this table or these cards to review booking status and access the client tracking link."
+            },
+            "googleCalendar": {
+                "label": "Connect Google Calendar",
+                "description": "Sync booking schedules to Google Calendar so your working agenda stays organized.",
+                "tourTitle": "Connect Google Calendar",
+                "tourBody": "Connect your Google account if you want calendar sync to run automatically.",
+                "tourAction": "Use this card to connect Google Calendar from the Settings page."
+            },
+            "googleDrive": {
+                "label": "Connect Google Drive",
+                "description": "Connect Google Drive for files, QRIS assets, and automatic work folders.",
+                "tourTitle": "Connect Google Drive",
+                "tourBody": "Connect your Google account if you want files and work folders to run automatically.",
+                "tourAction": "Use this card to connect Google Drive from the Settings page."
+            }
+        }
+    },
     "ApiErrors": {
         "unauthorized": "Not authenticated.",
         "bookingNotFound": "Booking not found.",

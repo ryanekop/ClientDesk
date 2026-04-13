@@ -72,6 +72,7 @@ import {
   normalizeEventTypeName,
   normalizeEventTypeList,
 } from "@/lib/event-type-config";
+import { notifyOnboardingStepUnlocked } from "@/lib/onboarding";
 import { CardListSkeleton } from "@/components/ui/data-skeletons";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
@@ -1256,6 +1257,7 @@ export default function ServicesPage() {
         });
         setIsAddOpen(false);
         await refreshVisibleData();
+        notifyOnboardingStepUnlocked("services");
         showSuccessToast(ts("serviceCreatedSuccess"));
       } catch (scopeError) {
         setPageError(
@@ -1786,11 +1788,17 @@ export default function ServicesPage() {
             ) : null}
             <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
               <DialogTrigger asChild>
-                <Button className="w-full lg:w-auto">
+                <Button
+                  className="w-full lg:w-auto"
+                  data-onboarding-target="services-add-button"
+                >
                   <Plus className="h-4 w-4" /> {t("tambah")}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[680px]">
+              <DialogContent
+                className="sm:max-w-[680px]"
+                data-onboarding-target="services-add-dialog"
+              >
               <DialogHeader>
                 <DialogTitle>{t("tambahTitle")}</DialogTitle>
                 <DialogDescription>{t("tambahDesc")}</DialogDescription>
@@ -1802,6 +1810,7 @@ export default function ServicesPage() {
                     name="name"
                     required
                     placeholder="e.g.: Wedding Photography"
+                    data-onboarding-target="services-add-dialog-name"
                     className="placeholder:text-muted-foreground h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 md:text-sm"
                   />
                 </div>
@@ -2226,7 +2235,10 @@ export default function ServicesPage() {
                 description={ts("emptyMainDesc")}
               />
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div
+                className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+                data-onboarding-target="services-main-package-list"
+              >
                 {displayedMainServices.map((service) => (
                   <ServiceCard
                     key={service.id}

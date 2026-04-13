@@ -100,6 +100,11 @@ import {
     toggleSelectAllVisible,
     toggleSelection,
 } from "@/lib/manage-selection";
+import {
+    getOnboardingActiveStep,
+    markOnboardingStepCompleted,
+    ONBOARDING_ACTIVE_STEP_EVENT,
+} from "@/lib/onboarding";
 import * as XLSX from "xlsx";
 
 const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
@@ -533,6 +538,28 @@ export default function BookingsPage() {
     const hasLoadedBookingsRef = React.useRef(false);
     const bookingMetadataCacheRef = React.useRef<BookingPageMetadata | null>(null);
     const bookingMetadataEventTypeFilterKeyRef = React.useRef("");
+    React.useEffect(() => {
+        const syncBookingsOverviewOnboarding = () => {
+            if (getOnboardingActiveStep() === "bookingsOverview") {
+                markOnboardingStepCompleted("bookingsOverview");
+            }
+        };
+
+        syncBookingsOverviewOnboarding();
+        window.addEventListener("storage", syncBookingsOverviewOnboarding);
+        window.addEventListener(
+            ONBOARDING_ACTIVE_STEP_EVENT,
+            syncBookingsOverviewOnboarding as EventListener,
+        );
+
+        return () => {
+            window.removeEventListener("storage", syncBookingsOverviewOnboarding);
+            window.removeEventListener(
+                ONBOARDING_ACTIVE_STEP_EVENT,
+                syncBookingsOverviewOnboarding as EventListener,
+            );
+        };
+    }, []);
     const activeFetchControllerRef = React.useRef<AbortController | null>(null);
     const latestFetchRequestIdRef = React.useRef(0);
     const invalidateProfilePublicCache = React.useCallback(async () => {
@@ -2227,7 +2254,7 @@ export default function BookingsPage() {
     const multiCountSuffix = locale === "en" ? "selected" : "dipilih";
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6" data-onboarding-target="bookings-overview-panel">
             {successToastNode}
             <BookingWriteReadonlyBanner />
             {/* Header */}

@@ -1778,6 +1778,134 @@
             "memberCount": "Jumlah Anggota"
         }
     },
+    "Onboarding": {
+        "badge": "Quick Setup",
+        "title": "Siapkan Client Desk langkah demi langkah",
+        "description": "Selesaikan langkah inti ini supaya dashboard, form booking, dan alur kerja utamamu langsung siap dipakai.",
+        "progressLabel": "{done} dari {total} langkah selesai",
+        "progressBadge": "{percent}%",
+        "continueSetup": "Lanjutkan setup",
+        "done": "Selesai",
+        "pending": "Belum",
+        "viewAgain": "Lihat lagi",
+        "openGuide": "Buka panduan",
+        "optionalTitle": "Integrasi opsional",
+        "optionalDescription": "Hubungkan Google jika kamu ingin kalender dan file berjalan otomatis setelah setup inti beres.",
+        "optionalBadge": "Opsional",
+        "completeTitle": "Setup inti sudah selesai",
+        "completeDescription": "Client Desk-mu sudah siap dipakai. Kamu tetap bisa membuka panduan ini lagi kapan saja.",
+        "reviewSetup": "Panduan Setup",
+        "reviewModal": {
+            "title": "Progress setup Client Desk",
+            "description": "Lihat langkah yang sudah selesai dan buka lagi panduan yang masih ingin kamu ikuti.",
+            "progressDescription": "Kamu bisa lanjut dari langkah berikutnya atau membuka ulang panduan tertentu."
+        },
+        "tourLabel": "Panduan langkah",
+        "back": "Kembali",
+        "skip": "Lewati",
+        "next": "Lanjut",
+        "finish": "Selesai",
+        "fallbackMessage": "Elemen yang disorot sedang tidak tersedia di layar ini. Gunakan panduan ini sebagai petunjuk lalu lanjutkan ke langkah berikutnya saat siap.",
+        "overlay": {
+            "title": "Yuk selesaikan setup awal",
+            "description": "Supaya Client Desk siap dipakai, selesaikan 8 langkah setup inti berikut. Kami akan mengarahkanmu ke bagian penting di tiap halaman.",
+            "dismissForever": "Jangan tampilkan lagi di perangkat ini",
+            "later": "Nanti saja",
+            "start": "Mulai setup",
+            "close": "Tutup"
+        },
+        "steps": {
+            "profile": {
+                "label": "Lengkapi Profil",
+                "description": "Isi identitas dasar akun agar area admin dan tampilan publik tampil lebih rapi.",
+                "tourTitle": "Lengkapi profil dasar dulu",
+                "tourBody": "Lengkapi identitas dasar akunmu dulu. Nama ini akan dipakai di area admin dan beberapa tampilan publik.",
+                "tourAction": "Isi nama yang ingin kamu gunakan, lalu simpan perubahan sebelum lanjut."
+            },
+            "studioSettings": {
+                "label": "Atur Nama Studio",
+                "description": "Isi nama studio di Pengaturan Umum supaya identitas dan link form booking siap dipakai dengan benar.",
+                "tourTitle": "Isi nama studio dulu",
+                "tourBody": "Isi nama studio dulu di Pengaturan Umum. Nama ini dipakai untuk link dan identitas form booking.",
+                "tourAction": "Lengkapi nama studio pada bagian ini lalu simpan sebelum lanjut ke Form Booking."
+            },
+            "services": {
+                "label": "Buat Layanan/Paket",
+                "description": "Tambahkan minimal satu layanan agar form booking dan booking manual bisa dipakai dengan benar.",
+                "tourTitle": "Tambahkan layanan pertamamu",
+                "tourBody": "Tambahkan minimal 1 layanan atau paket agar form booking bisa dipakai klien.",
+                "tourAction": "Gunakan tombol tambah ini untuk membuat paket utama pertamamu. Langkah akan lanjut setelah paket berhasil disimpan.",
+                "blockingMessage": "Simpan paket utama pertamamu dulu di popup ini untuk lanjut."
+            },
+            "team": {
+                "label": "Buat Tim/Freelance",
+                "description": "Tambahkan minimal satu anggota agar booking bisa dibagikan atau dikelola bersama dengan lebih rapi.",
+                "tourTitle": "Tambahkan anggota tim pertamamu",
+                "tourBody": "Tambahkan minimal satu tim atau freelance agar alur penugasan booking dan kerja kolaboratif lebih rapi.",
+                "tourAction": "Gunakan tombol tambah ini untuk membuat anggota tim atau freelance pertamamu. Langkah akan lanjut setelah anggota berhasil disimpan.",
+                "blockingMessage": "Simpan anggota tim atau freelance pertamamu dulu di popup ini untuk lanjut."
+            },
+            "formBooking": {
+                "label": "Atur Form Booking",
+                "description": "Siapkan link form dan metode pembayaran supaya klien bisa booking sendiri dengan alur yang rapi.",
+                "tourTitle": "Aktifkan form booking",
+                "tourBody": "Atur slug atau link form booking dan pilih metode pembayaran supaya klien bisa booking sendiri dengan lebih rapi.",
+                "tourAction": "Pilih minimal satu metode pembayaran, simpan pengaturan, lalu cek link atau preview form bila perlu."
+            },
+            "bookingFirst": {
+                "label": "Buat Booking Pertama",
+                "description": "Masukkan satu booking pertama agar kamu bisa melihat alur kerja Client Desk berjalan end-to-end.",
+                "tourTitle": "Buat booking pertamamu",
+                "tourBody": "Buat 1 booking pertama untuk mulai menjalankan alur kerja Client Desk.",
+                "tourAction": "Isi data klien dan detail dasar booking pada bagian ini, lalu simpan booking.",
+                "sequence": {
+                    "clientInfo": {
+                        "tourTitle": "Mulai dari data klien",
+                        "tourBody": "Isi identitas dasar klien dulu di bagian ini, seperti nama dan nomor WhatsApp.",
+                        "tourAction": "Lengkapi data klien utama di sini sebelum lanjut ke detail sesi."
+                    },
+                    "sessionDetails": {
+                        "tourTitle": "Lanjut ke detail sesi",
+                        "tourBody": "Di bagian ini kamu mengatur tipe acara, tanggal, jam, lokasi, dan paket utama booking.",
+                        "tourAction": "Lengkapi detail sesi utama di sini agar booking pertamamu siap disimpan."
+                    },
+                    "submit": {
+                        "tourTitle": "Simpan booking pertamamu",
+                        "tourBody": "Kalau data utama sudah terisi, simpan booking ini untuk menyelesaikan langkah onboarding.",
+                        "tourAction": "Gunakan tombol simpan ini untuk membuat booking pertamamu dan lanjut ke langkah berikutnya."
+                    }
+                }
+            },
+            "bookingsOverview": {
+                "label": "Pantau Halaman Daftar Booking",
+                "description": "Lihat booking yang baru tersimpan dan kenali area daftar booking beserta aksi utamanya.",
+                "tourTitle": "Lihat booking pertamamu di daftar",
+                "tourBody": "Halaman ini menampilkan daftar booking yang sudah masuk, termasuk booking pertama yang baru kamu buat.",
+                "tourAction": "Gunakan area ini untuk mengenali daftar booking, mencari data, dan membuka aksi utama tiap booking."
+            },
+            "clientStatus": {
+                "label": "Pantau Halaman Status Booking",
+                "description": "Setelah ada booking, pantau progres klien dan gunakan link tracking dari halaman status booking.",
+                "tourTitle": "Pantau status booking di sini",
+                "tourBody": "Di halaman ini kamu memantau progres booking, antrian, dan link tracking yang bisa dibagikan ke klien.",
+                "tourAction": "Gunakan tabel atau kartu ini untuk melihat status booking dan mengakses link tracking klien."
+            },
+            "googleCalendar": {
+                "label": "Hubungkan Google Calendar",
+                "description": "Sinkronkan jadwal booking ke Google Calendar agar agenda kerja lebih rapi.",
+                "tourTitle": "Hubungkan Google Calendar",
+                "tourBody": "Hubungkan akun Google jika kamu ingin sinkron kalender berjalan otomatis.",
+                "tourAction": "Gunakan kartu ini untuk menghubungkan Google Calendar dari halaman Pengaturan."
+            },
+            "googleDrive": {
+                "label": "Hubungkan Google Drive",
+                "description": "Sambungkan Google Drive untuk kebutuhan file, QRIS, dan folder kerja otomatis.",
+                "tourTitle": "Hubungkan Google Drive",
+                "tourBody": "Hubungkan akun Google jika kamu ingin file dan folder kerja berjalan otomatis.",
+                "tourAction": "Gunakan kartu ini untuk menghubungkan Google Drive dari halaman Pengaturan."
+            }
+        }
+    },
     "ApiErrors": {
         "unauthorized": "Tidak terautentikasi.",
         "bookingNotFound": "Booking tidak ditemukan.",

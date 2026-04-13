@@ -107,6 +107,11 @@ import {
   normalizeFastpikLinkDisplayMode,
   type FastpikLinkDisplayMode,
 } from "@/lib/fastpik-link-display";
+import {
+  getOnboardingActiveStep,
+  isOnboardingGoogleStep,
+  ONBOARDING_ACTIVE_STEP_EVENT,
+} from "@/lib/onboarding";
 import { useTenant } from "@/lib/tenant-context";
 import {
   isMainClientDeskDomain,
@@ -890,6 +895,35 @@ export default function SettingsPage() {
     message: string;
   }>({ open: false, title: "", message: "" });
   const { showSuccessToast, successToastNode } = useSuccessToast();
+
+  React.useEffect(() => {
+    const syncSettingsTabFromOnboarding = () => {
+      const activeStep = getOnboardingActiveStep();
+      if (activeStep === "studioSettings") {
+        setActiveTab("umum");
+        return;
+      }
+
+      if (isOnboardingGoogleStep(activeStep)) {
+        setActiveTab("google");
+      }
+    };
+
+    syncSettingsTabFromOnboarding();
+    window.addEventListener("storage", syncSettingsTabFromOnboarding);
+    window.addEventListener(
+      ONBOARDING_ACTIVE_STEP_EVENT,
+      syncSettingsTabFromOnboarding,
+    );
+
+    return () => {
+      window.removeEventListener("storage", syncSettingsTabFromOnboarding);
+      window.removeEventListener(
+        ONBOARDING_ACTIVE_STEP_EVENT,
+        syncSettingsTabFromOnboarding,
+      );
+    };
+  }, []);
 
   // Logo studio
   const [logoUrl, setLogoUrl] = React.useState<string | null>(null);
@@ -3505,6 +3539,7 @@ export default function SettingsPage() {
                       value={studioName}
                       onChange={(e) => setStudioName(e.target.value)}
                       placeholder={tp("vendorNamePlaceholder")}
+                      data-onboarding-target="settings-studio-name"
                       className={inputClass}
                     />
                   </div>
@@ -3903,7 +3938,10 @@ export default function SettingsPage() {
               </div>
               <div className="p-6 space-y-4">
                 {/* Google Calendar */}
-                <div className="p-4 rounded-lg border bg-muted/30">
+                <div
+                  className="p-4 rounded-lg border bg-muted/30"
+                  data-onboarding-target="settings-google-calendar"
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-white dark:bg-white/10 flex items-center justify-center border">
                       <GoogleCalendarLogo className="w-7 h-7" />
@@ -4129,7 +4167,10 @@ export default function SettingsPage() {
                 )}
 
                 {/* Google Drive */}
-                <div className="p-4 rounded-lg border bg-muted/30">
+                <div
+                  className="p-4 rounded-lg border bg-muted/30"
+                  data-onboarding-target="settings-google-drive"
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-white dark:bg-white/10 flex items-center justify-center border">
                       <GoogleDriveLogo className="w-7 h-7" />

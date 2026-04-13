@@ -19,6 +19,7 @@ import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import { UpcomingBookingCard } from "@/components/dashboard/dashboard-widgets";
 import { DashboardChangelogPopup } from "@/components/changelog-modal";
 import { CustomDomainPromo } from "@/components/dashboard/custom-domain-promo";
+import { OnboardingQuickSetup } from "@/components/dashboard/onboarding-quick-setup";
 import {
   MaskedCurrencyText,
   MoneyVisibilityToggle,
@@ -31,6 +32,7 @@ import {
   getNetVerifiedRevenueAmount,
   getRemainingFinalPayment,
 } from "@/lib/final-settlement";
+import { buildDashboardOnboardingState } from "@/lib/onboarding";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -61,12 +63,16 @@ export default async function DashboardPage() {
   ).toISOString();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, studio_name")
+    .select(
+      "full_name, studio_name, vendor_slug, form_payment_methods, google_access_token, google_drive_access_token",
+    )
     .eq("id", user.id)
     .single();
   // Dashboard data + changelog are fetched in parallel to keep the page snappy.
   const [
+    { count: activeServicesCount },
     { count: totalBookings },
+    { count: totalTeamMembers },
     { count: monthlyBookings },
     { count: todaySessions },
     { data: recentBookings },
@@ -75,10 +81,20 @@ export default async function DashboardPage() {
     { data: changelogRaw },
   ] = await Promise.all([
     supabase
+      .from("services")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .eq("is_addon", false),
+    supabase
       .from("bookings")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id)
       .neq("status", "Batal"),
+    supabase
+      .from("freelance")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id),
     supabase
       .from("bookings")
       .select("*", { count: "exact", head: true })
@@ -174,6 +190,24 @@ export default async function DashboardPage() {
   );
   const displayName = profile?.full_name || user?.email || "Admin";
   const dateLocale = locale === "en" ? "en-US" : "id-ID";
+  const paymentMethods = Array.isArray(profile?.form_payment_methods)
+    ? profile.form_payment_methods.filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0,
+      )
+    : [];
+  const onboarding = buildDashboardOnboardingState({
+    profileCompleted: Boolean(profile?.full_name?.trim()),
+    studioSettingsCompleted: Boolean(profile?.studio_name?.trim()),
+    servicesCompleted: (activeServicesCount || 0) > 0,
+    teamCompleted: (totalTeamMembers || 0) > 0,
+    formBookingCompleted: Boolean(profile?.vendor_slug?.trim()) && paymentMethods.length > 0,
+    bookingFirstCompleted: (totalBookings || 0) > 0,
+    bookingsOverviewCompleted: false,
+    clientStatusCompleted: false,
+    googleCalendarCompleted: Boolean(profile?.google_access_token),
+    googleDriveCompleted: Boolean(profile?.google_drive_access_token),
+  });
 
   // --- Process 30-day + 12-month chart data server-side ---
   const toLocalKey = (d: Date) =>
@@ -290,6 +324,8 @@ export default async function DashboardPage() {
           👋 {t("welcome", { name: displayName })}
         </h2>
       </div>
+
+      <OnboardingQuickSetup onboarding={onboarding} />
 
       <div className="flex justify-end">
         <MoneyVisibilityToggle className="h-9 px-3" />

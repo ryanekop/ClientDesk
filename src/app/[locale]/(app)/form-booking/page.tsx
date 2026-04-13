@@ -1602,7 +1602,10 @@ export default function FormBookingPage() {
               </div>
 
               {/* Payment Methods */}
-              <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+              <div
+                className="rounded-xl border bg-card text-card-foreground shadow-sm"
+                data-onboarding-target="form-booking-payment-methods"
+              >
                 <div className="px-6 py-4 border-b">
                   <h3 className="font-semibold flex items-center gap-2">
                     <CreditCard className="w-4 h-4" /> Metode Pembayaran

@@ -43,6 +43,7 @@ import {
     toggleSelectAllVisible,
     toggleSelection,
 } from "@/lib/manage-selection";
+import { notifyOnboardingStepUnlocked } from "@/lib/onboarding";
 
 
 type Freelancer = {
@@ -872,6 +873,7 @@ export default function TeamPage() {
             setAddTags([]);
             setTagInput("");
             setAddPricelist(createEmptyPricelist());
+            notifyOnboardingStepUnlocked("team");
             void fetchMembers("refresh");
         }
     }
@@ -1491,9 +1493,17 @@ export default function TeamPage() {
                             }}
                         >
                             <DialogTrigger asChild>
-                                <Button className="order-2 w-full lg:order-1 lg:w-auto"><Plus className="w-4 h-4" /> {t("tambah")}</Button>
+                                <Button
+                                    className="order-2 w-full lg:order-1 lg:w-auto"
+                                    data-onboarding-target="team-add-button"
+                                >
+                                    <Plus className="w-4 h-4" /> {t("tambah")}
+                                </Button>
                             </DialogTrigger>
-                            <DialogContent className="sm:max-w-[780px]">
+                            <DialogContent
+                                className="sm:max-w-[780px]"
+                                data-onboarding-target="team-add-dialog"
+                            >
                                 <DialogHeader>
                                     <DialogTitle>{t("tambahTitle")}</DialogTitle>
                                     <DialogDescription>{t("tambahDesc")}</DialogDescription>
@@ -1501,7 +1511,13 @@ export default function TeamPage() {
                                 <form action={(fd) => handleAdd(fd)} className="grid gap-4 py-4">
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">{t("nama")}</label>
-                                        <input name="name" required placeholder={tt("namePlaceholder")} className={inputClass} />
+                                        <input
+                                            name="name"
+                                            required
+                                            placeholder={tt("namePlaceholder")}
+                                            className={inputClass}
+                                            data-onboarding-target="team-add-dialog-name"
+                                        />
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">{t("peran")}</label>
@@ -1809,7 +1825,7 @@ export default function TeamPage() {
                     <p className="text-muted-foreground text-sm">{hasActiveListFilters ? tt("noResultsDesc") : t("belumAdaDesc")}</p>
                 </div>
             ) : (
-                <>
+                <div data-onboarding-target="team-members-list">
                     {/* Mobile Cards */}
                     <div className="md:hidden space-y-3">
                         {members.map((member) => {
@@ -1969,7 +1985,7 @@ export default function TeamPage() {
                         </div>
                         <TablePagination totalItems={queryState.totalItems} currentPage={queryState.page} itemsPerPage={queryState.perPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} perPageOptions={[...TEAM_PER_PAGE_OPTIONS]} />
                     </div>
-                </>
+                </div>
             )}
 
             {/* Edit Dialog */}

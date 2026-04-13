@@ -79,6 +79,10 @@ import {
     isCityScopedBookingEventType,
 } from "@/lib/service-availability";
 import {
+    getOnboardingActiveStep,
+    setOnboardingActiveStep,
+} from "@/lib/onboarding";
+import {
     buildServiceSoftPalette,
     normalizeHexColor,
     resolveHexColor,
@@ -1069,6 +1073,14 @@ export default function NewBookingPage() {
     const clientCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "client_info")?.items || [];
     const sessionCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "session_details")?.items || [];
     const paymentCustomItems = activeCustomLayoutSections.find(section => section.sectionId === "payment_details")?.items || [];
+    const wisudaDurationOverride = React.useMemo(
+        () =>
+            buildWisudaSessionDurationOverride({
+                session1Minutes: wisudaSession1DurationInput,
+                session2Minutes: wisudaSession2DurationInput,
+            }),
+        [wisudaSession1DurationInput, wisudaSession2DurationInput],
+    );
 
     const toggleFreelancer = (id: string) => {
         setSelectedFreelancerIds(prev => {
@@ -1275,10 +1287,6 @@ export default function NewBookingPage() {
                 showFeedback(tBookingEditor("errorSelectMainPackage"));
                 return;
             }
-            const wisudaDurationOverride = buildWisudaSessionDurationOverride({
-                session1Minutes: wisudaSession1DurationInput,
-                session2Minutes: wisudaSession2DurationInput,
-            });
             if (
                 isWisudaEvent &&
                 isSplitSessionEnabled &&
@@ -1599,7 +1607,13 @@ export default function NewBookingPage() {
             }
 
             void triggerFastpikAutoSync(booking.id);
-            router.push(`/${locale}/bookings/${booking.id}?saved=create`);
+
+            if (getOnboardingActiveStep() === "bookingFirst") {
+                setOnboardingActiveStep("bookingsOverview");
+                router.push(`/${locale}/bookings`);
+            } else {
+                router.push(`/${locale}/bookings/${booking.id}?saved=create`);
+            }
         } finally {
             setSaving(false);
         }
@@ -1633,7 +1647,10 @@ export default function NewBookingPage() {
             <form onSubmit={handleSubmit} className="space-y-6">
                 <fieldset disabled={!canWriteBookings} className="space-y-6">
                 {/* Informasi Klien */}
-                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-4">
+                <div
+                    className="rounded-xl border bg-card p-6 shadow-sm space-y-4"
+                    data-onboarding-target="booking-client-info"
+                >
                     <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                         <Users className="w-4 h-4" /> Informasi Klien
                     </h3>
@@ -1679,7 +1696,10 @@ export default function NewBookingPage() {
                                     ? tBookingEditor(`extraFieldLabels.${fieldLabelKey}`)
                                     : f.label;
                                 return (
-                                <div key={f.key} className={`space-y-1.5 ${f.isLocation || f.fullWidth || currentExtraFields.length === 1 ? "col-span-full" : ""}`}>
+                                <div
+                                    key={f.key}
+                                    className={`space-y-1.5 ${f.isLocation || f.fullWidth || currentExtraFields.length === 1 ? "col-span-full" : ""}`}
+                                >
                                     <label className="text-xs font-medium text-muted-foreground">{fieldLabel}{f.required && <span className="text-red-500 ml-0.5">*</span>}</label>
                                     {f.key === UNIVERSITY_EXTRA_FIELD_KEY ? (
                                         <UniversityAutocomplete
@@ -1752,7 +1772,10 @@ export default function NewBookingPage() {
                 </div>
 
                 {/* Detail Sesi */}
-                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-4">
+                <div
+                    className="rounded-xl border bg-card p-6 shadow-sm space-y-4"
+                    data-onboarding-target="booking-session-details"
+                >
                     <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                         <CalendarClock className="w-4 h-4" /> Detail Sesi
                     </h3>
@@ -1980,7 +2003,10 @@ export default function NewBookingPage() {
                                         ? tBookingEditor(`extraFieldLabels.${fieldLabelKey}`)
                                         : field.label;
                                     return (
-                                        <div key={field.key} className="space-y-1.5">
+                                        <div
+                                            key={field.key}
+                                            className="space-y-1.5"
+                                        >
                                             <label className="text-xs font-medium text-muted-foreground">
                                                 {fieldLabel}
                                                 {field.required && (
@@ -2487,7 +2513,10 @@ export default function NewBookingPage() {
 
                 </fieldset>
 
-                <div className="flex gap-3 justify-end pt-4">
+                <div
+                    className="flex gap-3 justify-end pt-4"
+                    data-onboarding-target="booking-submit-actions"
+                >
                     <Link href="/bookings"><Button type="button" variant="ghost" className="text-muted-foreground hover:text-foreground">Batal</Button></Link>
                     <Button type="submit" disabled={saving || !canWriteBookings} className="gap-2 bg-foreground text-background hover:bg-foreground/90 px-8">
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

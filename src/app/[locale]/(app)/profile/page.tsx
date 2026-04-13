@@ -307,7 +307,10 @@ export default function ProfilePage() {
                     </div>
 
                     {/* Name */}
-                    <div className="space-y-2">
+                    <div
+                        className="space-y-2"
+                        data-onboarding-target="profile-name-field"
+                    >
                         <label className="text-sm font-medium">{t("nama")}</label>
                         <input
                             value={fullName}
