@@ -127,10 +127,12 @@ function ReviewSetupDialogContent({
   onboarding,
   onClose,
   onStartTour,
+  onOpenTutorial,
 }: {
   onboarding: DashboardOnboardingState;
   onClose: () => void;
   onStartTour: (stepId: OnboardingStepId) => void;
+  onOpenTutorial: () => void;
 }) {
   const t = useTranslations("Onboarding");
 
@@ -265,6 +267,9 @@ function ReviewSetupDialogContent({
       </div>
 
       <DialogFooter>
+        <Button variant="outline" onClick={onOpenTutorial}>
+          {t("reviewModal.openTutorial")}
+        </Button>
         <Button variant="outline" onClick={onClose}>
           {t("overlay.close")}
         </Button>
@@ -415,6 +420,11 @@ export function OnboardingQuickSetup({
     [startTour],
   );
 
+  const handleOpenTutorial = React.useCallback(() => {
+    setReviewModalOpen(false);
+    router.push("/tutorial");
+  }, [router]);
+
   if (!resolvedOnboarding.shouldShowChecklist) {
     return (
       <>
@@ -423,6 +433,7 @@ export function OnboardingQuickSetup({
             onboarding={resolvedOnboarding}
             onClose={() => setReviewModalOpen(false)}
             onStartTour={handleStartTourFromReview}
+            onOpenTutorial={handleOpenTutorial}
           />
         </Dialog>
       </>
@@ -657,6 +668,7 @@ export function OnboardingQuickSetup({
           onboarding={resolvedOnboarding}
           onClose={() => setReviewModalOpen(false)}
           onStartTour={handleStartTourFromReview}
+          onOpenTutorial={handleOpenTutorial}
         />
       </Dialog>
     </>

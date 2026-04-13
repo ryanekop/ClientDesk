@@ -13,6 +13,7 @@ import {
   LogOut,
   Megaphone,
   Sparkles,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, usePathname, useRouter } from "@/i18n/routing";
@@ -177,6 +178,11 @@ export function Topbar({ onMenuClick }: TopbarProps) {
     }
   }, [pathname, router]);
 
+  const handleOpenTutorial = React.useCallback(() => {
+    setProfileOpen(false);
+    router.push("/tutorial");
+  }, [router]);
+
   return (
     <>
     {/* Topbar stays at top-0 here; announcement offset is already handled by DashboardLayout container. */}
@@ -275,6 +281,14 @@ export function Topbar({ onMenuClick }: TopbarProps) {
               >
                 <Sparkles className="w-4 h-4 text-muted-foreground" />
                 {tOnboarding("reviewSetup")}
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenTutorial}
+                className="flex w-full items-center gap-3 px-4 py-2 text-sm hover:bg-muted/50 transition-colors"
+              >
+                <BookOpen className="w-4 h-4 text-muted-foreground" />
+                {t("tutorial")}
               </button>
               {menuItems.slice(3).map((item) => (
                 <Link

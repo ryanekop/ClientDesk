@@ -44,6 +44,7 @@
         "profil": "Profile",
         "dashboard": "Dashboard",
         "paket": "Packages",
+        "tutorial": "Tutorial",
         "pengaturan": "Settings",
         "logout": "Log out"
     },
@@ -63,6 +64,7 @@
         "formSettlement": "Settlement Form",
         "formSpecialBooking": "Special Booking Form",
         "statusBooking": "Booking Status",
+        "tutorial": "Tutorial",
         "changelog": "Changelog",
         "settings": "Settings",
         "profile": "Profile"
@@ -1798,7 +1800,8 @@
         "reviewModal": {
             "title": "Client Desk setup progress",
             "description": "Review the steps you've completed and reopen any guide you still want to follow.",
-            "progressDescription": "You can continue from the next step or reopen a specific guide anytime."
+            "progressDescription": "You can continue from the next step or reopen a specific guide anytime.",
+            "openTutorial": "Open Tutorial"
         },
         "tourLabel": "Guided step",
         "back": "Back",
@@ -1903,6 +1906,386 @@
                 "tourTitle": "Connect Google Drive",
                 "tourBody": "Connect your Google account if you want files and work folders to run automatically.",
                 "tourAction": "Use this card to connect Google Drive from the Settings page."
+            }
+        }
+    },
+    "Tutorial": {
+        "badge": "Tutorial",
+        "title": "Learn Client Desk in more depth without repeating the basic setup",
+        "description": "This page helps you understand feature purpose, workflow, and best practices after your basic setup is done or already underway.",
+        "openSetup": "Open Setup Guide",
+        "openFaq": "Open FAQ",
+        "readTutorial": "Read tutorial",
+        "backToTutorial": "Back to tutorial list",
+        "antiDuplication": "Tutorial focuses on context, when to use each feature, and the best workflow. Setup Guide remains the place for step-by-step interactive directions.",
+        "topicsTitle": "Tutorial Topics",
+        "topicsDescription": "Start with the core workflow, then go deeper into the features you will use most often day to day.",
+        "stepsTitle": "How to use it / click-by-click flow",
+        "stepsDescription": "Follow this sequence when you want to try the feature directly inside the app.",
+        "stepResultLabel": "Expected result:",
+        "notesTitle": "Additional notes",
+        "notesDescription": "These points help you use the feature more cleanly without repeating the interactive onboarding flow.",
+        "detailSectionTitles": {
+            "understand": "What to understand",
+            "whenToUse": "When to use it",
+            "quickTips": "Quick tips"
+        },
+        "surfaces": {
+            "setupTitle": "Setup Guide",
+            "setupDescription": "Best for new users who want interactive guidance through the setup steps inside the app.",
+            "tutorialTitle": "Tutorial",
+            "tutorialDescription": "Best for users who want to understand feature purpose, compare workflows, and learn best practices without a spotlight tour."
+        },
+        "topics": {
+            "overview": {
+                "title": "Getting to know Client Desk",
+                "description": "Understand the main menu structure, the core work areas, and how each page supports your daily operations.",
+                "details": {
+                    "understand": "Client Desk is split into setup, booking operations, status monitoring, and finance. Understanding what each page is for makes it much easier to know where to start when new work comes in.",
+                    "whenToUse": "This topic is most useful when you are just starting with the app, onboarding a new admin, or trying to make your team's daily workflow more consistent.",
+                    "quickTips": "Start from Dashboard for the overview, use Bookings for daily operations, use Booking Status for client-facing progress, and use Tutorial when you want context before changing your workflow."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Open Dashboard as your operational starting point",
+                        "description": "Use Dashboard to see booking summaries, upcoming work, and quick access to the most important pages.",
+                        "result": "You immediately understand today's studio condition without opening every menu one by one."
+                    },
+                    "step2": {
+                        "title": "Learn the main menu in the sidebar",
+                        "description": "Review pages like Bookings, Services / Packages, Booking Form, Team / Freelance, Finance, and Booking Status.",
+                        "result": "You can distinguish which pages are for setup and which pages are for day-to-day operations."
+                    },
+                    "step3": {
+                        "title": "Open one booking from the Bookings page",
+                        "description": "Go to Bookings and open one entry to see how client details, session data, and payments are structured together.",
+                        "result": "You understand that booking detail is the central record for one client."
+                    },
+                    "step4": {
+                        "title": "Use Tutorial when you need context, not just setup",
+                        "description": "If you are unsure what a page is for, open Tutorial. If you only want to complete setup tasks, open Setup Guide.",
+                        "result": "You know when to use the interactive guide and when to read the deeper documentation."
+                    }
+                },
+                "notes": {
+                    "note1": "If a new admin is joining the team, this is a good first topic before moving to more specific tutorials.",
+                    "note2": "This tutorial explains the product flow, but it still works best when paired with direct hands-on use of the pages you open every day."
+                }
+            },
+            "workflow": {
+                "title": "How the booking workflow runs from start to finish",
+                "description": "Learn the overall flow from incoming leads, booking creation, session execution, all the way to status and payment follow-up.",
+                "details": {
+                    "understand": "The main Client Desk flow usually starts from a booking form or manual booking entry, then continues into session setup, team assignment, progress tracking, and payment completion. Each page supports one part of that journey.",
+                    "whenToUse": "Use this topic when you want to make sure your internal process matches the way the app is designed to be used, or when you want to reduce repeated manual steps.",
+                    "quickTips": "Pick one consistent main workflow for all bookings. The more uniform your process is from start to finish, the easier it is for the team to read statuses and avoid scattered data."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Decide how bookings enter the system first",
+                        "description": "Choose whether bookings should come from the public Booking Form or be created manually by the admin from the dashboard.",
+                        "result": "The team has a clear intake path before client data moves further."
+                    },
+                    "step2": {
+                        "title": "Complete booking and session information",
+                        "description": "Fill in client identity, event type, schedule, location, and main package so the booking is operationally ready.",
+                        "result": "The booking already has enough core information to be monitored and worked on."
+                    },
+                    "step3": {
+                        "title": "Monitor the booking from Bookings and Booking Status",
+                        "description": "Use Bookings for internal admin operations and Booking Status for progress visibility and client tracking.",
+                        "result": "You separate internal workflow needs from client-facing progress monitoring."
+                    },
+                    "step4": {
+                        "title": "Follow up payments and closing work",
+                        "description": "As the booking progresses, use finance and status pages to keep deposits, settlement, and progress aligned.",
+                        "result": "The full flow from intake to completion can be monitored end to end in one system."
+                    }
+                },
+                "notes": {
+                    "note1": "The more consistent your intake path and data entry habits are, the easier it becomes for admins to search and update bookings.",
+                    "note2": "If your internal studio process changes, revisit this topic to make sure the workflow still fits the way Client Desk is structured."
+                }
+            },
+            "formVsManual": {
+                "title": "When to use Booking Form vs manual booking",
+                "description": "See when it is more efficient to let clients submit their own form and when the admin should create the booking manually.",
+                "details": {
+                    "understand": "Booking Form works best for direct incoming leads, while manual booking is better when data comes from chat, phone calls, referrals, or offline events that the admin needs to record manually.",
+                    "whenToUse": "Use the public form when you want cleaner self-service input from clients. Use manual booking when the admin needs full control from the beginning or when the lead did not come through the form.",
+                    "quickTips": "Choose one primary path for your studio. Many teams use the public form for new leads and reserve manual booking only for exceptions so the data stays more consistent."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Open Booking Form to check whether the public flow is ready",
+                        "description": "Review the form link, payment methods, and basic form setup if you want clients to submit their own booking details.",
+                        "result": "You know whether the public form is ready to share or still needs adjustments."
+                    },
+                    "step2": {
+                        "title": "Use manual booking when the admin owns the intake",
+                        "description": "Go to booking creation when the lead comes from chat, phone, or referrals and needs to be entered by the admin.",
+                        "result": "Client data still gets recorded inside the system even if it did not come through the public form."
+                    },
+                    "step3": {
+                        "title": "Compare control needs against efficiency",
+                        "description": "Share the Booking Form when you want a cleaner and more repeatable intake flow. Use manual booking when the admin must control details from the start.",
+                        "result": "The team can choose the right intake path based on the real context, not a one-size-fits-all rule."
+                    },
+                    "step4": {
+                        "title": "Set one consistent team habit",
+                        "description": "Align the team on when to send the form and when to create bookings manually so data does not stay scattered outside the app.",
+                        "result": "Your intake flow becomes easier to follow and more consistent across admins."
+                    }
+                },
+                "notes": {
+                    "note1": "If your studio often receives leads through WhatsApp, manual booking will usually remain useful even when the public form is active.",
+                    "note2": "Booking Form and manual booking are not competing features. They are two intake paths you can use for different situations."
+                }
+            },
+            "servicesPackages": {
+                "title": "How to structure services, main packages, and add-ons",
+                "description": "Learn how to build a clear service catalog so clients can easily understand package choices, pricing, and add-ons.",
+                "details": {
+                    "understand": "Main packages are the core choices clients compare first, while add-ons are supporting extras. A clear structure helps both the booking form and the admin team understand client needs faster.",
+                    "whenToUse": "This topic matters when you are building your catalog for the first time, adding new offers, or noticing that clients often get confused by your package options.",
+                    "quickTips": "Keep main packages simple and easy to compare, then place extra options as add-ons. Avoid too many similar packages because they make both the client journey and admin input more confusing."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Open Services / Packages",
+                        "description": "Go to the Services / Packages page to review all active main packages and add-ons in your account.",
+                        "result": "You get one clear place to structure your studio catalog."
+                    },
+                    "step2": {
+                        "title": "Click add to create a main package first",
+                        "description": "Start with one core service that has a clear name, price, duration, and description.",
+                        "result": "Clients have an easy main option to compare and select."
+                    },
+                    "step3": {
+                        "title": "Use add-ons only for supporting extras",
+                        "description": "Keep optional extras separate instead of turning everything into a standalone main package.",
+                        "result": "Your offer structure stays cleaner for both clients and admins."
+                    },
+                    "step4": {
+                        "title": "Review the result from the booking form perspective",
+                        "description": "After saving services, open Booking Form or preview the flow to check if package order and choices still feel easy to understand.",
+                        "result": "The catalog works not only in admin view, but also from the client's point of view."
+                    }
+                },
+                "notes": {
+                    "note1": "If clients often struggle to choose, the issue is usually not just the number of packages but how unclear the differences feel.",
+                    "note2": "Main packages should carry the main decision, while add-ons help refine the offer without making the catalog feel noisy."
+                }
+            },
+            "teamAssignment": {
+                "title": "How to manage team/freelance and assignments",
+                "description": "Understand when to add team members, how assignment data is used, and why team data matters for smoother operations.",
+                "details": {
+                    "understand": "Team and freelance data acts as the foundation for assignments, collaboration, and clarity on who is involved in each booking. It reduces dependence on scattered chat notes.",
+                    "whenToUse": "This topic becomes important when your studio starts involving editors, photographers, videographers, or freelance partners who should be tracked more systematically.",
+                    "quickTips": "Add the members who are genuinely part of regular operations first. Once the structure is clear, build the habit of reading assignments from the app instead of relying on fragmented chat threads."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Open Team / Freelance",
+                        "description": "Visit the Team / Freelance page to see which members are already available for collaborative work.",
+                        "result": "You can compare the team structure in the app with your real studio workflow."
+                    },
+                    "step2": {
+                        "title": "Click add member and fill in the basics",
+                        "description": "Enter name, role, contact details, and any practical information the team needs to recognize that member quickly.",
+                        "result": "Your first team member or freelancer is ready to be referenced inside the app."
+                    },
+                    "step3": {
+                        "title": "Use team data once bookings become collaborative",
+                        "description": "When a booking needs task distribution, rely on the members already recorded instead of depending only on chat threads.",
+                        "result": "Assignments become easier to trace and manage."
+                    },
+                    "step4": {
+                        "title": "Keep the member list relevant",
+                        "description": "Add the people who are actively used and keep the list tidy so the page stays operationally useful.",
+                        "result": "The team page remains clean and practical instead of becoming an outdated archive."
+                    }
+                },
+                "notes": {
+                    "note1": "You will feel the value of clean team data much more once booking volume grows and one booking involves multiple people.",
+                    "note2": "If you do not yet manage assignments from the app, start with member records first. Assignment habits can be built gradually."
+                }
+            },
+            "bookingList": {
+                "title": "How to read the Bookings page",
+                "description": "Understand the bookings list as the place to find data quickly, monitor high-level progress, and access each booking's main actions.",
+                "details": {
+                    "understand": "The Bookings page is the operational home base for finding clients, opening booking details, checking schedules, and accessing fast actions. It is usually the page admins visit most often.",
+                    "whenToUse": "Use this topic when you want to understand how to scan all active bookings, find a specific client quickly, or move into booking details without jumping across too many screens.",
+                    "quickTips": "Treat the Bookings page as a working surface, not just a list. Use search, status cues, and fast actions to help the admin team respond faster to daily client needs."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Open Bookings from the sidebar",
+                        "description": "Go to the Bookings page to see all active and recent bookings in one place.",
+                        "result": "You immediately get a high-level picture of work that is already in motion."
+                    },
+                    "step2": {
+                        "title": "Use search or visual status cues as data grows",
+                        "description": "Search for client names or booking codes, and use visible status markers to spot the bookings that need attention.",
+                        "result": "Admins can find relevant bookings faster instead of scanning manually."
+                    },
+                    "step3": {
+                        "title": "Open the booking you want to inspect",
+                        "description": "Click into a booking to review client data, session details, services, payments, and related files more fully.",
+                        "result": "You move from the operational overview into the full record for one client quickly."
+                    },
+                    "step4": {
+                        "title": "Use this page as your daily operating base",
+                        "description": "Whenever there is a question or follow-up task, start from Bookings before moving into a more specific page.",
+                        "result": "The team shares one consistent starting point for day-to-day admin work."
+                    }
+                },
+                "notes": {
+                    "note1": "This page is best for quick internal operations, while Booking Status is better when you need to focus on progress and client tracking.",
+                    "note2": "If admins often struggle to find data, the habit of using Bookings as the primary work surface is usually not yet strong enough."
+                }
+            },
+            "bookingStatus": {
+                "title": "How to read the Booking Status page",
+                "description": "Understand the status page for managing client progress, queue order, and the tracking link you can share.",
+                "details": {
+                    "understand": "Booking Status is focused on progress and client tracking rather than the full admin detail of a booking. It helps admins monitor work stages and gives clients better visibility through a tracking link.",
+                    "whenToUse": "This topic matters once bookings are already in progress and you need to manage queue position, update progress, or reduce repeated status questions from clients.",
+                    "quickTips": "Keep booking statuses accurate and updated. The more consistently the team maintains progress states, the lighter the manual follow-up burden becomes because clients can rely on the tracking link."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Open Booking Status once work is in progress",
+                        "description": "Visit the Booking Status page to review current progress and active queue positions across clients.",
+                        "result": "You can monitor active work without opening every booking detail individually."
+                    },
+                    "step2": {
+                        "title": "Check status labels and queue ordering",
+                        "description": "Look at the visible statuses and queue information to understand what stage each booking is currently in.",
+                        "result": "Admins can quickly see which bookings need updates or should be prioritized."
+                    },
+                    "step3": {
+                        "title": "Use the tracking link when clients ask for updates",
+                        "description": "When a client asks about progress, use the tracking link from this page so they can monitor their booking more independently.",
+                        "result": "Repeated manual progress updates through chat can decrease."
+                    },
+                    "step4": {
+                        "title": "Update statuses regularly based on real progress",
+                        "description": "Make it a team habit to update statuses when work actually moves stages instead of waiting until the end.",
+                        "result": "The status page stays accurate and genuinely useful for both the team and clients."
+                    }
+                },
+                "notes": {
+                    "note1": "If statuses are rarely updated, the tracking link still exists but becomes much less valuable because the information gets stale quickly.",
+                    "note2": "Booking Status works best as an everyday operational habit, not only as a page you open when there is a complaint or a question."
+                }
+            },
+            "finance": {
+                "title": "How to read finance, deposits, and settlement",
+                "description": "Learn how Client Desk surfaces revenue, deposits, settlement, and payment indicators that still need attention.",
+                "details": {
+                    "understand": "The finance area helps you see incoming money, deposit status, remaining settlement, and overall revenue signals without relying on separate notes. It is designed around booking-related financial visibility.",
+                    "whenToUse": "Open this topic when you want admins to understand the difference between deposit, settlement, and the indicators that mean a payment still needs follow-up.",
+                    "quickTips": "Use finance as a monitoring layer, then make sure payment updates happen as soon as a transaction is verified. Faster updates make reporting and follow-up much more reliable."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Open Finance to review payment summaries",
+                        "description": "Use the Finance page to monitor revenue, deposits, and settlement items that still need attention.",
+                        "result": "You get a clearer financial picture from one page."
+                    },
+                    "step2": {
+                        "title": "Separate deposits, settlement, and follow-up signals",
+                        "description": "Identify which bookings have only deposit paid, which are close to settlement, and which still need payment follow-up.",
+                        "result": "Admins can decide which bookings should be verified or reminded next."
+                    },
+                    "step3": {
+                        "title": "Open booking detail when the numbers need context",
+                        "description": "If a payment figure or label needs verification, move into the relevant booking detail for the full transaction context.",
+                        "result": "Finance data stays grounded in the underlying booking information."
+                    },
+                    "step4": {
+                        "title": "Update payments as soon as transactions are confirmed",
+                        "description": "Do not delay deposit or settlement updates if the payment is already verified.",
+                        "result": "Your finance monitoring stays much more accurate day to day."
+                    }
+                },
+                "notes": {
+                    "note1": "The faster payments are verified and recorded, the lower the chance that admins will misread the real financial state during busy periods.",
+                    "note2": "The finance page is best treated as an operational monitoring layer, not as a full accounting replacement."
+                }
+            },
+            "googleIntegration": {
+                "title": "Google Calendar and Google Drive integrations",
+                "description": "Understand when Google integrations are useful and the practical value for syncing schedules, files, and collaborative work.",
+                "details": {
+                    "understand": "Google integrations add automation, especially for schedules and files. They are not required to use Client Desk, but they become very helpful once the workload increases and collaboration gets more complex.",
+                    "whenToUse": "Consider these integrations when your studio starts coordinating more team schedules, needs more structured file handling, or wants to reduce repeated copy-paste into external tools.",
+                    "quickTips": "Finish your core setup first before connecting Google. Once the basic workflow is stable, use integrations to save time and keep data more consistent across tools."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Open Settings after the core setup is stable",
+                        "description": "Go to Settings to review the available Google Calendar and Google Drive integrations.",
+                        "result": "You can judge whether your studio is ready for extra automation."
+                    },
+                    "step2": {
+                        "title": "Connect Google Calendar if scheduling needs syncing",
+                        "description": "Enable calendar connection once the team needs more centralized and consistent schedule visibility.",
+                        "result": "Work agendas become easier to read across tools without manual copying."
+                    },
+                    "step3": {
+                        "title": "Connect Google Drive if file handling is getting complex",
+                        "description": "Use Drive integration when the studio needs more structured folders and more automated file handling.",
+                        "result": "Working files become easier to organize and trace."
+                    },
+                    "step4": {
+                        "title": "Evaluate the integration after a few real bookings",
+                        "description": "Review whether the integration actually saves time and reduces repeated manual work.",
+                        "result": "You can confirm that the integration is useful in practice, not just enabled."
+                    }
+                },
+                "notes": {
+                    "note1": "Google integrations are optional extras. The studio can still run the core Client Desk workflow without turning them on immediately.",
+                    "note2": "The clearer your operational needs are, the easier it is to decide whether Calendar, Drive, or both are really necessary."
+                }
+            },
+            "dailyTips": {
+                "title": "Daily usage tips and FAQ",
+                "description": "A practical wrap-up of habits that keep your dashboard tidy, your data organized, and common questions easy to answer.",
+                "details": {
+                    "understand": "Daily tips help the team use Client Desk consistently, not just understand features in theory. Small habits like updating status quickly or entering complete data early have a big impact on operational clarity.",
+                    "whenToUse": "This topic is useful after the basic setup is done and the team starts using the app every day. It also helps when the workflow begins to feel messy again.",
+                    "quickTips": "Use Tutorial and FAQ as references for repeated questions, then reinforce simple team habits: clean input, timely updates, and using the right page for the right kind of work."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Start the day from Dashboard or Bookings",
+                        "description": "Open a high-level overview first before diving into detail so the team knows what deserves attention today.",
+                        "result": "Your workday starts from a clear picture instead of random reactions to incoming chat."
+                    },
+                    "step2": {
+                        "title": "Enter complete data as early as possible",
+                        "description": "When creating or updating a booking, try to capture the core information up front instead of postponing it.",
+                        "result": "Bookings are easier to process and the next admin does not have to guess missing details."
+                    },
+                    "step3": {
+                        "title": "Update status and payments as soon as they change",
+                        "description": "Do not wait too long to update booking progress or payment states once the real change has happened.",
+                        "result": "Operational pages stay accurate enough for the rest of the team to trust."
+                    },
+                    "step4": {
+                        "title": "Use Tutorial and FAQ as shared references",
+                        "description": "When the same questions appear repeatedly, point the team to Tutorial or FAQ instead of rewriting the same explanations in chat.",
+                        "result": "Operational knowledge becomes easier to share and maintain."
+                    }
+                },
+                "notes": {
+                    "note1": "Clean operations are usually shaped less by advanced features and more by small habits that stay consistent every day.",
+                    "note2": "This tutorial becomes much more useful when the team treats it as a shared reference instead of something that is read once and forgotten."
+                }
             }
         }
     },

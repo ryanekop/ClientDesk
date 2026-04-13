@@ -44,6 +44,7 @@
         "profil": "Profil",
         "dashboard": "Dashboard",
         "paket": "Paket",
+        "tutorial": "Tutorial",
         "pengaturan": "Pengaturan",
         "logout": "Log out"
     },
@@ -63,6 +64,7 @@
         "formSettlement": "Form Pelunasan",
         "formSpecialBooking": "Form Booking Khusus",
         "statusBooking": "Status Booking",
+        "tutorial": "Tutorial",
         "changelog": "Log Perubahan",
         "settings": "Pengaturan",
         "profile": "Profil"
@@ -1798,7 +1800,8 @@
         "reviewModal": {
             "title": "Progress setup Client Desk",
             "description": "Lihat langkah yang sudah selesai dan buka lagi panduan yang masih ingin kamu ikuti.",
-            "progressDescription": "Kamu bisa lanjut dari langkah berikutnya atau membuka ulang panduan tertentu."
+            "progressDescription": "Kamu bisa lanjut dari langkah berikutnya atau membuka ulang panduan tertentu.",
+            "openTutorial": "Buka Tutorial"
         },
         "tourLabel": "Panduan langkah",
         "back": "Kembali",
@@ -1903,6 +1906,386 @@
                 "tourTitle": "Hubungkan Google Drive",
                 "tourBody": "Hubungkan akun Google jika kamu ingin file dan folder kerja berjalan otomatis.",
                 "tourAction": "Gunakan kartu ini untuk menghubungkan Google Drive dari halaman Pengaturan."
+            }
+        }
+    },
+    "Tutorial": {
+        "badge": "Tutorial",
+        "title": "Pelajari Client Desk lebih lengkap tanpa mengulang setup dasar",
+        "description": "Halaman ini membantu kamu memahami fungsi fitur, alur kerja, dan best practice penggunaan Client Desk setelah setup awal selesai atau sudah mulai berjalan.",
+        "openSetup": "Buka Panduan Setup",
+        "openFaq": "Buka FAQ",
+        "readTutorial": "Baca tutorial",
+        "backToTutorial": "Kembali ke daftar tutorial",
+        "antiDuplication": "Tutorial fokus pada konteks, kapan fitur dipakai, dan cara kerja terbaiknya. Panduan Setup tetap dipakai untuk arahan klik langkah demi langkah.",
+        "topicsTitle": "Topik Tutorial",
+        "topicsDescription": "Mulai dari pemahaman alur dasar, lalu dalami fitur yang paling sering dipakai sehari-hari.",
+        "stepsTitle": "Cara pakai / langkah klik",
+        "stepsDescription": "Ikuti urutan ini kalau kamu ingin langsung mencoba fitur di dalam aplikasi.",
+        "stepResultLabel": "Hasil yang diharapkan:",
+        "notesTitle": "Catatan lanjutan",
+        "notesDescription": "Poin ini membantu kamu memakai fitur dengan lebih rapi tanpa mengulang onboarding interaktif.",
+        "detailSectionTitles": {
+            "understand": "Yang perlu dipahami",
+            "whenToUse": "Kapan dipakai",
+            "quickTips": "Tips singkat"
+        },
+        "surfaces": {
+            "setupTitle": "Panduan Setup",
+            "setupDescription": "Cocok untuk user baru yang ingin langsung diarahkan ke langkah setup interaktif di dalam aplikasi.",
+            "tutorialTitle": "Tutorial",
+            "tutorialDescription": "Cocok untuk user yang ingin memahami fungsi fitur, membandingkan alur kerja, dan belajar best practice tanpa spotlight tour."
+        },
+        "topics": {
+            "overview": {
+                "title": "Kenalan dengan Client Desk",
+                "description": "Pahami struktur menu utama, area kerja inti, dan bagaimana tiap halaman saling terhubung dalam operasional harian.",
+                "details": {
+                    "understand": "Client Desk dibagi ke area setup, operasional booking, monitoring status, dan keuangan. Memahami fungsi tiap halaman akan membuat kamu lebih cepat tahu harus mulai dari mana saat ada pekerjaan baru masuk.",
+                    "whenToUse": "Topik ini paling berguna saat baru mulai memakai aplikasi, saat onboarding tim admin baru, atau saat kamu ingin merapikan kebiasaan kerja agar tidak bolak-balik antar halaman tanpa arah.",
+                    "quickTips": "Mulai dari Dashboard untuk ringkasan, pakai Daftar Booking untuk operasional harian, Status Booking untuk progress klien, dan Tutorial ini untuk memahami konteks fitur sebelum mengubah alur kerja."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Buka Dashboard sebagai titik awal operasional",
+                        "description": "Masuk ke Dashboard untuk melihat ringkasan booking, agenda terdekat, dan akses cepat ke halaman-halaman penting.",
+                        "result": "Kamu langsung tahu kondisi studio hari ini tanpa harus membuka semua menu satu per satu."
+                    },
+                    "step2": {
+                        "title": "Kenali menu utama di sidebar kiri",
+                        "description": "Lihat urutan menu seperti Daftar Booking, Layanan / Paket, Form Booking, Tim / Freelance, Keuangan, dan Status Booking.",
+                        "result": "Kamu paham halaman mana yang dipakai untuk setup, mana yang dipakai untuk operasional harian."
+                    },
+                    "step3": {
+                        "title": "Buka satu booking dari halaman Daftar Booking",
+                        "description": "Masuk ke Daftar Booking lalu klik salah satu booking untuk melihat bagaimana detail klien, sesi, dan pembayaran disusun.",
+                        "result": "Kamu memahami bahwa detail booking adalah pusat informasi satu klien secara menyeluruh."
+                    },
+                    "step4": {
+                        "title": "Gunakan Tutorial saat butuh konteks, bukan saat hanya butuh setup",
+                        "description": "Kalau kamu bingung fungsi halaman tertentu, buka Tutorial. Kalau kamu hanya ingin dituntun menyelesaikan setup, buka Panduan Setup.",
+                        "result": "Kamu bisa membedakan kapan memakai panduan interaktif dan kapan membaca tutorial yang lebih lengkap."
+                    }
+                },
+                "notes": {
+                    "note1": "Kalau tim admin baru mulai memakai aplikasi, topik ini cocok dijadikan bacaan pertama sebelum pindah ke tutorial yang lebih spesifik.",
+                    "note2": "Tutorial ini membantu memahami alur produk, tetapi tetap tidak menggantikan kebiasaan eksplorasi langsung di halaman yang dipakai setiap hari."
+                }
+            },
+            "workflow": {
+                "title": "Cara kerja alur booking dari awal sampai selesai",
+                "description": "Pelajari urutan kerja dari lead masuk, booking dibuat, sesi berjalan, sampai status dan pembayaran selesai dikelola.",
+                "details": {
+                    "understand": "Alur utama Client Desk biasanya dimulai dari form booking atau input manual, lalu berlanjut ke pengaturan sesi, penugasan tim, monitoring progress, dan penyelesaian pembayaran. Setiap halaman mendukung satu tahap dalam alur itu.",
+                    "whenToUse": "Topik ini cocok dibuka saat kamu ingin memastikan proses internal studio sudah sejalan dengan fitur aplikasi, atau saat ingin mengurangi langkah kerja manual yang berulang.",
+                    "quickTips": "Gunakan satu alur kerja utama yang konsisten untuk semua booking. Semakin seragam proses dari awal sampai selesai, semakin mudah tim membaca status booking dan menghindari data tercecer."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Tentukan sumber booking masuk terlebih dulu",
+                        "description": "Putuskan apakah booking akan datang dari Form Booking publik atau dibuat manual dari dashboard oleh admin.",
+                        "result": "Tim punya jalur masuk yang jelas sebelum data klien diproses lebih lanjut."
+                    },
+                    "step2": {
+                        "title": "Lengkapi data booking dan sesi",
+                        "description": "Isi identitas klien, tipe acara, jadwal, lokasi, dan paket utama agar booking siap diproses secara operasional.",
+                        "result": "Booking pertama sudah punya informasi inti yang cukup untuk dipantau dan dikerjakan."
+                    },
+                    "step3": {
+                        "title": "Pantau booking dari Daftar Booking dan Status Booking",
+                        "description": "Gunakan Daftar Booking untuk operasional admin dan halaman Status Booking untuk melihat progres serta tracking klien.",
+                        "result": "Kamu bisa memisahkan kebutuhan kerja internal dan kebutuhan monitoring progres klien."
+                    },
+                    "step4": {
+                        "title": "Tindak lanjuti pembayaran dan penyelesaian kerja",
+                        "description": "Setelah booking berjalan, pakai halaman keuangan dan status untuk memastikan DP, pelunasan, dan progres kerja tetap sinkron.",
+                        "result": "Alur dari booking masuk sampai selesai dapat dipantau end-to-end dalam satu sistem."
+                    }
+                },
+                "notes": {
+                    "note1": "Semakin konsisten sumber booking dan cara input datanya, semakin ringan pekerjaan admin saat mencari dan memperbarui data.",
+                    "note2": "Kalau alur internal studiomu berubah, buka topik ini lagi untuk memastikan urutan kerja tetap nyambung dengan struktur halaman Client Desk."
+                }
+            },
+            "formVsManual": {
+                "title": "Kapan pakai Form Booking vs booking manual",
+                "description": "Kenali kapan lebih efisien membiarkan klien isi form sendiri dan kapan admin perlu membuat booking manual dari dashboard.",
+                "details": {
+                    "understand": "Form Booking cocok untuk lead masuk yang datang langsung dari klien, sedangkan booking manual cocok untuk transaksi yang datang dari chat, telepon, referral, atau event offline yang perlu dicatat admin.",
+                    "whenToUse": "Pakai Form Booking saat kamu ingin proses input lebih mandiri dan rapi. Pakai booking manual saat admin perlu mengontrol detail dari awal atau saat data klien datang tidak melalui form publik.",
+                    "quickTips": "Tentukan jalur utama di studio kamu. Banyak tim memakai form publik untuk lead baru dan booking manual hanya untuk kasus khusus agar data lebih konsisten."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Buka halaman Form Booking untuk mengecek kesiapan form publik",
+                        "description": "Pastikan link form, metode pembayaran, dan tampilan dasarnya sudah siap jika kamu ingin menerima input langsung dari klien.",
+                        "result": "Kamu tahu apakah form publik sudah siap dibagikan atau masih perlu disesuaikan."
+                    },
+                    "step2": {
+                        "title": "Pakai booking manual jika data datang dari admin",
+                        "description": "Masuk ke Buat Booking Pertama atau tambah booking manual saat klien datang dari chat, telepon, atau referral yang perlu dicatat sendiri.",
+                        "result": "Data klien tetap masuk ke sistem meski tidak melewati form publik."
+                    },
+                    "step3": {
+                        "title": "Bandingkan kebutuhan kontrol vs efisiensi",
+                        "description": "Kalau ingin proses lebih cepat dan seragam, bagikan Form Booking. Kalau admin perlu memegang detail dari awal, pilih booking manual.",
+                        "result": "Tim bisa memilih jalur yang paling sesuai dengan situasi klien, bukan memakai satu cara untuk semua kasus."
+                    },
+                    "step4": {
+                        "title": "Tetapkan kebiasaan kerja yang konsisten",
+                        "description": "Sosialisasikan ke tim kapan harus membagikan form dan kapan harus input manual supaya data tidak tersebar di luar sistem.",
+                        "result": "Alur masuk booking jadi lebih rapi dan mudah dipahami oleh semua admin."
+                    }
+                },
+                "notes": {
+                    "note1": "Kalau studio kamu sering menerima inquiry lewat WhatsApp, booking manual biasanya tetap dibutuhkan walaupun form publik sudah aktif.",
+                    "note2": "Form Booking dan booking manual bukan dua fitur yang saling menggantikan, tetapi dua jalur masuk yang bisa dipakai sesuai konteks."
+                }
+            },
+            "servicesPackages": {
+                "title": "Cara menyusun layanan, paket utama, dan add-on",
+                "description": "Pelajari cara membuat katalog layanan yang jelas agar pilihan paket, harga, dan add-on mudah dipahami klien.",
+                "details": {
+                    "understand": "Paket utama adalah pilihan inti yang paling sering dipilih klien, sedangkan add-on dipakai untuk pelengkap tambahan. Struktur paket yang jelas membantu form booking dan tim admin membaca kebutuhan klien lebih cepat.",
+                    "whenToUse": "Topik ini penting saat kamu mulai membangun katalog layanan, menambah varian baru, atau merasa klien sering bingung membedakan paket yang tersedia.",
+                    "quickTips": "Buat paket utama yang ringkas dan mudah dibandingkan, lalu simpan opsi tambahan sebagai add-on. Hindari terlalu banyak paket yang mirip karena akan membingungkan klien dan menyulitkan admin saat input."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Buka halaman Layanan / Paket",
+                        "description": "Masuk ke menu Layanan / Paket untuk melihat semua paket utama dan add-on yang aktif di akunmu.",
+                        "result": "Kamu punya satu tempat pusat untuk menyusun katalog layanan studio."
+                    },
+                    "step2": {
+                        "title": "Klik tombol tambah untuk membuat paket utama",
+                        "description": "Buat layanan utama lebih dulu dengan nama, harga, durasi, dan deskripsi yang mudah dipahami klien.",
+                        "result": "Klien punya pilihan inti yang jelas saat form booking dibuka."
+                    },
+                    "step3": {
+                        "title": "Tambahkan add-on hanya jika memang pelengkap",
+                        "description": "Gunakan add-on untuk item tambahan yang tidak perlu berdiri sendiri sebagai paket utama.",
+                        "result": "Struktur penawaran tetap rapi dan tidak membingungkan saat dibaca klien maupun admin."
+                    },
+                    "step4": {
+                        "title": "Cek hasilnya dari perspektif form booking",
+                        "description": "Setelah paket dibuat, buka Form Booking atau preview untuk memastikan urutan dan pilihan layanan terasa mudah dipahami.",
+                        "result": "Katalog layanan tidak hanya rapi di admin, tetapi juga enak dipilih dari sisi klien."
+                    }
+                },
+                "notes": {
+                    "note1": "Kalau klien sering bingung memilih, biasanya masalahnya bukan pada jumlah paket saja, tapi pada perbedaan manfaat antar paket yang kurang jelas.",
+                    "note2": "Paket utama sebaiknya mewakili keputusan utama, sedangkan add-on dipakai untuk menyesuaikan kebutuhan tanpa membuat katalog terlalu ramai."
+                }
+            },
+            "teamAssignment": {
+                "title": "Cara mengelola tim/freelance dan penugasan",
+                "description": "Pahami kapan menambah anggota tim, bagaimana pembagian kerja dibaca, dan kenapa data tim penting untuk operasional yang rapi.",
+                "details": {
+                    "understand": "Data tim atau freelance di Client Desk berfungsi sebagai basis penugasan, referensi kerja kolaboratif, dan pelacakan siapa yang terlibat di setiap booking. Ini penting agar operasional tidak hanya bergantung pada catatan chat.",
+                    "whenToUse": "Topik ini relevan saat studio kamu mulai melibatkan editor, fotografer, videografer, atau partner freelance yang perlu dicatat dan ditugaskan secara lebih sistematis.",
+                    "quickTips": "Masukkan anggota yang benar-benar terlibat di operasional rutin terlebih dahulu. Setelah struktur tim jelas, baru biasakan assignment dibaca dari aplikasi, bukan dari obrolan tercecer."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Buka halaman Tim / Freelance",
+                        "description": "Masuk ke menu Tim / Freelance untuk melihat siapa saja yang sudah terdaftar dan bisa dipakai untuk kerja kolaboratif.",
+                        "result": "Kamu tahu apakah struktur tim di aplikasi sudah mencerminkan kondisi lapangan."
+                    },
+                    "step2": {
+                        "title": "Klik tambah anggota untuk memasukkan data dasar",
+                        "description": "Isi nama, peran, kontak, dan informasi penting lain agar anggota bisa dikenali dengan jelas oleh admin.",
+                        "result": "Anggota tim atau freelance pertama siap dipakai sebagai referensi kerja."
+                    },
+                    "step3": {
+                        "title": "Gunakan data tim saat booking mulai berjalan",
+                        "description": "Saat booking membutuhkan pembagian kerja, pakai anggota yang sudah tercatat agar assignment tidak hanya bergantung pada chat luar aplikasi.",
+                        "result": "Penugasan jadi lebih rapi dan lebih mudah dilacak kembali."
+                    },
+                    "step4": {
+                        "title": "Jaga daftar anggota tetap relevan",
+                        "description": "Tambah anggota yang aktif dipakai dan rapikan data yang tidak lagi digunakan agar daftar tim tetap bersih.",
+                        "result": "Halaman tim tetap berguna sebagai sumber operasional, bukan sekadar daftar lama yang menumpuk."
+                    }
+                },
+                "notes": {
+                    "note1": "Data tim yang rapi akan jauh lebih terasa manfaatnya saat volume booking mulai banyak dan satu booking dikerjakan lebih dari satu orang.",
+                    "note2": "Kalau kamu belum rutin membagi assignment dari aplikasi, mulai dulu dari pencatatan anggota. Kebiasaan assignment bisa dibangun bertahap setelahnya."
+                }
+            },
+            "bookingList": {
+                "title": "Cara membaca Daftar Booking",
+                "description": "Kenali fungsi halaman daftar booking untuk mencari data, memantau progres cepat, dan membuka aksi utama per booking.",
+                "details": {
+                    "understand": "Daftar Booking adalah pusat operasional harian untuk mencari klien, membuka detail booking, memeriksa jadwal, dan mengakses aksi cepat. Halaman ini biasanya jadi tempat paling sering dibuka oleh admin.",
+                    "whenToUse": "Gunakan halaman ini saat kamu ingin melihat semua booking aktif, menemukan satu klien tertentu, atau berpindah ke detail booking dengan cepat tanpa membuka banyak menu lain.",
+                    "quickTips": "Biasakan memandang Daftar Booking sebagai area kerja utama, bukan sekadar daftar. Pakai pencarian, status visual, dan aksi cepat untuk mempercepat respon admin terhadap kebutuhan klien."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Buka halaman Daftar Booking dari sidebar",
+                        "description": "Masuk ke menu Daftar Booking untuk melihat seluruh booking yang aktif dan terbaru dalam satu tempat.",
+                        "result": "Kamu punya gambaran cepat tentang pekerjaan yang sedang berjalan."
+                    },
+                    "step2": {
+                        "title": "Gunakan pencarian atau filter saat data mulai banyak",
+                        "description": "Cari nama klien, kode booking, atau gunakan status visual untuk menemukan booking yang ingin ditindaklanjuti.",
+                        "result": "Admin tidak perlu membuka data satu per satu untuk menemukan booking tertentu."
+                    },
+                    "step3": {
+                        "title": "Klik booking yang ingin dicek",
+                        "description": "Masuk ke detail booking untuk melihat informasi klien, sesi, layanan, pembayaran, dan lampiran yang lebih lengkap.",
+                        "result": "Kamu berpindah dari overview operasional ke pusat detail satu booking dengan cepat."
+                    },
+                    "step4": {
+                        "title": "Gunakan halaman ini sebagai pusat kerja harian",
+                        "description": "Setiap kali ada pertanyaan atau tindak lanjut admin, biasakan mulai dari Daftar Booking sebelum pindah ke halaman lain yang lebih spesifik.",
+                        "result": "Tim punya titik awal kerja yang konsisten dan lebih mudah dibiasakan."
+                    }
+                },
+                "notes": {
+                    "note1": "Halaman ini paling cocok untuk operasional cepat, sedangkan halaman Status Booking lebih cocok untuk fokus ke progress dan tracking klien.",
+                    "note2": "Kalau admin sering kebingungan mencari data, biasanya kebiasaan membuka Daftar Booking sebagai halaman kerja utama belum konsisten."
+                }
+            },
+            "bookingStatus": {
+                "title": "Cara membaca Status Booking",
+                "description": "Pahami halaman status booking untuk mengelola progress klien, antrian, dan link tracking yang bisa dibagikan.",
+                "details": {
+                    "understand": "Status Booking berfokus pada progress klien dan tracking, bukan seluruh detail administrasi booking. Ini membantu admin melihat posisi pekerjaan dan membagikan visibilitas progres ke klien.",
+                    "whenToUse": "Topik ini penting saat booking sudah berjalan dan kamu perlu memantau antrean, memperbarui progres, atau memberi link tracking agar klien bisa cek status tanpa bertanya manual terus-menerus.",
+                    "quickTips": "Jaga status booking tetap akurat dan konsisten. Semakin rutin status diperbarui, semakin ringan beban follow-up manual lewat chat karena klien bisa melihat progres dari link tracking."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Buka halaman Status Booking setelah booking mulai berjalan",
+                        "description": "Masuk ke menu Status Booking untuk melihat posisi progres tiap klien dan antrian kerja yang sedang aktif.",
+                        "result": "Kamu bisa memantau perkembangan kerja tanpa harus membuka detail booking satu per satu."
+                    },
+                    "step2": {
+                        "title": "Cek status dan urutan antrean yang tampil",
+                        "description": "Perhatikan label status dan informasi antrean untuk memahami di tahap mana pekerjaan masing-masing klien berada.",
+                        "result": "Admin lebih mudah menentukan booking mana yang perlu diprioritaskan atau diperbarui."
+                    },
+                    "step3": {
+                        "title": "Gunakan link tracking saat perlu memberi update ke klien",
+                        "description": "Saat klien bertanya progres, gunakan link tracking dari halaman ini agar mereka bisa memantau status secara mandiri.",
+                        "result": "Beban follow-up manual lewat chat bisa berkurang karena klien punya akses visibilitas sendiri."
+                    },
+                    "step4": {
+                        "title": "Perbarui status secara rutin sesuai progres nyata",
+                        "description": "Biasakan tim memperbarui status saat pekerjaan benar-benar berpindah tahap, bukan menumpuk update di akhir.",
+                        "result": "Halaman status tetap akurat dan benar-benar berguna sebagai alat komunikasi internal maupun eksternal."
+                    }
+                },
+                "notes": {
+                    "note1": "Kalau status jarang diperbarui, link tracking tetap ada tetapi nilainya untuk klien akan terasa rendah karena informasinya cepat basi.",
+                    "note2": "Status Booking paling efektif saat dipakai sebagai kebiasaan operasional, bukan hanya sesekali dibuka saat ada komplain atau pertanyaan."
+                }
+            },
+            "finance": {
+                "title": "Cara membaca keuangan, DP, dan pelunasan",
+                "description": "Pelajari bagaimana Client Desk menampilkan pemasukan, DP, pelunasan, dan indikator pembayaran yang perlu ditindaklanjuti.",
+                "details": {
+                    "understand": "Area keuangan membantu kamu melihat uang masuk, status DP, kebutuhan pelunasan, dan gambaran revenue tanpa harus mengandalkan catatan terpisah. Fokusnya adalah visibilitas transaksi yang berkaitan dengan booking.",
+                    "whenToUse": "Buka topik ini saat kamu ingin memastikan admin paham perbedaan antara DP, pelunasan, dan indikator yang berarti ada pembayaran yang masih harus ditindaklanjuti.",
+                    "quickTips": "Gunakan data keuangan sebagai alat monitoring, lalu pastikan kebiasaan update pembayaran dilakukan segera setelah transaksi diverifikasi. Data yang cepat diperbarui membuat laporan dan tindak lanjut lebih akurat."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Buka halaman Keuangan untuk melihat ringkasan transaksi",
+                        "description": "Masuk ke menu Keuangan untuk memantau pemasukan, DP, dan pelunasan yang masih perlu diperhatikan.",
+                        "result": "Kamu bisa membaca kondisi pembayaran studio dari satu layar yang lebih ringkas."
+                    },
+                    "step2": {
+                        "title": "Bedakan DP, pelunasan, dan indikator tindak lanjut",
+                        "description": "Perhatikan mana booking yang baru masuk DP, mana yang hampir lunas, dan mana yang masih membutuhkan follow-up pembayaran.",
+                        "result": "Admin lebih mudah memutuskan booking mana yang harus diingatkan atau diverifikasi."
+                    },
+                    "step3": {
+                        "title": "Buka detail booking jika perlu verifikasi lebih lanjut",
+                        "description": "Saat ada angka atau status yang perlu dicek, masuk ke detail booking terkait untuk melihat sumber data pembayaran secara lebih lengkap.",
+                        "result": "Tim bisa memastikan angka keuangan tetap sinkron dengan kondisi booking aktual."
+                    },
+                    "step4": {
+                        "title": "Perbarui pembayaran secepat mungkin setelah transaksi masuk",
+                        "description": "Jangan menunda update DP atau pelunasan agar angka di halaman keuangan tetap relevan untuk dipakai memonitor studio.",
+                        "result": "Laporan dan tindak lanjut admin menjadi lebih akurat dari hari ke hari."
+                    }
+                },
+                "notes": {
+                    "note1": "Semakin cepat pembayaran diverifikasi dan dicatat, semakin kecil risiko salah baca kondisi keuangan saat admin sedang sibuk.",
+                    "note2": "Halaman keuangan paling berguna sebagai alat monitoring operasional, bukan pengganti sistem akuntansi penuh."
+                }
+            },
+            "googleIntegration": {
+                "title": "Integrasi Google Calendar dan Google Drive",
+                "description": "Pahami kapan integrasi Google dibutuhkan dan manfaat praktisnya untuk sinkron jadwal, file, dan kerja kolaboratif.",
+                "details": {
+                    "understand": "Integrasi Google menambah otomatisasi, terutama untuk sinkron jadwal dan file. Fitur ini bukan syarat memakai Client Desk, tetapi sangat membantu saat volume kerja mulai bertambah dan kolaborasi makin kompleks.",
+                    "whenToUse": "Pertimbangkan integrasi ini saat studio kamu mulai rutin mengatur jadwal tim, butuh folder kerja terstruktur, atau ingin mengurangi kerja copy-paste ke tools lain.",
+                    "quickTips": "Selesaikan setup inti dulu sebelum menghubungkan Google. Setelah alur dasar stabil, barulah integrasi dipakai untuk menghemat waktu dan menjaga konsistensi data lintas tools."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Buka halaman Pengaturan saat setup inti sudah stabil",
+                        "description": "Masuk ke Pengaturan untuk melihat area integrasi Google Calendar dan Google Drive yang tersedia.",
+                        "result": "Kamu bisa menilai apakah studio memang sudah siap memakai otomatisasi tambahan."
+                    },
+                    "step2": {
+                        "title": "Hubungkan Google Calendar jika jadwal perlu sinkron",
+                        "description": "Aktifkan koneksi kalender saat tim mulai butuh visibilitas jadwal yang lebih terpusat dan konsisten.",
+                        "result": "Agenda kerja lebih mudah dibaca lintas tools tanpa input ulang manual."
+                    },
+                    "step3": {
+                        "title": "Hubungkan Google Drive jika alur file mulai kompleks",
+                        "description": "Gunakan integrasi Drive saat studio membutuhkan struktur folder dan pengelolaan file yang lebih otomatis.",
+                        "result": "Penyimpanan file kerja menjadi lebih rapi dan lebih mudah ditelusuri."
+                    },
+                    "step4": {
+                        "title": "Evaluasi integrasi setelah dipakai beberapa booking",
+                        "description": "Lihat apakah integrasi benar-benar menghemat waktu dan mengurangi kerja copy-paste dibanding sebelumnya.",
+                        "result": "Kamu bisa memastikan integrasi dipakai karena memberi manfaat nyata, bukan sekadar aktif saja."
+                    }
+                },
+                "notes": {
+                    "note1": "Integrasi Google bersifat pelengkap. Studio tetap bisa menjalankan alur inti Client Desk tanpa harus langsung menghubungkannya di hari pertama.",
+                    "note2": "Semakin jelas kebutuhan operasionalmu, semakin mudah menentukan apakah Google Calendar, Google Drive, atau keduanya memang perlu diaktifkan."
+                }
+            },
+            "dailyTips": {
+                "title": "Tips penggunaan harian dan FAQ",
+                "description": "Rangkuman tips kerja harian agar dashboard tetap rapi, data tidak tercecer, dan pertanyaan umum cepat terjawab.",
+                "details": {
+                    "understand": "Tips harian membantu tim memakai Client Desk secara konsisten, bukan hanya sekadar tahu fitur. Kebiasaan kecil seperti update status cepat atau input data lengkap di awal sangat berpengaruh ke kerapian operasional.",
+                    "whenToUse": "Topik ini cocok dibaca setelah setup dasar selesai dan tim mulai memakai aplikasi setiap hari. Ini juga berguna sebagai pengingat saat alur kerja terasa mulai berantakan lagi.",
+                    "quickTips": "Jadikan Tutorial dan FAQ sebagai referensi saat ada pertanyaan berulang, lalu bangun kebiasaan kerja yang sederhana: input rapi, update rutin, dan gunakan halaman yang tepat sesuai konteks pekerjaan."
+                },
+                "steps": {
+                    "step1": {
+                        "title": "Mulai hari dari Dashboard atau Daftar Booking",
+                        "description": "Biasakan membuka ringkasan terlebih dulu sebelum mengerjakan detail agar tim tahu prioritas dan booking mana yang paling mendesak.",
+                        "result": "Hari kerja dimulai dari gambaran yang jelas, bukan dari reaksi acak terhadap chat yang masuk."
+                    },
+                    "step2": {
+                        "title": "Input data selengkap mungkin di awal",
+                        "description": "Saat membuat booking atau memperbarui data klien, usahakan informasi utama langsung lengkap agar tidak perlu mengejar data yang sama berulang kali.",
+                        "result": "Booking lebih siap diproses dan admin berikutnya tidak perlu menebak-nebak informasi yang kurang."
+                    },
+                    "step3": {
+                        "title": "Perbarui status dan pembayaran segera setelah berubah",
+                        "description": "Jangan menunda update status booking atau pembayaran jika perubahan sudah terjadi di lapangan.",
+                        "result": "Halaman operasional tetap akurat dan bisa dipakai tim lain tanpa harus cross-check manual terus."
+                    },
+                    "step4": {
+                        "title": "Pakai Tutorial dan FAQ sebagai referensi tim",
+                        "description": "Kalau ada pertanyaan berulang, arahkan tim ke Tutorial atau FAQ sebelum menjawab hal yang sama berkali-kali lewat chat.",
+                        "result": "Pengetahuan kerja jadi lebih rapi dan tidak hanya tersimpan di kepala satu orang admin."
+                    }
+                },
+                "notes": {
+                    "note1": "Kerapian operasional biasanya bukan ditentukan oleh fitur paling canggih, tetapi oleh kebiasaan kecil yang dijaga konsisten setiap hari.",
+                    "note2": "Tutorial ini akan paling terasa manfaatnya kalau dijadikan referensi tim bersama, bukan hanya dibaca sekali lalu dilupakan."
+                }
             }
         }
     },
