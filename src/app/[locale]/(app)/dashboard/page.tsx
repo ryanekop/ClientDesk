@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import { UpcomingBookingCard } from "@/components/dashboard/dashboard-widgets";
+import { TodaySessionsCount } from "@/components/dashboard/today-sessions-count";
 import { DashboardChangelogPopup } from "@/components/changelog-modal";
 import { CustomDomainPromo } from "@/components/dashboard/custom-domain-promo";
 import { OnboardingQuickSetup } from "@/components/dashboard/onboarding-quick-setup";
@@ -51,16 +52,6 @@ export default async function DashboardPage() {
   const startOfMonth = `${now.getFullYear()}-${String(
     now.getMonth() + 1,
   ).padStart(2, "0")}-01`;
-  const todayStart = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  ).toISOString();
-  const todayEnd = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + 1,
-  ).toISOString();
   const { data: profile } = await supabase
     .from("profiles")
     .select(
@@ -74,7 +65,6 @@ export default async function DashboardPage() {
     { count: totalBookings },
     { count: totalTeamMembers },
     { count: monthlyBookings },
-    { count: todaySessions },
     { data: recentBookings },
     { data: upcomingBooking },
     { data: financeRows },
@@ -100,13 +90,6 @@ export default async function DashboardPage() {
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id)
       .gte("booking_date", startOfMonth)
-      .neq("status", "Batal"),
-    supabase
-      .from("bookings")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .gte("session_date", todayStart)
-      .lt("session_date", todayEnd)
       .neq("status", "Batal"),
     supabase
       .from("bookings")
@@ -377,12 +360,7 @@ export default async function DashboardPage() {
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     {t("sesiHariIni")}
                   </h4>
-                  <div className="text-xl font-bold text-foreground">
-                    {todaySessions || 0}{" "}
-                    <span className="text-sm font-medium text-muted-foreground">
-                      {t("sesi")}
-                    </span>
-                  </div>
+                  <TodaySessionsCount />
                 </div>
                 <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-500/10">
                   <Camera className="w-5 h-5 text-blue-600 dark:text-blue-400" />
