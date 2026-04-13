@@ -37,9 +37,7 @@ const TOPIC_ICON_MAP = {
 
 const DETAIL_SECTION_KEYS = ["understand", "whenToUse", "quickTips"] as const;
 
-export async function generateStaticParams() {
-  return TUTORIAL_TOPICS.map((topic) => ({ topic: topic.slug }));
-}
+export const dynamic = "force-dynamic";
 
 export default async function TutorialTopicDetailPage({
   params,
