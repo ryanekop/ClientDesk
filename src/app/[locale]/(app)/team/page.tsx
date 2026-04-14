@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
+import { adminNativeSelectClass } from "@/components/ui/admin-native-form-controls";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { useLocale, useTranslations } from "next-intl";
@@ -953,6 +954,7 @@ export default function TeamPage() {
     }
 
     const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
+    const selectClass = adminNativeSelectClass;
 
     React.useEffect(() => {
         setCurrentPage(1);
@@ -1521,7 +1523,7 @@ export default function TeamPage() {
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">{t("peran")}</label>
-                                        <select name="role" required className={inputClass}>
+                                        <select name="role" required className={selectClass}>
                                             <option value="">{t("pilihPeran")}</option>
                                             {roleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
                                         </select>
@@ -1529,7 +1531,7 @@ export default function TeamPage() {
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">{t("whatsapp")}</label>
                                         <div className="flex gap-2">
-                                            <select value={addCountryCode} onChange={e => setAddCountryCode(e.target.value)} className={inputClass + " !w-28 shrink-0 cursor-pointer"}>
+                                            <select value={addCountryCode} onChange={e => setAddCountryCode(e.target.value)} className={selectClass + " !w-28 shrink-0"}>
                                                 {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
                                             </select>
                                             <input name="whatsapp_number" type="tel" placeholder="8123456789"
@@ -2014,14 +2016,14 @@ export default function TeamPage() {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">{t("peran")}</label>
-                                <select name="role" required defaultValue={editingMember.role} className={inputClass}>
+                                <select name="role" required defaultValue={editingMember.role} className={selectClass}>
                                     {roleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
                                 </select>
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">{t("whatsapp")}</label>
                                 <div className="flex gap-2">
-                                    <select value={editCountryCode} onChange={e => setEditCountryCode(e.target.value)} className={inputClass + " !w-28 shrink-0 cursor-pointer"}>
+                                    <select value={editCountryCode} onChange={e => setEditCountryCode(e.target.value)} className={selectClass + " !w-28 shrink-0"}>
                                         {COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
                                     </select>
                                     <input name="whatsapp_number" type="tel" placeholder="8123456789"

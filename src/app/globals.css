@@ -158,6 +158,20 @@
         );
     }
 
+    .admin-dashboard-scope :is(select, input[type="date"], input[type="time"]) {
+        color-scheme: light;
+    }
+
+    .dark .admin-dashboard-scope :is(select, input[type="date"], input[type="time"]) {
+        color-scheme: dark;
+    }
+
+    .admin-dashboard-scope select option,
+    .admin-dashboard-scope select optgroup {
+        background-color: var(--color-background);
+        color: var(--color-foreground);
+    }
+
     /* Reduce paint/composition glitches on some browsers/devices inside map modal UI */
     .map-picker-panel,
     .map-picker-gps-button,

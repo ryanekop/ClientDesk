@@ -21,6 +21,10 @@ import {
 import { UniversityAutocomplete } from "@/components/ui/university-autocomplete";
 import { CitySingleSelect } from "@/components/ui/city-single-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+    adminNativeDateTimeInputClass,
+    adminNativeSelectClass,
+} from "@/components/ui/admin-native-form-controls";
 import { cn } from "@/lib/utils";
 import { BookingAdminCustomFields } from "@/components/form-builder/booking-admin-custom-fields";
 import {
@@ -132,7 +136,8 @@ import {
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
-const selectClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat pr-8";
+const selectClass = adminNativeSelectClass;
+const dateTimeInputClass = `${adminNativeDateTimeInputClass} block`;
 
 const EVENT_TYPES = getBuiltInEventTypes();
 
@@ -2500,7 +2505,7 @@ export default function EditBookingPage() {
                                 type="date"
                                 value={bookingDate}
                                 onChange={e => setBookingDate(e.target.value)}
-                                className={cn(inputClass, "block")}
+                                className={dateTimeInputClass}
                             />
                             <p className="text-[11px] text-muted-foreground">
                                 Dipakai untuk urutan Booking Terbaru/Terlama.
@@ -2541,28 +2546,28 @@ export default function EditBookingPage() {
                                     <input type="date" value={akadDate ? akadDate.split("T")[0] : ""} onChange={e => {
                                         const timePart = akadDate?.split("T")[1] || "10:00";
                                         setAkadDate(e.target.value ? `${e.target.value}T${timePart}` : "");
-                                    }} required className={cn(inputClass, "block")} />
+                                    }} required className={dateTimeInputClass} />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-medium text-muted-foreground">Jam Akad{reqMark}</label>
                                     <input type="time" value={akadDate ? akadDate.split("T")[1] || "10:00" : ""} onChange={e => {
                                         const datePart = akadDate?.split("T")[0] || "";
                                         if (datePart) setAkadDate(`${datePart}T${e.target.value}`);
-                                    }} className={cn(inputClass, "block")} />
+                                    }} className={dateTimeInputClass} />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-medium text-muted-foreground">Tanggal Resepsi{reqMark}</label>
                                     <input type="date" value={resepsiDate ? resepsiDate.split("T")[0] : ""} onChange={e => {
                                         const timePart = resepsiDate?.split("T")[1] || "10:00";
                                         setResepsiDate(e.target.value ? `${e.target.value}T${timePart}` : "");
-                                    }} required className={cn(inputClass, "block")} />
+                                    }} required className={dateTimeInputClass} />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-medium text-muted-foreground">Jam Resepsi{reqMark}</label>
                                     <input type="time" value={resepsiDate ? resepsiDate.split("T")[1] || "10:00" : ""} onChange={e => {
                                         const datePart = resepsiDate?.split("T")[0] || "";
                                         if (datePart) setResepsiDate(`${datePart}T${e.target.value}`);
-                                    }} className={cn(inputClass, "block")} />
+                                    }} className={dateTimeInputClass} />
                                 </div>
                             </>
                         ) : eventType === "Wisuda" && splitDates ? (
@@ -2572,28 +2577,28 @@ export default function EditBookingPage() {
                                     <input type="date" value={wisudaSession1Date ? wisudaSession1Date.split("T")[0] : ""} onChange={e => {
                                         const timePart = wisudaSession1Date?.split("T")[1] || "10:00";
                                         setWisudaSession1Date(e.target.value ? `${e.target.value}T${timePart}` : "");
-                                    }} required className={cn(inputClass, "block")} />
+                                    }} required className={dateTimeInputClass} />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-medium text-muted-foreground">Jam Sesi 1{reqMark}</label>
                                     <input type="time" value={wisudaSession1Date ? wisudaSession1Date.split("T")[1] || "10:00" : ""} onChange={e => {
                                         const datePart = wisudaSession1Date?.split("T")[0] || "";
                                         if (datePart) setWisudaSession1Date(`${datePart}T${e.target.value}`);
-                                    }} className={cn(inputClass, "block")} />
+                                    }} className={dateTimeInputClass} />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-medium text-muted-foreground">Tanggal Sesi 2{reqMark}</label>
                                     <input type="date" value={wisudaSession2Date ? wisudaSession2Date.split("T")[0] : ""} onChange={e => {
                                         const timePart = wisudaSession2Date?.split("T")[1] || "10:00";
                                         setWisudaSession2Date(e.target.value ? `${e.target.value}T${timePart}` : "");
-                                    }} required className={cn(inputClass, "block")} />
+                                    }} required className={dateTimeInputClass} />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-medium text-muted-foreground">Jam Sesi 2{reqMark}</label>
                                     <input type="time" value={wisudaSession2Date ? wisudaSession2Date.split("T")[1] || "10:00" : ""} onChange={e => {
                                         const datePart = wisudaSession2Date?.split("T")[0] || "";
                                         if (datePart) setWisudaSession2Date(`${datePart}T${e.target.value}`);
-                                    }} className={cn(inputClass, "block")} />
+                                    }} className={dateTimeInputClass} />
                                 </div>
                                 <div className="col-span-full rounded-lg border border-dashed p-3 space-y-3">
                                     <div className="flex items-center gap-3">
@@ -2675,14 +2680,14 @@ export default function EditBookingPage() {
                                     <input type="date" value={sessionDate ? sessionDate.split("T")[0] : ""} onChange={e => {
                                         const timePart = sessionDate?.split("T")[1] || "10:00";
                                         setSessionDate(e.target.value ? `${e.target.value}T${timePart}` : "");
-                                    }} required className={cn(inputClass, "block")} />
+                                    }} required className={dateTimeInputClass} />
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-medium text-muted-foreground">Jam{reqMark}</label>
                                     <input type="time" value={sessionDate ? sessionDate.split("T")[1] || "10:00" : ""} onChange={e => {
                                         const datePart = sessionDate?.split("T")[0] || "";
                                         if (datePart) setSessionDate(`${datePart}T${e.target.value}`);
-                                    }} className={cn(inputClass, "block")} />
+                                    }} className={dateTimeInputClass} />
                                 </div>
                             </>
                         )}

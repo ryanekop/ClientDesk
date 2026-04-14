@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { FileDropzone } from "@/components/public/file-dropzone";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
+import { adminNativeSelectClass } from "@/components/ui/admin-native-form-controls";
 import { useSuccessToast } from "@/components/ui/success-toast";
 import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -3190,7 +3191,7 @@ export default function BookingDetailPage() {
                                     <select
                                         value={item.service_id || ""}
                                         onChange={(e) => handleSelectAdjustmentService(item.id, e.target.value)}
-                                        className="h-10 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                        className={`${adminNativeSelectClass} h-10 text-sm`}
                                     >
                                         <option value="">Pilih add-on katalog...</option>
                                         {filteredAddonServices.map((service) => (
@@ -3637,7 +3638,7 @@ export default function BookingDetailPage() {
                             value={clientStatus}
                             onChange={e => setClientStatus(e.target.value)}
                             disabled={!canWriteBookings}
-                            className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] cursor-pointer"
+                            className={`${adminNativeSelectClass} text-sm`}
                         >
                             <option value="">Pilih status...</option>
                             {bookingStatuses.map((statusOption) => (

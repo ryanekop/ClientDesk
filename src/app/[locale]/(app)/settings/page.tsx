@@ -20,6 +20,7 @@ import {
   Plus,
   Search,
 } from "lucide-react";
+import { adminNativeSelectClass } from "@/components/ui/admin-native-form-controls";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { useSuccessToast } from "@/components/ui/success-toast";
@@ -2780,6 +2781,7 @@ export default function SettingsPage() {
     "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
   const textareaClass =
     "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-y";
+  const selectClass = adminNativeSelectClass;
   const unifiedSaveButtonClass = "h-11 min-w-[190px] gap-2 px-6 text-sm";
   const unifiedResetButtonClass = "h-11 gap-2 px-5";
 
@@ -3338,7 +3340,7 @@ export default function SettingsPage() {
               <select
                 value={selectedEventType}
                 onChange={(e) => setSelectedEventType(e.target.value)}
-                className={inputClass + " cursor-pointer"}
+                className={selectClass}
               >
                 {availableEventTypes.map((et) => (
                   <option key={et} value={et}>
@@ -3358,7 +3360,7 @@ export default function SettingsPage() {
                         e.target.value === "split" ? "split" : "normal",
                       )
                     }
-                    className={inputClass + " cursor-pointer"}
+                    className={selectClass}
                   >
                     <option value="normal">{tp("templateModeNormal")}</option>
                     <option value="split">{tp("templateModeSplit")}</option>
@@ -3750,9 +3752,7 @@ export default function SettingsPage() {
                       <select
                         value={countryCode}
                         onChange={(e) => setCountryCode(e.target.value)}
-                        className={
-                          inputClass + " !w-28 shrink-0 cursor-pointer"
-                        }
+                        className={`${selectClass} !w-28 shrink-0`}
                       >
                         {COUNTRY_CODES.map((c) => (
                           <option key={c.code} value={c.code}>
@@ -4225,7 +4225,7 @@ export default function SettingsPage() {
                         onChange={(e) =>
                           setSelectedCalendarEventType(e.target.value)
                         }
-                        className={inputClass + " cursor-pointer"}
+                        className={selectClass}
                       >
                         {availableEventTypes.map((et) => (
                           <option key={et} value={et}>
@@ -4301,7 +4301,7 @@ export default function SettingsPage() {
                                 ),
                               )
                             }
-                            className={inputClass}
+                            className={selectClass}
                           >
                             <option value="normal">
                               {tp("templateModeNormal")}
@@ -4448,7 +4448,7 @@ export default function SettingsPage() {
                         onChange={(e) =>
                           setSelectedDriveEventType(e.target.value)
                         }
-                        className={inputClass + " cursor-pointer"}
+                        className={selectClass}
                       >
                         {availableEventTypes.map((et) => (
                           <option key={et} value={et}>
@@ -4713,7 +4713,7 @@ export default function SettingsPage() {
                             e.target.value === "auto" ? "auto" : "manual",
                           )
                         }
-                        className={inputClass}
+                        className={selectClass}
                       >
                         <option value="manual">{tp("fastpikSyncManual")}</option>
                         <option value="auto">{tp("fastpikSyncAuto")}</option>
@@ -4732,7 +4732,7 @@ export default function SettingsPage() {
                               : "clientdesk",
                           )
                         }
-                        className={inputClass}
+                        className={selectClass}
                       >
                         <option value="clientdesk">
                           {tp("fastpikPresetClientdesk")}
@@ -4771,7 +4771,7 @@ export default function SettingsPage() {
                           normalizeFastpikLinkDisplayMode(e.target.value),
                         )
                       }
-                      className={inputClass}
+                      className={selectClass}
                     >
                       <option value="both">{tp("fastpikLinkModeBoth")}</option>
                       <option value="prefer_fastpik">
@@ -4797,7 +4797,7 @@ export default function SettingsPage() {
                           normalizeFastpikLinkDisplayMode(e.target.value),
                         )
                       }
-                      className={inputClass}
+                      className={selectClass}
                     >
                       <option value="both">{tp("fastpikLinkModeBoth")}</option>
                       <option value="prefer_fastpik">
@@ -5307,7 +5307,7 @@ export default function SettingsPage() {
                   <select
                     value={queueTriggerStatus}
                     onChange={(e) => setQueueTriggerStatus(e.target.value)}
-                    className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className={`${selectClass} max-w-xs text-sm`}
                   >
                     <option value="">Off (Tidak ada trigger)</option>
                     {customClientStatuses.map((s) => (
@@ -5332,7 +5332,7 @@ export default function SettingsPage() {
                       dpVerifyTriggerStatus,
                     )}
                     onChange={(e) => setDpVerifyTriggerStatus(e.target.value)}
-                    className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className={`${selectClass} max-w-xs text-sm`}
                   >
                     <option value="">(Tidak ada trigger)</option>
                     {customClientStatuses.map((s) => (
@@ -5368,7 +5368,7 @@ export default function SettingsPage() {
                         onChange={(e) =>
                           setSessionTimeTriggerFromStatus(e.target.value)
                         }
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        className={`${selectClass} text-sm`}
                       >
                         <option value="">Off (Tidak ada trigger)</option>
                         {customClientStatuses.map((status) => (
@@ -5391,7 +5391,7 @@ export default function SettingsPage() {
                         onChange={(e) =>
                           setSessionTimeTriggerToStatus(e.target.value)
                         }
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        className={`${selectClass} text-sm`}
                       >
                         <option value="">Off (Tidak ada trigger)</option>
                         {customClientStatuses.map((status) => (
@@ -5419,7 +5419,7 @@ export default function SettingsPage() {
                     onChange={(e) =>
                       setFinalInvoiceVisibleFromStatus(e.target.value)
                     }
-                    className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className={`${selectClass} max-w-xs text-sm`}
                   >
                     {(customClientStatuses.length > 0
                       ? customClientStatuses
@@ -5451,7 +5451,7 @@ export default function SettingsPage() {
                     onChange={(e) =>
                       setTrackingFileLinksVisibleFromStatus(e.target.value)
                     }
-                    className="h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className={`${selectClass} max-w-xs text-sm`}
                   >
                     {(customClientStatuses.length > 0
                       ? customClientStatuses

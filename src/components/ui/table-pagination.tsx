@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { adminNativeSelectClass } from "@/components/ui/admin-native-form-controls";
 
 interface TablePaginationProps {
     totalItems: number;
@@ -31,7 +32,7 @@ export function TablePagination({
                 <select
                     value={itemsPerPage}
                     onChange={(e) => { onItemsPerPageChange(Number(e.target.value)); onPageChange(1); }}
-                    className="h-7 rounded-md border border-input bg-background px-2 text-xs cursor-pointer"
+                    className={`${adminNativeSelectClass} h-7 px-2 pr-7 text-xs`}
                 >
                     {perPageOptions.map(n => <option key={n} value={n}>{n}</option>)}
                 </select>

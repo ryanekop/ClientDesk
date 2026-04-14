@@ -27,6 +27,10 @@ import {
     PageHeader,
     PAGE_HEADER_COMPACT_MOBILE_ACTIONS_CLASSNAME,
 } from "@/components/ui/page-header";
+import {
+    adminNativeFieldBaseClass,
+    adminNativeSelectClass,
+} from "@/components/ui/admin-native-form-controls";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TableActionMenuPortal } from "@/components/ui/table-action-menu-portal";
 import { useSuccessToast } from "@/components/ui/success-toast";
@@ -118,7 +122,8 @@ import {
 } from "@/lib/freelancer-session-assignments";
 import * as XLSX from "xlsx";
 
-const selectFilterClass = "h-9 rounded-md border border-input bg-background/50 px-3 pr-8 text-sm outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23999%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px] bg-[right_8px_center] bg-no-repeat";
+const selectFilterClass = `${adminNativeSelectClass} h-9 text-sm`;
+const textFilterClass = `${adminNativeFieldBaseClass} h-9 rounded-md border px-3 text-sm`;
 
 type FreelancerInfo = { id: string; name: string; whatsapp_number: string | null };
 
@@ -2966,7 +2971,7 @@ export default function BookingsPage() {
                                             value={extraFieldFilters[field.key] || ""}
                                             onChange={e => setExtraFieldFilters(prev => ({ ...prev, [field.key]: e.target.value }))}
                                             placeholder={`Filter ${field.label.toLowerCase()}...`}
-                                            className={`${selectFilterClass} w-full`}
+                                            className={`${textFilterClass} w-full`}
                                         />
                                     )}
                                 </div>
