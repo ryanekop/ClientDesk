@@ -334,6 +334,7 @@ type SummaryRow = {
   label: string;
   value: string;
   icon?: LucideIcon;
+  startsSessionGroup?: boolean;
 };
 
 const BOOKING_FORM_DRAFT_VERSION = 1;
@@ -4447,6 +4448,7 @@ export function BookingFormClient({
       const durationMinutes =
         sessionDurationMinutesByKey[session.key] || totalDurationMinutes;
       return {
+        key: session.key,
         label: session.label?.trim() || "",
         date: formatSessionDate(session.sessionDate, {
           locale: summaryLocale,
@@ -4476,6 +4478,9 @@ export function BookingFormClient({
       .forEach((item) => {
         const key = item.builtinId.slice("extra:".length);
         const extraDefinition = currentExtraFields.find((field) => field.key === key);
+        if (eventType === "Wedding" && key === "nama_pasangan") {
+          return;
+        }
         if (isSplitLocationExtraBuiltinId(eventType, item.builtinId)) {
           return;
         }
@@ -4524,6 +4529,16 @@ export function BookingFormClient({
           icon: getBuiltInFieldIcon("client_name"),
         },
         {
+          label: getBuiltInDisplayLabel(
+            "extra:nama_pasangan",
+            currentExtraFields.find((field) => field.key === "nama_pasangan")?.label ||
+              "Nama Pasangan",
+          ),
+          value:
+            eventType === "Wedding" ? extraData.nama_pasangan?.trim() || "" : "",
+          icon: User,
+        },
+        {
           label: getBuiltInDisplayLabel("client_whatsapp", t("summaryWhatsapp")),
           value: summaryFullWhatsapp.trim(),
           icon: getBuiltInFieldIcon("client_whatsapp"),
@@ -4546,7 +4561,9 @@ export function BookingFormClient({
       ].filter((row) => row.value.length > 0),
     [
       clientName,
+      currentExtraFields,
       eventType,
+      extraData.nama_pasangan,
       instagram,
       selectedCity,
       summaryFullWhatsapp,
@@ -4558,10 +4575,15 @@ export function BookingFormClient({
     const rows: SummaryRow[] = [];
 
     summarySessionRows.forEach((session) => {
+      const startsReceptionGroup =
+        eventType === "Wedding" &&
+        splitDates &&
+        session.key === "resepsi";
       rows.push({
         label: buildSummarySessionFieldLabel(session.label, "date"),
         value: session.date,
         icon: CalendarDays,
+        startsSessionGroup: startsReceptionGroup,
       });
       rows.push({
         label: buildSummarySessionFieldLabel(session.label, "time"),
@@ -4601,9 +4623,11 @@ export function BookingFormClient({
     return rows.filter((row) => row.value.length > 0);
   }, [
     buildSummarySessionFieldLabel,
+    eventType,
     getBuiltInDisplayLabel,
     locationDetail,
     notes,
+    splitDates,
     summaryCustomFieldRows,
     summaryExtraFieldRows,
     summarySessionRows,
@@ -4965,7 +4989,11 @@ export function BookingFormClient({
                       {summarySessionDetailRows.map((row) => (
                         <div
                           key={`${row.label}-${row.value}`}
-                          className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+                          className={`flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4 ${
+                            row.startsSessionGroup
+                              ? "border-t border-dashed border-border pt-3"
+                              : ""
+                          }`}
                         >
                           <p className="text-muted-foreground break-words sm:max-w-[45%]">
                             {renderSummaryRowLabel(row)}
