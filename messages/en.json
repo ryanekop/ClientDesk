@@ -412,7 +412,9 @@
         "title": "Invoices & Settlement",
         "subtitle": "Manage initial invoices, final settlement, payment proofs, and payment follow-ups.",
         "columnManagerTitle": "Manage Invoice & Settlement Columns",
-        "columnManagerDescription": "Choose which columns appear in the invoice and settlement table. Name and Actions always stay visible, and lock can still be toggled."
+        "columnManagerDescription": "Choose which columns appear in the invoice and settlement table. Name and Actions always stay visible, and lock can still be toggled.",
+        "editBookingAction": "Edit Booking",
+        "setOperationalCostsAction": "Set Operational Costs"
     },
     "Team": {
         "title": "Team / Freelance",

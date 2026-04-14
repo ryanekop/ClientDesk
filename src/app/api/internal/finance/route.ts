@@ -73,6 +73,7 @@ type FinanceMetadataResponse = {
   bookingStatusOptions?: string[];
   packageOptions?: string[];
   availableEventTypes?: string[];
+  canManageOperationalCosts?: boolean;
   tableColumnPreferences?: unknown;
   formSectionsByEventType?: Record<string, unknown>;
   metadataRows?: Array<{
@@ -347,7 +348,7 @@ export async function GET(request: NextRequest) {
   const profileSettingsPromise = includeMetadata && user?.id
     ? supabase
       .from("profiles")
-      .select("booking_table_color_enabled, finance_table_color_enabled")
+      .select("role, booking_table_color_enabled, finance_table_color_enabled")
       .eq("id", user.id)
       .maybeSingle()
     : Promise.resolve({ data: null, error: null });
@@ -518,6 +519,9 @@ export async function GET(request: NextRequest) {
     profileSettingsResult.data?.booking_table_color_enabled === true;
   const financeTableColorEnabled =
     profileSettingsResult.data?.finance_table_color_enabled === true;
+  const canManageOperationalCosts =
+    typeof profileSettingsResult.data?.role === "string" &&
+    profileSettingsResult.data.role.trim().toLowerCase() === "admin";
 
   return NextResponse.json({
     items: bookings,
@@ -539,6 +543,7 @@ export async function GET(request: NextRequest) {
           metadataRows: readMetadataRows(metadataData?.metadataRows),
           bookingTableColorEnabled,
           financeTableColorEnabled,
+          canManageOperationalCosts,
           summary: readSummary(metadataData?.summary),
         },
       }

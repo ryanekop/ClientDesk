@@ -412,7 +412,9 @@
         "title": "Invoice & Pelunasan",
         "subtitle": "Kelola invoice awal, pelunasan, bukti bayar, dan tindak lanjut pembayaran.",
         "columnManagerTitle": "Kelola Kolom Invoice & Pelunasan",
-        "columnManagerDescription": "Atur kolom yang tampil di tabel invoice dan pelunasan. Kolom Nama dan Aksi selalu tampil, serta lock-nya bisa diaktifkan atau dimatikan."
+        "columnManagerDescription": "Atur kolom yang tampil di tabel invoice dan pelunasan. Kolom Nama dan Aksi selalu tampil, serta lock-nya bisa diaktifkan atau dimatikan.",
+        "editBookingAction": "Edit Booking",
+        "setOperationalCostsAction": "Set Biaya Operasional"
     },
     "Team": {
         "title": "Tim / Freelance",

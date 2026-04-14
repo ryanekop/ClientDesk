@@ -1,14 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { ArrowLeft, Save, Loader2, Users, CalendarClock, Wallet, StickyNote, Plus, Minus, Link2, CheckCircle2, Search, List, LayoutGrid, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { CancelStatusPaymentDialog } from "@/components/cancel-status-payment-dialog";
 import { createClient } from "@/utils/supabase/client";
-import { Link } from "@/i18n/routing";
+import { Link, useRouter } from "@/i18n/routing";
 import {
     BookingWriteReadonlyBanner,
     useBookingWriteAccess,
@@ -490,6 +490,7 @@ const WISUDA_SESSION_DURATION_EXTRA_FIELD_KEY =
 
 export default function EditBookingPage() {
     const params = useParams();
+    const searchParams = useSearchParams();
     const id = params.id as string;
     const router = useRouter();
     const locale = useLocale();
@@ -553,6 +554,7 @@ export default function EditBookingPage() {
     const [operationalCostTemplateDialogOpen, setOperationalCostTemplateDialogOpen] = React.useState(false);
     const [operationalCostTemplateSearchQuery, setOperationalCostTemplateSearchQuery] = React.useState("");
     const [isCurrentUserAdmin, setIsCurrentUserAdmin] = React.useState(false);
+    const [highlightOperationalCosts, setHighlightOperationalCosts] = React.useState(false);
     const [finalPaymentAmount, setFinalPaymentAmount] = React.useState(0);
     const [finalPaidAt, setFinalPaidAt] = React.useState<string | null>(null);
     const [baseExtraFieldsObject, setBaseExtraFieldsObject] = React.useState<Record<string, unknown> | null>(null);
@@ -611,6 +613,9 @@ export default function EditBookingPage() {
     }>({ open: false, title: "", message: "" });
     const [cancelStatusConfirmOpen, setCancelStatusConfirmOpen] = React.useState(false);
     const { canWriteBookings } = useBookingWriteAccess();
+    const operationalCostsSectionRef = React.useRef<HTMLDivElement | null>(null);
+    const focusOperationalCostsHandledRef = React.useRef(false);
+    const focusTarget = searchParams.get("focus");
 
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
@@ -1059,6 +1064,30 @@ export default function EditBookingPage() {
                 : eventTypeOptions[0],
         );
     }, [eventTypeOptions]);
+
+    React.useEffect(() => {
+        if (loading || !isCurrentUserAdmin) return;
+        if (focusTarget !== "operational-costs") return;
+        if (focusOperationalCostsHandledRef.current) return;
+
+        focusOperationalCostsHandledRef.current = true;
+        setHighlightOperationalCosts(true);
+
+        const scrollTimer = window.setTimeout(() => {
+            operationalCostsSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+            });
+        }, 120);
+        const highlightTimer = window.setTimeout(() => {
+            setHighlightOperationalCosts(false);
+        }, 2200);
+
+        return () => {
+            window.clearTimeout(scrollTimer);
+            window.clearTimeout(highlightTimer);
+        };
+    }, [focusTarget, isCurrentUserAdmin, loading]);
 
     const sortedServices = React.useMemo(
         () => [...services].sort(compareServicesByCatalogOrder),
@@ -3211,7 +3240,14 @@ export default function EditBookingPage() {
                         )}
                     </div>
                     {isCurrentUserAdmin && (
-                    <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                    <div
+                        id="operational-costs"
+                        ref={operationalCostsSectionRef}
+                        className={cn(
+                            "scroll-mt-24 rounded-xl border bg-muted/20 p-4 space-y-3 transition-all duration-500",
+                            highlightOperationalCosts && "ring-2 ring-orange-400/80 bg-orange-50/80 dark:bg-orange-500/10",
+                        )}
+                    >
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <h4 className="text-sm font-semibold">Biaya Operasional</h4>

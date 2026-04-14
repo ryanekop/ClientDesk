@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Clock, CheckCircle2, FileText, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown, Copy, ClipboardCheck, Search, ListOrdered, Settings2, X, Archive, Loader2 } from "lucide-react";
+import { Clock, CheckCircle2, FileText, Download, MessageCircle, ExternalLink, Receipt, Info, ChevronDown, Copy, ClipboardCheck, Search, ListOrdered, Settings2, X, Archive, Loader2, Pencil, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
@@ -19,7 +19,7 @@ import { formatSessionDate } from "@/utils/format-date";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { useStickyTableColumns } from "@/components/ui/use-sticky-table-columns";
 import { useResizableTableColumns } from "@/components/ui/use-resizable-table-columns";
-import { Link } from "@/i18n/routing";
+import { Link, useRouter } from "@/i18n/routing";
 import {
     BookingWriteReadonlyBanner,
     useBookingWriteAccess,
@@ -206,6 +206,7 @@ type FinancePageMetadata = {
     availableEventTypes: string[];
     bookingTableColorEnabled: boolean;
     financeTableColorEnabled: boolean;
+    canManageOperationalCosts: boolean;
     tableColumnPreferences: TableColumnPreference[] | null;
     formSectionsByEventType: Record<string, FormLayoutItem[]>;
     metadataRows: Array<{
@@ -308,6 +309,7 @@ function getPrimaryMainServiceColor(
 }
 
 export default function FinancePage() {
+    const router = useRouter();
     const supabase = createClient();
     const t = useTranslations("Finance");
     const tb = useTranslations("BookingsPage");
@@ -335,6 +337,7 @@ export default function FinancePage() {
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
     );
     const [financeTableColorEnabled, setFinanceTableColorEnabled] = React.useState(false);
+    const [canManageOperationalCosts, setCanManageOperationalCosts] = React.useState(false);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
@@ -570,6 +573,7 @@ export default function FinancePage() {
                 setPackageOptions(metadata.packageOptions || []);
                 setAvailableEventTypes(metadata.availableEventTypes || []);
                 setFinanceTableColorEnabled(metadata.financeTableColorEnabled === true);
+                setCanManageOperationalCosts(metadata.canManageOperationalCosts === true);
                 setStudioName(metadata.studioName || "");
                 setFormSectionsByEventType(metadata.formSectionsByEventType || {});
                 setMetadataRows(metadata.metadataRows || []);
@@ -1500,6 +1504,14 @@ export default function FinancePage() {
         await handleSendInvoiceWaStage(booking, resolveWaInvoiceStageFromContext(booking));
     }
 
+    function openEditBooking(bookingId: string) {
+        router.push(`/bookings/${bookingId}/edit`);
+    }
+
+    function openOperationalCostsEditor(bookingId: string) {
+        router.push(`/bookings/${bookingId}/edit?focus=operational-costs`);
+    }
+
     function renderDesktopHeaderLabel(column: TableColumnPreference, label: React.ReactNode) {
         const resizeHandleProps = getResizeHandleProps(column.id);
         const resizable = isColumnResizable(column.id);
@@ -1589,7 +1601,7 @@ export default function FinancePage() {
             case "status":
                 return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("status"));
             case "actions":
-                return renderDesktopHeaderCell(column, "min-w-[420px] px-4 py-4 font-medium text-muted-foreground text-right", t("aksi"));
+                return renderDesktopHeaderCell(column, "min-w-[520px] px-4 py-4 font-medium text-muted-foreground text-right", t("aksi"));
             default:
                 return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", column.label);
         }
@@ -1693,7 +1705,7 @@ export default function FinancePage() {
                 );
             case "actions":
                 return (
-                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[420px] px-4 py-4 text-right")}>
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[520px] px-4 py-4 text-right")}>
                         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap pr-1">
                             {isManageMode ? null : (
                                 <>
@@ -1702,6 +1714,24 @@ export default function FinancePage() {
                                     <Info className="w-4 h-4" />
                                 </ActionIconButton>
                             </Link>
+                            <ActionIconButton
+                                tone="blue"
+                                title={!canWriteBookings ? bookingWriteBlockedMessage : ti("editBookingAction")}
+                                disabled={!canWriteBookings}
+                                onClick={() => openEditBooking(booking.id)}
+                            >
+                                <Pencil className="w-4 h-4" />
+                            </ActionIconButton>
+                            {canManageOperationalCosts ? (
+                                <ActionIconButton
+                                    tone="orange"
+                                    title={!canWriteBookings ? bookingWriteBlockedMessage : ti("setOperationalCostsAction")}
+                                    disabled={!canWriteBookings}
+                                    onClick={() => openOperationalCostsEditor(booking.id)}
+                                >
+                                    <Wallet className="w-4 h-4" />
+                                </ActionIconButton>
+                            ) : null}
                             <div className="relative" data-finance-menu-root="true">
                                 <div className="flex items-stretch overflow-hidden rounded-md border border-indigo-200 bg-indigo-50 text-indigo-600 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
                                     <button
@@ -2653,6 +2683,24 @@ export default function FinancePage() {
                                         <Info className="w-4 h-4" />
                                     </ActionIconButton>
                                 </Link>
+                                <ActionIconButton
+                                    tone="blue"
+                                    title={!canWriteBookings ? bookingWriteBlockedMessage : ti("editBookingAction")}
+                                    disabled={!canWriteBookings}
+                                    onClick={() => openEditBooking(b.id)}
+                                >
+                                    <Pencil className="w-4 h-4" />
+                                </ActionIconButton>
+                                {canManageOperationalCosts ? (
+                                    <ActionIconButton
+                                        tone="orange"
+                                        title={!canWriteBookings ? bookingWriteBlockedMessage : ti("setOperationalCostsAction")}
+                                        disabled={!canWriteBookings}
+                                        onClick={() => openOperationalCostsEditor(b.id)}
+                                    >
+                                        <Wallet className="w-4 h-4" />
+                                    </ActionIconButton>
+                                ) : null}
                                 <ActionIconButton tone="indigo" title={tf("openInvoiceOptions")} onClick={() => setMobileActionPicker({ open: true, booking: b, kind: "invoice" })}>
                                     <FileText className="w-4 h-4" />
                                 </ActionIconButton>
