@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { invalidateTenantCache } from "@/lib/tenant-resolver";
 import { normalizeVendorSlug } from "@/lib/booking-url-mode";
+import { invalidatePublicCachesForProfile } from "@/lib/public-cache-invalidation";
 import { buildAdminCorsHeaders, isAdminCorsOriginAllowed } from "@/lib/security/admin-cors";
 import { sanitizeTenantFooterHtml } from "@/utils/tenant-footer";
 
-const ADMIN_CORS_METHODS = "GET, POST, PUT, OPTIONS";
+const ADMIN_CORS_METHODS = "GET, POST, PUT, DELETE, OPTIONS";
 
 function corsResponse(request: NextRequest, data: unknown, init?: { status?: number }) {
   return NextResponse.json(data, {
@@ -201,4 +202,91 @@ export async function PUT(request: NextRequest) {
   if (data?.domain) invalidateTenantCache(data.domain);
 
   return corsResponse(request, data);
+}
+
+export async function DELETE(request: NextRequest) {
+  if (!verifyAdmin(request)) {
+    return corsResponse(request, { error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const tenantId = typeof body.id === "string" ? body.id.trim() : "";
+
+    if (!tenantId) {
+      return corsResponse(request, { error: "id is required" }, { status: 400 });
+    }
+
+    const supabase = createServiceClient();
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("id, domain")
+      .eq("id", tenantId)
+      .maybeSingle();
+
+    if (tenantError) {
+      return corsResponse(request, { error: tenantError.message }, { status: 500 });
+    }
+
+    if (!tenant) {
+      return corsResponse(request, { error: "Tenant not found" }, { status: 404 });
+    }
+
+    const { data: linkedProfiles, error: linkedProfilesError } = await supabase
+      .from("profiles")
+      .select("id, vendor_slug")
+      .eq("tenant_id", tenantId);
+
+    if (linkedProfilesError) {
+      return corsResponse(request, { error: linkedProfilesError.message }, { status: 500 });
+    }
+
+    const unassignedProfiles = (linkedProfiles || []) as Array<{
+      id: string;
+      vendor_slug: string | null;
+    }>;
+
+    if (unassignedProfiles.length > 0) {
+      const { error: unassignError } = await supabase
+        .from("profiles")
+        .update({ tenant_id: null })
+        .eq("tenant_id", tenantId);
+
+      if (unassignError) {
+        return corsResponse(request, { error: unassignError.message }, { status: 500 });
+      }
+    }
+
+    const { error: deleteError } = await supabase
+      .from("tenants")
+      .delete()
+      .eq("id", tenantId);
+
+    if (deleteError) {
+      return corsResponse(request, { error: deleteError.message }, { status: 500 });
+    }
+
+    if (tenant.domain) {
+      invalidateTenantCache(tenant.domain);
+    } else {
+      invalidateTenantCache();
+    }
+
+    for (const profile of unassignedProfiles) {
+      invalidatePublicCachesForProfile({
+        userId: profile.id,
+        vendorSlug: profile.vendor_slug,
+      });
+    }
+
+    return corsResponse(request, {
+      success: true,
+      deletedTenantId: tenantId,
+      unassignedAccounts: unassignedProfiles.length,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to delete tenant";
+    return corsResponse(request, { error: message }, { status: 500 });
+  }
 }
