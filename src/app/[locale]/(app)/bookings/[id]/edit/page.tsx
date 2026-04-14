@@ -2471,7 +2471,7 @@ export default function EditBookingPage() {
 
                 <div className="rounded-xl border bg-card p-6 shadow-sm space-y-4">
                     <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                        <CalendarClock className="w-4 h-4" /> Detail Sesi
+                        <CalendarClock className="w-4 h-4" /> {tBookingEditor("sectionSessionDetail")}
                     </h3>
                     <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                         <div className="col-span-full space-y-1.5">

@@ -132,7 +132,7 @@
         "namaLengkap": "Full Name",
         "namaPlaceholder": "Your full name",
         "nomorWhatsapp": "WhatsApp Number",
-        "detailSesi": "Session Details",
+        "detailSesi": "Session/Event Details",
         "tipeAcara": "Event Type",
         "pilihTipe": "Select type...",
         "jadwalSesi": "Session Schedule",
@@ -183,7 +183,7 @@
         "summaryTitle": "Booking Summary",
         "summaryCheckHint": "Review the details above before continuing to payment and confirmation.",
         "summarySectionClientInfo": "Client Information",
-        "summarySectionSessionDetail": "Session Details",
+        "summarySectionSessionDetail": "Session/Event Details",
         "summarySectionPackageAddon": "Package & Add-On",
         "summarySectionExtraFields": "Extra Fields",
         "summarySectionCustomFields": "Custom Fields",
@@ -1315,7 +1315,8 @@
         "clickSaveToActivateForm": "Click \"Save Settings\" to activate the booking form.",
         "copyUrlButtonTitle": "Copy URL",
         "openInNewTabTitle": "Open in new tab",
-        "formNotActive": "Form is not active yet"
+        "formNotActive": "Form is not active yet",
+        "customFormBuiltInSectionsHelp": "Each event type has its own built-in sections: Client Information, Session/Event Details, and Package Payment. Built-in items can be reordered, and you can add custom fields or dividers inside each section."
     },
     "ChangelogPage": {
         "title": "Changelog",
@@ -1677,6 +1678,7 @@
         "adminNotesPlaceholder": "Internal admin notes (not visible to client/freelancer)...",
         "customPackageExampleNew": "Example: Gold Package 2 Hours",
         "customPackageExampleEdit": "Example: Gold Package",
+        "sectionSessionDetail": "Session/Event Details",
         "extraFieldLabels": {
             "university": "University",
             "faculty": "Faculty",
@@ -1754,6 +1756,7 @@
         "galleryLinkCopyFailed": "Failed to copy gallery link.",
         "portfolioLinkCopied": "Portfolio link copied.",
         "portfolioLinkCopyFailed": "Failed to copy portfolio link.",
+        "sectionSessionDetail": "Session/Event Details",
         "sessionDateLabel": "Session Date",
         "sessionTimeLabel": "Session Time",
         "locationDetailLabel": "Location Detail",

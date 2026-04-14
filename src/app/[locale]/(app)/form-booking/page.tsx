@@ -2176,7 +2176,7 @@ export default function FormBookingPage() {
                   <List className="w-4 h-4" /> Custom Form
                 </h3>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Setiap tipe acara memiliki section bawaan sendiri: Informasi Klien, Detail Sesi, dan Paket Pembayaran. Item bawaan di dalamnya bisa direorder, lalu kamu bisa tambah field atau divider custom per section.
+                  {t("customFormBuiltInSectionsHelp")}
                 </p>
               </div>
               <div className="p-6 space-y-4">

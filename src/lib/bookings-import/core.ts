@@ -108,7 +108,7 @@ const BUILT_IN_SECTION_TITLES: Record<
   string
 > = {
   client_info: "Informasi Klien",
-  session_details: "Detail Sesi",
+  session_details: "Detail Sesi/Acara",
   payment_details: "Paket Pembayaran",
 };
 

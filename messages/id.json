@@ -132,7 +132,7 @@
         "namaLengkap": "Nama Lengkap",
         "namaPlaceholder": "Nama lengkap Anda",
         "nomorWhatsapp": "Nomor WhatsApp",
-        "detailSesi": "Detail Sesi",
+        "detailSesi": "Detail Sesi/Acara",
         "tipeAcara": "Tipe Acara",
         "pilihTipe": "Pilih tipe...",
         "jadwalSesi": "Jadwal Sesi",
@@ -183,7 +183,7 @@
         "summaryTitle": "Ringkasan Booking",
         "summaryCheckHint": "Cek ulang data di atas sebelum lanjut ke pembayaran dan konfirmasi.",
         "summarySectionClientInfo": "Informasi Klien",
-        "summarySectionSessionDetail": "Detail Sesi",
+        "summarySectionSessionDetail": "Detail Sesi/Acara",
         "summarySectionPackageAddon": "Paket & Add-On",
         "summarySectionExtraFields": "Extra Fields",
         "summarySectionCustomFields": "Custom Fields",
@@ -1315,7 +1315,8 @@
         "clickSaveToActivateForm": "Klik \"Simpan Pengaturan\" untuk mengaktifkan form booking.",
         "copyUrlButtonTitle": "Salin URL",
         "openInNewTabTitle": "Buka di tab baru",
-        "formNotActive": "Form belum aktif"
+        "formNotActive": "Form belum aktif",
+        "customFormBuiltInSectionsHelp": "Setiap tipe acara memiliki section bawaan sendiri: Informasi Klien, Detail Sesi/Acara, dan Paket Pembayaran. Item bawaan di dalamnya bisa direorder, lalu kamu bisa tambah field atau divider custom per section."
     },
     "ChangelogPage": {
         "title": "Log Perubahan",
@@ -1677,6 +1678,7 @@
         "adminNotesPlaceholder": "Catatan internal admin (tidak tampil ke klien/freelance)...",
         "customPackageExampleNew": "Contoh: Paket Gold 2 Jam",
         "customPackageExampleEdit": "Contoh: Paket Gold",
+        "sectionSessionDetail": "Detail Sesi/Acara",
         "extraFieldLabels": {
             "university": "Universitas",
             "faculty": "Fakultas",
@@ -1754,6 +1756,7 @@
         "galleryLinkCopyFailed": "Gagal menyalin link galeri.",
         "portfolioLinkCopied": "Link portofolio berhasil disalin.",
         "portfolioLinkCopyFailed": "Gagal menyalin link portofolio.",
+        "sectionSessionDetail": "Detail Sesi/Acara",
         "sessionDateLabel": "Tanggal Sesi",
         "sessionTimeLabel": "Jam Sesi",
         "locationDetailLabel": "Detail Lokasi",

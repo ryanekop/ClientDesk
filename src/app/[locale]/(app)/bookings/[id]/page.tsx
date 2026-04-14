@@ -2854,10 +2854,10 @@ export default function BookingDetailPage() {
             </div>
             )}
 
-            {/* Detail Sesi */}
+            {/* Detail Sesi/Acara */}
             {activeDetailTab === "informasi" && (
             <div className="rounded-xl border bg-card p-4 space-y-3 sm:p-6">
-                <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Detail Sesi</h3>
+                <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">{tBookingDetail("sectionSessionDetail")}</h3>
                 <InfoRow label={tBookingDetail("sessionDateLabel")} value={renderSessionDisplayValue(sessionDisplay.dateDisplay)} />
                 <InfoRow label={tBookingDetail("sessionTimeLabel")} value={renderSessionDisplayValue(sessionDisplay.timeDisplay)} />
                 {sessionLocationEntries.map(([key, value]) => (

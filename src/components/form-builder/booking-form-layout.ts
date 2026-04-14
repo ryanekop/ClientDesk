@@ -174,7 +174,7 @@ const BUILT_IN_SECTIONS: BuiltInSectionDefinition[] = [
   },
   {
     sectionId: "session_details",
-    title: "Detail Sesi",
+    title: "Detail Sesi/Acara",
     category: "Sesi",
   },
   {
