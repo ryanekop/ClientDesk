@@ -121,6 +121,7 @@ export default function SpecialBookingFormPage() {
   const [discountAmountInput, setDiscountAmountInput] = React.useState(
     () => formatRupiahInput(0),
   );
+  const [disableDp, setDisableDp] = React.useState(false);
   const [isActive, setIsActive] = React.useState(true);
   const { showSuccessToast, successToastNode } = useSuccessToast();
 
@@ -148,6 +149,7 @@ export default function SpecialBookingFormPage() {
     setSelectedAddonIds([]);
     setAccommodationFeeInput(formatRupiahInput(0));
     setDiscountAmountInput(formatRupiahInput(0));
+    setDisableDp(false);
     setIsActive(true);
   }, []);
 
@@ -179,7 +181,7 @@ export default function SpecialBookingFormPage() {
         supabase
           .from("booking_special_links")
           .select(
-            "id, token, user_id, name, event_type_locked, event_types, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, is_active, consumed_at, consumed_booking_id, created_at",
+            "id, token, user_id, name, event_type_locked, event_types, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, disable_dp, is_active, consumed_at, consumed_booking_id, created_at",
           )
           .eq("user_id", user.id)
           .order("created_at", { ascending: false }),
@@ -269,6 +271,7 @@ export default function SpecialBookingFormPage() {
     setSelectedAddonIds(link.addonServiceIds);
     setAccommodationFeeInput(formatRupiahInput(Math.round(link.accommodationFee || 0)));
     setDiscountAmountInput(formatRupiahInput(Math.round(link.discountAmount || 0)));
+    setDisableDp(link.disableDp);
     setIsActive(link.isActive);
   }
 
@@ -321,6 +324,7 @@ export default function SpecialBookingFormPage() {
           addon_service_ids: normalizedAddonIds,
           accommodation_fee: accommodationFee,
           discount_amount: discountAmount,
+          disable_dp: disableDp,
           is_active: isActive,
         })
         .eq("id", editingLinkId)
@@ -349,6 +353,7 @@ export default function SpecialBookingFormPage() {
       addon_service_ids: normalizedAddonIds,
       accommodation_fee: accommodationFee,
       discount_amount: discountAmount,
+      disable_dp: disableDp,
       is_active: isActive,
     });
 
@@ -693,6 +698,21 @@ export default function SpecialBookingFormPage() {
             </div>
           </div>
 
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4 text-sm">
+            <input
+              type="checkbox"
+              checked={disableDp}
+              onChange={(e) => setDisableDp(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-primary"
+            />
+            <span className="space-y-1">
+              <span className="block font-medium">{t("disableDpLabel")}</span>
+              <span className="block text-xs text-muted-foreground">
+                {t("disableDpHint")}
+              </span>
+            </span>
+          </label>
+
           <label className="inline-flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -792,6 +812,13 @@ export default function SpecialBookingFormPage() {
                       {t("priceSummary", {
                         accommodation: formatCurrency(link.accommodationFee),
                         discount: formatCurrency(link.discountAmount),
+                      })}
+                    </p>
+                    <p>
+                      {t("dpSummary", {
+                        status: link.disableDp
+                          ? t("dpSummaryDisabled")
+                          : t("dpSummaryActive"),
                       })}
                     </p>
                   </div>

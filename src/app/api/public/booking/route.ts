@@ -646,7 +646,7 @@ export async function POST(request: NextRequest) {
             const { data: specialOfferRow, error: specialOfferError } = await supabaseAdmin
                 .from("booking_special_links")
                 .select(
-                    "id, token, user_id, name, event_type_locked, event_types, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, is_active, consumed_at, consumed_booking_id",
+                    "id, token, user_id, name, event_type_locked, event_types, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, disable_dp, is_active, consumed_at, consumed_booking_id",
                 )
                 .eq("token", normalizedOfferToken)
                 .eq("user_id", vendor.id)
@@ -675,6 +675,7 @@ export async function POST(request: NextRequest) {
                 );
             }
         }
+        const isSpecialOfferDpDisabled = specialOfferRule?.disableDp === true;
 
         if (specialOfferRule) {
             const allowedEventTypes = normalizeEventTypeList(
@@ -927,14 +928,21 @@ export async function POST(request: NextRequest) {
 
         const availablePaymentMethods = normalizePaymentMethods(vendor.form_payment_methods);
         const enabledBankAccounts = getEnabledBankAccounts(normalizeBankAccounts(vendor.bank_accounts));
-        const selectedPaymentMethod = paymentMethod as PaymentMethod | null;
+        const selectedPaymentMethod = isSpecialOfferDpDisabled
+            ? null
+            : paymentMethod as PaymentMethod | null;
         let normalizedPaymentSource: PaymentSource | null = null;
 
-        if (!selectedPaymentMethod || !availablePaymentMethods.includes(selectedPaymentMethod)) {
+        if (
+            !isSpecialOfferDpDisabled &&
+            (!selectedPaymentMethod || !availablePaymentMethods.includes(selectedPaymentMethod))
+        ) {
             return NextResponse.json({ success: false, error: "Metode pembayaran tidak valid." }, { status: 400 });
         }
 
-        if (selectedPaymentMethod === "bank") {
+        if (isSpecialOfferDpDisabled) {
+            normalizedPaymentSource = null;
+        } else if (selectedPaymentMethod === "bank") {
             const requestedBankId =
                 paymentSource &&
                 typeof paymentSource === "object" &&
@@ -962,9 +970,9 @@ export async function POST(request: NextRequest) {
             };
         }
 
-        const proofEnabled = vendor.form_show_proof ?? true;
+        const proofEnabled = !isSpecialOfferDpDisabled && (vendor.form_show_proof ?? true);
         const normalizedPaymentProofUrl =
-            selectedPaymentMethod === "cash" || !proofEnabled
+            isSpecialOfferDpDisabled || selectedPaymentMethod === "cash" || !proofEnabled
                 ? null
                 : normalizedPaymentProofInputUrl || null;
 
@@ -1276,6 +1284,7 @@ export async function POST(request: NextRequest) {
             accommodationFee,
             discountAmount,
         });
+        const normalizedDpPaid = isSpecialOfferDpDisabled ? 0 : dpPaid;
 
         // Validate minimum DP (supports percent/fixed mode + backward compatibility)
         const dpMap =
@@ -1294,7 +1303,7 @@ export async function POST(request: NextRequest) {
         const dpMode = typeof dpEntry === "number" ? "percent" : (dpEntry.mode || "percent");
         const dpValue = typeof dpEntry === "number" ? dpEntry : (dpEntry.value ?? (vendor.min_dp_percent ?? 50));
         const minDPAmount = dpMode === "fixed" ? dpValue : (computedTotalPrice * dpValue) / 100;
-        if (dpPaid < minDPAmount) {
+        if (!isSpecialOfferDpDisabled && normalizedDpPaid < minDPAmount) {
             return NextResponse.json({
                 success: false,
                 error: dpMode === "fixed"
@@ -1358,7 +1367,7 @@ export async function POST(request: NextRequest) {
             city_code: resolvedCityCode,
             city_name: resolvedCityName,
             total_price: computedTotalPrice,
-            dp_paid: dpPaid,
+            dp_paid: normalizedDpPaid,
             location: location || null,
             location_lat: normalizedLocationLat,
             location_lng: normalizedLocationLng,
@@ -1371,7 +1380,7 @@ export async function POST(request: NextRequest) {
             instagram: instagram || null,
             status: initialStatus,
             client_status: initialStatus,
-            is_fully_paid: dpPaid >= computedTotalPrice,
+            is_fully_paid: normalizedDpPaid >= computedTotalPrice,
         };
 
         let booking: { id: string; booking_code: string } | null = null;

@@ -15,6 +15,7 @@ export type BookingSpecialLinkRule = {
   addonServiceIds: string[];
   accommodationFee: number;
   discountAmount: number;
+  disableDp: boolean;
   isActive: boolean;
   consumedAt: string | null;
   consumedBookingId: string | null;
@@ -40,6 +41,7 @@ export type BookingSpecialOfferSnapshot = {
   addon_total: number;
   accommodation_fee: number;
   discount_amount: number;
+  dp_disabled: boolean;
   final_total: number;
   applied_at: string;
 };
@@ -123,6 +125,7 @@ export function normalizeBookingSpecialLinkRule(
     addonServiceIds: normalizeUuidList(record.addon_service_ids),
     accommodationFee: toNonNegativeMoney(record.accommodation_fee),
     discountAmount: toNonNegativeMoney(record.discount_amount),
+    disableDp: record.disable_dp === true,
     isActive: record.is_active !== false,
     consumedAt:
       typeof record.consumed_at === "string" && record.consumed_at.trim()
@@ -195,6 +198,7 @@ export function buildSpecialOfferSnapshot(input: {
     addon_total: addonTotal,
     accommodation_fee: accommodationFee,
     discount_amount: discountAmount,
+    dp_disabled: input.rule.disableDp === true,
     final_total: computeSpecialOfferTotal({
       packageTotal,
       addonTotal,
@@ -259,6 +263,7 @@ export function buildEditableSpecialOfferSnapshot(input: {
     addon_total: addonTotal,
     accommodation_fee: accommodationFee,
     discount_amount: discountAmount,
+    dp_disabled: existingSnapshot?.dp_disabled === true,
     final_total: computeSpecialOfferTotal({
       packageTotal,
       addonTotal,
@@ -331,6 +336,7 @@ export function resolveSpecialOfferSnapshotFromExtraFields(
     addon_total: addonTotal,
     accommodation_fee: accommodationFee,
     discount_amount: discountAmount,
+    dp_disabled: payload.dp_disabled === true,
     final_total: finalTotalRaw > 0 || fallbackTotal === 0 ? finalTotalRaw : fallbackTotal,
     applied_at:
       typeof payload.applied_at === "string" && payload.applied_at.trim()

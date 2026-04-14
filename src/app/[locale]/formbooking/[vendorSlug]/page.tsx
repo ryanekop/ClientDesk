@@ -109,6 +109,7 @@ export default async function PublicBookingFormPage({
     addonServiceIds: string[];
     accommodationFee: number;
     discountAmount: number;
+    disableDp: boolean;
   } | null = null;
   let specialOfferStatus: BookingSpecialOfferStatus = offerToken
     ? "expired"
@@ -118,7 +119,7 @@ export default async function PublicBookingFormPage({
     const { data: specialOfferRow } = await supabaseAdmin
       .from("booking_special_links")
       .select(
-        "id, token, user_id, name, event_type_locked, event_types, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, is_active, consumed_at, consumed_booking_id",
+        "id, token, user_id, name, event_type_locked, event_types, package_locked, package_service_ids, addon_locked, addon_service_ids, accommodation_fee, discount_amount, disable_dp, is_active, consumed_at, consumed_booking_id",
       )
       .eq("token", offerToken)
       .eq("user_id", vendor.id)
@@ -138,6 +139,7 @@ export default async function PublicBookingFormPage({
         addonServiceIds: normalizedRule.addonServiceIds,
         accommodationFee: normalizedRule.accommodationFee,
         discountAmount: normalizedRule.discountAmount,
+        disableDp: normalizedRule.disableDp,
       };
     }
   }

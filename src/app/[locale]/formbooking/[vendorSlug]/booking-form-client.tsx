@@ -668,6 +668,7 @@ interface BookingFormClientProps {
     addonServiceIds: string[];
     accommodationFee: number;
     discountAmount: number;
+    disableDp: boolean;
   } | null;
 }
 
@@ -925,6 +926,8 @@ export function BookingFormClient({
       normalizedOfferToken &&
       specialOfferRule,
   );
+  const isSpecialOfferDpDisabled =
+    isSpecialOfferActive && specialOfferRule?.disableDp === true;
   const eventTypeLocked = isSpecialOfferActive && specialOfferRule?.eventTypeLocked === true;
   const packageLocked = isSpecialOfferActive && specialOfferRule?.packageLocked === true;
   const addonLocked = isSpecialOfferActive && specialOfferRule?.addonLocked === true;
@@ -1442,17 +1445,25 @@ export function BookingFormClient({
       }
     }
 
-    if (!selectedPaymentMethod) {
+    if (!isSpecialOfferDpDisabled && !selectedPaymentMethod) {
       setError(t("errorPaymentMethod"));
       return;
     }
 
-    if (selectedPaymentMethod === "bank" && !selectedPaymentSource) {
+    if (
+      !isSpecialOfferDpDisabled &&
+      selectedPaymentMethod === "bank" &&
+      !selectedPaymentSource
+    ) {
       setError(t("errorPaymentSource"));
       return;
     }
 
-    if (selectedPaymentMethod === "qris" && !effectiveVendor.qris_image_url) {
+    if (
+      !isSpecialOfferDpDisabled &&
+      selectedPaymentMethod === "qris" &&
+      !effectiveVendor.qris_image_url
+    ) {
       setError(t("paymentNoQris"));
       return;
     }
@@ -1513,7 +1524,7 @@ export function BookingFormClient({
     }
 
     const fullPhone = `${countryCode}${phone}`.replace(/[^0-9+]/g, "");
-    const dpValue = parseFormatted(dpDisplay) || 0;
+    const dpValue = isSpecialOfferDpDisabled ? 0 : parseFormatted(dpDisplay) || 0;
     if (requiresCitySelection && !selectedCity) {
       setError(
         localeCode === "en"
@@ -1592,7 +1603,7 @@ export function BookingFormClient({
     });
 
     const minDP = getMinDpForEvent();
-    if (activeSelectedService) {
+    if (!isSpecialOfferDpDisabled && activeSelectedService) {
       const minAmount = calcMinDpAmount(activeSelectedBookingTotal, minDP);
       if (dpValue < minAmount) {
         setError(
@@ -1609,7 +1620,11 @@ export function BookingFormClient({
 
     setSubmitting(true);
 
-    if (proofFile && selectedPaymentMethod !== "cash") {
+    if (
+      !isSpecialOfferDpDisabled &&
+      proofFile &&
+      selectedPaymentMethod !== "cash"
+    ) {
       setUploadingProof(true);
     }
 
@@ -1720,12 +1735,18 @@ export function BookingFormClient({
           ...(customFieldSnapshots.length > 0 ? { custom_fields: customFieldSnapshots } : {}),
         }),
       );
-      formData.append("paymentMethod", selectedPaymentMethod);
-      if (selectedPaymentSource) {
-        formData.append("paymentSource", JSON.stringify(selectedPaymentSource));
+      if (!isSpecialOfferDpDisabled && selectedPaymentMethod) {
+        formData.append("paymentMethod", selectedPaymentMethod);
+        if (selectedPaymentSource) {
+          formData.append("paymentSource", JSON.stringify(selectedPaymentSource));
+        }
       }
       formData.append("instagram", instagram || "");
-      if (proofFile && selectedPaymentMethod !== "cash") {
+      if (
+        !isSpecialOfferDpDisabled &&
+        proofFile &&
+        selectedPaymentMethod !== "cash"
+      ) {
         formData.append("paymentProofFile", proofFile);
       }
 
@@ -1841,7 +1862,7 @@ export function BookingFormClient({
           minute: "2-digit",
         })
       : "-";
-    const dpVal = parseFormatted(dpDisplay) || 0;
+    const dpVal = isSpecialOfferDpDisabled ? 0 : parseFormatted(dpDisplay) || 0;
     const resolvedLocation = resolvePreferredLocation(
       isWeddingEvent
         ? [
@@ -2258,15 +2279,18 @@ export function BookingFormClient({
   const hasTerms = effectiveVendor.form_terms_enabled && !isRichTextEmpty(termsContent);
   const canAcceptTerms = termsViewedOnce;
   const proofRequired =
+    !isSpecialOfferDpDisabled &&
     effectiveVendor.form_show_proof !== false &&
     Boolean(selectedPaymentMethod) &&
     selectedPaymentMethod !== "cash";
   const availablePaymentMethods = React.useMemo(
-    () =>
-      effectiveVendor.form_payment_methods.length > 0
+    () => {
+      if (isSpecialOfferDpDisabled) return [];
+      return effectiveVendor.form_payment_methods.length > 0
         ? effectiveVendor.form_payment_methods
-        : (["bank"] as PaymentMethod[]),
-    [effectiveVendor.form_payment_methods],
+        : (["bank"] as PaymentMethod[]);
+    },
+    [effectiveVendor.form_payment_methods, isSpecialOfferDpDisabled],
   );
   const enabledBankAccounts = React.useMemo(
     () => getEnabledBankAccounts(effectiveVendor.bank_accounts || []),
@@ -2545,10 +2569,18 @@ export function BookingFormClient({
     discountAmount,
   });
   const currentMinDpAmount = selectedService
-    ? calcMinDpAmount(selectedBookingTotal, minDP)
+    ? isSpecialOfferDpDisabled
+      ? 0
+      : calcMinDpAmount(selectedBookingTotal, minDP)
     : 0;
 
   React.useEffect(() => {
+    if (isSpecialOfferDpDisabled) {
+      autoDpAmountRef.current = null;
+      setDpDisplay("");
+      return;
+    }
+
     if (!selectedService) {
       autoDpAmountRef.current = null;
       return;
@@ -2566,7 +2598,7 @@ export function BookingFormClient({
 
       return current;
     });
-  }, [currentMinDpAmount, selectedService]);
+  }, [currentMinDpAmount, isSpecialOfferDpDisabled, selectedService]);
 
   React.useEffect(() => {
     if (availablePaymentMethods.length === 1) {
@@ -2609,10 +2641,16 @@ export function BookingFormClient({
   }, [enabledBankAccounts, selectedPaymentMethod]);
 
   React.useEffect(() => {
+    if (isSpecialOfferDpDisabled) {
+      setProofFile(null);
+      setProofPreview(null);
+      return;
+    }
+
     if (selectedPaymentMethod !== "cash") return;
     setProofFile(null);
     setProofPreview(null);
-  }, [selectedPaymentMethod]);
+  }, [isSpecialOfferDpDisabled, selectedPaymentMethod]);
 
   const visibleBuiltInFieldById = React.useMemo(() => {
     const map = new Map<
@@ -4026,6 +4064,7 @@ export function BookingFormClient({
           </div>
         );
       case "dp_paid":
+        if (isSpecialOfferDpDisabled) return null;
         return (
           <div key={item.id} className="space-y-1.5">
             <label className="text-sm font-medium">
@@ -4090,7 +4129,7 @@ export function BookingFormClient({
           </div>
         );
       case "bank_accounts":
-        if (availablePaymentMethods.length === 0) return null;
+        if (isSpecialOfferDpDisabled || availablePaymentMethods.length === 0) return null;
         return (
           <div key={item.id} className="space-y-4">
             {fieldDescription ? (
@@ -4135,6 +4174,7 @@ export function BookingFormClient({
         );
       case "payment_proof":
         if (
+          isSpecialOfferDpDisabled ||
           effectiveVendor.form_show_proof === false ||
           !selectedPaymentMethod ||
           selectedPaymentMethod === "cash"
