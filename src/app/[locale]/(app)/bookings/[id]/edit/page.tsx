@@ -2162,7 +2162,7 @@ export default function EditBookingPage() {
             }
             setCancelStatusConfirmOpen(false);
             void triggerFastpikAutoSync(id);
-            router.push(`/${locale}/bookings/${id}?saved=edit`);
+            router.push(`/bookings/${id}?saved=edit`);
         } finally {
             setSaving(false);
         }
