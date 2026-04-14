@@ -156,6 +156,16 @@ const HIDDEN_EXTRA_FIELD_KEYS = new Set([
 ]);
 const FASTPIK_APP_BASE_URL = (process.env.NEXT_PUBLIC_FASTPIK_BASE_URL || "https://fastpik.ryanekoapp.web.id").replace(/\/+$/, "");
 
+function getBookingDetailSelect(canViewOperationalCosts: boolean) {
+    return [
+        "id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source",
+        canViewOperationalCosts ? "operational_costs" : "",
+        "settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, admin_notes, extra_fields, tracking_uuid, archived_at, archived_by, client_status, queue_position, services(id, name, price, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, quantity, service:services(id, name, price, duration_minutes, is_addon, affects_schedule)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))",
+    ]
+        .filter(Boolean)
+        .join(", ");
+}
+
 type FreelancerDetail = { id: string; name: string; whatsapp_number: string | null };
 type BookingRow = Booking & {
     payment_proof_url: string | null;
@@ -251,6 +261,7 @@ type DrivePathProfile = {
 };
 
 type BookingProfileRow = {
+    role?: string | null;
     custom_client_statuses?: string[] | null;
     dp_verify_trigger_status?: string | null;
     queue_trigger_status?: string | null;
@@ -658,6 +669,7 @@ export default function BookingDetailPage() {
     const postSaveState = searchParams.get("saved");
     const [booking, setBooking] = React.useState<Booking | null>(null);
     const [loading, setLoading] = React.useState(true);
+    const [isCurrentUserAdmin, setIsCurrentUserAdmin] = React.useState(false);
     const [creatingFolder, setCreatingFolder] = React.useState(false);
     const [isDriveConnected, setIsDriveConnected] = React.useState(false);
     const [clientStatus, setClientStatus] = React.useState("");
@@ -1178,11 +1190,19 @@ export default function BookingDetailPage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
-            const [{ data }, { data: profile }, { data: addonServiceRows }] = await Promise.all([
+            const { data: profile } = await supabase
+                .from("profiles")
+                .select("role, studio_name, custom_client_statuses, dp_verify_trigger_status, queue_trigger_status, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof")
+                .eq("id", user.id)
+                .single();
+            const profileRow = (profile ?? null) as BookingProfileRow | null;
+            const userIsAdmin = (profileRow?.role || "").trim().toLowerCase() === "admin";
+            setIsCurrentUserAdmin(userIsAdmin);
+
+            const [{ data }, { data: addonServiceRows }] = await Promise.all([
                 supabase.from("bookings")
-                    .select("id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source, operational_costs, settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, admin_notes, extra_fields, tracking_uuid, archived_at, archived_by, client_status, queue_position, services(id, name, price, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, quantity, service:services(id, name, price, duration_minutes, is_addon, affects_schedule)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))")
+                    .select(getBookingDetailSelect(userIsAdmin))
                     .eq("id", id).single(),
-                supabase.from("profiles").select("studio_name, custom_client_statuses, dp_verify_trigger_status, queue_trigger_status, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof").eq("id", user.id).single(),
                 supabase.from("services")
                     .select("id, name, price, description, event_types")
                     .eq("user_id", user.id)
@@ -1197,7 +1217,6 @@ export default function BookingDetailPage() {
                 rawBooking?.booking_services,
                 rawBooking?.services || null,
             );
-            const profileRow = (profile ?? null) as BookingProfileRow | null;
             const { data: splitModeProfile } = await supabase
                 .from("profiles")
                 .select("fastpik_link_display_mode_booking_detail")
@@ -2413,7 +2432,9 @@ export default function BookingDetailPage() {
     const settlementStatus = getSettlementStatus(booking.settlement_status);
     const finalAdjustments = normalizeEditableAdjustments(adjustmentItems);
     const finalAdjustmentsTotal = getFinalAdjustmentsTotal(finalAdjustments);
-    const operationalCosts = normalizeOperationalCosts(booking.operational_costs);
+    const operationalCosts = isCurrentUserAdmin
+        ? normalizeOperationalCosts(booking.operational_costs)
+        : [];
     const operationalCostsTotal = getOperationalCostsTotal(operationalCosts);
     const finalInvoiceTotal = getFinalInvoiceTotal(booking.total_price, finalAdjustments);
     const verifiedPaymentInput = {
@@ -2433,10 +2454,12 @@ export default function BookingDetailPage() {
     const dpRefundAmount = getDpRefundAmount(verifiedPaymentInput);
     const verifiedFinalPayment = booking.final_paid_at ? booking.final_payment_amount || 0 : 0;
     const netVerifiedRevenue = getNetVerifiedRevenueAmount(verifiedPaymentInput);
-    const netRevenueAfterOperationalCosts = getNetRevenueAfterOperationalCosts({
-        ...verifiedPaymentInput,
-        operational_costs: operationalCosts,
-    });
+    const netRevenueAfterOperationalCosts = isCurrentUserAdmin
+        ? getNetRevenueAfterOperationalCosts({
+            ...verifiedPaymentInput,
+            operational_costs: operationalCosts,
+        })
+        : netVerifiedRevenue;
     const initialPaymentStatus = booking.is_fully_paid
         ? "Lunas"
         : verifiedDpAmount > 0
@@ -3070,35 +3093,41 @@ export default function BookingDetailPage() {
                             </span>
                         }
                     />
-                    <InfoRow label="Biaya Operasional" value={`- ${formatCurrency(operationalCostsTotal)}`} />
-                    <InfoRow
-                        label="Pemasukan Bersih"
-                        value={
-                            <span className="font-semibold text-green-700 dark:text-green-400">
-                                {formatCurrency(netRevenueAfterOperationalCosts)}
-                            </span>
-                        }
-                    />
+                    {isCurrentUserAdmin && (
+                        <>
+                            <InfoRow label="Biaya Operasional" value={`- ${formatCurrency(operationalCostsTotal)}`} />
+                            <InfoRow
+                                label="Pemasukan Bersih"
+                                value={
+                                    <span className="font-semibold text-green-700 dark:text-green-400">
+                                        {formatCurrency(netRevenueAfterOperationalCosts)}
+                                    </span>
+                                }
+                            />
+                        </>
+                    )}
                 </div>
-                <div className="border-t pt-3 space-y-3">
-                    <InfoRow
-                        label="Rincian Biaya Operasional"
-                        value={
-                            operationalCosts.length > 0 ? (
-                                <div className="space-y-2">
-                                    {operationalCosts.map((item) => (
-                                        <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2">
-                                            <span>{item.label}</span>
-                                            <span className="font-medium">- {formatCurrency(item.amount)}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                "-"
-                            )
-                        }
-                    />
-                </div>
+                {isCurrentUserAdmin && (
+                    <div className="border-t pt-3 space-y-3">
+                        <InfoRow
+                            label="Rincian Biaya Operasional"
+                            value={
+                                operationalCosts.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {operationalCosts.map((item) => (
+                                            <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2">
+                                                <span>{item.label}</span>
+                                                <span className="font-medium">- {formatCurrency(item.amount)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    "-"
+                                )
+                            }
+                        />
+                    </div>
+                )}
                 <div className="border-t pt-3 space-y-3">
                     <InfoRow label="Metode Pembayaran" value={formatPaymentMethod(booking.payment_method)} />
                     <InfoRow label="Sumber Pembayaran" value={formatPaymentSource(booking.payment_source)} />

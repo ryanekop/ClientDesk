@@ -62,10 +62,15 @@ import {
     normalizeFinalAdjustments,
 } from "@/lib/final-settlement";
 import {
+    appendUniqueOperationalCosts,
+    buildOperationalCostFromTemplateItem,
     getNetRevenueAfterOperationalCosts,
     getOperationalCostsTotal,
+    normalizeOperationalCostPricelistItems,
     normalizeOperationalCosts,
+    normalizeOperationalCostTemplates,
     type OperationalCost,
+    type OperationalCostTemplate,
 } from "@/lib/operational-costs";
 import {
     buildEditableSpecialOfferSnapshot,
@@ -239,9 +244,11 @@ type Freelance = {
     google_email?: string | null;
     role?: string | null;
     tags: string[];
+    pricelist?: unknown;
 };
 type LocationCoords = { lat: number | null; lng: number | null };
 type ProfileRow = {
+    role?: string | null;
     custom_client_statuses?: string[] | null;
     dp_verify_trigger_status?: string | null;
     form_sections?: unknown;
@@ -249,6 +256,7 @@ type ProfileRow = {
     custom_event_types?: unknown;
     form_brand_color?: string | null;
     team_badge_colors?: unknown;
+    operational_cost_templates?: unknown;
 };
 
 type BadgeColorMap = Record<string, string>;
@@ -263,6 +271,45 @@ type EditableOperationalCost = {
     amount: number | "";
     created_at: string;
 };
+
+const BOOKING_EDIT_NON_ADMIN_SELECT = [
+    "id",
+    "booking_code",
+    "tracking_uuid",
+    "client_name",
+    "client_whatsapp",
+    "instagram",
+    "event_type",
+    "city_code",
+    "city_name",
+    "booking_date",
+    "created_at",
+    "session_date",
+    "location",
+    "location_lat",
+    "location_lng",
+    "location_detail",
+    "service_id",
+    "freelance_id",
+    "total_price",
+    "dp_paid",
+    "dp_verified_amount",
+    "dp_verified_at",
+    "dp_refund_amount",
+    "dp_refunded_at",
+    "settlement_status",
+    "is_fully_paid",
+    "final_adjustments",
+    "final_payment_amount",
+    "final_paid_at",
+    "status",
+    "client_status",
+    "notes",
+    "admin_notes",
+    "drive_folder_url",
+    "portfolio_url",
+    "extra_fields",
+].join(", ");
 
 const DEFAULT_TEAM_BADGE_COLORS: TeamBadgeColors = {
     roles: {},
@@ -497,6 +544,10 @@ export default function EditBookingPage() {
     const [isFullyPaid, setIsFullyPaid] = React.useState(false);
     const [finalAdjustmentsRaw, setFinalAdjustmentsRaw] = React.useState<unknown>(null);
     const [operationalCostItems, setOperationalCostItems] = React.useState<EditableOperationalCost[]>([]);
+    const [operationalCostTemplates, setOperationalCostTemplates] = React.useState<OperationalCostTemplate[]>([]);
+    const [operationalCostTemplateDialogOpen, setOperationalCostTemplateDialogOpen] = React.useState(false);
+    const [operationalCostTemplateSearchQuery, setOperationalCostTemplateSearchQuery] = React.useState("");
+    const [isCurrentUserAdmin, setIsCurrentUserAdmin] = React.useState(false);
     const [finalPaymentAmount, setFinalPaymentAmount] = React.useState(0);
     const [finalPaidAt, setFinalPaidAt] = React.useState<string | null>(null);
     const [baseExtraFieldsObject, setBaseExtraFieldsObject] = React.useState<Record<string, unknown> | null>(null);
@@ -620,13 +671,45 @@ export default function EditBookingPage() {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
-            const [{ data: booking }, { data: svcs }, { data: frees }, { data: bfRows }, { data: bsRows }, { data: prof }, { data: cityRefs }] = await Promise.all([
-                supabase.from("bookings").select("*").eq("id", id).single(),
+            let { data: prof, error: profileError } = await supabase
+                .from("profiles")
+                .select("role, custom_client_statuses, dp_verify_trigger_status, form_sections, form_event_types, custom_event_types, form_brand_color, team_badge_colors, operational_cost_templates")
+                .eq("id", user.id)
+                .single();
+            if (
+                profileError &&
+                (profileError.message || "").includes("operational_cost_templates")
+            ) {
+                const fallbackProfile = await supabase
+                    .from("profiles")
+                    .select("role, custom_client_statuses, dp_verify_trigger_status, form_sections, form_event_types, custom_event_types, form_brand_color, team_badge_colors")
+                    .eq("id", user.id)
+                    .single();
+                prof = fallbackProfile.data;
+                profileError = fallbackProfile.error;
+            }
+            if (profileError) {
+                console.warn("Failed to load booking editor profile:", profileError.message);
+            }
+            const profileRow = (prof ?? null) as ProfileRow | null;
+            const userIsAdmin = (profileRow?.role || "").trim().toLowerCase() === "admin";
+            setIsCurrentUserAdmin(userIsAdmin);
+            setOperationalCostTemplates(
+                userIsAdmin
+                    ? normalizeOperationalCostTemplates(profileRow?.operational_cost_templates)
+                    : [],
+            );
+
+            const [{ data: booking }, { data: svcs }, { data: frees }, { data: bfRows }, { data: bsRows }, { data: cityRefs }] = await Promise.all([
+                supabase
+                    .from("bookings")
+                    .select(userIsAdmin ? "*" : BOOKING_EDIT_NON_ADMIN_SELECT)
+                    .eq("id", id)
+                    .single(),
                 supabase.from("services").select("id, name, price, original_price, description, color, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types").eq("user_id", user.id).eq("is_active", true),
-                supabase.from("freelance").select("id, name, google_email, role, tags").eq("user_id", user.id).eq("status", "active"),
+                supabase.from("freelance").select("id, name, google_email, role, tags, pricelist").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
                 supabase.from("booking_services").select("service_id, kind, sort_order, quantity").eq("booking_id", id).order("sort_order", { ascending: true }),
-                supabase.from("profiles").select("custom_client_statuses, dp_verify_trigger_status, form_sections, form_event_types, custom_event_types, form_brand_color, team_badge_colors").eq("id", user.id).single(),
                 supabase
                     .from("region_city_references")
                     .select("city_code, city_name, province_code, province_name")
@@ -656,7 +739,6 @@ export default function EditBookingPage() {
                 }
                 serviceCityCodesMap.set(row.service_id, current);
             });
-            const profileRow = (prof ?? null) as ProfileRow | null;
             setDefaultServiceColor(
                 resolveHexColor(profileRow?.form_brand_color, "#000000"),
             );
@@ -796,9 +878,11 @@ export default function EditBookingPage() {
                 setIsFullyPaid(Boolean((booking as Record<string, unknown>).is_fully_paid));
                 setFinalAdjustmentsRaw((booking as Record<string, unknown>).final_adjustments ?? null);
                 setOperationalCostItems(
-                    toEditableOperationalCosts(
-                        normalizeOperationalCosts((booking as Record<string, unknown>).operational_costs ?? null),
-                    ),
+                    userIsAdmin
+                        ? toEditableOperationalCosts(
+                            normalizeOperationalCosts((booking as Record<string, unknown>).operational_costs ?? null),
+                        )
+                        : [],
                 );
                 setFinalPaymentAmount(Number((booking as Record<string, unknown>).final_payment_amount) || 0);
                 setFinalPaidAt(((booking as Record<string, unknown>).final_paid_at as string | null) || null);
@@ -951,6 +1035,7 @@ export default function EditBookingPage() {
                 google_email: typeof freelancer.google_email === "string" ? freelancer.google_email : null,
                 role: typeof freelancer.role === "string" ? freelancer.role : null,
                 tags: normalizeFreelancerTags(freelancer.tags),
+                pricelist: freelancer.pricelist ?? null,
             })).filter((freelancer) => freelancer.id && freelancer.name);
             setFreelancers(normalizedFreelancers);
             setLoading(false);
@@ -1124,6 +1209,50 @@ export default function EditBookingPage() {
                 freelancers.map((freelancer) => [freelancer.id, freelancer.name]),
             ),
         [freelancers],
+    );
+    const assignedFreelancerIdsForOperationalCosts = React.useMemo(
+        () =>
+            isSplitFreelancerMode
+                ? buildSessionFreelancerUnion(
+                    freelancerAssignmentsBySession,
+                    splitFreelancerSessionKeys,
+                )
+                : normalizeFreelancerIdList(freelancerIds, {
+                    validFreelancerIds,
+                    maxItems: MAX_FREELANCERS_PER_SESSION,
+                }),
+        [
+            freelancerAssignmentsBySession,
+            freelancerIds,
+            isSplitFreelancerMode,
+            splitFreelancerSessionKeys,
+            validFreelancerIds,
+        ],
+    );
+    const assignedFreelancersForOperationalCosts = React.useMemo(
+        () =>
+            assignedFreelancerIdsForOperationalCosts
+                .map((freelancerId) =>
+                    freelancers.find((freelancer) => freelancer.id === freelancerId),
+                )
+                .filter((freelancer): freelancer is Freelance => Boolean(freelancer)),
+        [assignedFreelancerIdsForOperationalCosts, freelancers],
+    );
+    const searchedOperationalCostTemplates = React.useMemo(() => {
+        const query = operationalCostTemplateSearchQuery.trim().toLowerCase();
+        if (!query) return operationalCostTemplates;
+        return operationalCostTemplates.filter((template) =>
+            template.name.toLowerCase().includes(query) ||
+            template.items.some((item) => item.label.toLowerCase().includes(query)),
+        );
+    }, [operationalCostTemplateSearchQuery, operationalCostTemplates]);
+    const assignedFreelancerOperationalCostOptions = React.useMemo(
+        () =>
+            assignedFreelancersForOperationalCosts.map((freelancer) => ({
+                freelancer,
+                items: normalizeOperationalCostPricelistItems(freelancer.pricelist),
+            })),
+        [assignedFreelancersForOperationalCosts],
     );
     const selectedMainQuantities = React.useMemo(
         () =>
@@ -1883,7 +2012,9 @@ export default function EditBookingPage() {
                 admin_notes: adminNotes || null,
                 drive_folder_url: driveFolderUrl || null,
                 portfolio_url: portfolioUrl || null,
-                operational_costs: normalizedOperationalCosts,
+                ...(isCurrentUserAdmin
+                    ? { operational_costs: normalizedOperationalCosts }
+                    : {}),
                 extra_fields: nextExtraFieldsPayload,
                 updated_at: new Date().toISOString(),
             }).eq("id", id);
@@ -2098,6 +2229,35 @@ export default function EditBookingPage() {
 
     function removeOperationalCostItem(id: string) {
         setOperationalCostItems((prev) => prev.filter((item) => item.id !== id));
+    }
+
+    function appendOperationalCostItems(items: OperationalCost[]) {
+        if (!isCurrentUserAdmin || items.length === 0) return;
+        setOperationalCostItems((prev) =>
+            toEditableOperationalCosts(
+                appendUniqueOperationalCosts(
+                    normalizeEditableOperationalCosts(prev),
+                    items,
+                ),
+            ),
+        );
+    }
+
+    function applyOperationalCostTemplate(template: OperationalCostTemplate) {
+        appendOperationalCostItems(
+            template.items.map((item) => buildOperationalCostFromTemplateItem(item)),
+        );
+    }
+
+    function applyFreelancerOperationalCostItem(
+        freelancerName: string,
+        item: { label: string; amount: number },
+    ) {
+        appendOperationalCostItems([
+            buildOperationalCostFromTemplateItem(item, {
+                labelPrefix: freelancerName,
+            }),
+        ]);
     }
 
     const packageTotalValue = selectedMainServices.reduce(
@@ -3045,6 +3205,7 @@ export default function EditBookingPage() {
                             />
                         )}
                     </div>
+                    {isCurrentUserAdmin && (
                     <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div>
@@ -3053,16 +3214,28 @@ export default function EditBookingPage() {
                                     Biaya ini hanya mengurangi pemasukan bersih internal, tidak mengubah invoice klien.
                                 </p>
                             </div>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="gap-1.5"
-                                onClick={addOperationalCostItem}
-                            >
-                                <Plus className="w-3.5 h-3.5" />
-                                Tambah Biaya
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1.5"
+                                    onClick={() => setOperationalCostTemplateDialogOpen(true)}
+                                >
+                                    <Search className="w-3.5 h-3.5" />
+                                    Pilih Template
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1.5"
+                                    onClick={addOperationalCostItem}
+                                >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    Tambah Biaya
+                                </Button>
+                            </div>
                         </div>
 
                         {operationalCostItems.length > 0 ? (
@@ -3119,6 +3292,7 @@ export default function EditBookingPage() {
                             </div>
                         )}
                     </div>
+                    )}
                     <div className="rounded-xl border bg-muted/30 p-4 space-y-3 text-sm">
                         <div className="flex justify-between gap-4">
                             <span className="text-muted-foreground">Status Pembayaran Awal</span>
@@ -3161,14 +3335,18 @@ export default function EditBookingPage() {
                                 <span className="font-semibold text-green-700 dark:text-green-400">Total Terverifikasi</span>
                                 <span className="font-semibold text-green-700 dark:text-green-400">{formatCurrency(netVerifiedRevenue)}</span>
                             </div>
-                            <div className="flex justify-between gap-4">
-                                <span className="text-muted-foreground">Biaya Operasional</span>
-                                <span>- {formatCurrency(operationalCostsTotal)}</span>
-                            </div>
-                            <div className="flex justify-between gap-4">
-                                <span className="font-semibold text-green-700 dark:text-green-400">Pemasukan Bersih</span>
-                                <span className="font-semibold text-green-700 dark:text-green-400">{formatCurrency(netRevenueAfterOperationalCosts)}</span>
-                            </div>
+                            {isCurrentUserAdmin && (
+                                <>
+                                    <div className="flex justify-between gap-4">
+                                        <span className="text-muted-foreground">Biaya Operasional</span>
+                                        <span>- {formatCurrency(operationalCostsTotal)}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4">
+                                        <span className="font-semibold text-green-700 dark:text-green-400">Pemasukan Bersih</span>
+                                        <span className="font-semibold text-green-700 dark:text-green-400">{formatCurrency(netRevenueAfterOperationalCosts)}</span>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         <div className="border-t pt-3">
@@ -3223,6 +3401,160 @@ export default function EditBookingPage() {
                     </Button>
                 </div>
             </form>
+
+            <Dialog
+                open={operationalCostTemplateDialogOpen}
+                onOpenChange={(open) => {
+                    setOperationalCostTemplateDialogOpen(open);
+                    if (!open) setOperationalCostTemplateSearchQuery("");
+                }}
+            >
+                <DialogContent className="sm:max-w-3xl">
+                    <DialogHeader>
+                        <DialogTitle>Pilih Template Biaya Operasional</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <input
+                                value={operationalCostTemplateSearchQuery}
+                                onChange={(event) => setOperationalCostTemplateSearchQuery(event.target.value)}
+                                placeholder="Cari template, item biaya, atau freelance..."
+                                className={cn(inputClass, "pl-9")}
+                            />
+                        </div>
+
+                        <div className="max-h-[62vh] space-y-5 overflow-y-auto pr-1">
+                            <section className="space-y-2">
+                                <div>
+                                    <h4 className="text-sm font-semibold">Template Biaya</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                        Item akan ditambahkan ke booking tanpa menghapus biaya yang sudah ada.
+                                    </p>
+                                </div>
+                                {searchedOperationalCostTemplates.length > 0 ? (
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        {searchedOperationalCostTemplates.map((template) => (
+                                            <button
+                                                key={template.id}
+                                                type="button"
+                                                className="rounded-lg border bg-background p-3 text-left transition hover:border-foreground/40 hover:bg-muted/30"
+                                                onClick={() => applyOperationalCostTemplate(template)}
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-sm font-semibold">
+                                                            {template.name}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {template.items.length} item
+                                                        </p>
+                                                    </div>
+                                                    <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                                </div>
+                                                <div className="mt-3 space-y-1">
+                                                    {template.items.slice(0, 4).map((item) => (
+                                                        <div key={item.id} className="flex justify-between gap-3 text-xs">
+                                                            <span className="min-w-0 truncate text-muted-foreground">
+                                                                {item.label}
+                                                            </span>
+                                                            <span className="shrink-0 font-medium">
+                                                                {formatCurrency(item.amount)}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                    {template.items.length > 4 ? (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            +{template.items.length - 4} item lain
+                                                        </p>
+                                                    ) : null}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="rounded-lg border border-dashed bg-muted/10 px-4 py-5 text-sm text-muted-foreground">
+                                        Belum ada template biaya yang cocok.
+                                    </div>
+                                )}
+                            </section>
+
+                            <section className="space-y-2">
+                                <div>
+                                    <h4 className="text-sm font-semibold">Biaya Freelance</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                        Muncul dari pricelist freelance yang sudah di-assign ke booking.
+                                    </p>
+                                </div>
+                                {assignedFreelancerOperationalCostOptions.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {assignedFreelancerOperationalCostOptions.map(({ freelancer, items }) => {
+                                            const query = operationalCostTemplateSearchQuery.trim().toLowerCase();
+                                            const visibleItems = query
+                                                ? items.filter((item) =>
+                                                    freelancer.name.toLowerCase().includes(query) ||
+                                                    item.label.toLowerCase().includes(query),
+                                                )
+                                                : items;
+                                            return (
+                                                <div key={freelancer.id} className="rounded-lg border bg-background p-3">
+                                                    <div className="mb-2">
+                                                        <p className="text-sm font-semibold">{freelancer.name}</p>
+                                                        {freelancer.role ? (
+                                                            <p className="text-xs text-muted-foreground">{freelancer.role}</p>
+                                                        ) : null}
+                                                    </div>
+                                                    {visibleItems.length > 0 ? (
+                                                        <div className="grid gap-2 sm:grid-cols-2">
+                                                            {visibleItems.map((item) => (
+                                                                <button
+                                                                    key={`${freelancer.id}-${item.id}`}
+                                                                    type="button"
+                                                                    className="flex items-center justify-between gap-3 rounded-md border bg-muted/10 px-3 py-2 text-left text-sm transition hover:border-foreground/40 hover:bg-muted/30"
+                                                                    onClick={() =>
+                                                                        applyFreelancerOperationalCostItem(
+                                                                            freelancer.name,
+                                                                            item,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <span className="min-w-0 truncate">
+                                                                        {item.label}
+                                                                    </span>
+                                                                    <span className="shrink-0 font-medium">
+                                                                        {formatCurrency(item.amount)}
+                                                                    </span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="rounded-md border border-dashed bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
+                                                            Belum ada pricelist yang cocok untuk freelance ini.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="rounded-lg border border-dashed bg-muted/10 px-4 py-5 text-sm text-muted-foreground">
+                                        Belum ada freelance assigned dengan pricelist.
+                                    </div>
+                                )}
+                            </section>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setOperationalCostTemplateDialogOpen(false)}
+                        >
+                            Selesai
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <Dialog
                 open={freelancerDialogOpen}

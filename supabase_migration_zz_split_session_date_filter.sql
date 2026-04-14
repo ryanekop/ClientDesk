@@ -24,7 +24,7 @@ AS $$
   WITH raw_dates AS (
     SELECT CASE
       WHEN p_session_date IS NULL THEN NULL
-      ELSE (p_session_date AT TIME ZONE public.cd_safe_timezone_name(p_time_zone, 'UTC'))::date::text
+      ELSE (p_session_date AT TIME ZONE 'UTC')::date::text
     END AS session_date_text
     UNION ALL
     SELECT public.cd_normalize_split_session_date_text(
@@ -250,33 +250,34 @@ AS $$
         OR row_data.event_type = ANY(params.event_type_filters)
       )
       AND (
-        params.date_from_filter = ''
-        OR (
-          CASE
-            WHEN params.date_basis = 'booking_date' THEN
-              row_data.booking_date IS NOT NULL
-              AND row_data.booking_date::text >= params.date_from_filter
-            ELSE
-              EXISTS (
-                SELECT 1
-                FROM unnest(derived_dates.session_filter_dates) AS session_filter_date(value)
-                WHERE value >= params.date_from_filter
-              )
-          END
+        (
+          params.date_from_filter = ''
+          AND params.date_to_filter = ''
         )
-      )
-      AND (
-        params.date_to_filter = ''
         OR (
           CASE
             WHEN params.date_basis = 'booking_date' THEN
               row_data.booking_date IS NOT NULL
-              AND row_data.booking_date::text <= params.date_to_filter
+              AND (
+                params.date_from_filter = ''
+                OR row_data.booking_date::text >= params.date_from_filter
+              )
+              AND (
+                params.date_to_filter = ''
+                OR row_data.booking_date::text <= params.date_to_filter
+              )
             ELSE
               EXISTS (
                 SELECT 1
                 FROM unnest(derived_dates.session_filter_dates) AS session_filter_date(value)
-                WHERE value <= params.date_to_filter
+                WHERE (
+                  params.date_from_filter = ''
+                  OR value >= params.date_from_filter
+                )
+                  AND (
+                    params.date_to_filter = ''
+                    OR value <= params.date_to_filter
+                  )
               )
           END
         )
@@ -494,33 +495,34 @@ AS $$
         OR row_data.event_type = ANY(params.event_type_filters)
       )
       AND (
-        params.date_from_filter = ''
-        OR (
-          CASE
-            WHEN params.date_basis = 'booking_date' THEN
-              row_data.booking_date IS NOT NULL
-              AND row_data.booking_date::text >= params.date_from_filter
-            ELSE
-              EXISTS (
-                SELECT 1
-                FROM unnest(derived_dates.session_filter_dates) AS session_filter_date(value)
-                WHERE value >= params.date_from_filter
-              )
-          END
+        (
+          params.date_from_filter = ''
+          AND params.date_to_filter = ''
         )
-      )
-      AND (
-        params.date_to_filter = ''
         OR (
           CASE
             WHEN params.date_basis = 'booking_date' THEN
               row_data.booking_date IS NOT NULL
-              AND row_data.booking_date::text <= params.date_to_filter
+              AND (
+                params.date_from_filter = ''
+                OR row_data.booking_date::text >= params.date_from_filter
+              )
+              AND (
+                params.date_to_filter = ''
+                OR row_data.booking_date::text <= params.date_to_filter
+              )
             ELSE
               EXISTS (
                 SELECT 1
                 FROM unnest(derived_dates.session_filter_dates) AS session_filter_date(value)
-                WHERE value <= params.date_to_filter
+                WHERE (
+                  params.date_from_filter = ''
+                  OR value >= params.date_from_filter
+                )
+                  AND (
+                    params.date_to_filter = ''
+                    OR value <= params.date_to_filter
+                  )
               )
           END
         )

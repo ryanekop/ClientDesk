@@ -108,6 +108,10 @@ import {
   type FastpikLinkDisplayMode,
 } from "@/lib/fastpik-link-display";
 import {
+  normalizeOperationalCostTemplates,
+  type OperationalCostTemplate,
+} from "@/lib/operational-costs";
+import {
   getOnboardingActiveStep,
   isOnboardingGoogleStep,
   ONBOARDING_ACTIVE_STEP_EVENT,
@@ -191,6 +195,7 @@ type Profile = {
   seo_settlement_meta_title?: string | null;
   seo_settlement_meta_description?: string | null;
   seo_settlement_meta_keywords?: string | null;
+  operational_cost_templates?: OperationalCostTemplate[] | null;
 };
 
 type Template = {
@@ -216,6 +221,37 @@ const templateTypes = [
   { value: "whatsapp_settlement_client" },
   { value: "whatsapp_settlement_confirm" },
 ];
+
+function createOperationalCostTemplateId(prefix: "template" | "item") {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `cost_${prefix}_${crypto.randomUUID()}`;
+  }
+
+  return `cost_${prefix}_${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function formatOperationalCostAmount(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  return new Intl.NumberFormat("id-ID").format(Math.floor(value));
+}
+
+function parseOperationalCostAmount(value: string) {
+  const digitsOnly = value.replace(/\D+/g, "");
+  if (!digitsOnly) return 0;
+  const parsed = Number(digitsOnly);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+}
+
+function createEmptyOperationalCostTemplate(index: number): OperationalCostTemplate {
+  const now = new Date().toISOString();
+  return {
+    id: createOperationalCostTemplateId("template"),
+    name: `Template ${index + 1}`,
+    items: [],
+    created_at: now,
+    updated_at: now,
+  };
+}
 
 const EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES = new Set([
   "whatsapp_client",
@@ -561,6 +597,7 @@ function extractMissingColumnFromSupabaseError(
 const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "id",
   "full_name",
+  "role",
   "studio_name",
   "studio_address",
   "whatsapp_number",
@@ -620,6 +657,7 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "seo_settlement_meta_title",
   "seo_settlement_meta_description",
   "seo_settlement_meta_keywords",
+  "operational_cost_templates",
 ] as const;
 
 // Google Calendar SVG Logo (official 2020)
@@ -984,6 +1022,8 @@ export default function SettingsPage() {
     React.useState(false);
   const [financeTableColorEnabled, setFinanceTableColorEnabled] =
     React.useState(false);
+  const [operationalCostTemplates, setOperationalCostTemplates] =
+    React.useState<OperationalCostTemplate[]>([]);
 
   // Calendar event format
   const [calendarEventFormats, setCalendarEventFormats] = React.useState<
@@ -1151,6 +1191,11 @@ export default function SettingsPage() {
   const isTenantAdmin = profileRole === "admin";
   const canEditTenantBookingMode = isCustomTenantDomain && isTenantAdmin;
   const slugInputReadOnly = isCustomTenantDomain && disableBookingSlug;
+  React.useEffect(() => {
+    if (activeTab === "keuangan" && !isTenantAdmin) {
+      setActiveTab("umum");
+    }
+  }, [activeTab, isTenantAdmin]);
   const eventTypeItems = React.useMemo<SortableConfigItem[]>(
     () =>
       eventTypeSettings.map((item) => {
@@ -1396,19 +1441,58 @@ export default function SettingsPage() {
   }, [tenant.defaultBookingVendorSlug, tenant.disableBookingSlug, tenant.domain]);
 
   const loadSettingsProfile = React.useEffectEvent(async (userId: string) => {
-    const { data, error } = await supabase
+    const { data: roleData, error: roleError } = await supabase
       .from("profiles")
-      .select("*")
+      .select("role")
       .eq("id", userId)
       .single();
 
-    if (error) {
-      console.warn("Failed to load profile settings:", error.message);
+    if (roleError) {
+      console.warn("Failed to load profile role:", roleError.message);
+      return null;
+    }
+
+    const role = (roleData?.role || "").trim().toLowerCase();
+    let selectColumns = [
+      ...(role === "admin"
+        ? PROFILE_SETTINGS_SELECT_COLUMNS
+        : PROFILE_SETTINGS_SELECT_COLUMNS.filter(
+            (column) => column !== "operational_cost_templates",
+          )),
+    ];
+    let data: Record<string, unknown> | null = null;
+    let lastErrorMessage = "";
+
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const result = await supabase
+        .from("profiles")
+        .select(selectColumns.join(", "))
+        .eq("id", userId)
+        .single();
+
+      if (!result.error) {
+        data = (result.data ?? null) as Record<string, unknown> | null;
+        break;
+      }
+
+      lastErrorMessage = result.error.message;
+      const missingColumn = extractMissingColumnFromSupabaseError(result.error);
+      if (missingColumn && selectColumns.includes(missingColumn as any)) {
+        unsupportedProfileColumnsRef.current.add(missingColumn);
+        selectColumns = selectColumns.filter((column) => column !== missingColumn);
+        continue;
+      }
+
+      break;
+    }
+
+    if (!data) {
+      console.warn("Failed to load profile settings:", lastErrorMessage);
       return null;
     }
 
     if (data && typeof data === "object") {
-      PROFILE_SETTINGS_SELECT_COLUMNS.forEach((column) => {
+      selectColumns.forEach((column) => {
         if (!Object.prototype.hasOwnProperty.call(data, column)) {
           unsupportedProfileColumnsRef.current.add(column);
         }
@@ -1624,6 +1708,9 @@ export default function SettingsPage() {
     );
     setFinanceTableColorEnabled(
       Boolean((prof as any)?.finance_table_color_enabled),
+    );
+    setOperationalCostTemplates(
+      normalizeOperationalCostTemplates((prof as any)?.operational_cost_templates),
     );
     const savedWa = prof?.whatsapp_number || "";
     const matchedCode = COUNTRY_CODES.find((c) => savedWa.startsWith(c.code));
@@ -1981,6 +2068,117 @@ export default function SettingsPage() {
       void fetchAll(true);
     } catch (error) {
       console.error("Booking list settings save error:", error);
+      setSavedMsg(tp("failedSave"));
+      setTimeout(() => setSavedMsg(""), 3000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function addOperationalCostTemplate() {
+    setOperationalCostTemplates((prev) => [
+      ...prev,
+      createEmptyOperationalCostTemplate(prev.length),
+    ]);
+  }
+
+  function updateOperationalCostTemplateName(templateId: string, name: string) {
+    setOperationalCostTemplates((prev) =>
+      prev.map((template) =>
+        template.id === templateId
+          ? { ...template, name, updated_at: new Date().toISOString() }
+          : template,
+      ),
+    );
+  }
+
+  function removeOperationalCostTemplate(templateId: string) {
+    setOperationalCostTemplates((prev) =>
+      prev.filter((template) => template.id !== templateId),
+    );
+  }
+
+  function addOperationalCostTemplateItem(templateId: string) {
+    setOperationalCostTemplates((prev) =>
+      prev.map((template) =>
+        template.id === templateId
+          ? {
+              ...template,
+              items: [
+                ...template.items,
+                {
+                  id: createOperationalCostTemplateId("item"),
+                  label: "",
+                  amount: 0,
+                },
+              ],
+              updated_at: new Date().toISOString(),
+            }
+          : template,
+      ),
+    );
+  }
+
+  function updateOperationalCostTemplateItem(
+    templateId: string,
+    itemId: string,
+    field: "label" | "amount",
+    value: string,
+  ) {
+    setOperationalCostTemplates((prev) =>
+      prev.map((template) =>
+        template.id === templateId
+          ? {
+              ...template,
+              items: template.items.map((item) =>
+                item.id === itemId
+                  ? {
+                      ...item,
+                      [field]:
+                        field === "amount"
+                          ? parseOperationalCostAmount(value)
+                          : value,
+                    }
+                  : item,
+              ),
+              updated_at: new Date().toISOString(),
+            }
+          : template,
+      ),
+    );
+  }
+
+  function removeOperationalCostTemplateItem(templateId: string, itemId: string) {
+    setOperationalCostTemplates((prev) =>
+      prev.map((template) =>
+        template.id === templateId
+          ? {
+              ...template,
+              items: template.items.filter((item) => item.id !== itemId),
+              updated_at: new Date().toISOString(),
+            }
+          : template,
+      ),
+    );
+  }
+
+  async function handleSaveOperationalCostTemplates() {
+    if (!profile || !isTenantAdmin) return;
+    setSaving(true);
+
+    try {
+      const normalizedTemplates =
+        normalizeOperationalCostTemplates(operationalCostTemplates);
+      await saveProfilePatch({
+        operational_cost_templates: normalizedTemplates,
+      });
+      setOperationalCostTemplates(normalizedTemplates);
+      setSavedMsg(settingsSavedMessage);
+      showSettingsSavedToast();
+      setTimeout(() => setSavedMsg(""), 3000);
+      void fetchAll(true);
+    } catch (error) {
+      console.error("Operational cost template save error:", error);
       setSavedMsg(tp("failedSave"));
       setTimeout(() => setSavedMsg(""), 3000);
     } finally {
@@ -2787,6 +2985,7 @@ export default function SettingsPage() {
     { key: "seo", label: tp("tabSeo") },
     { key: "template", label: tp("tabTemplates") },
     { key: "daftar-booking", label: tp("tabBookingList") },
+    ...(isTenantAdmin ? [{ key: "keuangan", label: tp("tabFinance") }] : []),
     { key: "status", label: tp("tabStatus") },
     { key: "jenis-acara", label: tp("tabEventTypes") },
     { key: "google", label: tp("tabGoogle") },
@@ -4838,6 +5037,176 @@ export default function SettingsPage() {
                 {templateSavedMsg && (
                   <span className="text-sm text-green-600 dark:text-green-400">
                     {templateSavedMsg}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ TAB: Keuangan ═══ */}
+        {activeTab === "keuangan" && isTenantAdmin && (
+          <div className="space-y-6">
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+              <div className="flex flex-col gap-3 border-b px-6 py-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="font-semibold">Template Biaya Operasional</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Siapkan preset biaya internal untuk dipakai cepat di edit booking admin.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={addOperationalCostTemplate}
+                >
+                  <Plus className="h-4 w-4" />
+                  Tambah Template
+                </Button>
+              </div>
+              <div className="space-y-4 p-6">
+                {operationalCostTemplates.length === 0 ? (
+                  <div className="rounded-lg border border-dashed bg-muted/10 px-4 py-5 text-sm text-muted-foreground">
+                    Belum ada template biaya operasional.
+                  </div>
+                ) : (
+                  operationalCostTemplates.map((template, templateIndex) => (
+                    <div key={template.id} className="rounded-lg border bg-muted/10 p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            Nama Template
+                          </label>
+                          <input
+                            value={template.name}
+                            onChange={(event) =>
+                              updateOperationalCostTemplateName(
+                                template.id,
+                                event.target.value,
+                              )
+                            }
+                            placeholder={`Template ${templateIndex + 1}`}
+                            className={inputClass}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => addOperationalCostTemplateItem(template.id)}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Tambah Item
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => removeOperationalCostTemplate(template.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        {template.items.length === 0 ? (
+                          <div className="rounded-md border border-dashed bg-background/70 px-3 py-3 text-xs text-muted-foreground">
+                            Belum ada item biaya di template ini.
+                          </div>
+                        ) : (
+                          template.items.map((item, itemIndex) => (
+                            <div
+                              key={item.id}
+                              className="grid gap-3 rounded-md border bg-background p-3 md:grid-cols-[minmax(0,1fr)_220px_auto]"
+                            >
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">
+                                  Nama Biaya {itemIndex + 1}
+                                </label>
+                                <input
+                                  value={item.label}
+                                  onChange={(event) =>
+                                    updateOperationalCostTemplateItem(
+                                      template.id,
+                                      item.id,
+                                      "label",
+                                      event.target.value,
+                                    )
+                                  }
+                                  placeholder="Contoh: Biaya Freelance"
+                                  className={inputClass}
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">
+                                  Nominal (Rp)
+                                </label>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="shrink-0 text-sm font-medium text-muted-foreground">
+                                    Rp
+                                  </span>
+                                  <input
+                                    value={formatOperationalCostAmount(item.amount)}
+                                    onChange={(event) =>
+                                      updateOperationalCostTemplateItem(
+                                        template.id,
+                                        item.id,
+                                        "amount",
+                                        event.target.value,
+                                      )
+                                    }
+                                    inputMode="numeric"
+                                    placeholder="0"
+                                    className={`${inputClass} flex-1`}
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex items-end">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() =>
+                                    removeOperationalCostTemplateItem(template.id, item.id)
+                                  }
+                                  aria-label={`Hapus item biaya ${itemIndex + 1}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="pt-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleSaveOperationalCostTemplates}
+                  className={unifiedSaveButtonClass}
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Simpan Semua
+                </Button>
+                {savedMsg && (
+                  <span className="text-sm text-green-600 dark:text-green-400">
+                    {savedMsg}
                   </span>
                 )}
               </div>

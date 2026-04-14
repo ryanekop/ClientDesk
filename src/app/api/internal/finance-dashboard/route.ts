@@ -87,7 +87,7 @@ function readSummary(value: unknown) {
 }
 
 export async function GET(request: NextRequest) {
-  const { errorResponse, supabase } = await requireRouteUser();
+  const { errorResponse, supabase, user } = await requireRouteUser();
   if (errorResponse) return errorResponse;
 
   const searchParams = request.nextUrl.searchParams;
@@ -95,10 +95,17 @@ export async function GET(request: NextRequest) {
   const period = rawPeriod === "all" || /^\d{4}-\d{2}$/.test(rawPeriod) ? rawPeriod : "all";
   const timeZone = searchParams.get("timeZone")?.trim() || "UTC";
 
-  const { data, error } = await supabase.rpc("cd_get_finance_dashboard", {
-    p_period: period,
-    p_time_zone: timeZone,
-  });
+  const [{ data, error }, { data: profile }] = await Promise.all([
+    supabase.rpc("cd_get_finance_dashboard", {
+      p_period: period,
+      p_time_zone: timeZone,
+    }),
+    supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user!.id)
+      .maybeSingle(),
+  ]);
 
   if (error) {
     console.error("[Finance Dashboard API] Failed to load dashboard", {
@@ -113,31 +120,49 @@ export async function GET(request: NextRequest) {
   }
 
   const payload = readRpcObject<FinanceDashboardResponse>(data);
+  const canViewOperationalCosts =
+    typeof profile?.role === "string" &&
+    profile.role.trim().toLowerCase() === "admin";
+  const summary = readSummary(payload?.summary);
+  const monthlyChart = readObjectArray<FinanceDashboardChartRow>(payload?.monthlyChart).map((item) => {
+    const grossRevenue = Number(item.grossRevenue) || 0;
+    const operationalCosts = canViewOperationalCosts ? Number(item.operationalCosts) || 0 : 0;
+    return {
+      periodKey: typeof item.periodKey === "string" ? item.periodKey : "",
+      grossRevenue,
+      verifiedDp: Number(item.verifiedDp) || 0,
+      operationalCosts,
+      netRevenue: canViewOperationalCosts ? Number(item.netRevenue) || 0 : grossRevenue,
+    };
+  });
+  const topPackages = readObjectArray<FinanceDashboardPackageRow>(payload?.topPackages).map((item) => {
+    const grossRevenue = Number(item.grossRevenue) || 0;
+    return {
+      packageName: typeof item.packageName === "string" ? item.packageName : "-",
+      bookingCount: Number(item.bookingCount) || 0,
+      grossRevenue,
+      netRevenue: canViewOperationalCosts ? Number(item.netRevenue) || 0 : grossRevenue,
+    };
+  });
 
   return NextResponse.json({
+    canViewOperationalCosts,
     selectedPeriod:
       typeof payload?.selectedPeriod === "string" ? payload.selectedPeriod : "all",
     currentPeriod:
       typeof payload?.currentPeriod === "string" ? payload.currentPeriod : "",
     availablePeriods: readStringArray(payload?.availablePeriods),
-    summary: readSummary(payload?.summary),
+    summary: {
+      ...summary,
+      operationalCosts: canViewOperationalCosts ? summary.operationalCosts : 0,
+      netRevenue: canViewOperationalCosts ? summary.netRevenue : summary.grossRevenue,
+    },
     sourceBreakdown: readObjectArray<FinanceDashboardSourceRow>(payload?.sourceBreakdown).map((item) => ({
       sourceKey: typeof item.sourceKey === "string" ? item.sourceKey : "unknown",
       label: typeof item.label === "string" ? item.label : "",
       amount: Number(item.amount) || 0,
     })),
-    monthlyChart: readObjectArray<FinanceDashboardChartRow>(payload?.monthlyChart).map((item) => ({
-      periodKey: typeof item.periodKey === "string" ? item.periodKey : "",
-      grossRevenue: Number(item.grossRevenue) || 0,
-      verifiedDp: Number(item.verifiedDp) || 0,
-      operationalCosts: Number(item.operationalCosts) || 0,
-      netRevenue: Number(item.netRevenue) || 0,
-    })),
-    topPackages: readObjectArray<FinanceDashboardPackageRow>(payload?.topPackages).map((item) => ({
-      packageName: typeof item.packageName === "string" ? item.packageName : "-",
-      bookingCount: Number(item.bookingCount) || 0,
-      grossRevenue: Number(item.grossRevenue) || 0,
-      netRevenue: Number(item.netRevenue) || 0,
-    })),
+    monthlyChart,
+    topPackages,
   });
 }

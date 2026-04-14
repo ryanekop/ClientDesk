@@ -64,6 +64,7 @@ type TopPackageRow = {
 };
 
 type FinanceDashboardPayload = {
+  canViewOperationalCosts: boolean;
   selectedPeriod: string;
   currentPeriod: string;
   availablePeriods: string[];
@@ -78,6 +79,7 @@ function isFinanceDashboardPayload(value: unknown): value is FinanceDashboardPay
   const candidate = value as Partial<FinanceDashboardPayload>;
   return (
     typeof candidate.selectedPeriod === "string" &&
+    typeof candidate.canViewOperationalCosts === "boolean" &&
     typeof candidate.currentPeriod === "string" &&
     Array.isArray(candidate.availablePeriods) &&
     Array.isArray(candidate.sourceBreakdown) &&
@@ -96,6 +98,7 @@ const EMPTY_SUMMARY: DashboardSummary = {
 };
 
 const EMPTY_PAYLOAD: FinanceDashboardPayload = {
+  canViewOperationalCosts: false,
   selectedPeriod: "all",
   currentPeriod: "",
   availablePeriods: [],
@@ -321,6 +324,7 @@ export default function FinanceDashboardPage() {
         }
 
         const nextPayload = {
+          canViewOperationalCosts: result.canViewOperationalCosts,
           selectedPeriod:
             typeof result.selectedPeriod === "string" ? result.selectedPeriod : period,
           currentPeriod:
@@ -375,6 +379,8 @@ export default function FinanceDashboardPage() {
       })
       .filter((item) => item.amount !== 0);
   }, [payload.sourceBreakdown, t]);
+
+  const canViewOperationalCosts = payload.canViewOperationalCosts;
 
   const chartRows = React.useMemo(
     () =>
@@ -478,7 +484,10 @@ export default function FinanceDashboardPage() {
 
       {!showInitialSkeleton ? (
         <>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 2xl:grid-cols-6">
+      <div className={cn(
+        "grid grid-cols-1 gap-4 lg:grid-cols-3",
+        canViewOperationalCosts ? "2xl:grid-cols-6" : "2xl:grid-cols-4",
+      )}>
         <SummaryCard
           title={t("grossRevenue")}
           hint={t("grossRevenueHint")}
@@ -487,22 +496,26 @@ export default function FinanceDashboardPage() {
           tone="bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400"
           icon={<Wallet className="h-5 w-5" />}
         />
-        <SummaryCard
-          title={t("operationalCosts")}
-          hint={t("operationalCostsHint")}
-          amount={payload.summary.operationalCosts}
-          isMoneyVisible={isMoneyVisible}
-          tone="bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400"
-          icon={<Receipt className="h-5 w-5" />}
-        />
-        <SummaryCard
-          title={t("netRevenue")}
-          hint={t("netRevenueHint")}
-          amount={payload.summary.netRevenue}
-          isMoneyVisible={isMoneyVisible}
-          tone="bg-sky-100 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400"
-          icon={<TrendingUp className="h-5 w-5" />}
-        />
+        {canViewOperationalCosts && (
+          <>
+            <SummaryCard
+              title={t("operationalCosts")}
+              hint={t("operationalCostsHint")}
+              amount={payload.summary.operationalCosts}
+              isMoneyVisible={isMoneyVisible}
+              tone="bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400"
+              icon={<Receipt className="h-5 w-5" />}
+            />
+            <SummaryCard
+              title={t("netRevenue")}
+              hint={t("netRevenueHint")}
+              amount={payload.summary.netRevenue}
+              isMoneyVisible={isMoneyVisible}
+              tone="bg-sky-100 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400"
+              icon={<TrendingUp className="h-5 w-5" />}
+            />
+          </>
+        )}
         <SummaryCard
           title={t("verifiedDp")}
           hint={t("verifiedDpHint")}
@@ -543,8 +556,14 @@ export default function FinanceDashboardPage() {
               <p className="text-sm text-muted-foreground">{t("monthlyChartSubtitle")}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <LegendChip colorClassName="bg-cyan-600" label={t("chartNetRevenue")} />
-              <LegendChip colorClassName="bg-rose-400" label={t("chartOperationalCosts")} />
+              {canViewOperationalCosts ? (
+                <>
+                  <LegendChip colorClassName="bg-cyan-600" label={t("chartNetRevenue")} />
+                  <LegendChip colorClassName="bg-rose-400" label={t("chartOperationalCosts")} />
+                </>
+              ) : (
+                <LegendChip colorClassName="bg-green-600" label={t("chartGrossRevenue")} />
+              )}
             </div>
           </div>
           <div className="h-[360px] w-full 2xl:h-[400px]">
@@ -577,26 +596,42 @@ export default function FinanceDashboardPage() {
                       <div className="rounded-lg border bg-background px-3 py-2 text-sm shadow-sm">
                         <p className="mb-2 font-semibold">{item.label}</p>
                         <p>{t("chartGrossRevenue")}: {isMoneyVisible ? formatCurrency(item.grossRevenue) : "Rp •••••••"}</p>
-                        <p>{t("chartOperationalCosts")}: {isMoneyVisible ? formatCurrency(item.operationalCosts) : "Rp •••••••"}</p>
-                        <p>{t("chartNetRevenue")}: {isMoneyVisible ? formatCurrency(item.netRevenue) : "Rp •••••••"}</p>
+                        {canViewOperationalCosts ? (
+                          <>
+                            <p>{t("chartOperationalCosts")}: {isMoneyVisible ? formatCurrency(item.operationalCosts) : "Rp •••••••"}</p>
+                            <p>{t("chartNetRevenue")}: {isMoneyVisible ? formatCurrency(item.netRevenue) : "Rp •••••••"}</p>
+                          </>
+                        ) : null}
                       </div>
                     );
                   }}
                 />
-                <Bar
-                  dataKey="netRevenue"
-                  name={t("chartNetRevenue")}
-                  fill="#0891b2"
-                  radius={[8, 8, 0, 0]}
-                  maxBarSize={28}
-                />
-                <Bar
-                  dataKey="operationalCosts"
-                  name={t("chartOperationalCosts")}
-                  fill="#fb7185"
-                  radius={[8, 8, 0, 0]}
-                  maxBarSize={28}
-                />
+                {canViewOperationalCosts ? (
+                  <>
+                    <Bar
+                      dataKey="netRevenue"
+                      name={t("chartNetRevenue")}
+                      fill="#0891b2"
+                      radius={[8, 8, 0, 0]}
+                      maxBarSize={28}
+                    />
+                    <Bar
+                      dataKey="operationalCosts"
+                      name={t("chartOperationalCosts")}
+                      fill="#fb7185"
+                      radius={[8, 8, 0, 0]}
+                      maxBarSize={28}
+                    />
+                  </>
+                ) : (
+                  <Bar
+                    dataKey="grossRevenue"
+                    name={t("chartGrossRevenue")}
+                    fill="#16a34a"
+                    radius={[8, 8, 0, 0]}
+                    maxBarSize={28}
+                  />
+                )}
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -662,11 +697,15 @@ export default function FinanceDashboardPage() {
                       </div>
                       <div className="shrink-0 text-right text-sm">
                         <p className="font-semibold">
-                          {isMoneyVisible ? formatCurrency(item.netRevenue) : "Rp •••••••"}
+                          {isMoneyVisible
+                            ? formatCurrency(canViewOperationalCosts ? item.netRevenue : item.grossRevenue)
+                            : "Rp •••••••"}
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          {isMoneyVisible ? formatCurrency(item.grossRevenue) : "Rp •••••••"}
-                        </p>
+                        {canViewOperationalCosts ? (
+                          <p className="text-xs text-muted-foreground">
+                            {isMoneyVisible ? formatCurrency(item.grossRevenue) : "Rp •••••••"}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="h-2.5 overflow-hidden rounded-full bg-background">
