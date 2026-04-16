@@ -312,6 +312,7 @@ const BOOKING_EDIT_NON_ADMIN_SELECT = [
     "notes",
     "admin_notes",
     "drive_folder_url",
+    "video_drive_folder_url",
     "portfolio_url",
     "extra_fields",
 ].join(", ");
@@ -573,6 +574,7 @@ export default function EditBookingPage() {
     const [notes, setNotes] = React.useState("");
     const [adminNotes, setAdminNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
+    const [videoDriveFolderUrl, setVideoDriveFolderUrl] = React.useState("");
     const [portfolioUrl, setPortfolioUrl] = React.useState("");
     const [cacheInvalidationBooking, setCacheInvalidationBooking] = React.useState<{
         bookingCode: string | null;
@@ -910,6 +912,11 @@ export default function EditBookingPage() {
                         : "",
                 );
                 setDriveFolderUrl(booking.drive_folder_url || "");
+                setVideoDriveFolderUrl(
+                    typeof (booking as Record<string, unknown>).video_drive_folder_url === "string"
+                        ? String((booking as Record<string, unknown>).video_drive_folder_url)
+                        : "",
+                );
                 setPortfolioUrl(booking.portfolio_url || "");
                 const nextExtraFields = (booking.extra_fields ? Object.fromEntries(
                     Object.entries(booking.extra_fields).filter(([key, value]) => key !== "custom_fields" && typeof value === "string")
@@ -2045,6 +2052,7 @@ export default function EditBookingPage() {
                 notes: notes || null,
                 admin_notes: adminNotes || null,
                 drive_folder_url: driveFolderUrl || null,
+                video_drive_folder_url: videoDriveFolderUrl || null,
                 portfolio_url: portfolioUrl || null,
                 ...(isCurrentUserAdmin
                     ? { operational_costs: normalizedOperationalCosts }
@@ -3414,13 +3422,22 @@ export default function EditBookingPage() {
                     <textarea rows={4} value={adminNotes} onChange={e => setAdminNotes(e.target.value)} placeholder={tBookingEditor("adminNotesPlaceholder")} className={textareaClass} />
                 </div>
 
-                {/* Link Google Drive */}
+                {/* Link Google Drive Hasil Foto */}
                 <div className="rounded-xl border bg-card p-6 shadow-sm space-y-3">
                     <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                        <Link2 className="w-4 h-4" /> Link Google Drive
+                        <Link2 className="w-4 h-4" /> Link Google Drive Hasil Foto
                     </h3>
                     <input type="url" value={driveFolderUrl} onChange={e => setDriveFolderUrl(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." className={inputClass} />
-                    <p className="text-[11px] text-muted-foreground">Tempelkan link folder Google Drive klien di sini (opsional).</p>
+                    <p className="text-[11px] text-muted-foreground">Tempelkan link Google Drive hasil foto klien di sini (opsional).</p>
+                </div>
+
+                {/* Link Google Drive Hasil Video */}
+                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-3">
+                    <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                        <Link2 className="w-4 h-4" /> Link Google Drive Hasil Video
+                    </h3>
+                    <input type="url" value={videoDriveFolderUrl} onChange={e => setVideoDriveFolderUrl(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." className={inputClass} />
+                    <p className="text-[11px] text-muted-foreground">Tempelkan link Google Drive hasil video klien di sini (opsional).</p>
                 </div>
 
                 {/* Link Portofolio IG */}

@@ -442,6 +442,7 @@ export default function NewBookingPage() {
     const [notes, setNotes] = React.useState("");
     const [adminNotes, setAdminNotes] = React.useState("");
     const [driveFolderUrl, setDriveFolderUrl] = React.useState("");
+    const [videoDriveFolderUrl, setVideoDriveFolderUrl] = React.useState("");
     const [portfolioUrl, setPortfolioUrl] = React.useState("");
     const [formSectionsByEventType, setFormSectionsByEventType] = React.useState<ModeAwareFormSectionsByEventType>({});
     const [customFieldValues, setCustomFieldValues] = React.useState<Record<string, string>>({});
@@ -1504,6 +1505,7 @@ export default function NewBookingPage() {
                 notes: notes || null,
                 admin_notes: adminNotes || null,
                 drive_folder_url: driveFolderUrl || null,
+                video_drive_folder_url: videoDriveFolderUrl || null,
                 portfolio_url: portfolioUrl || null,
                 extra_fields: nextExtraFieldsPayload,
             };
@@ -2498,13 +2500,22 @@ export default function NewBookingPage() {
                     />
                 </div>
 
-                {/* Link Google Drive */}
+                {/* Link Google Drive Hasil Foto */}
                 <div className="rounded-xl border bg-card p-6 shadow-sm space-y-3">
                     <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                        <Link2 className="w-4 h-4" /> Link Google Drive
+                        <Link2 className="w-4 h-4" /> Link Google Drive Hasil Foto
                     </h3>
                     <input type="url" value={driveFolderUrl} onChange={e => setDriveFolderUrl(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." className={inputClass} />
-                    <p className="text-[11px] text-muted-foreground">Tempelkan link folder Google Drive klien di sini (opsional).</p>
+                    <p className="text-[11px] text-muted-foreground">Tempelkan link Google Drive hasil foto klien di sini (opsional).</p>
+                </div>
+
+                {/* Link Google Drive Hasil Video */}
+                <div className="rounded-xl border bg-card p-6 shadow-sm space-y-3">
+                    <h3 className="font-semibold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                        <Link2 className="w-4 h-4" /> Link Google Drive Hasil Video
+                    </h3>
+                    <input type="url" value={videoDriveFolderUrl} onChange={e => setVideoDriveFolderUrl(e.target.value)} placeholder="https://drive.google.com/drive/folders/..." className={inputClass} />
+                    <p className="text-[11px] text-muted-foreground">Tempelkan link Google Drive hasil video klien di sini (opsional).</p>
                 </div>
 
                 {/* Link Portofolio IG */}

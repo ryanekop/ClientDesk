@@ -86,11 +86,13 @@ import {
   INITIAL_BOOKING_STATUS,
   getDefaultFinalInvoiceVisibleFromStatus,
   getDefaultTrackingFileLinksVisibleFromStatus,
+  getDefaultTrackingVideoLinksVisibleFromStatus,
   normalizeClientProgressStatuses,
   resolveDpVerifyTriggerStatus,
   resolveFinalInvoiceVisibleFromStatus,
   resolveOptionalClientProgressStatus,
   resolveTrackingFileLinksVisibleFromStatus,
+  resolveTrackingVideoLinksVisibleFromStatus,
 } from "@/lib/client-status";
 import {
   getActiveEventTypes,
@@ -152,6 +154,7 @@ type Profile = {
   session_time_trigger_to_status?: string | null;
   final_invoice_visible_from_status?: string | null;
   tracking_file_links_visible_from_status?: string | null;
+  tracking_video_links_visible_from_status?: string | null;
   tracking_hide_queue_number?: boolean | null;
   default_wa_target?: "client" | "freelancer" | null;
   booking_table_color_enabled?: boolean | null;
@@ -339,6 +342,7 @@ const templateHeaderToneByType: Record<string, string> = {
 const DEFAULT_QUEUE_TRIGGER_STATUS = "Antrian Edit";
 const DEFAULT_FINAL_INVOICE_VISIBLE_FROM_STATUS = "Sesi Foto / Acara";
 const DEFAULT_TRACKING_FILE_LINKS_VISIBLE_FROM_STATUS = "Sesi Foto / Acara";
+const DEFAULT_TRACKING_VIDEO_LINKS_VISIBLE_FROM_STATUS = "File Siap";
 const WEDDING_SPLIT_WHATSAPP_HINTS = [
   "{{akad_location}}",
   "{{akad_date}}",
@@ -626,6 +630,7 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "finance_table_color_enabled",
   "final_invoice_visible_from_status",
   "tracking_file_links_visible_from_status",
+  "tracking_video_links_visible_from_status",
   "tracking_hide_queue_number",
   "form_event_types",
   "custom_event_types",
@@ -1012,6 +1017,10 @@ export default function SettingsPage() {
     trackingFileLinksVisibleFromStatus,
     setTrackingFileLinksVisibleFromStatus,
   ] = React.useState(DEFAULT_TRACKING_FILE_LINKS_VISIBLE_FROM_STATUS);
+  const [
+    trackingVideoLinksVisibleFromStatus,
+    setTrackingVideoLinksVisibleFromStatus,
+  ] = React.useState(DEFAULT_TRACKING_VIDEO_LINKS_VISIBLE_FROM_STATUS);
   const [trackingHideQueueNumber, setTrackingHideQueueNumber] =
     React.useState(false);
 
@@ -1690,6 +1699,12 @@ export default function SettingsPage() {
       resolveTrackingFileLinksVisibleFromStatus(
         loadedClientStatuses,
         (prof as any)?.tracking_file_links_visible_from_status,
+      ),
+    );
+    setTrackingVideoLinksVisibleFromStatus(
+      resolveTrackingVideoLinksVisibleFromStatus(
+        loadedClientStatuses,
+        prof.tracking_video_links_visible_from_status,
       ),
     );
     if (
@@ -2531,6 +2546,11 @@ export default function SettingsPage() {
         normalizedClientStatuses,
         trackingFileLinksVisibleFromStatus,
       );
+    const nextTrackingVideoVisibleFromStatus =
+      resolveTrackingVideoLinksVisibleFromStatus(
+        normalizedClientStatuses,
+        trackingVideoLinksVisibleFromStatus,
+      );
     const nextDpVerifyTriggerStatus = resolveDpVerifyTriggerStatus(
       normalizedClientStatuses,
       dpVerifyTriggerStatus,
@@ -2569,6 +2589,8 @@ export default function SettingsPage() {
         final_invoice_visible_from_status: nextVisibleFromStatus,
         tracking_file_links_visible_from_status:
           nextTrackingFileVisibleFromStatus,
+        tracking_video_links_visible_from_status:
+          nextTrackingVideoVisibleFromStatus,
         tracking_hide_queue_number: trackingHideQueueNumber,
       });
       setCustomClientStatuses(normalizedClientStatuses);
@@ -2581,6 +2603,7 @@ export default function SettingsPage() {
       );
       setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
       setTrackingFileLinksVisibleFromStatus(nextTrackingFileVisibleFromStatus);
+      setTrackingVideoLinksVisibleFromStatus(nextTrackingVideoVisibleFromStatus);
       setStatusSaved(true);
       showSettingsSavedToast();
       setTimeout(() => setStatusSaved(false), 3000);
@@ -2675,6 +2698,11 @@ export default function SettingsPage() {
         nextClientStatuses,
         DEFAULT_TRACKING_FILE_LINKS_VISIBLE_FROM_STATUS,
       );
+    const nextTrackingVideoVisibleFromStatus =
+      resolveTrackingVideoLinksVisibleFromStatus(
+        nextClientStatuses,
+        DEFAULT_TRACKING_VIDEO_LINKS_VISIBLE_FROM_STATUS,
+      );
 
     setCustomClientStatuses(nextClientStatuses);
     setQueueTriggerStatus(DEFAULT_QUEUE_TRIGGER_STATUS);
@@ -2683,6 +2711,7 @@ export default function SettingsPage() {
     setSessionTimeTriggerToStatus("");
     setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
     setTrackingFileLinksVisibleFromStatus(nextTrackingFileVisibleFromStatus);
+    setTrackingVideoLinksVisibleFromStatus(nextTrackingVideoVisibleFromStatus);
     setTrackingHideQueueNumber(false);
 
     await saveProfilePatch({
@@ -2694,6 +2723,7 @@ export default function SettingsPage() {
       session_time_trigger_to_status: null,
       final_invoice_visible_from_status: nextVisibleFromStatus,
       tracking_file_links_visible_from_status: nextTrackingFileVisibleFromStatus,
+      tracking_video_links_visible_from_status: nextTrackingVideoVisibleFromStatus,
       tracking_hide_queue_number: false,
     });
     setStatusSaved(true);
@@ -5457,6 +5487,38 @@ export default function SettingsPage() {
                       ? customClientStatuses
                       : [
                           getDefaultTrackingFileLinksVisibleFromStatus(
+                            customClientStatuses,
+                          ),
+                        ]
+                    ).map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
+                  <p className="text-sm font-medium">
+                    {tp("videoLinkVisibilityTitle")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {tp("videoLinkVisibilityDescription")}
+                  </p>
+                  <select
+                    value={resolveTrackingVideoLinksVisibleFromStatus(
+                      customClientStatuses,
+                      trackingVideoLinksVisibleFromStatus,
+                    )}
+                    onChange={(e) =>
+                      setTrackingVideoLinksVisibleFromStatus(e.target.value)
+                    }
+                    className={`${selectClass} max-w-xs text-sm`}
+                  >
+                    {(customClientStatuses.length > 0
+                      ? customClientStatuses
+                      : [
+                          getDefaultTrackingVideoLinksVisibleFromStatus(
                             customClientStatuses,
                           ),
                         ]

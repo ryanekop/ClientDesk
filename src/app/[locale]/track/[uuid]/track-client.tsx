@@ -37,6 +37,7 @@ type BookingData = {
     invoiceUrlFinal?: string | null;
     fastpikUrl: string | null;
     driveUrl: string | null;
+    videoUrl: string | null;
     fastpikLinkDisplayMode: "both" | "prefer_fastpik" | "drive_only";
     createdAt: string;
     totalPrice: number;
@@ -67,6 +68,7 @@ type BookingData = {
     fastpikDataMessage: string | null;
     showFinalInvoice: boolean;
     showFileResults: boolean;
+    showVideoResults: boolean;
 };
 
 const DEFAULT_STEPS = [
@@ -186,9 +188,10 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
         driveUrl: booking.driveUrl,
     });
     const hasVisibleFileResults =
-        booking.showFileResults &&
-        ((galleryLinks.showFastpik && Boolean(galleryLinks.fastpikUrl)) ||
-            (galleryLinks.showDrive && Boolean(galleryLinks.driveUrl)));
+        (booking.showFileResults &&
+            ((galleryLinks.showFastpik && Boolean(galleryLinks.fastpikUrl)) ||
+                (galleryLinks.showDrive && Boolean(galleryLinks.driveUrl)))) ||
+        (booking.showVideoResults && Boolean(booking.videoUrl));
     const handleCopyFastpikPassword = React.useCallback(() => {
         const password = booking.fastpikProjectInfo?.password || "";
         if (!password) return;
@@ -398,24 +401,28 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                     </div>
                 </div>
 
-                {/* Gallery links follow admin visibility threshold from Status Settings */}
-                {(galleryLinks.showFastpik || galleryLinks.showDrive) && booking.showFileResults && (
+                {/* Result links follow admin visibility thresholds from Status Settings */}
+                {hasVisibleFileResults && (
                     <div className="bg-background rounded-2xl shadow-lg border p-6">
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("fileResults")}</h3>
-                        <p className="mb-3 text-xs text-muted-foreground">
-                            {locale === "en" ? "Fastpik source:" : "Sumber Fastpik:"}{" "}
-                            <span className="font-medium text-foreground">{fastpikSyncMetaLabel.sourceLabel}</span>
-                            {" · "}
-                            {locale === "en" ? "Last sync:" : "Sinkron terakhir:"}{" "}
-                            <span className="font-medium text-foreground">{fastpikSyncMetaLabel.syncedAtLabel}</span>
-                        </p>
-                        {booking.fastpikDataSource === "fallback" && booking.fastpikDataMessage ? (
-                            <p className="mb-3 text-[11px] text-amber-700 dark:text-amber-300">
-                                {booking.fastpikDataMessage}
-                            </p>
+                        {booking.showFileResults && (galleryLinks.showFastpik || galleryLinks.showDrive) ? (
+                            <>
+                                <p className="mb-3 text-xs text-muted-foreground">
+                                    {locale === "en" ? "Fastpik source:" : "Sumber Fastpik:"}{" "}
+                                    <span className="font-medium text-foreground">{fastpikSyncMetaLabel.sourceLabel}</span>
+                                    {" · "}
+                                    {locale === "en" ? "Last sync:" : "Sinkron terakhir:"}{" "}
+                                    <span className="font-medium text-foreground">{fastpikSyncMetaLabel.syncedAtLabel}</span>
+                                </p>
+                                {booking.fastpikDataSource === "fallback" && booking.fastpikDataMessage ? (
+                                    <p className="mb-3 text-[11px] text-amber-700 dark:text-amber-300">
+                                        {booking.fastpikDataMessage}
+                                    </p>
+                                ) : null}
+                            </>
                         ) : null}
                         <div className="space-y-2">
-                            {galleryLinks.showFastpik && galleryLinks.fastpikUrl && (
+                            {booking.showFileResults && galleryLinks.showFastpik && galleryLinks.fastpikUrl && (
                                 <a
                                     href={galleryLinks.fastpikUrl}
                                     target="_blank"
@@ -427,7 +434,7 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                                     <ExternalLink className="w-3.5 h-3.5" />
                                 </a>
                             )}
-                            {galleryLinks.showDrive && galleryLinks.driveUrl && (
+                            {booking.showFileResults && galleryLinks.showDrive && galleryLinks.driveUrl && (
                                 <a
                                     href={galleryLinks.driveUrl}
                                     target="_blank"
@@ -439,8 +446,18 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                                     <ExternalLink className="w-3.5 h-3.5" />
                                 </a>
                             )}
+                            {booking.showVideoResults && booking.videoUrl && (
+                                <a
+                                    href={booking.videoUrl}
+                                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                                >
+                                    <HardDrive className="w-4 h-4" />
+                                    {t("openVideoResult")}
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                            )}
                         </div>
-                        {booking.fastpikProjectInfo && (
+                        {booking.showFileResults && booking.fastpikProjectInfo && (
                             <div className="mt-4 rounded-lg border bg-muted/20 p-3 space-y-2 text-sm">
                                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                     {t("fastpikProjectInfo")}

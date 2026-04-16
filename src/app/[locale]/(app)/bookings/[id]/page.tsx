@@ -159,7 +159,7 @@ const FASTPIK_APP_BASE_URL = (process.env.NEXT_PUBLIC_FASTPIK_BASE_URL || "https
 
 function getBookingDetailSelect(canViewOperationalCosts: boolean) {
     return [
-        "id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source",
+        "id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, video_drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source",
         canViewOperationalCosts ? "operational_costs" : "",
         "settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, admin_notes, extra_fields, tracking_uuid, archived_at, archived_by, client_status, queue_position, services(id, name, price, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, quantity, service:services(id, name, price, duration_minutes, is_addon, affects_schedule)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))",
     ]
@@ -192,6 +192,7 @@ type Booking = {
     payment_proof_url: string | null;
     payment_proof_drive_file_id: string | null;
     drive_folder_url: string | null;
+    video_drive_folder_url: string | null;
     fastpik_project_id: string | null;
     fastpik_project_link: string | null;
     fastpik_project_edit_link: string | null;
@@ -3445,10 +3446,19 @@ export default function BookingDetailPage() {
                               fastpikLinkVisibility.showFastpik,
                         )}
                     {!fastpikLinkVisibility.showFastpik &&
-                        !fastpikLinkVisibility.showDrive && (
+                        !fastpikLinkVisibility.showDrive &&
+                        !booking.video_drive_folder_url && (
                             <p className="text-xs text-muted-foreground">
                                 Link Fastpik atau Google Drive belum tersedia untuk booking ini.
                             </p>
+                        )}
+
+                    {booking.video_drive_folder_url &&
+                        renderGalleryLinkCard(
+                            "Video Hasil",
+                            booking.video_drive_folder_url,
+                            "text-red-500",
+                            true,
                         )}
 
                     <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">

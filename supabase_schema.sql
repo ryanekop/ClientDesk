@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   studio_name TEXT,
   whatsapp_number TEXT,
   role TEXT DEFAULT 'admin' CHECK (role IN ('admin', 'staff')),
+  tracking_video_links_visible_from_status TEXT DEFAULT 'File Siap',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -65,6 +66,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   notes TEXT,
   admin_notes TEXT,
   drive_folder_url TEXT,
+  video_drive_folder_url TEXT,
   
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

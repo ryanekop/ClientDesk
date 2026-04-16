@@ -30,6 +30,7 @@ export type TrackBookingRow = {
   queue_position: number | null;
   status: string;
   drive_folder_url: string | null;
+  video_drive_folder_url: string | null;
   fastpik_project_id: string | null;
   fastpik_project_link: string | null;
   fastpik_project_edit_link: string | null;
@@ -64,6 +65,7 @@ export type TrackProfileRow = {
   queue_trigger_status?: string | null;
   final_invoice_visible_from_status: string | null;
   tracking_file_links_visible_from_status?: string | null;
+  tracking_video_links_visible_from_status?: string | null;
   tracking_hide_queue_number?: boolean | null;
   fastpik_link_display_mode: "both" | "prefer_fastpik" | "drive_only" | null;
   fastpik_link_display_mode_tracking?:
@@ -88,6 +90,7 @@ export type TrackBasePayload = {
   queueTriggerStatus: string | null;
   finalInvoiceVisibleFromStatus: string | null;
   trackingFileLinksVisibleFromStatus: string | null;
+  trackingVideoLinksVisibleFromStatus: string | null;
   trackingHideQueueNumber: boolean;
   fastpikLinkDisplayMode: "both" | "prefer_fastpik" | "drive_only";
 };
@@ -125,7 +128,7 @@ async function fetchTrackBasePayload(trackingUuid: string) {
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, user_id, booking_code, tracking_uuid, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, location, extra_fields, services(name), booking_services(id, kind, sort_order, quantity, service:services(id, name, price, duration_minutes, is_addon, affects_schedule)), created_at",
+      "id, user_id, booking_code, tracking_uuid, client_name, session_date, event_type, client_status, queue_position, status, drive_folder_url, video_drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, final_payment_amount, final_paid_at, final_invoice_sent_at, location, extra_fields, services(name), booking_services(id, kind, sort_order, quantity, service:services(id, name, price, duration_minutes, is_addon, affects_schedule)), created_at",
     )
     .eq("tracking_uuid", trackingUuid)
     .maybeSingle<TrackBookingRow>();
@@ -137,7 +140,7 @@ async function fetchTrackBasePayload(trackingUuid: string) {
   const { data: profileWithSplitMode, error: profileWithSplitModeError } = await supabase
     .from("profiles")
     .select(
-      "studio_name, avatar_url, invoice_logo_url, seo_meta_title, seo_meta_description, seo_meta_keywords, seo_track_meta_title, seo_track_meta_description, seo_track_meta_keywords, custom_client_statuses, queue_trigger_status, final_invoice_visible_from_status, tracking_file_links_visible_from_status, tracking_hide_queue_number, fastpik_link_display_mode, fastpik_link_display_mode_tracking",
+      "studio_name, avatar_url, invoice_logo_url, seo_meta_title, seo_meta_description, seo_meta_keywords, seo_track_meta_title, seo_track_meta_description, seo_track_meta_keywords, custom_client_statuses, queue_trigger_status, final_invoice_visible_from_status, tracking_file_links_visible_from_status, tracking_video_links_visible_from_status, tracking_hide_queue_number, fastpik_link_display_mode, fastpik_link_display_mode_tracking",
     )
     .eq("id", booking.user_id)
     .maybeSingle<TrackProfileRow>();
@@ -170,6 +173,8 @@ async function fetchTrackBasePayload(trackingUuid: string) {
     finalInvoiceVisibleFromStatus: profile?.final_invoice_visible_from_status || null,
     trackingFileLinksVisibleFromStatus:
       profile?.tracking_file_links_visible_from_status || null,
+    trackingVideoLinksVisibleFromStatus:
+      profile?.tracking_video_links_visible_from_status || null,
     trackingHideQueueNumber: Boolean(profile?.tracking_hide_queue_number),
     fastpikLinkDisplayMode: normalizeFastpikLinkDisplayMode(
       profile?.fastpik_link_display_mode_tracking ??

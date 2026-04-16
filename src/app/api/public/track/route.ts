@@ -10,6 +10,7 @@ import {
     resolveUnifiedBookingStatus,
     shouldShowTrackingFileLinksForClientStatus,
     shouldShowFinalInvoiceForClientStatus,
+    shouldShowTrackingVideoLinksForClientStatus,
 } from "@/lib/client-status";
 import { resolveSpecialOfferSnapshotFromExtraFields } from "@/lib/booking-special-offer";
 import {
@@ -74,6 +75,7 @@ export async function GET(request: NextRequest) {
         queueTriggerStatus,
         finalInvoiceVisibleFromStatus,
         trackingFileLinksVisibleFromStatus,
+        trackingVideoLinksVisibleFromStatus,
         trackingHideQueueNumber,
         fastpikLinkDisplayMode: profileLinkMode,
     } = basePayload;
@@ -140,6 +142,11 @@ export async function GET(request: NextRequest) {
                 }),
                 fastpikUrl: effectiveBooking.fastpik_project_link,
                 driveUrl: effectiveBooking.drive_folder_url,
+                videoUrl:
+                    effectiveBooking.video_drive_folder_url &&
+                    effectiveBooking.tracking_uuid
+                        ? `/${locale}/track/${effectiveBooking.tracking_uuid}/video`
+                        : null,
                 fastpikLinkDisplayMode: profileLinkMode,
                 createdAt: effectiveBooking.created_at,
                 totalPrice: effectiveBooking.total_price || 0,
@@ -181,6 +188,13 @@ export async function GET(request: NextRequest) {
                     currentStatus: effectiveClientStatus,
                     visibleFromStatus: trackingFileLinksVisibleFromStatus,
                 }),
+                showVideoResults:
+                    Boolean(effectiveBooking.video_drive_folder_url) &&
+                    shouldShowTrackingVideoLinksForClientStatus({
+                        statuses: customClientStatuses,
+                        currentStatus: effectiveClientStatus,
+                        visibleFromStatus: trackingVideoLinksVisibleFromStatus,
+                    }),
             },
             vendorName,
         },

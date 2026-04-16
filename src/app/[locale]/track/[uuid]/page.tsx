@@ -11,6 +11,7 @@ import {
     resolveUnifiedBookingStatus,
     shouldShowTrackingFileLinksForClientStatus,
     shouldShowFinalInvoiceForClientStatus,
+    shouldShowTrackingVideoLinksForClientStatus,
 } from "@/lib/client-status";
 import {
     type FastpikLinkDisplayMode,
@@ -53,6 +54,7 @@ type BookingRow = {
     queue_position: number | null;
     status: string;
     drive_folder_url: string | null;
+    video_drive_folder_url: string | null;
     fastpik_project_link: string | null;
     fastpik_project_id: string | null;
     fastpik_project_edit_link: string | null;
@@ -117,6 +119,7 @@ async function getBookingData(
         queueTriggerStatus: basePayload.queueTriggerStatus,
         finalInvoiceVisibleFromStatus: basePayload.finalInvoiceVisibleFromStatus,
         trackingFileLinksVisibleFromStatus: basePayload.trackingFileLinksVisibleFromStatus,
+        trackingVideoLinksVisibleFromStatus: basePayload.trackingVideoLinksVisibleFromStatus,
         trackingHideQueueNumber: basePayload.trackingHideQueueNumber,
         fastpikLinkDisplayMode: basePayload.fastpikLinkDisplayMode as FastpikLinkDisplayMode,
         fastpikDataSource,
@@ -199,6 +202,7 @@ export default async function TrackingPage({ params }: PageProps) {
         customClientStatuses,
         finalInvoiceVisibleFromStatus,
         trackingFileLinksVisibleFromStatus,
+        trackingVideoLinksVisibleFromStatus,
         fastpikDataSource,
         fastpikDataSyncedAt,
         fastpikDataMessage,
@@ -262,6 +266,10 @@ export default async function TrackingPage({ params }: PageProps) {
         }),
         fastpikUrl: booking.fastpik_project_link,
         driveUrl: booking.drive_folder_url,
+        videoUrl:
+            booking.video_drive_folder_url && booking.tracking_uuid
+                ? `/${locale}/track/${booking.tracking_uuid}/video`
+                : null,
         fastpikLinkDisplayMode: result.fastpikLinkDisplayMode,
         createdAt: booking.created_at,
         totalPrice: booking.total_price || 0,
@@ -295,6 +303,13 @@ export default async function TrackingPage({ params }: PageProps) {
             currentStatus: effectiveClientStatus,
             visibleFromStatus: trackingFileLinksVisibleFromStatus,
         }),
+        showVideoResults:
+            Boolean(booking.video_drive_folder_url) &&
+            shouldShowTrackingVideoLinksForClientStatus({
+                statuses: customClientStatuses,
+                currentStatus: effectiveClientStatus,
+                visibleFromStatus: trackingVideoLinksVisibleFromStatus,
+            }),
     };
 
     return <TrackingClient booking={bookingData} vendorName={vendorName} customStatuses={customClientStatuses} />;

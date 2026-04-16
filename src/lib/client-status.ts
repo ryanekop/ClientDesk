@@ -118,6 +118,19 @@ export function getDefaultTrackingFileLinksVisibleFromStatus(
   return getDefaultFinalInvoiceVisibleFromStatus(statuses);
 }
 
+export function getDefaultTrackingVideoLinksVisibleFromStatus(
+  statuses?: string[] | null,
+) {
+  const normalized = getClientProgressStatuses(statuses);
+  if (normalized.includes("File Siap")) {
+    return "File Siap";
+  }
+  if (normalized.includes(COMPLETED_BOOKING_STATUS)) {
+    return COMPLETED_BOOKING_STATUS;
+  }
+  return normalized[0] || "File Siap";
+}
+
 export function resolveTrackingFileLinksVisibleFromStatus(
   statuses?: string[] | null,
   selectedStatus?: string | null,
@@ -127,6 +140,17 @@ export function resolveTrackingFileLinksVisibleFromStatus(
     return selectedStatus;
   }
   return getDefaultTrackingFileLinksVisibleFromStatus(normalized);
+}
+
+export function resolveTrackingVideoLinksVisibleFromStatus(
+  statuses?: string[] | null,
+  selectedStatus?: string | null,
+) {
+  const normalized = getClientProgressStatuses(statuses);
+  if (selectedStatus && normalized.includes(selectedStatus)) {
+    return selectedStatus;
+  }
+  return getDefaultTrackingVideoLinksVisibleFromStatus(normalized);
 }
 
 export function resolveOptionalClientProgressStatus(
@@ -184,6 +208,32 @@ export function shouldShowTrackingFileLinksForClientStatus({
 
   const normalized = getClientProgressStatuses(statuses);
   const threshold = resolveTrackingFileLinksVisibleFromStatus(
+    normalized,
+    visibleFromStatus,
+  );
+  const currentIndex = normalized.indexOf(currentStatus);
+  const thresholdIndex = normalized.indexOf(threshold);
+
+  if (currentIndex === -1 || thresholdIndex === -1) {
+    return false;
+  }
+
+  return currentIndex >= thresholdIndex;
+}
+
+export function shouldShowTrackingVideoLinksForClientStatus({
+  statuses,
+  currentStatus,
+  visibleFromStatus,
+}: {
+  statuses?: string[] | null;
+  currentStatus?: string | null;
+  visibleFromStatus?: string | null;
+}) {
+  if (!currentStatus) return false;
+
+  const normalized = getClientProgressStatuses(statuses);
+  const threshold = resolveTrackingVideoLinksVisibleFromStatus(
     normalized,
     visibleFromStatus,
   );
