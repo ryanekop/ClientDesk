@@ -1445,6 +1445,8 @@
         "fileResults": "File Results",
         "openFastpik": "Open Fastpik",
         "openGoogleDrive": "Open Google Drive",
+        "openPhotoLink": "Open Photo Link",
+        "openVideoLink": "Open Video Link",
         "openVideoResult": "Open Video Result",
         "videoGatewayTitle": "Video Result",
         "videoGatewayDescription": "The video result for {name} is ready to open.",

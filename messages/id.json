@@ -1445,6 +1445,8 @@
         "fileResults": "File Hasil",
         "openFastpik": "Buka Fastpik",
         "openGoogleDrive": "Buka Google Drive",
+        "openPhotoLink": "Buka Link Foto",
+        "openVideoLink": "Buka Link Video",
         "openVideoResult": "Buka Video Hasil",
         "videoGatewayTitle": "Video Hasil",
         "videoGatewayDescription": "Video hasil untuk {name} sudah siap dibuka.",

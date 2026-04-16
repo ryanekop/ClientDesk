@@ -2,12 +2,13 @@
 
 import * as React from "react";
 import {
+    Camera,
     Check,
     CheckCircle2,
     Clock,
-    HardDrive,
     ExternalLink,
     Download,
+    Video,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
@@ -187,11 +188,11 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
         fastpikUrl: booking.fastpikUrl,
         driveUrl: booking.driveUrl,
     });
+    const photoResultUrl = booking.showFileResults ? galleryLinks.primaryUrl : null;
+    const videoResultUrl =
+        booking.showVideoResults && booking.videoUrl ? booking.videoUrl : null;
     const hasVisibleFileResults =
-        (booking.showFileResults &&
-            ((galleryLinks.showFastpik && Boolean(galleryLinks.fastpikUrl)) ||
-                (galleryLinks.showDrive && Boolean(galleryLinks.driveUrl)))) ||
-        (booking.showVideoResults && Boolean(booking.videoUrl));
+        Boolean(photoResultUrl) || Boolean(videoResultUrl);
     const handleCopyFastpikPassword = React.useCallback(() => {
         const password = booking.fastpikProjectInfo?.password || "";
         if (!password) return;
@@ -405,7 +406,7 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                 {hasVisibleFileResults && (
                     <div className="bg-background rounded-2xl shadow-lg border p-6">
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("fileResults")}</h3>
-                        {booking.showFileResults && (galleryLinks.showFastpik || galleryLinks.showDrive) ? (
+                        {photoResultUrl ? (
                             <>
                                 <p className="mb-3 text-xs text-muted-foreground">
                                     {locale === "en" ? "Fastpik source:" : "Sumber Fastpik:"}{" "}
@@ -421,43 +422,31 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                                 ) : null}
                             </>
                         ) : null}
-                        <div className="space-y-2">
-                            {booking.showFileResults && galleryLinks.showFastpik && galleryLinks.fastpikUrl && (
+                        <div className={`grid grid-cols-1 gap-2 ${photoResultUrl && videoResultUrl ? "sm:grid-cols-2" : ""}`}>
+                            {photoResultUrl && (
                                 <a
-                                    href={galleryLinks.fastpikUrl}
+                                    href={photoResultUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                                    className="flex min-h-11 items-center justify-center gap-2 rounded-lg border bg-muted/30 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-muted/60"
                                 >
-                                    <HardDrive className="w-4 h-4" />
-                                    {t("openFastpik")}
+                                    <Camera className="w-4 h-4" />
+                                    {t("openPhotoLink")}
                                     <ExternalLink className="w-3.5 h-3.5" />
                                 </a>
                             )}
-                            {booking.showFileResults && galleryLinks.showDrive && galleryLinks.driveUrl && (
+                            {videoResultUrl && (
                                 <a
-                                    href={galleryLinks.driveUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                                    href={videoResultUrl}
+                                    className="flex min-h-11 items-center justify-center gap-2 rounded-lg border bg-muted/30 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-muted/60"
                                 >
-                                    <HardDrive className="w-4 h-4" />
-                                    {t("openGoogleDrive")}
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
-                            )}
-                            {booking.showVideoResults && booking.videoUrl && (
-                                <a
-                                    href={booking.videoUrl}
-                                    className="flex items-center gap-2 text-sm text-primary hover:underline"
-                                >
-                                    <HardDrive className="w-4 h-4" />
-                                    {t("openVideoResult")}
+                                    <Video className="w-4 h-4" />
+                                    {t("openVideoLink")}
                                     <ExternalLink className="w-3.5 h-3.5" />
                                 </a>
                             )}
                         </div>
-                        {booking.showFileResults && booking.fastpikProjectInfo && (
+                        {photoResultUrl && booking.fastpikProjectInfo && (
                             <div className="mt-4 rounded-lg border bg-muted/20 p-3 space-y-2 text-sm">
                                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                     {t("fastpikProjectInfo")}
