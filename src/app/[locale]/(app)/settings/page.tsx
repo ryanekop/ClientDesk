@@ -19,9 +19,12 @@ import {
   Upload,
   Plus,
   Search,
+  Bot,
+  ClipboardPaste,
 } from "lucide-react";
 import { adminNativeSelectClass } from "@/components/ui/admin-native-form-controls";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
 import { useSuccessToast } from "@/components/ui/success-toast";
 import {
@@ -423,8 +426,6 @@ const variableHints: Record<string, string[]> = {
     "{{reminder_label}}",
     "{{session_date}}",
     ...BOOKING_WHATSAPP_TIME_VARIABLES,
-    "{{session_start_time}}",
-    "{{session_end_time}}",
     "{{service_name}}",
     "{{studio_name}}",
     "{{event_type}}",
@@ -3192,6 +3193,8 @@ export default function SettingsPage() {
   const previewData: Record<string, string> = {
     client_name: "Budi",
     booking_code: "INV-100120250001",
+    session_label: "Sesi utama",
+    reminder_label: previewLocale === "en" ? "tomorrow" : "besok",
     session_date: "15 April 2026",
     session_time: "17.00 - 18.00",
     session_start: "17.00",
@@ -5830,7 +5833,10 @@ export default function SettingsPage() {
         {activeTab === "telegram" && (
           <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
             <div className="px-6 py-4 border-b">
-              <h3 className="font-semibold">{tp("telegramTitle")}</h3>
+              <h3 className="font-semibold flex items-center gap-2">
+                <Bot className="w-4 h-4" />
+                {tp("telegramTitle")}
+              </h3>
               <p className="text-sm text-muted-foreground">
                 {tp("telegramDesc")}
               </p>
@@ -5846,19 +5852,79 @@ export default function SettingsPage() {
                       {tp("telegramToggleHint")}
                     </p>
                   </div>
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={telegramNotificationsEnabled}
-                      onChange={(e) =>
-                        setTelegramNotificationsEnabled(e.target.checked)
-                      }
-                      className="accent-primary"
-                    />
-                    {telegramNotificationsEnabled
-                      ? tp("telegramEnabled")
-                      : tp("telegramDisabled")}
-                  </label>
+                  <Switch
+                    checked={telegramNotificationsEnabled}
+                    onCheckedChange={(checked) =>
+                      setTelegramNotificationsEnabled(checked)
+                    }
+                    aria-label={tp("telegramNotificationStatus")}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-lg border bg-muted/10 p-4 space-y-4">
+                <p className="text-sm font-medium text-center">
+                  {tp("telegramSetupGuideTitle")}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <a
+                    href="https://t.me/userinfo3bot"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex flex-col items-center text-center group"
+                  >
+                    <span className="relative mb-2">
+                      <span className="w-16 h-16 rounded-full bg-background border-2 border-muted-foreground/20 flex items-center justify-center group-hover:border-primary transition-colors">
+                        <Search className="w-7 h-7 text-muted-foreground group-hover:text-primary transition-colors" />
+                      </span>
+                      <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-foreground text-background text-xs font-bold flex items-center justify-center">
+                        1
+                      </span>
+                    </span>
+                    <span className="text-sm font-semibold">
+                      {tp("telegramSetupGuideChatIdTitle")}
+                    </span>
+                    <span className="text-xs text-muted-foreground mt-1">
+                      {tp("telegramSetupGuideChatIdDesc")}
+                    </span>
+                  </a>
+                  <a
+                    href="https://t.me/Clientdesks_bot"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex flex-col items-center text-center group"
+                  >
+                    <span className="relative mb-2">
+                      <span className="w-16 h-16 rounded-full bg-background border-2 border-muted-foreground/20 flex items-center justify-center group-hover:border-primary transition-colors">
+                        <Bot className="w-7 h-7 text-muted-foreground group-hover:text-primary transition-colors" />
+                      </span>
+                      <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-foreground text-background text-xs font-bold flex items-center justify-center">
+                        2
+                      </span>
+                    </span>
+                    <span className="text-sm font-semibold">
+                      {tp("telegramSetupGuideBotTitle")}
+                    </span>
+                    <span className="text-xs text-muted-foreground mt-1">
+                      {tp("telegramSetupGuideBotDesc")}
+                    </span>
+                  </a>
+                  <div className="flex flex-col items-center text-center">
+                    <span className="relative mb-2">
+                      <span className="w-16 h-16 rounded-full bg-background border-2 border-muted-foreground/20 flex items-center justify-center">
+                        <ClipboardPaste className="w-7 h-7 text-muted-foreground" />
+                      </span>
+                      <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-foreground text-background text-xs font-bold flex items-center justify-center">
+                        3
+                      </span>
+                    </span>
+                    <span className="text-sm font-semibold">
+                      {tp("telegramSetupGuidePasteTitle")}
+                    </span>
+                    <span className="text-xs text-muted-foreground mt-1">
+                      {tp("telegramSetupGuidePasteDesc")}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -5947,16 +6013,6 @@ export default function SettingsPage() {
                     {tp("telegramNotifySessionH1Desc")}
                   </span>
                 </label>
-              </div>
-
-              <div className="rounded-lg border bg-muted/10 p-4 space-y-2">
-                <h4 className="text-sm font-medium">{tp("telegramSetupTitle")}</h4>
-                <ol className="list-decimal pl-5 text-xs text-muted-foreground space-y-1">
-                  <li>{tp("telegramSetupStepBotFather")}</li>
-                  <li>{tp("telegramSetupStepStartBot")}</li>
-                  <li>{tp("telegramSetupStepChatId")}</li>
-                  <li>{tp("telegramSetupStepEnv")}</li>
-                </ol>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">

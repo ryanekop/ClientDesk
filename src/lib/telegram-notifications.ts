@@ -445,8 +445,6 @@ function buildReminderWhatsAppMessage(args: {
     ...baseVars,
     session_label: args.session.label || (locale === "en" ? "Session" : "Sesi"),
     reminder_label: locale === "en" ? "tomorrow" : "besok",
-    session_start_time: baseVars.session_start || "-",
-    session_end_time: baseVars.session_end || "-",
   };
 
   return fillWhatsAppTemplate(content, vars);
