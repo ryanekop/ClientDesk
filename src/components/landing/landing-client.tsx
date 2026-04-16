@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 import { clearClientDeskSessionOnlyState } from "@/lib/auth/session-only";
+import { getClientDeskRegisterHref } from "@/lib/auth/register-url";
 
 type LandingAuthProps = {
   isAuthenticated?: boolean;
@@ -58,6 +59,7 @@ export function DesktopNav() {
 export function MobileNav({ isAuthenticated = false }: LandingAuthProps) {
   const t = useTranslations("Landing");
   const locale = useLocale();
+  const registerHref = getClientDeskRegisterHref(locale);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -138,7 +140,7 @@ export function MobileNav({ isAuthenticated = false }: LandingAuthProps) {
                     asChild
                     className="w-full cursor-pointer"
                   >
-                    <Link href={`/${locale}/register`} onClick={() => setOpen(false)}>
+                    <Link href={registerHref} onClick={() => setOpen(false)}>
                       {t("navRegister")}
                     </Link>
                   </Button>
@@ -353,6 +355,7 @@ export function LandingNav() {
 export function HeroCTA({ isAuthenticated = false }: LandingAuthProps) {
   const t = useTranslations("Landing");
   const locale = useLocale();
+  const registerHref = getClientDeskRegisterHref(locale);
 
   return (
     <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
@@ -365,7 +368,7 @@ export function HeroCTA({ isAuthenticated = false }: LandingAuthProps) {
       ) : (
         <>
           <Button size="lg" asChild className="gap-2 cursor-pointer text-lg px-8">
-            <Link href={`/${locale}/register`}>
+            <Link href={registerHref}>
               🚀 {t("startManaging")} <ArrowRightIcon />
             </Link>
           </Button>
@@ -386,10 +389,11 @@ export function HeroCTA({ isAuthenticated = false }: LandingAuthProps) {
 export function BottomCTA({ isAuthenticated = false }: LandingAuthProps) {
   const t = useTranslations("Landing");
   const locale = useLocale();
+  const registerHref = getClientDeskRegisterHref(locale);
 
   return (
     <Button size="lg" variant="secondary" asChild className="gap-2 text-lg px-8">
-      <Link href={isAuthenticated ? `/${locale}/dashboard` : `/${locale}/register`}>
+      <Link href={isAuthenticated ? `/${locale}/dashboard` : registerHref}>
         🎉 {t("ctaButton")} <ArrowRightIcon />
       </Link>
     </Button>

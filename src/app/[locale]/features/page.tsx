@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import Link from 'next/link'
 import { TenantLogo } from "@/components/layout/tenant-logo"
 import { motion } from "framer-motion"
+import { getClientDeskRegisterHref } from "@/lib/auth/register-url"
 import {
     CalendarCheck, Zap, FileText, MessageSquare, FolderOpen, Globe,
     Users, ClipboardCheck, Upload, Layers, Moon, Globe2,
@@ -41,6 +42,7 @@ export default function FeaturesPage() {
     const tl = useTranslations('Landing')
     const locale = useLocale()
     const tenant = useTenant()
+    const registerHref = getClientDeskRegisterHref(locale)
 
     const FeatureCard = ({ feature, index, large = false }: { feature: typeof coreFeatures[0], index: number, large?: boolean }) => {
         const Icon = feature.icon
@@ -172,7 +174,7 @@ export default function FeaturesPage() {
                         <h2 className="text-3xl font-bold mb-4">{tl('ctaTitle')}</h2>
                         <p className="text-primary-foreground/80 text-lg mb-8">{tl('ctaSubtitle')}</p>
                         <Button size="lg" variant="secondary" asChild className="gap-2 text-lg px-8">
-                            <Link href={`/${locale}/register`}>
+                            <Link href={registerHref}>
                                 🎉 {t('startNow')} <ArrowRight className="h-5 w-5" />
                             </Link>
                         </Button>

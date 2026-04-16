@@ -11,12 +11,14 @@ import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { applyClientDeskRememberMeSelection } from "@/lib/auth/session-only"
 import { AppCheckbox } from "@/components/ui/app-checkbox"
+import { getClientDeskRegisterHref } from "@/lib/auth/register-url"
 
 export default function LoginPage() {
     const router = useRouter()
     const supabase = createClient()
     const locale = useLocale()
     const t = useTranslations("Auth")
+    const registerHref = getClientDeskRegisterHref(locale)
 
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
@@ -147,7 +149,7 @@ export default function LoginPage() {
                         <div className="mt-6 pt-6 border-t text-center space-y-3">
                             <p className="text-sm text-muted-foreground">{t("noAccount")}</p>
                             <Button variant="outline" className="w-full gap-2" asChild>
-                                <Link href={`/${locale}/register`}>
+                                <Link href={registerHref}>
                                     <UserPlus className="h-4 w-4" />
                                     {t("registerNow")}
                                 </Link>
