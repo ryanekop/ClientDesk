@@ -91,6 +91,7 @@ import {
     toBookingServicesPayload,
     type BookingServicePayloadItem,
 } from "@/lib/booking-services";
+import { notifyTelegramNewBooking } from "@/lib/telegram-notifications";
 
 type VendorRecord = {
     id: string;
@@ -121,6 +122,10 @@ type VendorRecord = {
     bank_accounts?: unknown[] | null;
     custom_client_statuses?: string[] | null;
     form_sections?: unknown[] | Record<string, unknown> | null;
+    telegram_notifications_enabled?: boolean | null;
+    telegram_chat_id?: string | null;
+    telegram_language?: string | null;
+    telegram_notify_new_booking?: boolean | null;
 };
 
 type AvailableServiceRow = {
@@ -346,6 +351,10 @@ const VENDOR_SELECT_COLUMNS = [
     "bank_accounts",
     "custom_client_statuses",
     "form_sections",
+    "telegram_notifications_enabled",
+    "telegram_chat_id",
+    "telegram_language",
+    "telegram_notify_new_booking",
 ] as const;
 
 function resolveBuiltInFieldStateFromStoredSections(
@@ -1447,6 +1456,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        let storedPaymentProofUrl = normalizedPaymentProofUrl;
         if (proofEnabled && selectedPaymentMethod !== "cash" && paymentProofFile) {
             try {
                 if (!vendor.google_drive_access_token || !vendor.google_drive_refresh_token) {
@@ -1479,6 +1489,7 @@ export async function POST(request: NextRequest) {
                         payment_proof_drive_file_id: uploaded.fileId,
                     })
                     .eq("id", booking.id);
+                storedPaymentProofUrl = uploaded.fileUrl;
             } catch (uploadError) {
                 console.error("Public booking payment proof upload failed:", {
                     vendorId: vendor.id,
@@ -1687,6 +1698,46 @@ export async function POST(request: NextRequest) {
         } catch {
             bookingConfirmTemplate = null;
         }
+
+        const serviceLabel = [
+            ...mainServices,
+            ...addonServices,
+        ]
+            .map((service) =>
+                service.quantity > 1 ? `${service.name} x${service.quantity}` : service.name,
+            )
+            .filter(Boolean)
+            .join(", ");
+        await notifyTelegramNewBooking({
+            supabase: supabaseAdmin,
+            profile: vendor,
+            booking: {
+                id: booking.id,
+                booking_code: booking.booking_code,
+                client_name: normalizedClientName,
+                client_whatsapp: normalizedClientWhatsapp || null,
+                instagram: instagram || null,
+                event_type: resolvedEventType || null,
+                session_date: resolvedSessionDate || null,
+                total_price: computedTotalPrice,
+                dp_paid: normalizedDpPaid,
+                location: location || null,
+                location_lat: normalizedLocationLat,
+                location_lng: normalizedLocationLng,
+                location_detail: locationDetail || null,
+                notes: notes || null,
+                extra_fields: Object.keys(sanitizedExtraData).length > 0 ? sanitizedExtraData : null,
+                payment_proof_url: storedPaymentProofUrl,
+                payment_method: selectedPaymentMethod,
+                payment_source: normalizedPaymentSource,
+                services: mainServices[0]
+                    ? { name: mainServices[0].name, price: mainServices[0].price }
+                    : null,
+                service_label: serviceLabel || null,
+            },
+            paymentProofUrl: storedPaymentProofUrl,
+            publicOrigin,
+        });
 
         invalidatePublicCachesForBooking({
             bookingCode: booking.booking_code,

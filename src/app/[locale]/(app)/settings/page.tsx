@@ -144,6 +144,12 @@ type Profile = {
   studio_address?: string | null;
   whatsapp_number: string | null;
   vendor_slug: string | null;
+  telegram_notifications_enabled?: boolean | null;
+  telegram_chat_id?: string | null;
+  telegram_language?: string | null;
+  telegram_notify_new_booking?: boolean | null;
+  telegram_notify_settlement_submitted?: boolean | null;
+  telegram_notify_session_h1?: boolean | null;
   google_access_token?: string | null;
   google_refresh_token?: string | null;
   google_drive_access_token?: string | null;
@@ -221,6 +227,7 @@ const templateTypes = [
   { value: "whatsapp_client" },
   { value: "whatsapp_freelancer" },
   { value: "whatsapp_booking_confirm" },
+  { value: "whatsapp_session_reminder_client" },
   { value: "invoice" },
   { value: "whatsapp_settlement_client" },
   { value: "whatsapp_settlement_confirm" },
@@ -261,6 +268,7 @@ const EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES = new Set([
   "whatsapp_client",
   "whatsapp_freelancer",
   "whatsapp_booking_confirm",
+  "whatsapp_session_reminder_client",
   "whatsapp_settlement_client",
   "whatsapp_settlement_confirm",
 ]);
@@ -301,6 +309,7 @@ const templateTitleKeyByType: Record<string, string> = {
   whatsapp_client: "templateWAClient",
   whatsapp_freelancer: "templateWAFreelancer",
   whatsapp_booking_confirm: "templateBookingConfirm",
+  whatsapp_session_reminder_client: "templateSessionReminderClient",
   invoice: "templateInvoice",
   whatsapp_settlement_client: "templateSettlementClient",
   whatsapp_settlement_confirm: "templateSettlementConfirm",
@@ -310,6 +319,7 @@ const templateDescKeyByType: Record<string, string> = {
   whatsapp_client: "templateWAClientDesc",
   whatsapp_freelancer: "templateWAFreelancerDesc",
   whatsapp_booking_confirm: "templateBookingConfirmDesc",
+  whatsapp_session_reminder_client: "templateSessionReminderClientDesc",
   invoice: "templateInvoiceDesc",
   whatsapp_settlement_client: "templateSettlementClientDesc",
   whatsapp_settlement_confirm: "templateSettlementConfirmDesc",
@@ -322,6 +332,8 @@ const templateCardToneByType: Record<string, string> = {
     "border-amber-300/90 bg-amber-50/20 ring-1 ring-amber-200/70 dark:border-amber-500/50 dark:bg-amber-500/8 dark:ring-amber-500/30",
   whatsapp_booking_confirm:
     "border-sky-300/90 bg-sky-50/20 ring-1 ring-sky-200/70 dark:border-sky-500/50 dark:bg-sky-500/8 dark:ring-sky-500/30",
+  whatsapp_session_reminder_client:
+    "border-teal-300/90 bg-teal-50/20 ring-1 ring-teal-200/70 dark:border-teal-500/50 dark:bg-teal-500/8 dark:ring-teal-500/30",
   invoice:
     "border-violet-300/90 bg-violet-50/20 ring-1 ring-violet-200/70 dark:border-violet-500/50 dark:bg-violet-500/8 dark:ring-violet-500/30",
   whatsapp_settlement_client:
@@ -334,6 +346,7 @@ const templateHeaderToneByType: Record<string, string> = {
   whatsapp_client: "border-amber-200/80 dark:border-amber-500/30",
   whatsapp_freelancer: "border-amber-200/80 dark:border-amber-500/30",
   whatsapp_booking_confirm: "border-sky-200/80 dark:border-sky-500/30",
+  whatsapp_session_reminder_client: "border-teal-200/80 dark:border-teal-500/30",
   invoice: "border-violet-200/80 dark:border-violet-500/30",
   whatsapp_settlement_client: "border-emerald-200/80 dark:border-emerald-500/30",
   whatsapp_settlement_confirm: "border-emerald-200/80 dark:border-emerald-500/30",
@@ -400,6 +413,25 @@ const variableHints: Record<string, string[]> = {
     "{{studio_name}}",
     "{{event_type}}",
     "{{location}}",
+    "{{tracking_link}}",
+  ],
+  whatsapp_session_reminder_client: [
+    "{{client_name}}",
+    "{{client_whatsapp}}",
+    "{{booking_code}}",
+    "{{session_label}}",
+    "{{reminder_label}}",
+    "{{session_date}}",
+    ...BOOKING_WHATSAPP_TIME_VARIABLES,
+    "{{session_start_time}}",
+    "{{session_end_time}}",
+    "{{service_name}}",
+    "{{studio_name}}",
+    "{{event_type}}",
+    "{{location}}",
+    "{{location_maps_url}}",
+    "{{detail_location}}",
+    "{{notes}}",
     "{{tracking_link}}",
   ],
   whatsapp_settlement_client: [
@@ -607,6 +639,12 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "studio_address",
   "whatsapp_number",
   "vendor_slug",
+  "telegram_notifications_enabled",
+  "telegram_chat_id",
+  "telegram_language",
+  "telegram_notify_new_booking",
+  "telegram_notify_settlement_submitted",
+  "telegram_notify_session_h1",
   "google_access_token",
   "google_refresh_token",
   "google_drive_access_token",
@@ -848,6 +886,20 @@ export default function SettingsPage() {
   const [countryCode, setCountryCode] = React.useState("+62");
   const [waNumber, setWaNumber] = React.useState("");
   const [vendorSlug, setVendorSlug] = React.useState("");
+  const [telegramNotificationsEnabled, setTelegramNotificationsEnabled] =
+    React.useState(false);
+  const [telegramChatId, setTelegramChatId] = React.useState("");
+  const [telegramLanguage, setTelegramLanguage] = React.useState<"id" | "en">("id");
+  const [telegramNotifyNewBooking, setTelegramNotifyNewBooking] =
+    React.useState(true);
+  const [
+    telegramNotifySettlementSubmitted,
+    setTelegramNotifySettlementSubmitted,
+  ] = React.useState(true);
+  const [telegramNotifySessionH1, setTelegramNotifySessionH1] =
+    React.useState(true);
+  const [telegramTesting, setTelegramTesting] = React.useState(false);
+  const [telegramActionMessage, setTelegramActionMessage] = React.useState("");
   const [disableBookingSlug, setDisableBookingSlug] = React.useState(false);
   const [defaultBookingVendorSlug, setDefaultBookingVendorSlug] =
     React.useState("");
@@ -1737,6 +1789,22 @@ export default function SettingsPage() {
       setWaNumber(savedWa.replace(/^0/, ""));
     }
     setVendorSlug(prof?.vendor_slug || "");
+    setTelegramNotificationsEnabled(
+      Boolean(prof?.telegram_notifications_enabled),
+    );
+    setTelegramChatId(prof?.telegram_chat_id || "");
+    setTelegramLanguage(prof?.telegram_language === "en" ? "en" : "id");
+    setTelegramNotifyNewBooking(
+      prof?.telegram_notify_new_booking === false ? false : true,
+    );
+    setTelegramNotifySettlementSubmitted(
+      prof?.telegram_notify_settlement_submitted === false
+        ? false
+        : true,
+    );
+    setTelegramNotifySessionH1(
+      prof?.telegram_notify_session_h1 === false ? false : true,
+    );
     setFastpikIntegrationEnabled(
       Boolean((prof as any)?.fastpik_integration_enabled),
     );
@@ -2027,6 +2095,45 @@ export default function SettingsPage() {
       void fetchAll(true);
     } catch (error) {
       console.error("Settings save error:", error);
+      setSavedMsg(tp("failedSave"));
+      setTimeout(() => setSavedMsg(""), 3000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function buildTelegramProfilePatch() {
+    return {
+      telegram_notifications_enabled: telegramNotificationsEnabled,
+      telegram_chat_id: telegramChatId.trim() || null,
+      telegram_language: telegramLanguage,
+      telegram_notify_new_booking: telegramNotifyNewBooking,
+      telegram_notify_settlement_submitted: telegramNotifySettlementSubmitted,
+      telegram_notify_session_h1: telegramNotifySessionH1,
+    };
+  }
+
+  async function persistTelegramSettings(options?: { showSavedMessage?: boolean }) {
+    if (!profile) {
+      throw new Error(tp("profileNotFound"));
+    }
+
+    await saveProfilePatch(buildTelegramProfilePatch());
+    if (options?.showSavedMessage) {
+      setSavedMsg(settingsSavedMessage);
+      showSettingsSavedToast();
+      setTimeout(() => setSavedMsg(""), 3000);
+    }
+  }
+
+  async function handleSaveTelegramSettings() {
+    if (!profile) return;
+    setSaving(true);
+    try {
+      await persistTelegramSettings({ showSavedMessage: true });
+      void fetchAll(true);
+    } catch (error) {
+      console.error("Telegram settings save error:", error);
       setSavedMsg(tp("failedSave"));
       setTimeout(() => setSavedMsg(""), 3000);
     } finally {
@@ -2389,6 +2496,38 @@ export default function SettingsPage() {
       setFastpikActionMessage(message);
     } finally {
       setFastpikBatchSyncing(false);
+    }
+  }
+
+  async function handleTestTelegramConnection() {
+    setTelegramTesting(true);
+    setTelegramActionMessage("");
+    try {
+      await persistTelegramSettings();
+      const response = await fetch("/api/integrations/telegram/test", {
+        method: "POST",
+      });
+      const payload = await response.json().catch(() => null);
+      const message =
+        typeof payload?.message === "string"
+          ? payload.message
+          : response.ok
+            ? tp("telegramTestSuccess")
+            : tp("telegramTestFailed");
+      if (!response.ok) {
+        throw new Error(message);
+      }
+      setTelegramActionMessage(message);
+      showSettingsSavedToast(message);
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : tp("telegramTestFailed");
+      setTelegramActionMessage(message);
+      showFeedback(message);
+    } finally {
+      setTelegramTesting(false);
     }
   }
 
@@ -5696,14 +5835,164 @@ export default function SettingsPage() {
                 {tp("telegramDesc")}
               </p>
             </div>
-            <div className="p-8 text-center space-y-3">
-              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto text-3xl">
-                🤖
+            <div className="p-6 space-y-6">
+              <div className="rounded-lg border bg-muted/10 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-medium">
+                      {tp("telegramNotificationStatus")}
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      {tp("telegramToggleHint")}
+                    </p>
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={telegramNotificationsEnabled}
+                      onChange={(e) =>
+                        setTelegramNotificationsEnabled(e.target.checked)
+                      }
+                      className="accent-primary"
+                    />
+                    {telegramNotificationsEnabled
+                      ? tp("telegramEnabled")
+                      : tp("telegramDisabled")}
+                  </label>
+                </div>
               </div>
-              <h4 className="font-semibold">{tp("comingSoon")}</h4>
-              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                {tp("telegramComingSoonDesc")}
-              </p>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">
+                    {tp("telegramChatId")}
+                  </label>
+                  <input
+                    type="text"
+                    value={telegramChatId}
+                    onChange={(e) => setTelegramChatId(e.target.value)}
+                    placeholder={tp("telegramChatIdPlaceholder")}
+                    className={inputClass}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {tp("telegramChatIdHint")}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">
+                    {tp("telegramLanguage")}
+                  </label>
+                  <select
+                    value={telegramLanguage}
+                    onChange={(e) =>
+                      setTelegramLanguage(e.target.value === "en" ? "en" : "id")
+                    }
+                    className={selectClass}
+                  >
+                    <option value="id">Indonesia</option>
+                    <option value="en">English</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    {tp("telegramLanguageHint")}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="rounded-lg border p-4 text-sm space-y-2">
+                  <span className="flex items-center gap-2 font-medium">
+                    <input
+                      type="checkbox"
+                      checked={telegramNotifyNewBooking}
+                      onChange={(e) =>
+                        setTelegramNotifyNewBooking(e.target.checked)
+                      }
+                      className="accent-primary"
+                    />
+                    {tp("telegramNotifyNewBooking")}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {tp("telegramNotifyNewBookingDesc")}
+                  </span>
+                </label>
+                <label className="rounded-lg border p-4 text-sm space-y-2">
+                  <span className="flex items-center gap-2 font-medium">
+                    <input
+                      type="checkbox"
+                      checked={telegramNotifySettlementSubmitted}
+                      onChange={(e) =>
+                        setTelegramNotifySettlementSubmitted(e.target.checked)
+                      }
+                      className="accent-primary"
+                    />
+                    {tp("telegramNotifySettlement")}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {tp("telegramNotifySettlementDesc")}
+                  </span>
+                </label>
+                <label className="rounded-lg border p-4 text-sm space-y-2">
+                  <span className="flex items-center gap-2 font-medium">
+                    <input
+                      type="checkbox"
+                      checked={telegramNotifySessionH1}
+                      onChange={(e) =>
+                        setTelegramNotifySessionH1(e.target.checked)
+                      }
+                      className="accent-primary"
+                    />
+                    {tp("telegramNotifySessionH1")}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {tp("telegramNotifySessionH1Desc")}
+                  </span>
+                </label>
+              </div>
+
+              <div className="rounded-lg border bg-muted/10 p-4 space-y-2">
+                <h4 className="text-sm font-medium">{tp("telegramSetupTitle")}</h4>
+                <ol className="list-decimal pl-5 text-xs text-muted-foreground space-y-1">
+                  <li>{tp("telegramSetupStepBotFather")}</li>
+                  <li>{tp("telegramSetupStepStartBot")}</li>
+                  <li>{tp("telegramSetupStepChatId")}</li>
+                  <li>{tp("telegramSetupStepEnv")}</li>
+                </ol>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleSaveTelegramSettings}
+                  className="h-10 gap-2 px-5 text-sm"
+                >
+                  {saving ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Simpan Semua
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={handleTestTelegramConnection}
+                  disabled={telegramTesting || !telegramChatId.trim()}
+                >
+                  {telegramTesting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <MessageSquare className="w-4 h-4" />
+                  )}
+                  {tp("telegramTestSend")}
+                </Button>
+                {telegramActionMessage && (
+                  <p className="text-xs text-muted-foreground">
+                    {telegramActionMessage}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}

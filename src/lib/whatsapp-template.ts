@@ -23,6 +23,7 @@ const EVENT_SCOPED_WHATSAPP_TEMPLATE_TYPES = new Set([
   "whatsapp_client",
   "whatsapp_freelancer",
   "whatsapp_booking_confirm",
+  "whatsapp_session_reminder_client",
   "whatsapp_settlement_client",
   "whatsapp_settlement_confirm",
 ]);
@@ -69,6 +70,26 @@ const DEFAULT_WHATSAPP_TEMPLATES: Record<
       "Total: {{total_price}}\n" +
       "DP: {{dp_paid}}\n\n" +
       "Please confirm my booking. Thank you.",
+  },
+  whatsapp_session_reminder_client: {
+    id:
+      "Halo {{client_name}}, kami ingatkan untuk sesi {{session_label}} besok.\n\n" +
+      "Kode Booking: {{booking_code}}\n" +
+      "Paket: {{service_name}}\n" +
+      "Tanggal: {{session_date}}\n" +
+      "Jam: {{session_time}}\n" +
+      "Lokasi: {{location}}\n" +
+      "Maps: {{location_maps_url}}\n\n" +
+      "Mohon hadir tepat waktu. Terima kasih, {{studio_name}}.",
+    en:
+      "Hello {{client_name}}, this is a reminder for your {{session_label}} tomorrow.\n\n" +
+      "Booking Code: {{booking_code}}\n" +
+      "Package: {{service_name}}\n" +
+      "Date: {{session_date}}\n" +
+      "Time: {{session_time}}\n" +
+      "Location: {{location}}\n" +
+      "Maps: {{location_maps_url}}\n\n" +
+      "Please arrive on time. Thank you, {{studio_name}}.",
   },
   whatsapp_settlement_client: {
     id:

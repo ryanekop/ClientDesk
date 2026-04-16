@@ -19,8 +19,10 @@ import { securityErrorResponse } from "@/lib/security/error-response";
 import { validatePublicPaymentProofFile } from "@/lib/security/public-upload";
 import { enforceRateLimit } from "@/lib/security/rate-limit";
 import { validateExternalHttpsUrl } from "@/lib/security/url-validation";
+import { notifyTelegramSettlementSubmitted } from "@/lib/telegram-notifications";
 
 type VendorRecord = {
+  id: string;
   vendor_slug: string | null;
   qris_image_url: string | null;
   qris_drive_file_id: string | null;
@@ -34,12 +36,86 @@ type VendorRecord = {
   drive_folder_format_map: Record<string, string> | null;
   drive_folder_structure_map: Record<string, string[] | string> | null;
   studio_name: string | null;
+  telegram_notifications_enabled?: boolean | null;
+  telegram_chat_id?: string | null;
+  telegram_language?: string | null;
+  telegram_notify_settlement_submitted?: boolean | null;
 };
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
+
+const VENDOR_SELECT_COLUMNS = [
+  "id",
+  "vendor_slug",
+  "qris_image_url",
+  "qris_drive_file_id",
+  "form_payment_methods",
+  "settlement_form_payment_methods",
+  "form_show_proof",
+  "bank_accounts",
+  "google_drive_access_token",
+  "google_drive_refresh_token",
+  "drive_folder_format",
+  "drive_folder_format_map",
+  "drive_folder_structure_map",
+  "studio_name",
+  "telegram_notifications_enabled",
+  "telegram_chat_id",
+  "telegram_language",
+  "telegram_notify_settlement_submitted",
+] as const;
+
+function extractMissingColumnFromSupabaseError(
+  error: { message?: string; details?: string; hint?: string } | null,
+) {
+  const messages = [error?.message, error?.details, error?.hint].filter(
+    (value): value is string => Boolean(value),
+  );
+
+  for (const message of messages) {
+    const schemaCacheMatch = message.match(
+      /Could not find the '([^']+)' column/i,
+    );
+    if (schemaCacheMatch?.[1]) return schemaCacheMatch[1];
+
+    const postgresMatch = message.match(
+      /column\s+["']?(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)["']?\s+does not exist/i,
+    );
+    if (postgresMatch?.[1]) return postgresMatch[1];
+  }
+
+  return null;
+}
+
+async function fetchVendorRecord(userId: string): Promise<VendorRecord | null> {
+  let selectColumns = [...VENDOR_SELECT_COLUMNS];
+
+  while (selectColumns.length > 0) {
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select(selectColumns.join(", "))
+      .eq("id", userId)
+      .single();
+
+    if (!error) return (data as unknown as VendorRecord | null) || null;
+
+    const missingColumn = extractMissingColumnFromSupabaseError(error);
+    if (
+      missingColumn &&
+      selectColumns.includes(missingColumn as (typeof VENDOR_SELECT_COLUMNS)[number])
+    ) {
+      selectColumns = selectColumns.filter((column) => column !== missingColumn);
+      continue;
+    }
+
+    return null;
+  }
+
+  return null;
+}
 
 export async function POST(request: NextRequest) {
   const rateLimitedResponse = enforceRateLimit({
@@ -118,7 +194,7 @@ export async function POST(request: NextRequest) {
     const { data: booking } = await supabaseAdmin
       .from("bookings")
       .select(
-        "id, booking_code, client_name, event_type, session_date, user_id, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, extra_fields",
+        "id, booking_code, client_name, client_whatsapp, event_type, session_date, user_id, total_price, dp_paid, is_fully_paid, settlement_status, final_adjustments, extra_fields",
       )
       .eq("tracking_uuid", trackingUuid)
       .single();
@@ -153,13 +229,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: vendor } = await supabaseAdmin
-      .from("profiles")
-      .select("vendor_slug, qris_image_url, qris_drive_file_id, form_payment_methods, settlement_form_payment_methods, form_show_proof, bank_accounts, google_drive_access_token, google_drive_refresh_token, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, studio_name")
-      .eq("id", booking.user_id)
-      .single();
-
-    const vendorRecord = vendor as VendorRecord | null;
+    const vendorRecord = await fetchVendorRecord(booking.user_id);
     if (!vendorRecord) {
       return NextResponse.json(
         { success: false, error: "Vendor tidak ditemukan." },
@@ -302,6 +372,29 @@ export async function POST(request: NextRequest) {
         { status: 500 },
       );
     }
+
+    await notifyTelegramSettlementSubmitted({
+      supabase: supabaseAdmin,
+      profile: vendorRecord,
+      booking: {
+        id: booking.id,
+        booking_code: booking.booking_code,
+        client_name: booking.client_name,
+        client_whatsapp: booking.client_whatsapp,
+        event_type: booking.event_type,
+        session_date: booking.session_date,
+        total_price: booking.total_price,
+        dp_paid: booking.dp_paid,
+        extra_fields: booking.extra_fields,
+        final_payment_amount: remaining,
+        final_payment_method: selectedPaymentMethod,
+        final_payment_source: normalizedPaymentSource,
+        final_payment_proof_url:
+          selectedPaymentMethod === "cash" ? null : normalizedProofUrl || null,
+      },
+      proofUrl: selectedPaymentMethod === "cash" ? null : normalizedProofUrl || null,
+      publicOrigin: request.nextUrl.origin,
+    });
 
     invalidatePublicCachesForBooking({
       bookingCode: booking.booking_code,

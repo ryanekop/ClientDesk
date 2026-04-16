@@ -1,5 +1,13 @@
 const TELEGRAM_API = 'https://api.telegram.org'
 
+export function escapeTelegramHtml(value: unknown): string {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+}
+
 function getBotToken(): string {
     const token = process.env.TELEGRAM_BOT_TOKEN
     if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not set')

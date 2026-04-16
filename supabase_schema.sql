@@ -11,6 +11,12 @@ CREATE TABLE IF NOT EXISTS profiles (
   full_name TEXT NOT NULL,
   studio_name TEXT,
   whatsapp_number TEXT,
+  telegram_notifications_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  telegram_chat_id TEXT,
+  telegram_language TEXT NOT NULL DEFAULT 'id' CHECK (telegram_language IN ('id', 'en')),
+  telegram_notify_new_booking BOOLEAN NOT NULL DEFAULT TRUE,
+  telegram_notify_settlement_submitted BOOLEAN NOT NULL DEFAULT TRUE,
+  telegram_notify_session_h1 BOOLEAN NOT NULL DEFAULT TRUE,
   role TEXT DEFAULT 'admin' CHECK (role IN ('admin', 'staff')),
   tracking_video_links_visible_from_status TEXT DEFAULT 'File Siap',
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -79,6 +85,7 @@ CREATE TABLE IF NOT EXISTS templates (
   type TEXT NOT NULL CHECK (type IN (
     'whatsapp_client',
     'whatsapp_booking_confirm',
+    'whatsapp_session_reminder_client',
     'whatsapp_settlement_client',
     'whatsapp_settlement_confirm',
     'whatsapp_freelancer',
@@ -89,6 +96,26 @@ CREATE TABLE IF NOT EXISTS templates (
   is_default BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS telegram_notification_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  booking_id UUID REFERENCES bookings(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  event_key TEXT NOT NULL,
+  scheduled_for_date DATE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed', 'skipped')),
+  error_message TEXT,
+  sent_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS telegram_notification_logs_event_key_idx
+  ON telegram_notification_logs (user_id, event_type, event_key);
+
+CREATE INDEX IF NOT EXISTS telegram_notification_logs_booking_idx
+  ON telegram_notification_logs (booking_id, event_type);
 
 -- ========================================================
 -- RLS (Row Level Security) Policies
