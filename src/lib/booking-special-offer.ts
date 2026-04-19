@@ -1,4 +1,7 @@
-import type { BookingServiceSelection } from "@/lib/booking-services";
+import {
+  normalizeBookingServiceQuantity,
+  type BookingServiceSelection,
+} from "@/lib/booking-services";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -368,10 +371,22 @@ export function getInitialBookingPriceBreakdown(input: {
   const selections = Array.isArray(input.serviceSelections) ? input.serviceSelections : [];
   const packageFromSelections = selections
     .filter((item) => item.kind === "main")
-    .reduce((sum, item) => sum + toNonNegativeMoney(item.service.price), 0);
+    .reduce(
+      (sum, item) =>
+        sum +
+        toNonNegativeMoney(item.service.price) *
+          normalizeBookingServiceQuantity(item.quantity),
+      0,
+    );
   const addonFromSelections = selections
     .filter((item) => item.kind === "addon")
-    .reduce((sum, item) => sum + toNonNegativeMoney(item.service.price), 0);
+    .reduce(
+      (sum, item) =>
+        sum +
+        toNonNegativeMoney(item.service.price) *
+          normalizeBookingServiceQuantity(item.quantity),
+      0,
+    );
 
   let packageTotal = packageFromSelections;
   let addonTotal = addonFromSelections;

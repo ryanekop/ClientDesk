@@ -1,3 +1,8 @@
+import {
+  getInitialBookingPriceBreakdown,
+} from "@/lib/booking-special-offer";
+import type { BookingServiceSelection } from "@/lib/booking-services";
+
 export type FinalAdjustment = {
   id: string;
   service_id?: string | null;
@@ -24,6 +29,14 @@ type SettlementInput = {
   final_paid_at?: string | null;
   settlement_status?: string | null;
   is_fully_paid?: boolean | null;
+};
+
+type BookingAddonTotalInput = {
+  totalPrice: number;
+  serviceSelections?: BookingServiceSelection[] | null;
+  legacyServicePrice?: number | null;
+  extraFields?: unknown;
+  finalAdjustments?: unknown;
 };
 
 type AutoDpVerificationInput = {
@@ -155,8 +168,36 @@ export function getTotalPaidAmount(input: SettlementInput): number {
   return (input.dp_paid || 0) + getVerifiedFinalPaymentAmount(input);
 }
 
+export function isBookingFullyPaid(input: SettlementInput): boolean {
+  const finalInvoiceTotal = getFinalInvoiceTotal(
+    input.total_price || 0,
+    input.final_adjustments,
+  );
+  if (finalInvoiceTotal <= 0) return true;
+
+  return getTotalPaidAmount(input) >= finalInvoiceTotal;
+}
+
+export function getServiceAddonAdjustmentsTotal(value: unknown): number {
+  return normalizeFinalAdjustments(value).reduce((sum, item) => {
+    if (item.source !== "service_addon") return sum;
+    return sum + Math.max(item.amount || 0, 0);
+  }, 0);
+}
+
+export function getBookingAddonTotal(input: BookingAddonTotalInput): number {
+  const initialBreakdown = getInitialBookingPriceBreakdown({
+    totalPrice: input.totalPrice,
+    serviceSelections: input.serviceSelections,
+    legacyServicePrice: input.legacyServicePrice,
+    extraFields: input.extraFields,
+  });
+
+  return initialBreakdown.addonTotal + getServiceAddonAdjustmentsTotal(input.finalAdjustments);
+}
+
 export function getRemainingFinalPayment(input: SettlementInput): number {
-  if (input.is_fully_paid) return 0;
+  if (isBookingFullyPaid(input)) return 0;
 
   const remaining = getFinalInvoiceTotal(input.total_price || 0, input.final_adjustments) - getTotalPaidAmount(input);
   return remaining > 0 ? remaining : 0;

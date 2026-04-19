@@ -60,6 +60,7 @@ import {
     getFinalInvoiceTotal,
     getNetVerifiedRevenueAmount,
     getRemainingFinalPayment,
+    isBookingFullyPaid,
     getSettlementLabel,
     getSettlementStatus,
     getVerifiedDpAmount,
@@ -364,6 +365,24 @@ function formatCurrency(n: number) {
         minimumFractionDigits: 0,
     }).format(n || 0);
 }
+
+const SAFE_EDITOR_RETURN_TO_PATHS = new Set([
+    "/invoice-pelunasan",
+]);
+
+function normalizeSafeEditorReturnTo(value: string | null): string | null {
+    const trimmed = value?.trim() || "";
+    if (!trimmed) return null;
+    if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return null;
+
+    const [pathname] = trimmed.split("?");
+    if (!SAFE_EDITOR_RETURN_TO_PATHS.has(pathname)) {
+        return null;
+    }
+
+    return trimmed;
+}
+
 function sanitizePhone(raw: string): string {
     let cleaned = raw.replace(/[^0-9]/g, "");
     if (cleaned.startsWith("62")) cleaned = cleaned.slice(2);
@@ -618,6 +637,10 @@ export default function EditBookingPage() {
     const operationalCostsSectionRef = React.useRef<HTMLDivElement | null>(null);
     const focusOperationalCostsHandledRef = React.useRef(false);
     const focusTarget = searchParams.get("focus");
+    const safeReturnTo = normalizeSafeEditorReturnTo(searchParams.get("returnTo"));
+    const detailHref = `/bookings/${id}`;
+    const cancelHref = safeReturnTo || detailHref;
+    const saveRedirectHref = safeReturnTo || `${detailHref}?saved=edit`;
 
     const showFeedback = React.useCallback((message: string, title?: string) => {
         setFeedbackDialog({
@@ -2022,6 +2045,19 @@ export default function EditBookingPage() {
                 dpPaid: dPaid,
                 dpVerifiedAt,
             });
+            const nextIsFullyPaid = isBookingFullyPaid({
+                total_price: tPrice,
+                dp_paid: dPaid,
+                dp_verified_amount: shouldResetVerifiedDp ? 0 : dpVerifiedAmount,
+                dp_verified_at: shouldResetVerifiedDp ? null : dpVerifiedAt,
+                dp_refund_amount: shouldResetVerifiedDp ? 0 : dpRefundAmount,
+                dp_refunded_at: shouldResetVerifiedDp ? null : dpRefundedAt,
+                final_adjustments: normalizeFinalAdjustments(finalAdjustmentsRaw),
+                final_payment_amount: finalPaymentAmount,
+                final_paid_at: finalPaidAt,
+                settlement_status: settlementStatusValue,
+                is_fully_paid: isFullyPaid,
+            });
 
             const { error } = await supabase.from("bookings").update({
                 client_name: clientName,
@@ -2043,7 +2079,7 @@ export default function EditBookingPage() {
                 freelance_id: freelancerIdsForSave[0] || null,
                 total_price: tPrice,
                 dp_paid: dPaid,
-                is_fully_paid: dPaid >= tPrice && tPrice > 0,
+                is_fully_paid: nextIsFullyPaid,
                 ...verifiedDpResetPatch,
                 status: nextStatus,
                 client_status: nextStatus,
@@ -2170,7 +2206,8 @@ export default function EditBookingPage() {
             }
             setCancelStatusConfirmOpen(false);
             void triggerFastpikAutoSync(id);
-            router.push(`/bookings/${id}?saved=edit`);
+            setIsFullyPaid(nextIsFullyPaid);
+            router.push(saveRedirectHref);
         } finally {
             setSaving(false);
         }
@@ -2323,12 +2360,24 @@ export default function EditBookingPage() {
         discountAmount: discountAmountValue,
     });
     const dpPaidValue = typeof dpPaid === "number" ? dpPaid : 0;
-    const fullyPaidByCurrentDp = dpPaidValue >= totalPriceValue && totalPriceValue > 0;
     const normalizedFinalAdjustments = normalizeFinalAdjustments(finalAdjustmentsRaw);
     const finalAdjustmentsTotal = getFinalAdjustmentsTotal(normalizedFinalAdjustments);
     const normalizedOperationalCosts = normalizeEditableOperationalCosts(operationalCostItems);
     const operationalCostsTotal = getOperationalCostsTotal(normalizedOperationalCosts);
     const finalInvoiceTotal = getFinalInvoiceTotal(totalPriceValue, normalizedFinalAdjustments);
+    const resolvedIsFullyPaid = isBookingFullyPaid({
+        total_price: totalPriceValue,
+        dp_paid: dpPaidValue,
+        dp_verified_amount: dpVerifiedAmount,
+        dp_verified_at: dpVerifiedAt,
+        dp_refund_amount: dpRefundAmount,
+        dp_refunded_at: dpRefundedAt,
+        final_adjustments: normalizedFinalAdjustments,
+        final_payment_amount: finalPaymentAmount,
+        final_paid_at: finalPaidAt,
+        settlement_status: settlementStatusValue,
+        is_fully_paid: isFullyPaid,
+    });
     const verifiedPaymentInput = {
         total_price: totalPriceValue,
         dp_paid: dpPaidValue,
@@ -2340,7 +2389,7 @@ export default function EditBookingPage() {
         final_payment_amount: finalPaymentAmount,
         final_paid_at: finalPaidAt,
         settlement_status: settlementStatusValue,
-        is_fully_paid: isFullyPaid || fullyPaidByCurrentDp,
+        is_fully_paid: resolvedIsFullyPaid,
     };
     const verifiedDpAmount = getVerifiedDpAmount(verifiedPaymentInput);
     const resolvedDpRefundAmount = getDpRefundAmount(verifiedPaymentInput);
@@ -2351,7 +2400,7 @@ export default function EditBookingPage() {
         operational_costs: normalizedOperationalCosts,
     });
     const remainingPayment = getRemainingFinalPayment(verifiedPaymentInput);
-    const initialPaymentStatus = fullyPaidByCurrentDp || isFullyPaid
+    const initialPaymentStatus = resolvedIsFullyPaid
         ? "Lunas"
         : verifiedDpAmount > 0
             ? "DP Terverifikasi"
@@ -2384,7 +2433,7 @@ export default function EditBookingPage() {
             )}
         <div className="max-w-4xl mx-auto space-y-6 pb-20">
             <div className="flex items-center gap-3">
-                <Link href={`/bookings/${id}`}>
+                <Link href={cancelHref}>
                     <Button variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="w-4 h-4" /></Button>
                 </Link>
                 <div>
@@ -3452,7 +3501,7 @@ export default function EditBookingPage() {
                 </fieldset>
 
                 <div className="flex gap-3 justify-end pt-4">
-                    <Link href={`/bookings/${id}`}><Button type="button" variant="ghost" className="text-muted-foreground hover:text-foreground">Batal</Button></Link>
+                    <Link href={cancelHref}><Button type="button" variant="ghost" className="text-muted-foreground hover:text-foreground">Batal</Button></Link>
                     <Button type="submit" disabled={saving || !canWriteBookings} className="gap-2 bg-foreground text-background hover:bg-foreground/90 px-8">
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Simpan Perubahan

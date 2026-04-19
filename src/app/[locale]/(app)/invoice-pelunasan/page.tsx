@@ -57,6 +57,7 @@ import {
     type FormLayoutItem,
 } from "@/components/form-builder/booking-form-layout";
 import {
+    getBookingAddonTotal,
     getFinalInvoiceTotal,
     getNetVerifiedRevenueAmount,
     getRemainingFinalPayment,
@@ -1213,12 +1214,14 @@ export default function FinancePage() {
         return initialBreakdown.discountAmount;
     }
 
-    function getAddonTotal(
-        booking: BookingFinance,
-        initialBreakdown = getInitialPriceBreakdown(booking),
-    ) {
-        const finalAddonTotal = Math.max(getFinalInvoiceTotal(booking.total_price, booking.final_adjustments) - booking.total_price, 0);
-        return initialBreakdown.addonTotal + finalAddonTotal;
+    function getAddonTotal(booking: BookingFinance) {
+        return getBookingAddonTotal({
+            totalPrice: booking.total_price,
+            serviceSelections: booking.service_selections,
+            legacyServicePrice: booking.services?.price ?? booking.total_price,
+            extraFields: booking.extra_fields,
+            finalAdjustments: booking.final_adjustments,
+        });
     }
 
     function openInvoice(booking: BookingFinance, stage: "initial" | "final") {
@@ -1505,11 +1508,11 @@ export default function FinancePage() {
     }
 
     function openEditBooking(bookingId: string) {
-        router.push(`/bookings/${bookingId}/edit`);
+        router.push(`/bookings/${bookingId}/edit?returnTo=/invoice-pelunasan`);
     }
 
     function openOperationalCostsEditor(bookingId: string) {
-        router.push(`/bookings/${bookingId}/edit?focus=operational-costs`);
+        router.push(`/bookings/${bookingId}/edit?focus=operational-costs&returnTo=/invoice-pelunasan`);
     }
 
     function renderDesktopHeaderLabel(column: TableColumnPreference, label: React.ReactNode) {
@@ -2184,7 +2187,7 @@ export default function FinancePage() {
                     "Jadwal": b.session_date ? formatSessionDate(b.session_date, { dateOnly: true }) : "-",
                     "Total Harga": getFinalInvoiceTotal(b.total_price, b.final_adjustments),
                     "Harga Paket": getPackagePrice(b, initialBreakdown),
-                    "Total Add-on": getAddonTotal(b, initialBreakdown),
+                    "Total Add-on": getAddonTotal(b),
                     "DP Dibayar": b.dp_paid,
                     "Diskon": -getDiscountAmount(b, initialBreakdown),
                     "DP Terverifikasi": b.dp_verified_amount || 0,
@@ -2595,7 +2598,7 @@ export default function FinancePage() {
                     const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
                     const initialBreakdown = getInitialPriceBreakdown(b);
                     const packagePrice = getPackagePrice(b, initialBreakdown);
-                    const addonTotal = getAddonTotal(b, initialBreakdown);
+                    const addonTotal = getAddonTotal(b);
                     const discountAmount = getDiscountAmount(b, initialBreakdown);
                     const serviceColor = financeTableColorEnabled
                         ? getPrimaryMainServiceColor(b.service_selections)
@@ -2949,7 +2952,7 @@ export default function FinancePage() {
                                     const finalTotal = getFinalInvoiceTotal(b.total_price, b.final_adjustments);
                                     const initialBreakdown = getInitialPriceBreakdown(b);
                                     const packagePrice = getPackagePrice(b, initialBreakdown);
-                                    const addonTotal = getAddonTotal(b, initialBreakdown);
+                                    const addonTotal = getAddonTotal(b);
                                     const discountAmount = getDiscountAmount(b, initialBreakdown);
                                     const serviceColor = financeTableColorEnabled
                                         ? getPrimaryMainServiceColor(b.service_selections)

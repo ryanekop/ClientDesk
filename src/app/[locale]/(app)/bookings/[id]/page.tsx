@@ -35,6 +35,7 @@ import {
     getRemainingFinalPayment,
     getVerifiedDpAmount,
     getDpRefundAmount,
+    isBookingFullyPaid,
     getSettlementLabel,
     getSettlementStatus,
     normalizeFinalAdjustments,
@@ -1527,8 +1528,19 @@ export default function BookingDetailPage() {
             booking.extra_fields,
             nextSpecialOffer,
         );
-        const nextIsFullyPaid =
-            (booking.dp_paid || 0) >= nextTotalPrice && nextTotalPrice > 0;
+        const nextIsFullyPaid = isBookingFullyPaid({
+            total_price: nextTotalPrice,
+            dp_paid: booking.dp_paid || 0,
+            dp_verified_amount: booking.dp_verified_amount,
+            dp_verified_at: booking.dp_verified_at,
+            dp_refund_amount: booking.dp_refund_amount,
+            dp_refunded_at: booking.dp_refunded_at,
+            final_adjustments: booking.final_adjustments,
+            final_payment_amount: booking.final_payment_amount,
+            final_paid_at: booking.final_paid_at,
+            settlement_status: booking.settlement_status,
+            is_fully_paid: booking.is_fully_paid,
+        });
         const patch = {
             total_price: nextTotalPrice,
             is_fully_paid: nextIsFullyPaid,
