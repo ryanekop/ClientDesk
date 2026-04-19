@@ -792,7 +792,7 @@
         "end": "Selesai",
         "apply": "Terapkan",
         "clear": "Hapus",
-        "searchPlaceholder": "Cari nama klien, invoice, lokasi...",
+        "searchPlaceholder": "Cari klien, invoice, lokasi, akad/resepsi/sesi...",
         "noDataFound": "Data tidak ditemukan.",
         "changeStatus": "Ganti Status Booking",
         "changeStatusDesc": "Ubah status untuk klien",

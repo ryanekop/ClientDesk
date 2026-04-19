@@ -792,7 +792,7 @@
         "end": "End",
         "apply": "Apply",
         "clear": "Clear",
-        "searchPlaceholder": "Search client name, invoice, location...",
+        "searchPlaceholder": "Search client, invoice, location, ceremony/reception/session...",
         "noDataFound": "No data found.",
         "changeStatus": "Change Booking Status",
         "changeStatusDesc": "Change status for client",

@@ -41,6 +41,27 @@ FROM (
       'Jika link video belum diisi, bagian video tidak muncul di halaman tracking klien.',
       'improvement',
       '2026-04-17T08:03:00Z'
+    ),
+    (
+      '1.7.6',
+      'Notifikasi Telegram untuk admin',
+      'Admin bisa menerima info booking baru, bukti pelunasan, dan reminder sesi lewat Telegram.',
+      'new',
+      '2026-04-17T08:04:00Z'
+    ),
+    (
+      '1.7.6',
+      'Panduan koneksi Telegram lebih mudah',
+      'Halaman pengaturan Telegram sekarang punya langkah singkat untuk mengambil Chat ID dan mulai memakai bot.',
+      'improvement',
+      '2026-04-17T08:05:00Z'
+    ),
+    (
+      '1.7.6',
+      'Reminder WhatsApp lebih rapi',
+      'Template reminder sesi sekarang memakai variabel waktu yang benar, jadi preview pesan lebih mudah dicek.',
+      'fix',
+      '2026-04-17T08:06:00Z'
     )
 ) AS entry(version, title, description, badge, published_at)
 WHERE NOT EXISTS (
