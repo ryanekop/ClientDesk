@@ -8,6 +8,7 @@ import Link from "next/link"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { createImplicitClient } from "@/utils/supabase/implicit-client"
+import { getClientDeskRecoveryCallbackUrl } from "@/lib/auth/recovery-url"
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
 
@@ -27,9 +28,8 @@ export default function ForgotPasswordPage() {
         setError(null)
 
         try {
-            const siteUrl = window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${siteUrl}/${locale}/auth/callback?type=recovery`,
+                redirectTo: getClientDeskRecoveryCallbackUrl(locale),
             })
 
             if (error) {

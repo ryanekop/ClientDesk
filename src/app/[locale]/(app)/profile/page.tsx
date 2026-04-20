@@ -9,6 +9,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { ImageCropModal } from "@/components/ui/image-crop-modal";
 import Link from "next/link";
 import { createImplicitClient } from "@/utils/supabase/implicit-client";
+import { getClientDeskRecoveryCallbackUrl } from "@/lib/auth/recovery-url";
 import { optimizePngBlobForUpload } from "@/utils/optimize-png-blob";
 
 function extractMissingColumnFromSupabaseError(
@@ -250,9 +251,8 @@ export default function ProfilePage() {
 
     async function handleResetPassword() {
         const implicitSupabase = createImplicitClient();
-        const siteUrl = window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
         const { error } = await implicitSupabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${siteUrl}/${locale}/auth/callback?type=recovery`,
+            redirectTo: getClientDeskRecoveryCallbackUrl(locale),
         });
         if (error) {
             setResetMsg(t("resetFailed") + ": " + error.message);
