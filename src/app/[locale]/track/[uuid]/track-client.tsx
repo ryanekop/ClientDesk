@@ -6,6 +6,7 @@ import {
     Check,
     CheckCircle2,
     Clock,
+    ArrowDown,
     CreditCard,
     ExternalLink,
     Download,
@@ -100,13 +101,15 @@ type TrackApiResponse =
           error?: string;
       };
 
+type HighlightTarget = "file-results" | "final-invoice" | null;
+
 type AnnouncementCardProps = {
     icon: React.ReactNode;
     title: string;
     description: string;
     hint?: string | null;
     tone: "emerald" | "sky";
-    actions?: React.ReactNode;
+    cta?: React.ReactNode;
 };
 
 function AnnouncementCard({
@@ -115,7 +118,7 @@ function AnnouncementCard({
     description,
     hint,
     tone,
-    actions,
+    cta,
 }: AnnouncementCardProps) {
     const toneClassName =
         tone === "sky"
@@ -127,10 +130,7 @@ function AnnouncementCard({
                   title: "text-sky-900 dark:text-sky-200",
                   description: "text-sky-800/90 dark:text-sky-200/90",
                   hint: "text-sky-700/90 dark:text-sky-300/90",
-                  primaryAction:
-                      "bg-sky-600 text-white hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-400",
-                  secondaryAction:
-                      "border-sky-200 text-sky-800 hover:bg-sky-100/80 dark:border-sky-400/30 dark:text-sky-200 dark:hover:bg-sky-500/10",
+                  cta: "text-sky-800 hover:text-sky-900 dark:text-sky-200 dark:hover:text-sky-100",
               }
             : {
                   container:
@@ -140,19 +140,16 @@ function AnnouncementCard({
                   title: "text-emerald-900 dark:text-emerald-200",
                   description: "text-emerald-800/90 dark:text-emerald-200/90",
                   hint: "text-emerald-700/90 dark:text-emerald-300/90",
-                  primaryAction:
-                      "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400",
-                  secondaryAction:
-                      "border-emerald-200 text-emerald-800 hover:bg-emerald-100/80 dark:border-emerald-400/30 dark:text-emerald-200 dark:hover:bg-emerald-500/10",
+                  cta: "text-emerald-800 hover:text-emerald-900 dark:text-emerald-200 dark:hover:text-emerald-100",
               };
 
     return (
         <div className={`rounded-2xl border px-4 py-4 shadow-sm ${toneClassName.container}`}>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex items-start gap-3">
-                    <div className={`mt-0.5 rounded-full p-1.5 ${toneClassName.iconWrap}`}>
-                        {icon}
-                    </div>
+            <div className="flex items-start gap-3">
+                <div className={`mt-0.5 rounded-full p-1.5 ${toneClassName.iconWrap}`}>
+                    {icon}
+                </div>
+                <div className="space-y-1.5">
                     <div className="space-y-1">
                         <p className={`text-sm font-semibold ${toneClassName.title}`}>{title}</p>
                         <p className={`text-sm ${toneClassName.description}`}>{description}</p>
@@ -160,8 +157,8 @@ function AnnouncementCard({
                             <p className={`text-xs font-medium ${toneClassName.hint}`}>{hint}</p>
                         ) : null}
                     </div>
+                    {cta ? <div className={`inline-flex ${toneClassName.cta}`}>{cta}</div> : null}
                 </div>
-                {actions ? <div className="flex flex-wrap gap-2 sm:justify-end">{actions}</div> : null}
             </div>
         </div>
     );
@@ -178,6 +175,8 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
     });
     const [bookingState, setBookingState] = React.useState(initialBooking);
     const [passwordCopied, setPasswordCopied] = React.useState(false);
+    const [highlightTarget, setHighlightTarget] = React.useState<HighlightTarget>(null);
+    const highlightTimerRef = React.useRef<number | null>(null);
     const booking = bookingState;
 
     React.useEffect(() => {
@@ -261,10 +260,6 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
         booking.showVideoResults && booking.videoUrl ? booking.videoUrl : null;
     const hasVisibleFileResults =
         Boolean(photoResultUrl) || Boolean(videoResultUrl);
-    const hasSettlementLink = Boolean((booking.trackingUuid || "").trim());
-    const finalInvoiceUrl =
-        booking.invoiceUrlFinal ||
-        `/api/public/invoice?code=${encodeURIComponent(booking.bookingCode)}&lang=${locale}&stage=final`;
     const settlementStatusLabel = React.useMemo(() => {
         if (booking.isFullyPaid) return t("paid");
         if (booking.settlementStatus === "submitted") return t("awaitingVerification");
@@ -288,6 +283,25 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
         settlementStatusLabel,
         t,
     ]);
+    const triggerSectionHighlight = React.useCallback((target: Exclude<HighlightTarget, null>) => {
+        setHighlightTarget(target);
+        if (highlightTimerRef.current) {
+            window.clearTimeout(highlightTimerRef.current);
+        }
+        window.requestAnimationFrame(() => {
+            const targetElement = document.getElementById(target);
+            if (targetElement) {
+                targetElement.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                });
+            }
+        });
+        highlightTimerRef.current = window.setTimeout(() => {
+            setHighlightTarget((current) => (current === target ? null : current));
+            highlightTimerRef.current = null;
+        }, 2400);
+    }, []);
     const handleCopyFastpikPassword = React.useCallback(() => {
         const password = booking.fastpikProjectInfo?.password || "";
         if (!password) return;
@@ -335,6 +349,14 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
         booking.fastpikProjectInfo?.synced_at,
         locale,
     ]);
+
+    React.useEffect(() => {
+        return () => {
+            if (highlightTimerRef.current) {
+                window.clearTimeout(highlightTimerRef.current);
+            }
+        };
+    }, []);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 py-8 sm:py-12 px-4">
@@ -414,25 +436,15 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                                 description={t("settlementReadyBannerDescription")}
                                 hint={settlementBannerHint}
                                 tone="sky"
-                                actions={
-                                    <>
-                                        {hasSettlementLink ? (
-                                            <a
-                                                href={`/${locale}/settlement/${booking.trackingUuid}`}
-                                                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors bg-sky-600 text-white hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-400"
-                                            >
-                                                <ExternalLink className="h-4 w-4" />
-                                                {t("settlementReadyBannerPrimaryCta")}
-                                            </a>
-                                        ) : null}
-                                        <button
-                                            onClick={() => window.open(finalInvoiceUrl, "_blank")}
-                                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors border-sky-200 text-sky-800 hover:bg-sky-100/80 dark:border-sky-400/30 dark:text-sky-200 dark:hover:bg-sky-500/10"
-                                        >
-                                            <Download className="h-4 w-4" />
-                                            {t("settlementReadyBannerSecondaryCta")}
-                                        </button>
-                                    </>
+                                cta={
+                                    <button
+                                        type="button"
+                                        onClick={() => triggerSectionHighlight("final-invoice")}
+                                        className="inline-flex items-center gap-1.5 text-xs font-semibold transition-colors"
+                                    >
+                                        <ArrowDown className="h-3.5 w-3.5" />
+                                        {t("settlementReadyBannerCta")}
+                                    </button>
                                 }
                             />
                         )}
@@ -444,6 +456,16 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                                 description={t("fileReadyBannerDescription")}
                                 hint={t("fileReadyBannerHint")}
                                 tone="emerald"
+                                cta={
+                                    <button
+                                        type="button"
+                                        onClick={() => triggerSectionHighlight("file-results")}
+                                        className="inline-flex items-center gap-1.5 text-xs font-semibold transition-colors"
+                                    >
+                                        <ArrowDown className="h-3.5 w-3.5" />
+                                        {t("fileReadyBannerCta")}
+                                    </button>
+                                }
                             />
                         )}
                     </div>
@@ -522,7 +544,14 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
 
                 {/* Result links follow admin visibility thresholds from Status Settings */}
                 {hasVisibleFileResults && (
-                    <div className="bg-background rounded-2xl shadow-lg border p-6">
+                    <div
+                        id="file-results"
+                        className={`scroll-mt-24 rounded-2xl border bg-background p-6 shadow-lg transition-all duration-500 ${
+                            highlightTarget === "file-results"
+                                ? "ring-2 ring-emerald-400/80 bg-emerald-50/80 dark:bg-emerald-500/10"
+                                : ""
+                        }`}
+                    >
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("fileResults")}</h3>
                         {photoResultUrl ? (
                             <>
@@ -651,7 +680,14 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                 </div>
 
                 {booking.showFinalInvoice && (
-                    <div className="bg-background rounded-2xl shadow-lg border p-6">
+                    <div
+                        id="final-invoice"
+                        className={`scroll-mt-24 rounded-2xl border bg-background p-6 shadow-lg transition-all duration-500 ${
+                            highlightTarget === "final-invoice"
+                                ? "ring-2 ring-sky-400/80 bg-sky-50/80 dark:bg-sky-500/10"
+                                : ""
+                        }`}
+                    >
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("finalInvoiceTitle")}</h3>
                         <div className="space-y-2 text-sm border-b pb-3 mb-3">
                             {booking.initialBreakdown ? (
