@@ -6,6 +6,7 @@ import {
     Check,
     CheckCircle2,
     Clock,
+    CreditCard,
     ExternalLink,
     Download,
     Video,
@@ -98,6 +99,73 @@ type TrackApiResponse =
           success: false;
           error?: string;
       };
+
+type AnnouncementCardProps = {
+    icon: React.ReactNode;
+    title: string;
+    description: string;
+    hint?: string | null;
+    tone: "emerald" | "sky";
+    actions?: React.ReactNode;
+};
+
+function AnnouncementCard({
+    icon,
+    title,
+    description,
+    hint,
+    tone,
+    actions,
+}: AnnouncementCardProps) {
+    const toneClassName =
+        tone === "sky"
+            ? {
+                  container:
+                      "border-sky-200 bg-sky-50/80 dark:border-sky-500/30 dark:bg-sky-500/10",
+                  iconWrap:
+                      "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
+                  title: "text-sky-900 dark:text-sky-200",
+                  description: "text-sky-800/90 dark:text-sky-200/90",
+                  hint: "text-sky-700/90 dark:text-sky-300/90",
+                  primaryAction:
+                      "bg-sky-600 text-white hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-400",
+                  secondaryAction:
+                      "border-sky-200 text-sky-800 hover:bg-sky-100/80 dark:border-sky-400/30 dark:text-sky-200 dark:hover:bg-sky-500/10",
+              }
+            : {
+                  container:
+                      "border-emerald-200 bg-emerald-50/80 dark:border-emerald-500/30 dark:bg-emerald-500/10",
+                  iconWrap:
+                      "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+                  title: "text-emerald-900 dark:text-emerald-200",
+                  description: "text-emerald-800/90 dark:text-emerald-200/90",
+                  hint: "text-emerald-700/90 dark:text-emerald-300/90",
+                  primaryAction:
+                      "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400",
+                  secondaryAction:
+                      "border-emerald-200 text-emerald-800 hover:bg-emerald-100/80 dark:border-emerald-400/30 dark:text-emerald-200 dark:hover:bg-emerald-500/10",
+              };
+
+    return (
+        <div className={`rounded-2xl border px-4 py-4 shadow-sm ${toneClassName.container}`}>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 rounded-full p-1.5 ${toneClassName.iconWrap}`}>
+                        {icon}
+                    </div>
+                    <div className="space-y-1">
+                        <p className={`text-sm font-semibold ${toneClassName.title}`}>{title}</p>
+                        <p className={`text-sm ${toneClassName.description}`}>{description}</p>
+                        {hint ? (
+                            <p className={`text-xs font-medium ${toneClassName.hint}`}>{hint}</p>
+                        ) : null}
+                    </div>
+                </div>
+                {actions ? <div className="flex flex-wrap gap-2 sm:justify-end">{actions}</div> : null}
+            </div>
+        </div>
+    );
+}
 
 export default function TrackingClient({ booking: initialBooking, vendorName, customStatuses }: TrackingClientProps) {
     const t = useTranslations("Track");
@@ -193,6 +261,33 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
         booking.showVideoResults && booking.videoUrl ? booking.videoUrl : null;
     const hasVisibleFileResults =
         Boolean(photoResultUrl) || Boolean(videoResultUrl);
+    const hasSettlementLink = Boolean((booking.trackingUuid || "").trim());
+    const finalInvoiceUrl =
+        booking.invoiceUrlFinal ||
+        `/api/public/invoice?code=${encodeURIComponent(booking.bookingCode)}&lang=${locale}&stage=final`;
+    const settlementStatusLabel = React.useMemo(() => {
+        if (booking.isFullyPaid) return t("paid");
+        if (booking.settlementStatus === "submitted") return t("awaitingVerification");
+        return t("unpaid");
+    }, [booking.isFullyPaid, booking.settlementStatus, t]);
+    const settlementBannerHint = React.useMemo(() => {
+        if (booking.isFullyPaid) {
+            return t("settlementReadyBannerHintPaid");
+        }
+        if (booking.settlementStatus === "submitted") {
+            return t("settlementReadyBannerHintSubmitted");
+        }
+        return t("settlementReadyBannerHint", {
+            amount: `Rp ${(booking.remainingFinalPayment || 0).toLocaleString("id-ID")}`,
+            status: settlementStatusLabel,
+        });
+    }, [
+        booking.isFullyPaid,
+        booking.remainingFinalPayment,
+        booking.settlementStatus,
+        settlementStatusLabel,
+        t,
+    ]);
     const handleCopyFastpikPassword = React.useCallback(() => {
         const password = booking.fastpikProjectInfo?.password || "";
         if (!password) return;
@@ -310,24 +405,47 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                     </div>
                 </div>
 
-                {hasVisibleFileResults && (
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-4 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-500/10">
-                        <div className="flex items-start gap-3">
-                            <div className="mt-0.5 rounded-full bg-emerald-100 p-1.5 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                                <CheckCircle2 className="h-5 w-5" />
-                            </div>
-                            <div className="space-y-1">
-                                <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
-                                    {t("fileReadyBannerTitle")}
-                                </p>
-                                <p className="text-sm text-emerald-800/90 dark:text-emerald-200/90">
-                                    {t("fileReadyBannerDescription")}
-                                </p>
-                                <p className="text-xs font-medium text-emerald-700/90 dark:text-emerald-300/90">
-                                    {t("fileReadyBannerHint")}
-                                </p>
-                            </div>
-                        </div>
+                {(booking.showFinalInvoice || hasVisibleFileResults) && (
+                    <div className="space-y-3">
+                        {booking.showFinalInvoice && (
+                            <AnnouncementCard
+                                icon={<CreditCard className="h-5 w-5" />}
+                                title={t("settlementReadyBannerTitle")}
+                                description={t("settlementReadyBannerDescription")}
+                                hint={settlementBannerHint}
+                                tone="sky"
+                                actions={
+                                    <>
+                                        {hasSettlementLink ? (
+                                            <a
+                                                href={`/${locale}/settlement/${booking.trackingUuid}`}
+                                                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors bg-sky-600 text-white hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-400"
+                                            >
+                                                <ExternalLink className="h-4 w-4" />
+                                                {t("settlementReadyBannerPrimaryCta")}
+                                            </a>
+                                        ) : null}
+                                        <button
+                                            onClick={() => window.open(finalInvoiceUrl, "_blank")}
+                                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors border-sky-200 text-sky-800 hover:bg-sky-100/80 dark:border-sky-400/30 dark:text-sky-200 dark:hover:bg-sky-500/10"
+                                        >
+                                            <Download className="h-4 w-4" />
+                                            {t("settlementReadyBannerSecondaryCta")}
+                                        </button>
+                                    </>
+                                }
+                            />
+                        )}
+
+                        {hasVisibleFileResults && (
+                            <AnnouncementCard
+                                icon={<CheckCircle2 className="h-5 w-5" />}
+                                title={t("fileReadyBannerTitle")}
+                                description={t("fileReadyBannerDescription")}
+                                hint={t("fileReadyBannerHint")}
+                                tone="emerald"
+                            />
+                        )}
                     </div>
                 )}
 
