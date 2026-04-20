@@ -896,10 +896,11 @@ export default function EditBookingPage() {
                         : [];
                 setFreelancerIds(fallbackFreelancerIds);
                 const existingSpecialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
-                setDpPaid(booking.dp_paid || "");
+                const normalizedDpPaid = Number(booking.dp_paid) || 0;
+                setDpPaid(existingSpecialOffer?.dp_disabled ? normalizedDpPaid : booking.dp_paid || "");
                 setAccommodationFee(existingSpecialOffer?.accommodation_fee ?? "");
                 setDiscountAmount(existingSpecialOffer?.discount_amount ?? "");
-                setInitialDpPaid(Number(booking.dp_paid) || 0);
+                setInitialDpPaid(normalizedDpPaid);
                 setDpVerifiedAmount(Number((booking as Record<string, unknown>).dp_verified_amount) || 0);
                 setDpVerifiedAt(((booking as Record<string, unknown>).dp_verified_at as string | null) || null);
                 setDpRefundAmount(Number((booking as Record<string, unknown>).dp_refund_amount) || 0);
@@ -1310,6 +1311,11 @@ export default function EditBookingPage() {
             template.items.some((item) => item.label.toLowerCase().includes(query)),
         );
     }, [operationalCostTemplateSearchQuery, operationalCostTemplates]);
+    const specialOfferSnapshot = React.useMemo(
+        () => resolveSpecialOfferSnapshotFromExtraFields(baseExtraFieldsObject),
+        [baseExtraFieldsObject],
+    );
+    const isDpDisabledForThisBooking = specialOfferSnapshot?.dp_disabled === true;
     const assignedFreelancerOperationalCostOptions = React.useMemo(
         () =>
             assignedFreelancersForOperationalCosts.map((freelancer) => ({
@@ -1867,7 +1873,16 @@ export default function EditBookingPage() {
                 accommodationFee: accommodationFeeValue,
                 discountAmount: discountAmountValue,
             });
-            const dPaid = parseFloat(dpPaid.toString()) || 0;
+            const dPaid = Math.max(
+                Number(
+                    typeof dpPaid === "number"
+                        ? dpPaid
+                        : isDpDisabledForThisBooking
+                            ? 0
+                            : parseFloat(String(dpPaid || 0)),
+                ) || 0,
+                0,
+            );
 
             // Determine session_date: if split, use earliest; merge extra_fields with dates
             let finalSessionDate = sessionDate || null;
@@ -1942,11 +1957,8 @@ export default function EditBookingPage() {
                 customFieldValues,
                 { layoutMode: activeLayoutMode },
             );
-            const existingSpecialOffer = resolveSpecialOfferSnapshotFromExtraFields(
-                baseExtraFieldsObject,
-            );
             const nextSpecialOffer = buildEditableSpecialOfferSnapshot({
-                existingSnapshot: existingSpecialOffer,
+                existingSnapshot: specialOfferSnapshot,
                 selectedEventType: eventType,
                 selectedPackageServiceIds: selectedServiceIds,
                 selectedAddonServiceIds: selectedAddonIds,
@@ -3216,11 +3228,30 @@ export default function EditBookingPage() {
                             </div>
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">DP Dibayar{reqMark}</label>
+                            <label className="text-xs font-medium text-muted-foreground">
+                                DP Dibayar{isDpDisabledForThisBooking ? null : reqMark}
+                            </label>
                             <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
-                                <input required type="text" inputMode="numeric" value={formatNumber(dpPaid)} onChange={e => setDpPaid(parseFormattedNumber(e.target.value))} placeholder="0" className={cn(inputClass, "flex-1")} />
+                                <input
+                                    required={!isDpDisabledForThisBooking}
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={
+                                        isDpDisabledForThisBooking
+                                            ? String(typeof dpPaid === "number" ? dpPaid : 0)
+                                            : formatNumber(dpPaid)
+                                    }
+                                    onChange={e => setDpPaid(parseFormattedNumber(e.target.value))}
+                                    placeholder="0"
+                                    className={cn(inputClass, "flex-1")}
+                                />
                             </div>
+                            {isDpDisabledForThisBooking ? (
+                                <p className="text-[11px] text-muted-foreground">
+                                    Booking ini dibuat tanpa DP dari form khusus.
+                                </p>
+                            ) : null}
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">Biaya Akomodasi (Rp)</label>
