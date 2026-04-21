@@ -23,6 +23,7 @@ import { AnimatedFAQ } from "@/components/landing/faq-section";
 import { ProblemSection } from "@/components/landing/problem-section";
 import { SocialProofSection } from "@/components/landing/social-proof-section";
 import { getTenantConfig } from "@/lib/tenant-config";
+import { isMainClientDeskDomain } from "@/lib/booking-url-mode";
 import { getIsAuthenticated } from "@/lib/auth/get-is-authenticated";
 import { TenantLogo } from "@/components/layout/tenant-logo";
 
@@ -30,7 +31,7 @@ export default async function Home() {
   const t = await getTranslations("Landing");
   const locale = await getLocale();
   const tenant = await getTenantConfig();
-  const showSocialProof = tenant.id === "default";
+  const showSocialProof = tenant.id === "default" || isMainClientDeskDomain(tenant.domain);
   const isAuthenticated = await getIsAuthenticated();
 
   return (

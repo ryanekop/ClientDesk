@@ -26,6 +26,7 @@ import { ManageActionToolbar } from "@/components/ui/manage-action-toolbar";
 import { FilterSingleSelect } from "@/components/ui/filter-single-select";
 import { FilterMultiSelect } from "@/components/ui/filter-multi-select";
 import { BookingDateRangePicker } from "@/components/ui/booking-date-range-picker";
+import { ProjectDeadlineDatePicker } from "@/components/ui/project-deadline-date-picker";
 import {
     areTableColumnPreferencesEqual,
     lockBoundaryColumns,
@@ -53,7 +54,6 @@ import {
     getBookingStatusOptions,
 } from "@/lib/client-status";
 import {
-    formatProjectDeadlineDate,
     getProjectDeadlineCountdownLabel,
     getProjectDeadlineTone,
     normalizeClientStatusDeadlineDefaultDays,
@@ -302,7 +302,6 @@ export default function ClientStatusPage() {
     const [sortOrder, setSortOrder] = React.useState<ClientStatusSortOrder>("booking_newest");
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
     const [savingId, setSavingId] = React.useState<string | null>(null);
-    const [deadlineDraftById, setDeadlineDraftById] = React.useState<Record<string, string>>({});
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
@@ -534,7 +533,6 @@ export default function ClientStatusPage() {
             const metadata = response.metadata || clientStatusMetadataCacheRef.current;
 
             setBookings(response.items);
-            setDeadlineDraftById({});
             setTotalItems(response.totalItems);
             if (metadata) {
                 setClientStatuses(metadata.clientStatuses || DEFAULT_CLIENT_STATUSES);
@@ -1045,12 +1043,6 @@ export default function ClientStatusPage() {
                         : booking,
                 ),
             );
-            setDeadlineDraftById((current) => {
-                if (!(id in current)) return current;
-                const next = { ...current };
-                delete next[id];
-                return next;
-            });
             await invalidateBookingPublicCache({
                 bookingCode: currentBooking.booking_code,
                 trackingUuid: currentBooking.tracking_uuid,
@@ -1058,33 +1050,6 @@ export default function ClientStatusPage() {
         } finally {
             setSavingId(null);
         }
-    }
-
-    function getProjectDeadlineInputValue(booking: BookingStatus) {
-        return deadlineDraftById[booking.id] ?? booking.project_deadline_date ?? "";
-    }
-
-    function updateProjectDeadlineDraft(id: string, value: string) {
-        setDeadlineDraftById((current) => (
-            current[id] === value ? current : { ...current, [id]: value }
-        ));
-    }
-
-    function commitProjectDeadlineDraft(booking: BookingStatus) {
-        const draftValue = deadlineDraftById[booking.id];
-        if (draftValue === undefined) return;
-        const normalizedDraft = normalizeProjectDeadlineDate(draftValue);
-        const normalizedCurrent = normalizeProjectDeadlineDate(booking.project_deadline_date);
-        if (normalizedDraft === normalizedCurrent) {
-            setDeadlineDraftById((current) => {
-                if (!(booking.id in current)) return current;
-                const next = { ...current };
-                delete next[booking.id];
-                return next;
-            });
-            return;
-        }
-        void updateProjectDeadline(booking.id, draftValue);
     }
 
     function formatDeleteWarnings(
@@ -1660,14 +1625,14 @@ export default function ClientStatusPage() {
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
                         <div className="space-y-1.5">
-                            <input
-                                type="date"
-                                value={getProjectDeadlineInputValue(booking)}
-                                onChange={event => updateProjectDeadlineDraft(booking.id, event.target.value)}
-                                onBlur={() => commitProjectDeadlineDraft(booking)}
+                            <ProjectDeadlineDatePicker
+                                value={booking.project_deadline_date}
+                                onChange={(nextValue) => void updateProjectDeadline(booking.id, nextValue ?? "")}
                                 disabled={!canWriteBookings || isManageMode || savingId === booking.id}
+                                locale={deadlineLocale}
+                                placeholder={locale === "en" ? "Pick deadline" : "Pilih deadline"}
+                                clearLabel={locale === "en" ? "Clear deadline" : "Hapus deadline"}
                                 title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
-                                className="h-8 w-[160px] rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                             />
                             {deadlineCountdown ? (
                                 <span className={getAdminDeadlineBadgeClassName(booking.project_deadline_date)}>
@@ -2027,14 +1992,16 @@ export default function ClientStatusPage() {
                             <div className="flex items-start gap-3">
                                 <label className="text-xs text-muted-foreground shrink-0 w-14 pt-2">Deadline</label>
                                 <div className="flex-1 space-y-1.5">
-                                    <input
-                                        type="date"
-                                        value={getProjectDeadlineInputValue(b)}
-                                        onChange={event => updateProjectDeadlineDraft(b.id, event.target.value)}
-                                        onBlur={() => commitProjectDeadlineDraft(b)}
+                                    <ProjectDeadlineDatePicker
+                                        value={b.project_deadline_date}
+                                        onChange={(nextValue) => void updateProjectDeadline(b.id, nextValue ?? "")}
                                         disabled={!canWriteBookings || isManageMode || savingId === b.id}
+                                        locale={deadlineLocale}
+                                        placeholder={locale === "en" ? "Pick deadline" : "Pilih deadline"}
+                                        clearLabel={locale === "en" ? "Clear deadline" : "Hapus deadline"}
                                         title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
-                                        className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                        triggerClassName="w-full"
+                                        className="w-full"
                                     />
                                     {b.project_deadline_date ? (
                                         <div className="pt-0.5 text-[11px]">
