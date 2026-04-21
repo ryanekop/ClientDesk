@@ -22,6 +22,10 @@ import {
     normalizeBookingServiceSelections,
     type BookingServiceSelection,
 } from "@/lib/booking-services";
+import {
+    formatProjectDeadlineDate,
+    getProjectDeadlineCountdownLabel,
+} from "@/lib/booking-deadline";
 import { resolveFastpikProjectInfoFromExtraFields } from "@/lib/fastpik-project-info";
 import {
     hydrateFastpikLiveData,
@@ -51,6 +55,7 @@ type BookingRow = {
     session_date: string | null;
     event_type: string | null;
     client_status: string | null;
+    project_deadline_date: string | null;
     queue_position: number | null;
     status: string;
     drive_folder_url: string | null;
@@ -118,6 +123,7 @@ async function getBookingData(
         customClientStatuses: basePayload.customClientStatuses,
         queueTriggerStatus: basePayload.queueTriggerStatus,
         finalInvoiceVisibleFromStatus: basePayload.finalInvoiceVisibleFromStatus,
+        trackingProjectDeadlineVisible: basePayload.trackingProjectDeadlineVisible,
         trackingFileLinksVisibleFromStatus: basePayload.trackingFileLinksVisibleFromStatus,
         trackingVideoLinksVisibleFromStatus: basePayload.trackingVideoLinksVisibleFromStatus,
         trackingHideQueueNumber: basePayload.trackingHideQueueNumber,
@@ -240,6 +246,11 @@ export default async function TrackingPage({ params }: PageProps) {
     const serviceName = getBookingServiceLabel(serviceSelections, {
         fallback: booking.event_type || "Booking",
     });
+    const deadlineLocale = locale === "en" ? "en" : "id";
+    const projectDeadlineDate =
+        result.trackingProjectDeadlineVisible && booking.project_deadline_date
+            ? booking.project_deadline_date
+            : null;
 
     const bookingData = {
         bookingCode: booking.booking_code,
@@ -249,6 +260,14 @@ export default async function TrackingPage({ params }: PageProps) {
         sessionRows,
         eventType: booking.event_type,
         clientStatus: effectiveClientStatus,
+        projectDeadlineDate,
+        projectDeadlineLabel: projectDeadlineDate
+            ? formatProjectDeadlineDate(projectDeadlineDate, deadlineLocale)
+            : null,
+        projectDeadlineCountdown: projectDeadlineDate
+            ? getProjectDeadlineCountdownLabel(projectDeadlineDate, deadlineLocale)
+            : null,
+        showProjectDeadline: Boolean(projectDeadlineDate),
         queueTriggerStatus: result.queueTriggerStatus || "Antrian Edit",
         trackingHideQueueNumber: Boolean(result.trackingHideQueueNumber),
         queuePosition: booking.queue_position,

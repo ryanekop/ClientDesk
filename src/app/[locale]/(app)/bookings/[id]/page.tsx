@@ -95,6 +95,13 @@ import {
 } from "@/utils/google-calendar-status-sync";
 import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
 import {
+    formatProjectDeadlineDate,
+    getProjectDeadlineCountdownLabel,
+    normalizeClientStatusDeadlineRules,
+    normalizeProjectDeadlineDate,
+    type ClientStatusDeadlineRules,
+} from "@/lib/booking-deadline";
+import {
     isShowAllPackagesEventType,
     normalizeEventTypeName,
 } from "@/lib/event-type-config";
@@ -162,7 +169,7 @@ function getBookingDetailSelect(canViewOperationalCosts: boolean) {
     return [
         "id, booking_code, client_name, client_whatsapp, session_date, status, total_price, dp_paid, dp_verified_amount, dp_verified_at, dp_refund_amount, dp_refunded_at, is_fully_paid, drive_folder_url, video_drive_folder_url, fastpik_project_id, fastpik_project_link, fastpik_project_edit_link, fastpik_sync_status, fastpik_last_synced_at, portfolio_url, payment_proof_url, payment_proof_drive_file_id, payment_method, payment_source",
         canViewOperationalCosts ? "operational_costs" : "",
-        "settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, admin_notes, extra_fields, tracking_uuid, archived_at, archived_by, client_status, queue_position, services(id, name, price, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, quantity, service:services(id, name, price, duration_minutes, is_addon, affects_schedule)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))",
+        "settlement_status, final_adjustments, final_payment_proof_url, final_payment_proof_drive_file_id, final_payment_amount, final_payment_method, final_payment_source, final_paid_at, final_invoice_sent_at, location, location_lat, location_lng, location_detail, instagram, event_type, notes, admin_notes, extra_fields, tracking_uuid, archived_at, archived_by, client_status, queue_position, project_deadline_date, services(id, name, price, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, quantity, service:services(id, name, price, duration_minutes, is_addon, affects_schedule)), freelance(id, name, whatsapp_number), booking_freelance(freelance_id, freelance(id, name, whatsapp_number))",
     ]
         .filter(Boolean)
         .join(", ");
@@ -236,6 +243,7 @@ type Booking = {
     archived_by?: string | null;
     client_status: string | null;
     queue_position: number | null;
+    project_deadline_date: string | null;
     service_selections?: BookingServiceSelection[];
     service_label?: string;
 };
@@ -268,6 +276,7 @@ type BookingProfileRow = {
     custom_client_statuses?: string[] | null;
     dp_verify_trigger_status?: string | null;
     queue_trigger_status?: string | null;
+    client_status_deadline_rules?: ClientStatusDeadlineRules | null;
     form_show_proof?: boolean | null;
     google_drive_access_token?: string | null;
     google_drive_refresh_token?: string | null;
@@ -678,6 +687,9 @@ export default function BookingDetailPage() {
     const [clientStatus, setClientStatus] = React.useState("");
     const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
+    const [clientStatusDeadlineRules, setClientStatusDeadlineRules] =
+        React.useState<ClientStatusDeadlineRules>({});
+    const [projectDeadlineDate, setProjectDeadlineDate] = React.useState("");
     const [activeDetailTab, setActiveDetailTab] =
         React.useState<BookingDetailTabKey>("informasi");
     const [savingStatus, setSavingStatus] = React.useState(false);
@@ -1195,7 +1207,7 @@ export default function BookingDetailPage() {
 
             const { data: profile } = await supabase
                 .from("profiles")
-                .select("role, studio_name, custom_client_statuses, dp_verify_trigger_status, queue_trigger_status, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof")
+                .select("role, studio_name, custom_client_statuses, dp_verify_trigger_status, queue_trigger_status, client_status_deadline_rules, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof")
                 .eq("id", user.id)
                 .single();
             const profileRow = (profile ?? null) as BookingProfileRow | null;
@@ -1233,6 +1245,12 @@ export default function BookingDetailPage() {
             const statusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
             setDpVerifyTriggerStatus(profileRow?.dp_verify_trigger_status ?? "");
             setQueueTriggerStatus((profileRow?.queue_trigger_status || "Antrian Edit").trim() || "Antrian Edit");
+            setClientStatusDeadlineRules(
+                normalizeClientStatusDeadlineRules(
+                    profileRow?.client_status_deadline_rules,
+                    statusOptions,
+                ),
+            );
             setFastpikLinkDisplayMode(
                 normalizeFastpikLinkDisplayMode(
                     bookingDetailLinkMode ??
@@ -1287,6 +1305,7 @@ export default function BookingDetailPage() {
             setAddonServices((addonServiceRows || []) as AddonService[]);
             if (rawBooking) {
                 setClientStatus(syncedStatus);
+                setProjectDeadlineDate(rawBooking.project_deadline_date || "");
                 if (canWriteBookings && (rawBooking.client_status !== syncedStatus || rawBooking.status !== syncedStatus)) {
                     await supabase.from("bookings").update({ status: syncedStatus, client_status: syncedStatus }).eq("id", id);
                     await invalidateBookingPublicCache({
@@ -1364,15 +1383,28 @@ export default function BookingDetailPage() {
             dpPaid: booking.dp_paid,
             dpVerifiedAt: booking.dp_verified_at,
         });
+        const normalizedExistingProjectDeadlineDate = normalizeProjectDeadlineDate(
+            booking.project_deadline_date,
+        );
+        const normalizedProjectDeadlineInput = normalizeProjectDeadlineDate(
+            projectDeadlineDate,
+        );
+        const hasManualDeadlinePatch =
+            normalizedExistingProjectDeadlineDate !== normalizedProjectDeadlineInput;
         const updateResult = await updateBookingStatusWithQueueTransition({
             supabase,
             bookingId: booking.id,
             previousStatus,
             nextStatus,
             queueTriggerStatus,
+            currentDeadlineDate: booking.project_deadline_date,
+            deadlineRules: clientStatusDeadlineRules,
             patch: {
                 ...(cancelPatch || {}),
                 ...(autoDpPatch || {}),
+                ...(hasManualDeadlinePatch
+                    ? { project_deadline_date: normalizedProjectDeadlineInput }
+                    : {}),
             },
         });
         setSavingStatus(false);
@@ -1399,6 +1431,8 @@ export default function BookingDetailPage() {
                             : updateResult.transition === "left"
                                 ? null
                                 : prev.queue_position,
+                    project_deadline_date:
+                        updateResult.projectDeadlineDate ?? prev.project_deadline_date,
                     ...(cancelPatch || {}),
                     ...(autoDpPatch || {}),
                 }
@@ -1406,6 +1440,14 @@ export default function BookingDetailPage() {
         );
         setStatusSaved(true);
         setTimeout(() => setStatusSaved(false), 2000);
+        setProjectDeadlineDate(updateResult.projectDeadlineDate || "");
+        if (updateResult.autoDeadlineApplied && updateResult.projectDeadlineDate) {
+            showFeedback(
+                locale === "en"
+                    ? `Project deadline was created automatically for ${formatProjectDeadlineDate(updateResult.projectDeadlineDate, "en")}.`
+                    : `Deadline project otomatis dibuat untuk ${formatProjectDeadlineDate(updateResult.projectDeadlineDate, "id")}.`,
+            );
+        }
 
         const calendarWarning = await syncGoogleCalendarForStatusTransition({
             bookingId: booking.id,
@@ -2574,6 +2616,15 @@ export default function BookingDetailPage() {
         : willEnterQueueAfterSave
             ? "Akan otomatis saat disimpan."
             : "-";
+    const deadlineLocale = locale === "en" ? "en" : "id";
+    const formattedProjectDeadline = formatProjectDeadlineDate(
+        projectDeadlineDate || booking.project_deadline_date,
+        deadlineLocale,
+    );
+    const projectDeadlineCountdown = getProjectDeadlineCountdownLabel(
+        projectDeadlineDate || booking.project_deadline_date,
+        deadlineLocale,
+    );
 
     // Separate nama_pasangan from other extra fields (show right after Nama for Wedding)
     const namaPasangan = builtInExtraFields.nama_pasangan;
@@ -3677,6 +3728,21 @@ export default function BookingDetailPage() {
                             Trigger antrian: {normalizedQueueTriggerStatus}
                         </p>
                     </div>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Deadline Project</label>
+                        <input
+                            type="date"
+                            value={projectDeadlineDate}
+                            onChange={event => setProjectDeadlineDate(event.target.value)}
+                            disabled={!canWriteBookings}
+                            className={adminNativeSelectClass}
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                            {projectDeadlineDate || booking.project_deadline_date
+                                ? `${formattedProjectDeadline}${projectDeadlineCountdown ? ` • ${projectDeadlineCountdown}` : ""}`
+                                : "Kosong. Bisa diisi manual atau otomatis dari trigger status."}
+                        </p>
+                    </div>
                 </div>
 
                 <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -3687,7 +3753,7 @@ export default function BookingDetailPage() {
                         className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
                     >
                         {savingStatus ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                        Simpan Status
+                        Simpan Status & Deadline
                     </Button>
                     {statusSaved && <span className="text-xs text-green-600 dark:text-green-400">Tersimpan!</span>}
                 </div>

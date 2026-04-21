@@ -53,6 +53,13 @@ import {
     getBookingStatusOptions,
 } from "@/lib/client-status";
 import {
+    formatProjectDeadlineDate,
+    getProjectDeadlineCountdownLabel,
+    normalizeClientStatusDeadlineRules,
+    normalizeProjectDeadlineDate,
+    type ClientStatusDeadlineRules,
+} from "@/lib/booking-deadline";
+import {
     isTransitionToCancelled,
     syncGoogleCalendarForStatusTransition,
 } from "@/utils/google-calendar-status-sync";
@@ -85,6 +92,7 @@ type BookingStatus = {
     status: string;
     client_status: string | null;
     queue_position: number | null;
+    project_deadline_date: string | null;
     dp_paid?: number | null;
     dp_verified_amount?: number | null;
     dp_verified_at?: string | null;
@@ -105,6 +113,7 @@ type ClientStatusPageMetadata = {
     clientStatuses: string[];
     queueTriggerStatus: string;
     dpVerifyTriggerStatus: string;
+    clientStatusDeadlineRules: ClientStatusDeadlineRules;
     packages: string[];
     availableEventTypes: string[];
     tableColumnPreferences: TableColumnPreference[] | null;
@@ -135,6 +144,7 @@ const BASE_CLIENT_STATUS_COLUMNS: TableColumnPreference[] = [
     { id: "event_type", label: "Tipe Acara", visible: false },
     { id: "status", label: "Status", visible: true },
     { id: "queue", label: "Antrian", visible: true },
+    { id: "deadline", label: "Deadline", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ];
 const CLIENT_STATUS_NON_RESIZABLE_COLUMN_IDS = ["select", "row_number", "actions"];
@@ -145,6 +155,7 @@ const CLIENT_STATUS_COLUMN_MIN_WIDTHS: Record<string, number> = {
     event_type: 140,
     status: 232,
     queue: 104,
+    deadline: 196,
 };
 const CLIENT_STATUS_MANAGE_SELECT_COLUMN: TableColumnPreference = {
     id: "select",
@@ -286,6 +297,8 @@ export default function ClientStatusPage() {
     const [availableEventTypes, setAvailableEventTypes] = React.useState<string[]>([]);
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
     const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
+    const [clientStatusDeadlineRules, setClientStatusDeadlineRules] =
+        React.useState<ClientStatusDeadlineRules>({});
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_CLIENT_STATUS_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
@@ -509,6 +522,12 @@ export default function ClientStatusPage() {
                     normalizeQueueTriggerStatus(metadata.queueTriggerStatus),
                 );
                 setDpVerifyTriggerStatus(metadata.dpVerifyTriggerStatus || "");
+                setClientStatusDeadlineRules(
+                    normalizeClientStatusDeadlineRules(
+                        metadata.clientStatusDeadlineRules,
+                        metadata.clientStatuses,
+                    ),
+                );
                 setPackages(metadata.packages || []);
                 setAvailableEventTypes(metadata.availableEventTypes || []);
                 setFormSectionsByEventType(metadata.formSectionsByEventType || {});
@@ -857,6 +876,8 @@ export default function ClientStatusPage() {
                 previousStatus,
                 nextStatus,
                 queueTriggerStatus: normalizedQueueTriggerStatus,
+                currentDeadlineDate: oldBooking.project_deadline_date,
+                deadlineRules: clientStatusDeadlineRules,
                 patch: {
                     ...(cancelPatch || {}),
                     ...(autoDpPatch || {}),
@@ -915,6 +936,8 @@ export default function ClientStatusPage() {
                                     : updateResult.transition === "left"
                                         ? null
                                         : booking.queue_position,
+                            project_deadline_date:
+                                updateResult.projectDeadlineDate ?? booking.project_deadline_date,
                             ...(cancelPatch || {}),
                             ...(autoDpPatch || {}),
                         }
@@ -957,6 +980,52 @@ export default function ClientStatusPage() {
             bookingCode: booking.booking_code,
             trackingUuid: booking.tracking_uuid,
         });
+    }
+
+    async function updateProjectDeadline(id: string, value: string) {
+        if (!requireBookingWrite()) return;
+        const currentBooking = bookings.find((booking) => booking.id === id);
+        if (!currentBooking) return;
+
+        const normalizedProjectDeadline = normalizeProjectDeadlineDate(value);
+        if (
+            normalizeProjectDeadlineDate(currentBooking.project_deadline_date) ===
+            normalizedProjectDeadline
+        ) {
+            return;
+        }
+
+        setSavingId(id);
+        try {
+            const { error } = await supabase
+                .from("bookings")
+                .update({ project_deadline_date: normalizedProjectDeadline })
+                .eq("id", id);
+
+            if (error) {
+                showFeedback(
+                    locale === "en"
+                        ? "Failed to save project deadline."
+                        : "Gagal menyimpan deadline project.",
+                    locale === "en" ? "Warning" : t("warningTitle"),
+                );
+                return;
+            }
+
+            setBookings((prev) =>
+                prev.map((booking) =>
+                    booking.id === id
+                        ? { ...booking, project_deadline_date: normalizedProjectDeadline }
+                        : booking,
+                ),
+            );
+            await invalidateBookingPublicCache({
+                bookingCode: currentBooking.booking_code,
+                trackingUuid: currentBooking.tracking_uuid,
+            });
+        } finally {
+            setSavingId(null);
+        }
     }
 
     function formatDeleteWarnings(
@@ -1203,6 +1272,7 @@ export default function ClientStatusPage() {
         () => getBookingStatusOptions(clientStatuses),
         [clientStatuses],
     );
+    const deadlineLocale = locale === "en" ? "en" : "id";
     const statusSelectOptions = React.useMemo(
         () => [{ value: "", label: t("belumDiset") }, ...statusOptions.map((status) => ({ value: status, label: status }))],
         [statusOptions, t],
@@ -1429,6 +1499,8 @@ export default function ClientStatusPage() {
                 return renderDesktopHeaderCell(column, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap", locale === "en" ? "Status" : "Status");
             case "queue":
                 return renderDesktopHeaderCell(column, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-center hidden sm:table-cell", t("antrian"));
+            case "deadline":
+                return renderDesktopHeaderCell(column, "px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap", locale === "en" ? "Deadline" : "Deadline");
             case "actions":
                 return renderDesktopHeaderCell(column, "min-w-[96px] px-4 py-3 font-semibold text-muted-foreground whitespace-nowrap text-right", t("aksi"));
             default:
@@ -1521,6 +1593,37 @@ export default function ClientStatusPage() {
                         />
                     </td>
                 );
+            case "deadline": {
+                const deadlineLabel = formatProjectDeadlineDate(
+                    booking.project_deadline_date,
+                    deadlineLocale,
+                );
+                const deadlineCountdown = getProjectDeadlineCountdownLabel(
+                    booking.project_deadline_date,
+                    deadlineLocale,
+                );
+                return (
+                    <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
+                        <div className="space-y-1">
+                            <input
+                                type="date"
+                                value={booking.project_deadline_date ?? ""}
+                                onChange={event => void updateProjectDeadline(booking.id, event.target.value)}
+                                disabled={!canWriteBookings || isManageMode || savingId === booking.id}
+                                title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
+                                className="h-8 w-[160px] rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                            />
+                            <p className="text-[11px] text-muted-foreground">
+                                {booking.project_deadline_date
+                                    ? `${deadlineLabel}${deadlineCountdown ? ` • ${deadlineCountdown}` : ""}`
+                                    : locale === "en"
+                                        ? "No deadline"
+                                        : "Belum ada deadline"}
+                            </p>
+                        </div>
+                    </td>
+                );
+            }
             case "actions":
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "min-w-[96px] px-4 py-3 text-right")}>
@@ -1585,6 +1688,22 @@ export default function ClientStatusPage() {
                 return booking.client_status || t("belumDiset");
             case "queue":
                 return booking.queue_position ?? "-";
+            case "deadline": {
+                if (!booking.project_deadline_date) {
+                    return locale === "en" ? "No deadline" : "Belum ada deadline";
+                }
+                const deadlineLabel = formatProjectDeadlineDate(
+                    booking.project_deadline_date,
+                    deadlineLocale,
+                );
+                const deadlineCountdown = getProjectDeadlineCountdownLabel(
+                    booking.project_deadline_date,
+                    deadlineLocale,
+                );
+                return deadlineCountdown
+                    ? `${deadlineLabel} • ${deadlineCountdown}`
+                    : deadlineLabel;
+            }
             default:
                 return getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" });
         }
@@ -1828,7 +1947,7 @@ export default function ClientStatusPage() {
                         </div>
                         <div className="border-t pt-2 space-y-2">
                             {orderedVisibleColumns
-                                .filter((column) => !["name", "row_number", "status", "queue", "actions"].includes(column.id))
+                                .filter((column) => !["name", "row_number", "status", "queue", "deadline", "actions"].includes(column.id))
                                 .map((column) => (
                                     <div key={column.id} className="flex items-start justify-between gap-3 text-sm">
                                         <span className="text-muted-foreground">{column.label}</span>
@@ -1855,6 +1974,22 @@ export default function ClientStatusPage() {
                             <div className="flex items-center gap-3">
                                 <label className="text-xs text-muted-foreground shrink-0 w-14">{t("antrian")}</label>
                                 <input type="number" min={0} value={b.queue_position ?? ""} onChange={e => updateQueue(b.id, e.target.value === "" ? null : parseInt(e.target.value, 10))} placeholder="-" disabled={!canWriteBookings || isManageMode} title={!canWriteBookings ? bookingWriteBlockedMessage : undefined} className={`${inputClass} flex-1`} />
+                            </div>
+                            <div className="flex items-start gap-3">
+                                <label className="text-xs text-muted-foreground shrink-0 w-14 pt-2">Deadline</label>
+                                <div className="flex-1 space-y-1">
+                                    <input
+                                        type="date"
+                                        value={b.project_deadline_date ?? ""}
+                                        onChange={event => void updateProjectDeadline(b.id, event.target.value)}
+                                        disabled={!canWriteBookings || isManageMode || savingId === b.id}
+                                        title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
+                                        className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    />
+                                    <p className="text-[11px] text-muted-foreground">
+                                        {renderMobileValue(b, { id: "deadline", label: "Deadline", visible: true })}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                         {!isManageMode ? (

@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   telegram_notify_settlement_submitted BOOLEAN NOT NULL DEFAULT TRUE,
   telegram_notify_session_h1 BOOLEAN NOT NULL DEFAULT TRUE,
   role TEXT DEFAULT 'admin' CHECK (role IN ('admin', 'staff')),
+  client_status_deadline_rules JSONB NOT NULL DEFAULT '{}'::jsonb,
+  tracking_project_deadline_visible BOOLEAN NOT NULL DEFAULT FALSE,
   tracking_video_links_visible_from_status TEXT DEFAULT 'File Siap',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -61,6 +63,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   -- Scheduling & Status
   session_date TIMESTAMPTZ,
   booking_date DATE DEFAULT CURRENT_DATE,
+  project_deadline_date DATE,
   status TEXT DEFAULT 'Pending' CHECK (status IN ('Pending', 'DP', 'Terjadwal', 'Edit', 'Selesai', 'Batal')),
   
   -- Financial

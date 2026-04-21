@@ -98,6 +98,14 @@ import {
   resolveTrackingVideoLinksVisibleFromStatus,
 } from "@/lib/client-status";
 import {
+  DEFAULT_AUTO_DEADLINE_DAYS,
+  normalizeClientStatusDeadlineRules,
+  removeClientStatusDeadlineRule,
+  renameClientStatusDeadlineRule,
+  upsertClientStatusDeadlineRule,
+  type ClientStatusDeadlineRules,
+} from "@/lib/booking-deadline";
+import {
   getActiveEventTypes,
   getBuiltInEventTypes,
   getEventTypeSettings,
@@ -159,6 +167,8 @@ type Profile = {
   google_drive_refresh_token?: string | null;
   queue_trigger_status?: string | null;
   dp_verify_trigger_status?: string | null;
+  client_status_deadline_rules?: ClientStatusDeadlineRules | null;
+  tracking_project_deadline_visible?: boolean | null;
   session_time_trigger_from_status?: string | null;
   session_time_trigger_to_status?: string | null;
   final_invoice_visible_from_status?: string | null;
@@ -662,6 +672,8 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "custom_client_statuses",
   "queue_trigger_status",
   "dp_verify_trigger_status",
+  "client_status_deadline_rules",
+  "tracking_project_deadline_visible",
   "session_time_trigger_from_status",
   "session_time_trigger_to_status",
   "default_wa_target",
@@ -1060,6 +1072,8 @@ export default function SettingsPage() {
   const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState(
     DEFAULT_DP_VERIFY_TRIGGER_STATUS,
   );
+  const [clientStatusDeadlineRules, setClientStatusDeadlineRules] =
+    React.useState<ClientStatusDeadlineRules>({});
   const [sessionTimeTriggerFromStatus, setSessionTimeTriggerFromStatus] =
     React.useState("");
   const [sessionTimeTriggerToStatus, setSessionTimeTriggerToStatus] =
@@ -1074,6 +1088,10 @@ export default function SettingsPage() {
     trackingVideoLinksVisibleFromStatus,
     setTrackingVideoLinksVisibleFromStatus,
   ] = React.useState(DEFAULT_TRACKING_VIDEO_LINKS_VISIBLE_FROM_STATUS);
+  const [
+    trackingProjectDeadlineVisible,
+    setTrackingProjectDeadlineVisible,
+  ] = React.useState(false);
   const [trackingHideQueueNumber, setTrackingHideQueueNumber] =
     React.useState(false);
 
@@ -1730,6 +1748,12 @@ export default function SettingsPage() {
         (prof as any)?.dp_verify_trigger_status,
       ),
     );
+    setClientStatusDeadlineRules(
+      normalizeClientStatusDeadlineRules(
+        (prof as any)?.client_status_deadline_rules,
+        loadedClientStatuses,
+      ),
+    );
     setSessionTimeTriggerFromStatus(
       resolveOptionalClientProgressStatus(
         loadedClientStatuses,
@@ -1760,6 +1784,18 @@ export default function SettingsPage() {
         prof.tracking_video_links_visible_from_status,
       ),
     );
+    if (
+      Object.prototype.hasOwnProperty.call(
+        prof,
+        "tracking_project_deadline_visible",
+      )
+    ) {
+      setTrackingProjectDeadlineVisible(
+        Boolean((prof as any)?.tracking_project_deadline_visible),
+      );
+    } else {
+      setTrackingProjectDeadlineVisible(false);
+    }
     if (
       Object.prototype.hasOwnProperty.call(prof, "tracking_hide_queue_number")
     ) {
@@ -2695,6 +2731,10 @@ export default function SettingsPage() {
       normalizedClientStatuses,
       dpVerifyTriggerStatus,
     );
+    const nextClientStatusDeadlineRules = normalizeClientStatusDeadlineRules(
+      clientStatusDeadlineRules,
+      normalizedClientStatuses,
+    );
     const nextSessionTimeTriggerFromStatus = resolveOptionalClientProgressStatus(
       normalizedClientStatuses,
       sessionTimeTriggerFromStatus,
@@ -2720,6 +2760,7 @@ export default function SettingsPage() {
         custom_client_statuses: normalizedClientStatuses,
         queue_trigger_status: queueTriggerStatus,
         dp_verify_trigger_status: nextDpVerifyTriggerStatus || null,
+        client_status_deadline_rules: nextClientStatusDeadlineRules,
         session_time_trigger_from_status: hasSessionTimeTriggerPair
           ? nextSessionTimeTriggerFromStatus
           : null,
@@ -2731,10 +2772,12 @@ export default function SettingsPage() {
           nextTrackingFileVisibleFromStatus,
         tracking_video_links_visible_from_status:
           nextTrackingVideoVisibleFromStatus,
+        tracking_project_deadline_visible: trackingProjectDeadlineVisible,
         tracking_hide_queue_number: trackingHideQueueNumber,
       });
       setCustomClientStatuses(normalizedClientStatuses);
       setDpVerifyTriggerStatus(nextDpVerifyTriggerStatus);
+      setClientStatusDeadlineRules(nextClientStatusDeadlineRules);
       setSessionTimeTriggerFromStatus(
         hasSessionTimeTriggerPair ? nextSessionTimeTriggerFromStatus : "",
       );
@@ -2744,6 +2787,7 @@ export default function SettingsPage() {
       setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
       setTrackingFileLinksVisibleFromStatus(nextTrackingFileVisibleFromStatus);
       setTrackingVideoLinksVisibleFromStatus(nextTrackingVideoVisibleFromStatus);
+      setTrackingProjectDeadlineVisible(trackingProjectDeadlineVisible);
       setStatusSaved(true);
       showSettingsSavedToast();
       setTimeout(() => setStatusSaved(false), 3000);
@@ -2847,11 +2891,13 @@ export default function SettingsPage() {
     setCustomClientStatuses(nextClientStatuses);
     setQueueTriggerStatus(DEFAULT_QUEUE_TRIGGER_STATUS);
     setDpVerifyTriggerStatus(DEFAULT_DP_VERIFY_TRIGGER_STATUS);
+    setClientStatusDeadlineRules({});
     setSessionTimeTriggerFromStatus("");
     setSessionTimeTriggerToStatus("");
     setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
     setTrackingFileLinksVisibleFromStatus(nextTrackingFileVisibleFromStatus);
     setTrackingVideoLinksVisibleFromStatus(nextTrackingVideoVisibleFromStatus);
+    setTrackingProjectDeadlineVisible(false);
     setTrackingHideQueueNumber(false);
 
     await saveProfilePatch({
@@ -2859,11 +2905,13 @@ export default function SettingsPage() {
       custom_client_statuses: nextClientStatuses,
       queue_trigger_status: DEFAULT_QUEUE_TRIGGER_STATUS,
       dp_verify_trigger_status: DEFAULT_DP_VERIFY_TRIGGER_STATUS || null,
+      client_status_deadline_rules: {},
       session_time_trigger_from_status: null,
       session_time_trigger_to_status: null,
       final_invoice_visible_from_status: nextVisibleFromStatus,
       tracking_file_links_visible_from_status: nextTrackingFileVisibleFromStatus,
       tracking_video_links_visible_from_status: nextTrackingVideoVisibleFromStatus,
+      tracking_project_deadline_visible: false,
       tracking_hide_queue_number: false,
     });
     setStatusSaved(true);
@@ -5404,17 +5452,26 @@ export default function SettingsPage() {
                     setNormalizedClientStatuses(items.map((item) => item.id))
                   }
                   onRename={(id, label) =>
-                    setNormalizedClientStatuses((prev) => {
+                    {
                       if (
                         id === INITIAL_BOOKING_STATUS ||
                         id === COMPLETED_BOOKING_STATUS
                       ) {
-                        return prev;
+                        return;
                       }
-                      return prev.map((status) =>
-                        status === id ? label : status,
+                      const nextLabel = label.trim();
+                      if (!nextLabel) {
+                        return;
+                      }
+                      setClientStatusDeadlineRules((prev) =>
+                        renameClientStatusDeadlineRule(prev, id, nextLabel),
                       );
-                    })
+                      setNormalizedClientStatuses((prev) =>
+                        prev.map((status) =>
+                          status === id ? nextLabel : status,
+                        ),
+                      );
+                    }
                   }
                   onDelete={(id) => {
                     if (
@@ -5427,6 +5484,9 @@ export default function SettingsPage() {
                       showFeedback(tp("minimumClientStatuses"));
                       return;
                     }
+                    setClientStatusDeadlineRules((prev) =>
+                      removeClientStatusDeadlineRule(prev, id),
+                    );
                     setNormalizedClientStatuses((prev) =>
                       prev.filter((status) => status !== id),
                     );
@@ -5513,6 +5573,108 @@ export default function SettingsPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">
+                      Trigger Deadline Otomatis
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Pilih status yang otomatis membuat deadline baru saat
+                      booking masuk ke status tersebut. Deadline manual yang
+                      sudah ada tidak akan ditimpa.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {customClientStatuses.map((status) => {
+                      const deadlineRule = clientStatusDeadlineRules[status];
+                      const isEnabled = Boolean(deadlineRule?.enabled);
+                      const daysValue = String(
+                        deadlineRule?.days || DEFAULT_AUTO_DEADLINE_DAYS,
+                      );
+
+                      return (
+                        <div
+                          key={status}
+                          className="grid gap-3 rounded-lg border bg-background/80 p-3 md:grid-cols-[minmax(0,1fr)_auto_180px]"
+                        >
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium">{status}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Deadline dibuat dari tanggal hari ini + jumlah
+                              hari.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Switch
+                              checked={isEnabled}
+                              onCheckedChange={(checked) =>
+                                setClientStatusDeadlineRules((prev) =>
+                                  upsertClientStatusDeadlineRule(prev, status, {
+                                    enabled: checked,
+                                    days:
+                                      prev[status]?.days ||
+                                      DEFAULT_AUTO_DEADLINE_DAYS,
+                                  }),
+                                )
+                              }
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              Aktifkan auto deadline
+                            </span>
+                          </div>
+                          <label className="space-y-1">
+                            <span className="text-xs font-medium text-muted-foreground">
+                              Jumlah hari
+                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={daysValue}
+                              disabled={!isEnabled}
+                              onChange={(event) =>
+                                setClientStatusDeadlineRules((prev) =>
+                                  upsertClientStatusDeadlineRule(prev, status, {
+                                    enabled: true,
+                                    days:
+                                      Number(event.target.value) ||
+                                      DEFAULT_AUTO_DEADLINE_DAYS,
+                                  }),
+                                )
+                              }
+                              className={`${inputClass} ${
+                                !isEnabled ? "opacity-60" : ""
+                              }`}
+                            />
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
+                  <label className="flex items-start gap-3 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={trackingProjectDeadlineVisible}
+                      onChange={(event) =>
+                        setTrackingProjectDeadlineVisible(event.target.checked)
+                      }
+                      className="mt-0.5 accent-primary"
+                    />
+                    <span>
+                      <span className="font-medium block">
+                        {tp("projectDeadlineVisibilityTitle")}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {tp("projectDeadlineVisibilityDescription")}
+                      </span>
+                    </span>
+                  </label>
                 </div>
 
                 <div className="p-4 rounded-lg border bg-muted/30 space-y-3">

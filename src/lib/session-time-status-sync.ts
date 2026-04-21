@@ -1,4 +1,8 @@
 import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
+import {
+  normalizeClientStatusDeadlineRules,
+  type ClientStatusDeadlineRules,
+} from "@/lib/booking-deadline";
 import { updateBookingStatusWithQueueTransition } from "@/lib/booking-status-queue";
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -8,6 +12,7 @@ type SessionTimeTriggerProfileRow = {
   id: string;
   vendor_slug?: string | null;
   queue_trigger_status?: string | null;
+  client_status_deadline_rules?: ClientStatusDeadlineRules | null;
   session_time_trigger_from_status?: string | null;
   session_time_trigger_to_status?: string | null;
 };
@@ -18,6 +23,7 @@ type SessionTimeTriggerBookingRow = {
   booking_code: string;
   tracking_uuid: string | null;
   session_date: string | null;
+  project_deadline_date: string | null;
   event_type: string | null;
   extra_fields?: Record<string, unknown> | null;
   client_status: string | null;
@@ -131,7 +137,7 @@ export async function runSessionTimeStatusSync(
   const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
     .select(
-      "id, vendor_slug, queue_trigger_status, session_time_trigger_from_status, session_time_trigger_to_status",
+      "id, vendor_slug, queue_trigger_status, client_status_deadline_rules, session_time_trigger_from_status, session_time_trigger_to_status",
     )
     .not("session_time_trigger_from_status", "is", null)
     .not("session_time_trigger_to_status", "is", null);
@@ -164,7 +170,7 @@ export async function runSessionTimeStatusSync(
     const { data: bookings, error: bookingsError } = await supabase
       .from("bookings")
       .select(
-        "id, user_id, booking_code, tracking_uuid, session_date, event_type, extra_fields, client_status, status",
+        "id, user_id, booking_code, tracking_uuid, session_date, project_deadline_date, event_type, extra_fields, client_status, status",
       )
       .eq("user_id", profile.id)
       .eq("client_status", fromStatus)
@@ -197,6 +203,10 @@ export async function runSessionTimeStatusSync(
         previousStatus: booking.client_status || booking.status || fromStatus,
         nextStatus: toStatus,
         queueTriggerStatus: profile.queue_trigger_status,
+        currentDeadlineDate: booking.project_deadline_date,
+        deadlineRules: normalizeClientStatusDeadlineRules(
+          profile.client_status_deadline_rules,
+        ),
       });
 
       if (!result.ok) {

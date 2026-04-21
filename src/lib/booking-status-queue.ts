@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  normalizeProjectDeadlineDate,
+  resolveAutoProjectDeadlineDate,
+  type ClientStatusDeadlineRules,
+} from "@/lib/booking-deadline";
 
 type QueueTransition = "entered" | "left" | "unchanged";
 
@@ -10,6 +15,8 @@ export type QueueAwareStatusUpdateInput = {
   previousStatus: string | null;
   nextStatus: string | null;
   queueTriggerStatus?: string | null;
+  currentDeadlineDate?: string | null;
+  deadlineRules?: ClientStatusDeadlineRules | null;
   patch?: QueueStatusPatch;
 };
 
@@ -18,6 +25,8 @@ export type QueueAwareStatusUpdateResult =
       ok: true;
       transition: QueueTransition;
       queuePosition?: number | null;
+      projectDeadlineDate?: string | null;
+      autoDeadlineApplied?: boolean;
     }
   | {
       ok: false;
@@ -42,11 +51,35 @@ export async function updateBookingStatusWithQueueTransition(
   const nextStatus = normalizeStatus(input.nextStatus);
   const wasQueue = Boolean(trigger) && previousStatus === trigger;
   const isQueue = Boolean(trigger) && nextStatus === trigger;
+  const hasManualDeadlinePatch = Boolean(
+    input.patch && Object.prototype.hasOwnProperty.call(input.patch, "project_deadline_date"),
+  );
+  const normalizedManualDeadlinePatch = hasManualDeadlinePatch
+    ? normalizeProjectDeadlineDate(
+        (input.patch?.project_deadline_date as string | null | undefined) || null,
+      )
+    : undefined;
+  const autoProjectDeadlineDate = hasManualDeadlinePatch
+    ? null
+    : resolveAutoProjectDeadlineDate({
+        currentDeadlineDate: input.currentDeadlineDate,
+        nextStatus,
+        rules: input.deadlineRules,
+      });
+  const projectDeadlineDate =
+    normalizedManualDeadlinePatch !== undefined
+      ? normalizedManualDeadlinePatch
+      : autoProjectDeadlineDate ?? normalizeProjectDeadlineDate(input.currentDeadlineDate);
   const basePatch: QueueStatusPatch = {
     status: nextStatus,
     client_status: nextStatus,
     ...(input.patch || {}),
   };
+  if (hasManualDeadlinePatch) {
+    basePatch.project_deadline_date = normalizedManualDeadlinePatch;
+  } else if (autoProjectDeadlineDate) {
+    basePatch.project_deadline_date = autoProjectDeadlineDate;
+  }
 
   if (isQueue && !wasQueue) {
     const { data: queueRows, error: queueRowsError } = await input.supabase
@@ -97,6 +130,8 @@ export async function updateBookingStatusWithQueueTransition(
       ok: true,
       transition: "entered",
       queuePosition: nextQueuePosition,
+      projectDeadlineDate,
+      autoDeadlineApplied: Boolean(autoProjectDeadlineDate),
     };
   }
 
@@ -159,6 +194,8 @@ export async function updateBookingStatusWithQueueTransition(
       ok: true,
       transition: "left",
       queuePosition: null,
+      projectDeadlineDate,
+      autoDeadlineApplied: Boolean(autoProjectDeadlineDate),
     };
   }
 
@@ -179,5 +216,7 @@ export async function updateBookingStatusWithQueueTransition(
   return {
     ok: true,
     transition: "unchanged",
+    projectDeadlineDate,
+    autoDeadlineApplied: Boolean(autoProjectDeadlineDate),
   };
 }

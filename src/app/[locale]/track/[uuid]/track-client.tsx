@@ -14,6 +14,10 @@ import {
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { formatSessionDate } from "@/utils/format-date";
+import {
+    formatProjectDeadlineDate,
+    getProjectDeadlineCountdownLabel,
+} from "@/lib/booking-deadline";
 import { resolveFastpikLinkDisplay } from "@/lib/fastpik-link-display";
 import { useTenant } from "@/lib/tenant-context";
 import { shouldHideTenantBranding } from "@/lib/tenant-branding";
@@ -31,6 +35,10 @@ type BookingData = {
     }>;
     eventType: string | null;
     clientStatus: string | null;
+    projectDeadlineDate: string | null;
+    projectDeadlineLabel?: string | null;
+    projectDeadlineCountdown?: string | null;
+    showProjectDeadline: boolean;
     queueTriggerStatus: string;
     trackingHideQueueNumber: boolean;
     queuePosition: number | null;
@@ -250,6 +258,19 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
             value: formatSessionDate(row.sessionDate, { locale: dateLocale }),
         }));
     }, [booking.location, booking.sessionDate, booking.sessionRows, dateLocale]);
+    const projectDeadlineMeta = React.useMemo(() => {
+        if (!booking.showProjectDeadline || !booking.projectDeadlineDate) {
+            return null;
+        }
+
+        return {
+            label: formatProjectDeadlineDate(booking.projectDeadlineDate, dateLocale),
+            countdown: getProjectDeadlineCountdownLabel(
+                booking.projectDeadlineDate,
+                dateLocale,
+            ),
+        };
+    }, [booking.projectDeadlineDate, booking.showProjectDeadline, dateLocale]);
     const galleryLinks = resolveFastpikLinkDisplay({
         mode: booking.fastpikLinkDisplayMode,
         fastpikUrl: booking.fastpikUrl,
@@ -424,6 +445,17 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                                 </div>
                             )}
                         </div>
+                        {projectDeadlineMeta ? (
+                            <div className="flex items-start justify-between gap-3">
+                                <span className="text-muted-foreground">{t("deadline")}</span>
+                                <div className="space-y-1 text-right">
+                                    <p className="font-medium">{projectDeadlineMeta.label}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {projectDeadlineMeta.countdown}
+                                    </p>
+                                </div>
+                            </div>
+                        ) : null}
                     </div>
                 </div>
 

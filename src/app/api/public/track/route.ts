@@ -17,6 +17,10 @@ import {
     getBookingServiceLabel,
     normalizeBookingServiceSelections,
 } from "@/lib/booking-services";
+import {
+    formatProjectDeadlineDate,
+    getProjectDeadlineCountdownLabel,
+} from "@/lib/booking-deadline";
 import { resolveFastpikProjectInfoFromExtraFields } from "@/lib/fastpik-project-info";
 import {
     hydrateFastpikLiveData,
@@ -74,6 +78,7 @@ export async function GET(request: NextRequest) {
         customClientStatuses,
         queueTriggerStatus,
         finalInvoiceVisibleFromStatus,
+        trackingProjectDeadlineVisible,
         trackingFileLinksVisibleFromStatus,
         trackingVideoLinksVisibleFromStatus,
         trackingHideQueueNumber,
@@ -113,6 +118,17 @@ export async function GET(request: NextRequest) {
     const serviceName = getBookingServiceLabel(serviceSelections, {
         fallback: effectiveBooking.event_type || "Booking",
     });
+    const deadlineLocale = locale === "en" ? "en" : "id";
+    const projectDeadlineDate =
+        trackingProjectDeadlineVisible && effectiveBooking.project_deadline_date
+            ? effectiveBooking.project_deadline_date
+            : null;
+    const projectDeadlineLabel = projectDeadlineDate
+        ? formatProjectDeadlineDate(projectDeadlineDate, deadlineLocale)
+        : null;
+    const projectDeadlineCountdown = projectDeadlineDate
+        ? getProjectDeadlineCountdownLabel(projectDeadlineDate, deadlineLocale)
+        : null;
 
     return NextResponse.json(
         {
@@ -125,6 +141,10 @@ export async function GET(request: NextRequest) {
                 sessionRows,
                 eventType: effectiveBooking.event_type,
                 clientStatus: effectiveClientStatus,
+                projectDeadlineDate,
+                projectDeadlineLabel,
+                projectDeadlineCountdown,
+                showProjectDeadline: Boolean(projectDeadlineDate),
                 queueTriggerStatus: queueTriggerStatus || "Antrian Edit",
                 trackingHideQueueNumber: Boolean(trackingHideQueueNumber),
                 queuePosition: effectiveBooking.queue_position,
