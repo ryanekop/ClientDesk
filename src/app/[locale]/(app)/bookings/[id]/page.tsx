@@ -97,9 +97,9 @@ import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-
 import {
     formatProjectDeadlineDate,
     getProjectDeadlineCountdownLabel,
-    normalizeClientStatusDeadlineRules,
+    normalizeClientStatusDeadlineDefaultDays,
+    normalizeClientStatusDeadlineTriggerStatus,
     normalizeProjectDeadlineDate,
-    type ClientStatusDeadlineRules,
 } from "@/lib/booking-deadline";
 import {
     isShowAllPackagesEventType,
@@ -276,7 +276,8 @@ type BookingProfileRow = {
     custom_client_statuses?: string[] | null;
     dp_verify_trigger_status?: string | null;
     queue_trigger_status?: string | null;
-    client_status_deadline_rules?: ClientStatusDeadlineRules | null;
+    client_status_deadline_trigger_status?: string | null;
+    client_status_deadline_default_days?: number | null;
     form_show_proof?: boolean | null;
     google_drive_access_token?: string | null;
     google_drive_refresh_token?: string | null;
@@ -687,8 +688,10 @@ export default function BookingDetailPage() {
     const [clientStatus, setClientStatus] = React.useState("");
     const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
-    const [clientStatusDeadlineRules, setClientStatusDeadlineRules] =
-        React.useState<ClientStatusDeadlineRules>({});
+    const [clientStatusDeadlineTriggerStatus, setClientStatusDeadlineTriggerStatus] =
+        React.useState<string | null>(null);
+    const [clientStatusDeadlineDefaultDays, setClientStatusDeadlineDefaultDays] =
+        React.useState<number>(7);
     const [projectDeadlineDate, setProjectDeadlineDate] = React.useState("");
     const [activeDetailTab, setActiveDetailTab] =
         React.useState<BookingDetailTabKey>("informasi");
@@ -1207,7 +1210,7 @@ export default function BookingDetailPage() {
 
             const { data: profile } = await supabase
                 .from("profiles")
-                .select("role, studio_name, custom_client_statuses, dp_verify_trigger_status, queue_trigger_status, client_status_deadline_rules, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof")
+                .select("role, studio_name, custom_client_statuses, dp_verify_trigger_status, queue_trigger_status, client_status_deadline_trigger_status, client_status_deadline_default_days, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof")
                 .eq("id", user.id)
                 .single();
             const profileRow = (profile ?? null) as BookingProfileRow | null;
@@ -1245,10 +1248,15 @@ export default function BookingDetailPage() {
             const statusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
             setDpVerifyTriggerStatus(profileRow?.dp_verify_trigger_status ?? "");
             setQueueTriggerStatus((profileRow?.queue_trigger_status || "Antrian Edit").trim() || "Antrian Edit");
-            setClientStatusDeadlineRules(
-                normalizeClientStatusDeadlineRules(
-                    profileRow?.client_status_deadline_rules,
+            setClientStatusDeadlineTriggerStatus(
+                normalizeClientStatusDeadlineTriggerStatus(
+                    profileRow?.client_status_deadline_trigger_status,
                     statusOptions,
+                ),
+            );
+            setClientStatusDeadlineDefaultDays(
+                normalizeClientStatusDeadlineDefaultDays(
+                    profileRow?.client_status_deadline_default_days,
                 ),
             );
             setFastpikLinkDisplayMode(
@@ -1398,7 +1406,8 @@ export default function BookingDetailPage() {
             nextStatus,
             queueTriggerStatus,
             currentDeadlineDate: booking.project_deadline_date,
-            deadlineRules: clientStatusDeadlineRules,
+            deadlineTriggerStatus: clientStatusDeadlineTriggerStatus,
+            deadlineDefaultDays: clientStatusDeadlineDefaultDays,
             patch: {
                 ...(cancelPatch || {}),
                 ...(autoDpPatch || {}),

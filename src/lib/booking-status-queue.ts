@@ -1,8 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  normalizeClientStatusDeadlineDefaultDays,
+  normalizeClientStatusDeadlineTriggerStatus,
   normalizeProjectDeadlineDate,
   resolveAutoProjectDeadlineDate,
-  type ClientStatusDeadlineRules,
 } from "@/lib/booking-deadline";
 
 type QueueTransition = "entered" | "left" | "unchanged";
@@ -16,7 +17,8 @@ export type QueueAwareStatusUpdateInput = {
   nextStatus: string | null;
   queueTriggerStatus?: string | null;
   currentDeadlineDate?: string | null;
-  deadlineRules?: ClientStatusDeadlineRules | null;
+  deadlineTriggerStatus?: string | null;
+  deadlineDefaultDays?: unknown;
   patch?: QueueStatusPatch;
 };
 
@@ -64,7 +66,12 @@ export async function updateBookingStatusWithQueueTransition(
     : resolveAutoProjectDeadlineDate({
         currentDeadlineDate: input.currentDeadlineDate,
         nextStatus,
-        rules: input.deadlineRules,
+        triggerStatus: normalizeClientStatusDeadlineTriggerStatus(
+          input.deadlineTriggerStatus,
+        ),
+        defaultDays: normalizeClientStatusDeadlineDefaultDays(
+          input.deadlineDefaultDays,
+        ),
       });
   const projectDeadlineDate =
     normalizedManualDeadlinePatch !== undefined

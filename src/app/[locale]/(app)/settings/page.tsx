@@ -99,11 +99,8 @@ import {
 } from "@/lib/client-status";
 import {
   DEFAULT_AUTO_DEADLINE_DAYS,
-  normalizeClientStatusDeadlineRules,
-  removeClientStatusDeadlineRule,
-  renameClientStatusDeadlineRule,
-  upsertClientStatusDeadlineRule,
-  type ClientStatusDeadlineRules,
+  normalizeClientStatusDeadlineDefaultDays,
+  normalizeClientStatusDeadlineTriggerStatus,
 } from "@/lib/booking-deadline";
 import {
   getActiveEventTypes,
@@ -167,7 +164,8 @@ type Profile = {
   google_drive_refresh_token?: string | null;
   queue_trigger_status?: string | null;
   dp_verify_trigger_status?: string | null;
-  client_status_deadline_rules?: ClientStatusDeadlineRules | null;
+  client_status_deadline_trigger_status?: string | null;
+  client_status_deadline_default_days?: number | null;
   tracking_project_deadline_visible?: boolean | null;
   session_time_trigger_from_status?: string | null;
   session_time_trigger_to_status?: string | null;
@@ -672,7 +670,8 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "custom_client_statuses",
   "queue_trigger_status",
   "dp_verify_trigger_status",
-  "client_status_deadline_rules",
+  "client_status_deadline_trigger_status",
+  "client_status_deadline_default_days",
   "tracking_project_deadline_visible",
   "session_time_trigger_from_status",
   "session_time_trigger_to_status",
@@ -1072,8 +1071,12 @@ export default function SettingsPage() {
   const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState(
     DEFAULT_DP_VERIFY_TRIGGER_STATUS,
   );
-  const [clientStatusDeadlineRules, setClientStatusDeadlineRules] =
-    React.useState<ClientStatusDeadlineRules>({});
+  const [
+    clientStatusDeadlineTriggerStatus,
+    setClientStatusDeadlineTriggerStatus,
+  ] = React.useState<string | null>(null);
+  const [clientStatusDeadlineDefaultDays, setClientStatusDeadlineDefaultDays] =
+    React.useState<number>(DEFAULT_AUTO_DEADLINE_DAYS);
   const [sessionTimeTriggerFromStatus, setSessionTimeTriggerFromStatus] =
     React.useState("");
   const [sessionTimeTriggerToStatus, setSessionTimeTriggerToStatus] =
@@ -1748,10 +1751,15 @@ export default function SettingsPage() {
         (prof as any)?.dp_verify_trigger_status,
       ),
     );
-    setClientStatusDeadlineRules(
-      normalizeClientStatusDeadlineRules(
-        (prof as any)?.client_status_deadline_rules,
+    setClientStatusDeadlineTriggerStatus(
+      normalizeClientStatusDeadlineTriggerStatus(
+        (prof as any)?.client_status_deadline_trigger_status,
         loadedClientStatuses,
+      ),
+    );
+    setClientStatusDeadlineDefaultDays(
+      normalizeClientStatusDeadlineDefaultDays(
+        (prof as any)?.client_status_deadline_default_days,
       ),
     );
     setSessionTimeTriggerFromStatus(
@@ -2731,10 +2739,32 @@ export default function SettingsPage() {
       normalizedClientStatuses,
       dpVerifyTriggerStatus,
     );
-    const nextClientStatusDeadlineRules = normalizeClientStatusDeadlineRules(
-      clientStatusDeadlineRules,
-      normalizedClientStatuses,
-    );
+    const nextClientStatusDeadlineTriggerStatus =
+      normalizeClientStatusDeadlineTriggerStatus(
+        clientStatusDeadlineTriggerStatus,
+        normalizedClientStatuses,
+      );
+    const nextClientStatusDeadlineDefaultDays =
+      normalizeClientStatusDeadlineDefaultDays(clientStatusDeadlineDefaultDays);
+    const nextClientStatusDeadlineRules = nextClientStatusDeadlineTriggerStatus
+      ? {
+          [nextClientStatusDeadlineTriggerStatus]: {
+            enabled: true,
+            days: nextClientStatusDeadlineDefaultDays,
+          },
+        }
+      : {};
+    if (
+      nextClientStatusDeadlineTriggerStatus &&
+      !normalizedClientStatuses.includes(nextClientStatusDeadlineTriggerStatus)
+    ) {
+      showFeedback("Trigger deadline harus memilih salah satu status klien.");
+      return;
+    }
+    if (nextClientStatusDeadlineDefaultDays <= 0) {
+      showFeedback("Default jumlah hari deadline minimal 1 hari.");
+      return;
+    }
     const nextSessionTimeTriggerFromStatus = resolveOptionalClientProgressStatus(
       normalizedClientStatuses,
       sessionTimeTriggerFromStatus,
@@ -2760,6 +2790,9 @@ export default function SettingsPage() {
         custom_client_statuses: normalizedClientStatuses,
         queue_trigger_status: queueTriggerStatus,
         dp_verify_trigger_status: nextDpVerifyTriggerStatus || null,
+        client_status_deadline_trigger_status:
+          nextClientStatusDeadlineTriggerStatus,
+        client_status_deadline_default_days: nextClientStatusDeadlineDefaultDays,
         client_status_deadline_rules: nextClientStatusDeadlineRules,
         session_time_trigger_from_status: hasSessionTimeTriggerPair
           ? nextSessionTimeTriggerFromStatus
@@ -2777,7 +2810,8 @@ export default function SettingsPage() {
       });
       setCustomClientStatuses(normalizedClientStatuses);
       setDpVerifyTriggerStatus(nextDpVerifyTriggerStatus);
-      setClientStatusDeadlineRules(nextClientStatusDeadlineRules);
+      setClientStatusDeadlineTriggerStatus(nextClientStatusDeadlineTriggerStatus);
+      setClientStatusDeadlineDefaultDays(nextClientStatusDeadlineDefaultDays);
       setSessionTimeTriggerFromStatus(
         hasSessionTimeTriggerPair ? nextSessionTimeTriggerFromStatus : "",
       );
@@ -2891,7 +2925,8 @@ export default function SettingsPage() {
     setCustomClientStatuses(nextClientStatuses);
     setQueueTriggerStatus(DEFAULT_QUEUE_TRIGGER_STATUS);
     setDpVerifyTriggerStatus(DEFAULT_DP_VERIFY_TRIGGER_STATUS);
-    setClientStatusDeadlineRules({});
+    setClientStatusDeadlineTriggerStatus(null);
+    setClientStatusDeadlineDefaultDays(DEFAULT_AUTO_DEADLINE_DAYS);
     setSessionTimeTriggerFromStatus("");
     setSessionTimeTriggerToStatus("");
     setFinalInvoiceVisibleFromStatus(nextVisibleFromStatus);
@@ -2905,6 +2940,8 @@ export default function SettingsPage() {
       custom_client_statuses: nextClientStatuses,
       queue_trigger_status: DEFAULT_QUEUE_TRIGGER_STATUS,
       dp_verify_trigger_status: DEFAULT_DP_VERIFY_TRIGGER_STATUS || null,
+      client_status_deadline_trigger_status: null,
+      client_status_deadline_default_days: DEFAULT_AUTO_DEADLINE_DAYS,
       client_status_deadline_rules: {},
       session_time_trigger_from_status: null,
       session_time_trigger_to_status: null,
@@ -5463,8 +5500,8 @@ export default function SettingsPage() {
                       if (!nextLabel) {
                         return;
                       }
-                      setClientStatusDeadlineRules((prev) =>
-                        renameClientStatusDeadlineRule(prev, id, nextLabel),
+                      setClientStatusDeadlineTriggerStatus((prev) =>
+                        prev === id ? nextLabel : prev,
                       );
                       setNormalizedClientStatuses((prev) =>
                         prev.map((status) =>
@@ -5484,8 +5521,8 @@ export default function SettingsPage() {
                       showFeedback(tp("minimumClientStatuses"));
                       return;
                     }
-                    setClientStatusDeadlineRules((prev) =>
-                      removeClientStatusDeadlineRule(prev, id),
+                    setClientStatusDeadlineTriggerStatus((prev) =>
+                      prev === id ? null : prev,
                     );
                     setNormalizedClientStatuses((prev) =>
                       prev.filter((status) => status !== id),
@@ -5581,78 +5618,52 @@ export default function SettingsPage() {
                       Trigger Deadline Otomatis
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Pilih status yang otomatis membuat deadline baru saat
-                      booking masuk ke status tersebut. Deadline manual yang
-                      sudah ada tidak akan ditimpa.
+                      Pilih satu status trigger agar deadline otomatis dibuat
+                      saat booking masuk ke status tersebut. Deadline manual
+                      yang sudah ada tidak akan ditimpa.
                     </p>
                   </div>
-
-                  <div className="space-y-3">
-                    {customClientStatuses.map((status) => {
-                      const deadlineRule = clientStatusDeadlineRules[status];
-                      const isEnabled = Boolean(deadlineRule?.enabled);
-                      const daysValue = String(
-                        deadlineRule?.days || DEFAULT_AUTO_DEADLINE_DAYS,
-                      );
-
-                      return (
-                        <div
-                          key={status}
-                          className="grid gap-3 rounded-lg border bg-background/80 p-3 md:grid-cols-[minmax(0,1fr)_auto_180px]"
-                        >
-                          <div className="space-y-1">
-                            <p className="text-sm font-medium">{status}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Deadline dibuat dari tanggal hari ini + jumlah
-                              hari.
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <Switch
-                              checked={isEnabled}
-                              onCheckedChange={(checked) =>
-                                setClientStatusDeadlineRules((prev) =>
-                                  upsertClientStatusDeadlineRule(prev, status, {
-                                    enabled: checked,
-                                    days:
-                                      prev[status]?.days ||
-                                      DEFAULT_AUTO_DEADLINE_DAYS,
-                                  }),
-                                )
-                              }
-                            />
-                            <span className="text-xs text-muted-foreground">
-                              Aktifkan auto deadline
-                            </span>
-                          </div>
-                          <label className="space-y-1">
-                            <span className="text-xs font-medium text-muted-foreground">
-                              Jumlah hari
-                            </span>
-                            <input
-                              type="number"
-                              min={1}
-                              step={1}
-                              value={daysValue}
-                              disabled={!isEnabled}
-                              onChange={(event) =>
-                                setClientStatusDeadlineRules((prev) =>
-                                  upsertClientStatusDeadlineRule(prev, status, {
-                                    enabled: true,
-                                    days:
-                                      Number(event.target.value) ||
-                                      DEFAULT_AUTO_DEADLINE_DAYS,
-                                  }),
-                                )
-                              }
-                              className={`${inputClass} ${
-                                !isEnabled ? "opacity-60" : ""
-                              }`}
-                            />
-                          </label>
-                        </div>
-                      );
-                    })}
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Status trigger
+                      </span>
+                      <select
+                        value={clientStatusDeadlineTriggerStatus || ""}
+                        onChange={(event) =>
+                          setClientStatusDeadlineTriggerStatus(
+                            event.target.value || null,
+                          )
+                        }
+                        className={`${selectClass} text-sm`}
+                      >
+                        <option value="">(Tidak ada trigger)</option>
+                        {customClientStatuses.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Default jumlah hari deadline
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={String(clientStatusDeadlineDefaultDays)}
+                        onChange={(event) =>
+                          setClientStatusDeadlineDefaultDays(
+                            normalizeClientStatusDeadlineDefaultDays(
+                              event.target.value,
+                            ),
+                          )
+                        }
+                        className={inputClass}
+                      />
+                    </label>
                   </div>
                 </div>
 

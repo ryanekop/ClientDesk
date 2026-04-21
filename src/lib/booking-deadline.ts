@@ -6,6 +6,10 @@ export type ClientStatusDeadlineRule = {
 };
 
 export type ClientStatusDeadlineRules = Record<string, ClientStatusDeadlineRule>;
+export type ClientStatusDeadlineConfig = {
+  triggerStatus: string | null;
+  defaultDays: number;
+};
 
 function normalizeStatusLabel(value: string | null | undefined) {
   return (value || "").trim();
@@ -20,6 +24,27 @@ function normalizePositiveDays(value: unknown) {
         : NaN;
   if (!Number.isFinite(numericValue)) return 0;
   return Math.max(0, Math.floor(numericValue));
+}
+
+export function normalizeClientStatusDeadlineDefaultDays(value: unknown) {
+  const normalizedDays = normalizePositiveDays(value);
+  return normalizedDays > 0 ? normalizedDays : DEFAULT_AUTO_DEADLINE_DAYS;
+}
+
+export function normalizeClientStatusDeadlineTriggerStatus(
+  value: string | null | undefined,
+  statuses?: string[] | null,
+) {
+  const normalizedStatus = normalizeStatusLabel(value);
+  if (!normalizedStatus) return null;
+  if (!Array.isArray(statuses) || statuses.length === 0) {
+    return normalizedStatus;
+  }
+
+  const allowedStatuses = new Set(
+    statuses.map((status) => normalizeStatusLabel(status)).filter(Boolean),
+  );
+  return allowedStatuses.has(normalizedStatus) ? normalizedStatus : null;
 }
 
 function toDateOnlyString(date: Date) {
@@ -176,12 +201,29 @@ export function calculateAutoProjectDeadlineDate(
 export function resolveAutoProjectDeadlineDate(params: {
   currentDeadlineDate?: string | null;
   nextStatus?: string | null;
+  triggerStatus?: string | null;
+  defaultDays?: unknown;
   rules?: ClientStatusDeadlineRules | null;
   now?: Date;
 }) {
   const currentDeadlineDate = normalizeProjectDeadlineDate(params.currentDeadlineDate);
   if (currentDeadlineDate) {
     return null;
+  }
+
+  const normalizedNextStatus = normalizeStatusLabel(params.nextStatus);
+  const normalizedTriggerStatus = normalizeClientStatusDeadlineTriggerStatus(
+    params.triggerStatus,
+  );
+  if (
+    normalizedTriggerStatus &&
+    normalizedNextStatus &&
+    normalizedNextStatus === normalizedTriggerStatus
+  ) {
+    return calculateAutoProjectDeadlineDate(
+      normalizeClientStatusDeadlineDefaultDays(params.defaultDays),
+      params.now,
+    );
   }
 
   const rule = getClientStatusDeadlineRule(params.rules, params.nextStatus);

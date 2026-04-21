@@ -1,11 +1,9 @@
-ALTER TABLE public.bookings
-  ADD COLUMN IF NOT EXISTS project_deadline_date DATE;
+-- ============================================================
+-- MIGRATION: Simplify Deadline Trigger (Single Status + Default Days)
+-- ============================================================
 
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS client_status_deadline_rules JSONB NOT NULL DEFAULT '{}'::jsonb;
-
-ALTER TABLE public.profiles
-  ADD COLUMN IF NOT EXISTS tracking_project_deadline_visible BOOLEAN NOT NULL DEFAULT false;
 
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS client_status_deadline_trigger_status TEXT;

@@ -1,7 +1,7 @@
 import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import {
-  normalizeClientStatusDeadlineRules,
-  type ClientStatusDeadlineRules,
+  normalizeClientStatusDeadlineDefaultDays,
+  normalizeClientStatusDeadlineTriggerStatus,
 } from "@/lib/booking-deadline";
 import { updateBookingStatusWithQueueTransition } from "@/lib/booking-status-queue";
 import { invalidatePublicCachesForBooking } from "@/lib/public-cache-invalidation";
@@ -12,7 +12,8 @@ type SessionTimeTriggerProfileRow = {
   id: string;
   vendor_slug?: string | null;
   queue_trigger_status?: string | null;
-  client_status_deadline_rules?: ClientStatusDeadlineRules | null;
+  client_status_deadline_trigger_status?: string | null;
+  client_status_deadline_default_days?: number | null;
   session_time_trigger_from_status?: string | null;
   session_time_trigger_to_status?: string | null;
 };
@@ -137,7 +138,7 @@ export async function runSessionTimeStatusSync(
   const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
     .select(
-      "id, vendor_slug, queue_trigger_status, client_status_deadline_rules, session_time_trigger_from_status, session_time_trigger_to_status",
+      "id, vendor_slug, queue_trigger_status, client_status_deadline_trigger_status, client_status_deadline_default_days, session_time_trigger_from_status, session_time_trigger_to_status",
     )
     .not("session_time_trigger_from_status", "is", null)
     .not("session_time_trigger_to_status", "is", null);
@@ -204,8 +205,11 @@ export async function runSessionTimeStatusSync(
         nextStatus: toStatus,
         queueTriggerStatus: profile.queue_trigger_status,
         currentDeadlineDate: booking.project_deadline_date,
-        deadlineRules: normalizeClientStatusDeadlineRules(
-          profile.client_status_deadline_rules,
+        deadlineTriggerStatus: normalizeClientStatusDeadlineTriggerStatus(
+          profile.client_status_deadline_trigger_status,
+        ),
+        deadlineDefaultDays: normalizeClientStatusDeadlineDefaultDays(
+          profile.client_status_deadline_default_days,
         ),
       });
 

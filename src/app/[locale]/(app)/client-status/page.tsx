@@ -55,9 +55,9 @@ import {
 import {
     formatProjectDeadlineDate,
     getProjectDeadlineCountdownLabel,
-    normalizeClientStatusDeadlineRules,
+    normalizeClientStatusDeadlineDefaultDays,
+    normalizeClientStatusDeadlineTriggerStatus,
     normalizeProjectDeadlineDate,
-    type ClientStatusDeadlineRules,
 } from "@/lib/booking-deadline";
 import {
     isTransitionToCancelled,
@@ -113,7 +113,8 @@ type ClientStatusPageMetadata = {
     clientStatuses: string[];
     queueTriggerStatus: string;
     dpVerifyTriggerStatus: string;
-    clientStatusDeadlineRules: ClientStatusDeadlineRules;
+    clientStatusDeadlineTriggerStatus: string | null;
+    clientStatusDeadlineDefaultDays: number;
     packages: string[];
     availableEventTypes: string[];
     tableColumnPreferences: TableColumnPreference[] | null;
@@ -297,8 +298,10 @@ export default function ClientStatusPage() {
     const [availableEventTypes, setAvailableEventTypes] = React.useState<string[]>([]);
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
     const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
-    const [clientStatusDeadlineRules, setClientStatusDeadlineRules] =
-        React.useState<ClientStatusDeadlineRules>({});
+    const [clientStatusDeadlineTriggerStatus, setClientStatusDeadlineTriggerStatus] =
+        React.useState<string | null>(null);
+    const [clientStatusDeadlineDefaultDays, setClientStatusDeadlineDefaultDays] =
+        React.useState<number>(7);
     const [columns, setColumns] = React.useState<TableColumnPreference[]>(lockBoundaryColumns(BASE_CLIENT_STATUS_COLUMNS));
     const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
     const [savingColumns, setSavingColumns] = React.useState(false);
@@ -522,10 +525,15 @@ export default function ClientStatusPage() {
                     normalizeQueueTriggerStatus(metadata.queueTriggerStatus),
                 );
                 setDpVerifyTriggerStatus(metadata.dpVerifyTriggerStatus || "");
-                setClientStatusDeadlineRules(
-                    normalizeClientStatusDeadlineRules(
-                        metadata.clientStatusDeadlineRules,
+                setClientStatusDeadlineTriggerStatus(
+                    normalizeClientStatusDeadlineTriggerStatus(
+                        metadata.clientStatusDeadlineTriggerStatus,
                         metadata.clientStatuses,
+                    ),
+                );
+                setClientStatusDeadlineDefaultDays(
+                    normalizeClientStatusDeadlineDefaultDays(
+                        metadata.clientStatusDeadlineDefaultDays,
                     ),
                 );
                 setPackages(metadata.packages || []);
@@ -877,7 +885,8 @@ export default function ClientStatusPage() {
                 nextStatus,
                 queueTriggerStatus: normalizedQueueTriggerStatus,
                 currentDeadlineDate: oldBooking.project_deadline_date,
-                deadlineRules: clientStatusDeadlineRules,
+                deadlineTriggerStatus: clientStatusDeadlineTriggerStatus,
+                deadlineDefaultDays: clientStatusDeadlineDefaultDays,
                 patch: {
                     ...(cancelPatch || {}),
                     ...(autoDpPatch || {}),

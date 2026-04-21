@@ -15,8 +15,8 @@ import {
   type BookingServiceSelection,
 } from "@/lib/booking-services";
 import {
-  normalizeClientStatusDeadlineRules,
-  type ClientStatusDeadlineRules,
+  normalizeClientStatusDeadlineDefaultDays,
+  normalizeClientStatusDeadlineTriggerStatus,
 } from "@/lib/booking-deadline";
 
 const DEFAULT_PAGE = 1;
@@ -182,7 +182,8 @@ type BookingMetadataResponse = {
   statusOptions?: string[];
   queueTriggerStatus?: string;
   dpVerifyTriggerStatus?: string;
-  clientStatusDeadlineRules?: ClientStatusDeadlineRules;
+  clientStatusDeadlineTriggerStatus?: string | null;
+  clientStatusDeadlineDefaultDays?: number | null;
   packages?: string[];
   availableEventTypes?: string[];
   tableColumnPreferences?: unknown;
@@ -201,7 +202,9 @@ export async function GET(request: NextRequest) {
 
   const profileResult = await supabase
     .from("profiles")
-    .select("custom_client_statuses, client_status_deadline_rules, table_column_preferences")
+    .select(
+      "custom_client_statuses, client_status_deadline_trigger_status, client_status_deadline_default_days, table_column_preferences",
+    )
     .eq("id", user.id)
     .single();
 
@@ -214,13 +217,17 @@ export async function GET(request: NextRequest) {
 
   const profileData = profileResult.data as {
     custom_client_statuses?: string[] | null;
-    client_status_deadline_rules?: ClientStatusDeadlineRules | null;
+    client_status_deadline_trigger_status?: string | null;
+    client_status_deadline_default_days?: number | null;
     table_column_preferences?: { client_status?: unknown } | null;
   } | null;
   const profileStatuses = profileData?.custom_client_statuses || DEFAULT_CLIENT_STATUSES;
-  const profileDeadlineRules = normalizeClientStatusDeadlineRules(
-    profileData?.client_status_deadline_rules,
+  const profileDeadlineTriggerStatus = normalizeClientStatusDeadlineTriggerStatus(
+    profileData?.client_status_deadline_trigger_status,
     profileStatuses,
+  );
+  const profileDeadlineDefaultDays = normalizeClientStatusDeadlineDefaultDays(
+    profileData?.client_status_deadline_default_days,
   );
   const profileClientStatusTablePreferences =
     profileData?.table_column_preferences?.client_status ?? null;
@@ -422,7 +429,8 @@ export async function GET(request: NextRequest) {
           ? metadataData.queueTriggerStatus
           : "Antrian Edit",
       dpVerifyTriggerStatus: metadataData?.dpVerifyTriggerStatus || "",
-      clientStatusDeadlineRules: profileDeadlineRules,
+      clientStatusDeadlineTriggerStatus: profileDeadlineTriggerStatus,
+      clientStatusDeadlineDefaultDays: profileDeadlineDefaultDays,
       packages: readStringArray(metadataData?.packages),
       availableEventTypes: readStringArray(metadataData?.availableEventTypes),
       tableColumnPreferences:

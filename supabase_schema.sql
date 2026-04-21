@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   telegram_notify_session_h1 BOOLEAN NOT NULL DEFAULT TRUE,
   role TEXT DEFAULT 'admin' CHECK (role IN ('admin', 'staff')),
   client_status_deadline_rules JSONB NOT NULL DEFAULT '{}'::jsonb,
+  client_status_deadline_trigger_status TEXT,
+  client_status_deadline_default_days INTEGER NOT NULL DEFAULT 7,
   tracking_project_deadline_visible BOOLEAN NOT NULL DEFAULT FALSE,
   tracking_video_links_visible_from_status TEXT DEFAULT 'File Siap',
   created_at TIMESTAMPTZ DEFAULT NOW(),
