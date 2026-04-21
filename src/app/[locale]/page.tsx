@@ -21,6 +21,7 @@ import {
 } from "@/components/landing/landing-animations";
 import { AnimatedFAQ } from "@/components/landing/faq-section";
 import { ProblemSection } from "@/components/landing/problem-section";
+import { SocialProofSection } from "@/components/landing/social-proof-section";
 import { getTenantConfig } from "@/lib/tenant-config";
 import { getIsAuthenticated } from "@/lib/auth/get-is-authenticated";
 import { TenantLogo } from "@/components/layout/tenant-logo";
@@ -82,6 +83,8 @@ export default async function Home() {
           </AnimatedHero>
         </div>
       </section>
+
+      <SocialProofSection />
 
       <section id="problems" className="py-20 bg-muted/20">
         <div className="container mx-auto px-4">

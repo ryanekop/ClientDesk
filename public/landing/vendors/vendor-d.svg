@@ -1,0 +1,8 @@
+<svg width="320" height="128" viewBox="0 0 320 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="320" height="128" rx="28" fill="#F8FAFC"/>
+  <rect x="12" y="12" width="296" height="104" rx="22" fill="#FFFBEB" stroke="#FDE68A"/>
+  <path d="M74 36L96 49V79L74 92L52 79V49L74 36Z" fill="#D97706"/>
+  <path d="M74 49L85 55V73L74 79L63 73V55L74 49Z" fill="white"/>
+  <text x="118" y="56" fill="#92400E" font-family="Arial, sans-serif" font-size="16" font-weight="700">Vendor D</text>
+  <text x="118" y="77" fill="#57534E" font-family="Arial, sans-serif" font-size="12">Placeholder Logo</text>
+</svg>

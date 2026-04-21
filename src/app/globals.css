@@ -59,12 +59,44 @@
     }
 }
 
+@keyframes landing-marquee {
+    from {
+        transform: translateX(0);
+    }
+
+    to {
+        transform: translateX(-50%);
+    }
+}
+
 .announcement-aware-sticky {
     top: var(--global-announcement-height, 0px);
 }
 
 .animate-shimmer {
     animation: shimmer 1.5s infinite;
+}
+
+.landing-marquee-mask {
+    -webkit-mask-image: linear-gradient(
+        to right,
+        transparent,
+        black 10%,
+        black 90%,
+        transparent
+    );
+    mask-image: linear-gradient(
+        to right,
+        transparent,
+        black 10%,
+        black 90%,
+        transparent
+    );
+}
+
+.landing-marquee {
+    animation: landing-marquee 26s linear infinite;
+    will-change: transform;
 }
 
 .dark {
@@ -235,6 +267,10 @@
 }
 
 @media (max-width: 767px) {
+    .landing-marquee {
+        animation-duration: 22s;
+    }
+
     .admin-dashboard-scope :is(h1, [class*="text-5xl"], [class*="text-4xl"]) {
         font-size: 1.6rem !important;
         line-height: 1.95rem !important;
