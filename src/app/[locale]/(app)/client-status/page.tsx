@@ -55,6 +55,7 @@ import {
 import {
     formatProjectDeadlineDate,
     getProjectDeadlineCountdownLabel,
+    getProjectDeadlineTone,
     normalizeClientStatusDeadlineDefaultDays,
     normalizeClientStatusDeadlineTriggerStatus,
     normalizeProjectDeadlineDate,
@@ -137,6 +138,20 @@ const STATUS_COLOR_PALETTE = [
     "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400",
     "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400",
 ];
+
+function getAdminDeadlineBadgeClassName(deadlineDate: string | null | undefined) {
+    const tone = getProjectDeadlineTone(deadlineDate);
+    if (tone === "overdue" || tone === "today") {
+        return "inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300";
+    }
+    if (tone === "soon") {
+        return "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300";
+    }
+    if (tone === "safe") {
+        return "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300";
+    }
+    return "inline-flex rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground";
+}
 
 const BASE_CLIENT_STATUS_COLUMNS: TableColumnPreference[] = [
     { id: "row_number", label: "No.", visible: true, locked: true },
@@ -1611,6 +1626,7 @@ export default function ClientStatusPage() {
                     booking.project_deadline_date,
                     deadlineLocale,
                 );
+                const hasDeadline = Boolean(booking.project_deadline_date);
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
                         <div className="space-y-1">
@@ -1622,13 +1638,20 @@ export default function ClientStatusPage() {
                                 title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
                                 className="h-8 w-[160px] rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                             />
-                            <p className="text-[11px] text-muted-foreground">
-                                {booking.project_deadline_date
-                                    ? `${deadlineLabel}${deadlineCountdown ? ` • ${deadlineCountdown}` : ""}`
-                                    : locale === "en"
-                                        ? "No deadline"
-                                        : "Belum ada deadline"}
-                            </p>
+                            {hasDeadline ? (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] font-medium text-foreground">{deadlineLabel}</p>
+                                    {deadlineCountdown ? (
+                                        <span className={getAdminDeadlineBadgeClassName(booking.project_deadline_date)}>
+                                            {deadlineCountdown}
+                                        </span>
+                                    ) : null}
+                                </div>
+                            ) : (
+                                <p className="text-[11px] text-muted-foreground">
+                                    {locale === "en" ? "No deadline" : "Belum ada deadline"}
+                                </p>
+                            )}
                         </div>
                     </td>
                 );
@@ -1709,9 +1732,16 @@ export default function ClientStatusPage() {
                     booking.project_deadline_date,
                     deadlineLocale,
                 );
-                return deadlineCountdown
-                    ? `${deadlineLabel} • ${deadlineCountdown}`
-                    : deadlineLabel;
+                return (
+                    <span className="inline-flex flex-col items-end gap-1">
+                        <span className="font-medium text-foreground">{deadlineLabel}</span>
+                        {deadlineCountdown ? (
+                            <span className={getAdminDeadlineBadgeClassName(booking.project_deadline_date)}>
+                                {deadlineCountdown}
+                            </span>
+                        ) : null}
+                    </span>
+                );
             }
             default:
                 return getBookingMetadataValue(booking.extra_fields, column.id, { locale: locale === "en" ? "en" : "id" });

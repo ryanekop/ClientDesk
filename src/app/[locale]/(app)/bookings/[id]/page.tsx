@@ -97,6 +97,7 @@ import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-
 import {
     formatProjectDeadlineDate,
     getProjectDeadlineCountdownLabel,
+    getProjectDeadlineTone,
     normalizeClientStatusDeadlineDefaultDays,
     normalizeClientStatusDeadlineTriggerStatus,
     normalizeProjectDeadlineDate,
@@ -310,6 +311,20 @@ const RESPONSIVE_INLINE_ACTION_CLASS =
     "flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center";
 const RESPONSIVE_MONEY_INPUT_CLASS =
     "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] sm:w-40";
+
+function getAdminDeadlineBadgeClassName(deadlineDate: string | null | undefined) {
+    const tone = getProjectDeadlineTone(deadlineDate);
+    if (tone === "overdue" || tone === "today") {
+        return "inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300";
+    }
+    if (tone === "soon") {
+        return "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300";
+    }
+    if (tone === "safe") {
+        return "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300";
+    }
+    return "inline-flex rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground";
+}
 
 function StatusBadge({ status }: { status: string }) {
     const variants: Record<string, string> = {
@@ -2634,6 +2649,8 @@ export default function BookingDetailPage() {
         projectDeadlineDate || booking.project_deadline_date,
         deadlineLocale,
     );
+    const effectiveProjectDeadlineDate =
+        projectDeadlineDate || booking.project_deadline_date;
 
     // Separate nama_pasangan from other extra fields (show right after Nama for Wedding)
     const namaPasangan = builtInExtraFields.nama_pasangan;
@@ -3746,11 +3763,22 @@ export default function BookingDetailPage() {
                             disabled={!canWriteBookings}
                             className={adminNativeSelectClass}
                         />
-                        <p className="text-[11px] text-muted-foreground">
-                            {projectDeadlineDate || booking.project_deadline_date
-                                ? `${formattedProjectDeadline}${projectDeadlineCountdown ? ` • ${projectDeadlineCountdown}` : ""}`
-                                : "Kosong. Bisa diisi manual atau otomatis dari trigger status."}
-                        </p>
+                        {effectiveProjectDeadlineDate ? (
+                            <div className="space-y-1">
+                                <p className="text-[11px] font-medium text-foreground">
+                                    {formattedProjectDeadline}
+                                </p>
+                                {projectDeadlineCountdown ? (
+                                    <span className={getAdminDeadlineBadgeClassName(effectiveProjectDeadlineDate)}>
+                                        {projectDeadlineCountdown}
+                                    </span>
+                                ) : null}
+                            </div>
+                        ) : (
+                            <p className="text-[11px] text-muted-foreground">
+                                Kosong. Bisa diisi manual atau otomatis dari trigger status.
+                            </p>
+                        )}
                     </div>
                 </div>
 

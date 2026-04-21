@@ -450,7 +450,7 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                                 <span className="text-muted-foreground">{t("deadline")}</span>
                                 <div className="space-y-1 text-right">
                                     <p className="font-medium">{projectDeadlineMeta.label}</p>
-                                    <p className="text-xs text-muted-foreground">
+                                    <p className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
                                         {projectDeadlineMeta.countdown}
                                     </p>
                                 </div>

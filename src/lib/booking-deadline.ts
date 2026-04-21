@@ -10,6 +10,7 @@ export type ClientStatusDeadlineConfig = {
   triggerStatus: string | null;
   defaultDays: number;
 };
+export type ProjectDeadlineTone = "none" | "overdue" | "today" | "soon" | "safe";
 
 function normalizeStatusLabel(value: string | null | undefined) {
   return (value || "").trim();
@@ -77,6 +78,19 @@ function parseDateOnlyString(value: string | null | undefined) {
 
   parsed.setHours(0, 0, 0, 0);
   return parsed;
+}
+
+function getProjectDeadlineDiffDays(
+  value: string | null | undefined,
+  now: Date = new Date(),
+) {
+  const parsed = parseDateOnlyString(value);
+  if (!parsed) return null;
+
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const diffMs = parsed.getTime() - today.getTime();
+  return Math.round(diffMs / 86400000);
 }
 
 export function normalizeProjectDeadlineDate(value: string | null | undefined) {
@@ -250,13 +264,8 @@ export function getProjectDeadlineCountdownLabel(
   locale: "id" | "en" = "id",
   now: Date = new Date(),
 ) {
-  const parsed = parseDateOnlyString(value);
-  if (!parsed) return "";
-
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const diffMs = parsed.getTime() - today.getTime();
-  const diffDays = Math.round(diffMs / 86400000);
+  const diffDays = getProjectDeadlineDiffDays(value, now);
+  if (diffDays === null) return "";
 
   if (diffDays === 0) {
     return locale === "en" ? "Today" : "Hari ini";
@@ -274,4 +283,16 @@ export function getProjectDeadlineCountdownLabel(
   return locale === "en"
     ? `Overdue ${overdueDays} days`
     : `Terlambat ${overdueDays} hari`;
+}
+
+export function getProjectDeadlineTone(
+  value: string | null | undefined,
+  now: Date = new Date(),
+): ProjectDeadlineTone {
+  const diffDays = getProjectDeadlineDiffDays(value, now);
+  if (diffDays === null) return "none";
+  if (diffDays < 0) return "overdue";
+  if (diffDays === 0) return "today";
+  if (diffDays <= 3) return "soon";
+  return "safe";
 }
