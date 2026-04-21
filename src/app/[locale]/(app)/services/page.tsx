@@ -1149,6 +1149,30 @@ export default function ServicesPage() {
     await fetchPagedServices("refresh");
   }
 
+  async function invalidatePublicProfileCache() {
+    try {
+      const response = await fetch("/api/internal/cache/invalidate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          scope: "profile",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (error) {
+      console.warn(
+        "[Services] Failed to invalidate public vendor cache after service mutation.",
+        error,
+      );
+    }
+  }
+
   React.useEffect(() => {
     if (!isAddOpen) {
       setAddIsAddon(false);
@@ -1188,6 +1212,7 @@ export default function ServicesPage() {
       setPageError(failedResult.error.message);
     } else {
       await refreshVisibleData();
+      void invalidatePublicProfileCache();
     }
 
     setSavingOrderGroup(null);
@@ -1257,6 +1282,7 @@ export default function ServicesPage() {
         });
         setIsAddOpen(false);
         await refreshVisibleData();
+        void invalidatePublicProfileCache();
         notifyOnboardingStepUnlocked("services");
         showSuccessToast(ts("serviceCreatedSuccess"));
       } catch (scopeError) {
@@ -1352,6 +1378,7 @@ export default function ServicesPage() {
       setIsEditOpen(false);
       setEditingService(null);
       await refreshVisibleData();
+      void invalidatePublicProfileCache();
       showSuccessToast(ts("serviceUpdatedSuccess"));
     } finally {
       setIsUpdatingService(false);
@@ -1382,6 +1409,7 @@ export default function ServicesPage() {
     }
 
     await refreshVisibleData();
+    void invalidatePublicProfileCache();
   }
 
   async function handleTogglePublic(service: Service) {
@@ -1396,6 +1424,7 @@ export default function ServicesPage() {
     }
 
     await refreshVisibleData();
+    void invalidatePublicProfileCache();
   }
 
   function openEditDialog(service: Service) {
@@ -1447,6 +1476,7 @@ export default function ServicesPage() {
 
     await normalizeGroupAfterMutation(getServiceGroupKey(currentService));
     await refreshVisibleData();
+    void invalidatePublicProfileCache();
   }
 
   async function confirmBulkAction() {
@@ -1467,6 +1497,7 @@ export default function ServicesPage() {
         await normalizeGroupAfterMutation(groupKey);
       }
       await refreshVisibleData();
+      void invalidatePublicProfileCache();
       setSelectedServiceIds([]);
       setBulkActionDialog({ open: false, action: null });
     } catch (error) {
@@ -1539,6 +1570,7 @@ export default function ServicesPage() {
       }
 
       await refreshVisibleData();
+      void invalidatePublicProfileCache();
       showSuccessToast(ts("serviceDuplicatedSuccess"));
     } finally {
       setIsDuplicatingService(false);
