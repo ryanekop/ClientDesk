@@ -114,7 +114,9 @@ export function SocialProofSection() {
   const locale = useLocale();
 
   return (
-    <section className="relative overflow-hidden border-y bg-gradient-to-b from-background via-muted/20 to-background py-16 sm:py-20">
+    <section className="relative overflow-hidden bg-gradient-to-b from-background via-muted/25 to-background py-16 sm:py-20">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-muted/30 via-muted/10 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-muted/20 via-muted/8 to-transparent" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.06),_transparent_48%)]" />
       <div className="container relative mx-auto space-y-10 px-4 sm:space-y-12">
         <motion.div
