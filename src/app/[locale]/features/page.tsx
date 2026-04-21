@@ -12,26 +12,27 @@ import { TenantLogo } from "@/components/layout/tenant-logo"
 import { motion } from "framer-motion"
 import { getClientDeskRegisterHref } from "@/lib/auth/register-url"
 import {
-    CalendarCheck, Zap, FileText, MessageSquare, FolderOpen, Globe,
-    Users, ClipboardCheck, Upload, Layers, Moon, Globe2,
-    ArrowLeft, ArrowRight, Sparkles
+    CalendarDays, ClipboardCheck, FileText, FolderOpen, Globe,
+    Globe2, LayoutDashboard, Layers, MessageSquare, Sparkles, TicketPercent,
+    Upload, Users,
+    ArrowLeft, ArrowRight
 } from "lucide-react"
 
 const coreFeatures = [
-    { icon: CalendarCheck, titleKey: 'feature1Title', descKey: 'feature1Desc', color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { icon: LayoutDashboard, titleKey: 'feature1Title', descKey: 'feature1Desc', color: 'text-blue-500', bg: 'bg-blue-500/10' },
     { icon: FileText, titleKey: 'feature2Title', descKey: 'feature2Desc', color: 'text-green-500', bg: 'bg-green-500/10' },
     { icon: MessageSquare, titleKey: 'feature3Title', descKey: 'feature3Desc', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { icon: Zap, titleKey: 'feature4Title', descKey: 'feature4Desc', color: 'text-yellow-500', bg: 'bg-yellow-500/10' },
-    { icon: FolderOpen, titleKey: 'feature5Title', descKey: 'feature5Desc', color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
+    { icon: ClipboardCheck, titleKey: 'feature4Title', descKey: 'feature4Desc', color: 'text-rose-500', bg: 'bg-rose-500/10' },
+    { icon: CalendarDays, titleKey: 'feature5Title', descKey: 'feature5Desc', color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
     { icon: Globe, titleKey: 'feature6Title', descKey: 'feature6Desc', color: 'text-purple-500', bg: 'bg-purple-500/10' },
 ]
 
 const additionalFeatures = [
-    { icon: Users, titleKey: 'feature7Title', descKey: 'feature7Desc', color: 'text-orange-500', bg: 'bg-orange-500/10' },
-    { icon: ClipboardCheck, titleKey: 'feature8Title', descKey: 'feature8Desc', color: 'text-rose-500', bg: 'bg-rose-500/10' },
-    { icon: Upload, titleKey: 'feature9Title', descKey: 'feature9Desc', color: 'text-sky-500', bg: 'bg-sky-500/10' },
-    { icon: Layers, titleKey: 'feature10Title', descKey: 'feature10Desc', color: 'text-pink-500', bg: 'bg-pink-500/10' },
-    { icon: Moon, titleKey: 'feature11Title', descKey: 'feature11Desc', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
+    { icon: TicketPercent, titleKey: 'feature7Title', descKey: 'feature7Desc', color: 'text-orange-500', bg: 'bg-orange-500/10' },
+    { icon: FolderOpen, titleKey: 'feature8Title', descKey: 'feature8Desc', color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
+    { icon: Users, titleKey: 'feature9Title', descKey: 'feature9Desc', color: 'text-sky-500', bg: 'bg-sky-500/10' },
+    { icon: Upload, titleKey: 'feature10Title', descKey: 'feature10Desc', color: 'text-pink-500', bg: 'bg-pink-500/10' },
+    { icon: Layers, titleKey: 'feature11Title', descKey: 'feature11Desc', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
     { icon: Globe2, titleKey: 'feature12Title', descKey: 'feature12Desc', color: 'text-teal-500', bg: 'bg-teal-500/10' },
 ]
 

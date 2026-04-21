@@ -91,7 +91,7 @@ type PricelistBuilderProps = {
     inputClass: string;
 };
 
-const roleOptions = ["Photographer", "Videographer", "MUA", "WCC", "Editor", "Asisten", "Lainnya"];
+const roleOptions = ["Photographer", "Videographer", "WCC", "Editor", "Asisten", "Lainnya"];
 
 const COUNTRY_CODES = [
     { code: "+62", flag: "🇮🇩" },

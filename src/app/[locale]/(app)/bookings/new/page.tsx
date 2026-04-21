@@ -3065,7 +3065,6 @@ export default function NewBookingPage() {
                             <select value={customFreelancerRole} onChange={e => setCustomFreelancerRole(e.target.value)} className={selectClass}>
                                 <option value="Photographer">Photographer</option>
                                 <option value="Videographer">Videographer</option>
-                                <option value="MUA">MUA</option>
                                 <option value="Editor">Editor</option>
                                 <option value="Other">Other</option>
                             </select>
