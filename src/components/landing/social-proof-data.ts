@@ -52,6 +52,14 @@ export const vendorLogos: VendorLogo[] = [
     widthClass: "w-36 sm:w-44",
   },
   {
+    id: "makna-kisah",
+    name: "Makna Kisah",
+    src: "/landing/vendors/makna-kisah.webp",
+    darkSrc: "/landing/vendors/makna-kisah-dark.webp",
+    alt: "Logo Makna Kisah",
+    widthClass: "w-44 sm:w-56",
+  },
+  {
     id: "lumiavoto",
     name: "Lumiavoto",
     src: "/landing/vendors/lumiavoto.webp",

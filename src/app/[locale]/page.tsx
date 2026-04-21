@@ -30,6 +30,7 @@ export default async function Home() {
   const t = await getTranslations("Landing");
   const locale = await getLocale();
   const tenant = await getTenantConfig();
+  const showSocialProof = tenant.id === "default";
   const isAuthenticated = await getIsAuthenticated();
 
   return (
@@ -84,7 +85,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <SocialProofSection />
+      {showSocialProof ? <SocialProofSection /> : null}
 
       <section id="problems" className="py-20 bg-muted/20">
         <div className="container mx-auto px-4">

@@ -95,7 +95,7 @@
 }
 
 .landing-marquee {
-    animation: landing-marquee 34s linear infinite;
+    animation: landing-marquee 52s linear infinite;
     transform: translate3d(0, 0, 0);
     will-change: transform;
 }
@@ -276,7 +276,7 @@
 
 @media (max-width: 767px) {
     .landing-marquee {
-        animation-duration: 28s;
+        animation-duration: 44s;
     }
 
     .admin-dashboard-scope :is(h1, [class*="text-5xl"], [class*="text-4xl"]) {
