@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { createClient } from "@/utils/supabase/client";
-import { Activity, Copy, ClipboardCheck, ExternalLink, Search, ListOrdered, X, Archive, Loader2 } from "lucide-react";
+import { Activity, CalendarDays, Copy, ClipboardCheck, ExternalLink, Search, ListOrdered, X, Archive, Loader2 } from "lucide-react";
 import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
@@ -171,7 +171,7 @@ const CLIENT_STATUS_COLUMN_MIN_WIDTHS: Record<string, number> = {
     event_type: 140,
     status: 232,
     queue: 104,
-    deadline: 196,
+    deadline: 240,
 };
 const CLIENT_STATUS_MANAGE_SELECT_COLUMN: TableColumnPreference = {
     id: "select",
@@ -1629,18 +1629,10 @@ export default function ClientStatusPage() {
                 const hasDeadline = Boolean(booking.project_deadline_date);
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
-                        <div className="space-y-1">
-                            <input
-                                type="date"
-                                value={booking.project_deadline_date ?? ""}
-                                onChange={event => void updateProjectDeadline(booking.id, event.target.value)}
-                                disabled={!canWriteBookings || isManageMode || savingId === booking.id}
-                                title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
-                                className="h-8 w-[160px] rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                            />
+                        <div className="flex w-full min-w-0 flex-col gap-2">
                             {hasDeadline ? (
-                                <div className="space-y-1">
-                                    <p className="text-[11px] font-medium text-foreground">{deadlineLabel}</p>
+                                <div className="space-y-2">
+                                    <p className="text-sm font-medium text-foreground">{deadlineLabel}</p>
                                     {deadlineCountdown ? (
                                         <span className={getAdminDeadlineBadgeClassName(booking.project_deadline_date)}>
                                             {deadlineCountdown}
@@ -1652,6 +1644,33 @@ export default function ClientStatusPage() {
                                     {locale === "en" ? "No deadline" : "Belum ada deadline"}
                                 </p>
                             )}
+                            <label
+                                className={cn(
+                                    "relative inline-flex h-9 w-full min-w-0 items-center gap-2 rounded-md border border-input bg-background px-3 text-xs text-muted-foreground shadow-xs",
+                                    (!canWriteBookings || isManageMode || savingId === booking.id) &&
+                                        "cursor-not-allowed opacity-60",
+                                )}
+                                title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
+                            >
+                                <CalendarDays className="h-3.5 w-3.5 shrink-0 text-foreground/70" />
+                                <span className="truncate">
+                                    {hasDeadline
+                                        ? locale === "en"
+                                            ? "Change deadline"
+                                            : "Ubah deadline"
+                                        : locale === "en"
+                                            ? "Choose deadline"
+                                            : "Pilih deadline"}
+                                </span>
+                                <input
+                                    type="date"
+                                    value={booking.project_deadline_date ?? ""}
+                                    onChange={event => void updateProjectDeadline(booking.id, event.target.value)}
+                                    disabled={!canWriteBookings || isManageMode || savingId === booking.id}
+                                    title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
+                                    className="absolute inset-0 cursor-pointer opacity-0"
+                                />
+                            </label>
                         </div>
                     </td>
                 );
@@ -2016,18 +2035,37 @@ export default function ClientStatusPage() {
                             </div>
                             <div className="flex items-start gap-3">
                                 <label className="text-xs text-muted-foreground shrink-0 w-14 pt-2">Deadline</label>
-                                <div className="flex-1 space-y-1">
-                                    <input
-                                        type="date"
-                                        value={b.project_deadline_date ?? ""}
-                                        onChange={event => void updateProjectDeadline(b.id, event.target.value)}
-                                        disabled={!canWriteBookings || isManageMode || savingId === b.id}
-                                        title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
-                                        className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                                    />
-                                    <p className="text-[11px] text-muted-foreground">
+                                <div className="flex-1 space-y-2">
+                                    <div className="text-[11px]">
                                         {renderMobileValue(b, { id: "deadline", label: "Deadline", visible: true })}
-                                    </p>
+                                    </div>
+                                    <label
+                                        className={cn(
+                                            "relative inline-flex h-9 w-full items-center gap-2 rounded-md border border-input bg-background px-3 text-xs text-muted-foreground shadow-xs",
+                                            (!canWriteBookings || isManageMode || savingId === b.id) &&
+                                                "cursor-not-allowed opacity-60",
+                                        )}
+                                        title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
+                                    >
+                                        <CalendarDays className="h-3.5 w-3.5 shrink-0 text-foreground/70" />
+                                        <span className="truncate">
+                                            {b.project_deadline_date
+                                                ? locale === "en"
+                                                    ? "Change deadline"
+                                                    : "Ubah deadline"
+                                                : locale === "en"
+                                                    ? "Choose deadline"
+                                                    : "Pilih deadline"}
+                                        </span>
+                                        <input
+                                            type="date"
+                                            value={b.project_deadline_date ?? ""}
+                                            onChange={event => void updateProjectDeadline(b.id, event.target.value)}
+                                            disabled={!canWriteBookings || isManageMode || savingId === b.id}
+                                            title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
+                                            className="absolute inset-0 cursor-pointer opacity-0"
+                                        />
+                                    </label>
                                 </div>
                             </div>
                         </div>

@@ -3764,7 +3764,7 @@ export default function BookingDetailPage() {
                             className={adminNativeSelectClass}
                         />
                         {effectiveProjectDeadlineDate ? (
-                            <div className="space-y-1">
+                            <div className="space-y-2">
                                 <p className="text-[11px] font-medium text-foreground">
                                     {formattedProjectDeadline}
                                 </p>
