@@ -142,15 +142,15 @@ const STATUS_COLOR_PALETTE = [
 function getAdminDeadlineBadgeClassName(deadlineDate: string | null | undefined) {
     const tone = getProjectDeadlineTone(deadlineDate);
     if (tone === "overdue" || tone === "today") {
-        return "inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300";
+        return "inline-flex self-start rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium leading-none text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300";
     }
     if (tone === "soon") {
-        return "inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300";
+        return "inline-flex self-start rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium leading-none text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300";
     }
     if (tone === "safe") {
-        return "inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300";
+        return "inline-flex self-start rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium leading-none text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300";
     }
-    return "inline-flex rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground";
+    return "inline-flex self-start rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium leading-none text-muted-foreground";
 }
 
 const BASE_CLIENT_STATUS_COLUMNS: TableColumnPreference[] = [
@@ -1624,7 +1624,7 @@ export default function ClientStatusPage() {
                 );
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
-                        <div className="space-y-1">
+                        <div className="space-y-1.5">
                             <input
                                 type="date"
                                 value={booking.project_deadline_date ?? ""}
@@ -1990,7 +1990,7 @@ export default function ClientStatusPage() {
                             </div>
                             <div className="flex items-start gap-3">
                                 <label className="text-xs text-muted-foreground shrink-0 w-14 pt-2">Deadline</label>
-                                <div className="flex-1 space-y-1">
+                                <div className="flex-1 space-y-1.5">
                                     <input
                                         type="date"
                                         value={b.project_deadline_date ?? ""}
@@ -2000,7 +2000,7 @@ export default function ClientStatusPage() {
                                         className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                                     />
                                     {b.project_deadline_date ? (
-                                        <div className="text-[11px]">
+                                        <div className="pt-0.5 text-[11px]">
                                             {renderMobileValue(b, { id: "deadline", label: "Deadline", visible: true })}
                                         </div>
                                     ) : null}
