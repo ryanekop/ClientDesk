@@ -35,26 +35,31 @@ function MarqueeTrack({
 }) {
   return (
     <div
-      className="landing-marquee-track flex min-w-max items-center gap-8 pr-8 sm:gap-12 sm:pr-12"
+      className="landing-marquee-track flex min-w-max items-center gap-10 pr-10 sm:gap-14 sm:pr-14"
       aria-hidden={ariaHidden}
     >
       {logos.map((logo) => (
         <div
           key={`${ariaHidden ? "duplicate" : "primary"}-${logo.id}`}
           title={logo.name}
-          className="flex h-14 min-w-[124px] items-center justify-center px-2 sm:h-16 sm:min-w-[144px] sm:px-3"
+          className="flex h-20 min-w-[176px] items-center justify-center px-2 sm:h-24 sm:min-w-[216px] sm:px-3"
         >
           <Image
             src={logo.src}
             alt={logo.alt}
-            width={480}
-            height={180}
-            className={`${logo.widthClass ?? "w-28 sm:w-32"} h-auto max-h-10 object-contain transition-[filter,opacity] duration-300 sm:max-h-12 ${
-              logo.darkModeTreatment === "original"
-                ? "opacity-100 dark:opacity-85"
-                : "opacity-100 dark:brightness-0 dark:invert dark:opacity-72"
-            }`}
+            width={640}
+            height={240}
+            className={`${logo.widthClass ?? "w-36 sm:w-44"} h-auto max-h-14 object-contain dark:hidden sm:max-h-16`}
           />
+          {logo.darkSrc ? (
+            <Image
+              src={logo.darkSrc}
+              alt={logo.alt}
+              width={640}
+              height={240}
+              className={`${logo.widthClass ?? "w-36 sm:w-44"} hidden h-auto max-h-14 object-contain dark:block sm:max-h-16`}
+            />
+          ) : null}
         </div>
       ))}
     </div>
