@@ -2641,16 +2641,12 @@ export default function BookingDetailPage() {
             ? "Akan otomatis saat disimpan."
             : "-";
     const deadlineLocale = locale === "en" ? "en" : "id";
-    const formattedProjectDeadline = formatProjectDeadlineDate(
-        projectDeadlineDate || booking.project_deadline_date,
-        deadlineLocale,
-    );
-    const projectDeadlineCountdown = getProjectDeadlineCountdownLabel(
-        projectDeadlineDate || booking.project_deadline_date,
-        deadlineLocale,
-    );
     const effectiveProjectDeadlineDate =
         projectDeadlineDate || booking.project_deadline_date;
+    const projectDeadlineCountdown = getProjectDeadlineCountdownLabel(
+        effectiveProjectDeadlineDate,
+        deadlineLocale,
+    );
 
     // Separate nama_pasangan from other extra fields (show right after Nama for Wedding)
     const namaPasangan = builtInExtraFields.nama_pasangan;
@@ -3764,21 +3760,14 @@ export default function BookingDetailPage() {
                             className={adminNativeSelectClass}
                         />
                         {effectiveProjectDeadlineDate ? (
-                            <div className="space-y-2">
-                                <p className="text-[11px] font-medium text-foreground">
-                                    {formattedProjectDeadline}
-                                </p>
+                            <div className="space-y-1">
                                 {projectDeadlineCountdown ? (
                                     <span className={getAdminDeadlineBadgeClassName(effectiveProjectDeadlineDate)}>
                                         {projectDeadlineCountdown}
                                     </span>
                                 ) : null}
                             </div>
-                        ) : (
-                            <p className="text-[11px] text-muted-foreground">
-                                Kosong. Bisa diisi manual atau otomatis dari trigger status.
-                            </p>
-                        )}
+                        ) : null}
                     </div>
                 </div>
 
