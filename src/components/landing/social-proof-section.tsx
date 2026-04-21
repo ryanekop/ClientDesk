@@ -88,7 +88,7 @@ function ReviewCard({
           <div className="flex items-center justify-between gap-3">
             <ReviewStars rating={review.rating} />
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
-              {review.rating.toFixed(1)}/5
+              {review.rating}/5
             </span>
           </div>
 
