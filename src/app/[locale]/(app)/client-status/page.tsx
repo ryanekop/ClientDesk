@@ -302,6 +302,7 @@ export default function ClientStatusPage() {
     const [sortOrder, setSortOrder] = React.useState<ClientStatusSortOrder>("booking_newest");
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
     const [savingId, setSavingId] = React.useState<string | null>(null);
+    const [deadlineDraftById, setDeadlineDraftById] = React.useState<Record<string, string>>({});
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
     const [itemsPerPageHydrated, setItemsPerPageHydrated] = React.useState(false);
@@ -533,6 +534,7 @@ export default function ClientStatusPage() {
             const metadata = response.metadata || clientStatusMetadataCacheRef.current;
 
             setBookings(response.items);
+            setDeadlineDraftById({});
             setTotalItems(response.totalItems);
             if (metadata) {
                 setClientStatuses(metadata.clientStatuses || DEFAULT_CLIENT_STATUSES);
@@ -1043,6 +1045,12 @@ export default function ClientStatusPage() {
                         : booking,
                 ),
             );
+            setDeadlineDraftById((current) => {
+                if (!(id in current)) return current;
+                const next = { ...current };
+                delete next[id];
+                return next;
+            });
             await invalidateBookingPublicCache({
                 bookingCode: currentBooking.booking_code,
                 trackingUuid: currentBooking.tracking_uuid,
@@ -1050,6 +1058,33 @@ export default function ClientStatusPage() {
         } finally {
             setSavingId(null);
         }
+    }
+
+    function getProjectDeadlineInputValue(booking: BookingStatus) {
+        return deadlineDraftById[booking.id] ?? booking.project_deadline_date ?? "";
+    }
+
+    function updateProjectDeadlineDraft(id: string, value: string) {
+        setDeadlineDraftById((current) => (
+            current[id] === value ? current : { ...current, [id]: value }
+        ));
+    }
+
+    function commitProjectDeadlineDraft(booking: BookingStatus) {
+        const draftValue = deadlineDraftById[booking.id];
+        if (draftValue === undefined) return;
+        const normalizedDraft = normalizeProjectDeadlineDate(draftValue);
+        const normalizedCurrent = normalizeProjectDeadlineDate(booking.project_deadline_date);
+        if (normalizedDraft === normalizedCurrent) {
+            setDeadlineDraftById((current) => {
+                if (!(booking.id in current)) return current;
+                const next = { ...current };
+                delete next[booking.id];
+                return next;
+            });
+            return;
+        }
+        void updateProjectDeadline(booking.id, draftValue);
     }
 
     function formatDeleteWarnings(
@@ -1627,8 +1662,9 @@ export default function ClientStatusPage() {
                         <div className="space-y-1.5">
                             <input
                                 type="date"
-                                value={booking.project_deadline_date ?? ""}
-                                onChange={event => void updateProjectDeadline(booking.id, event.target.value)}
+                                value={getProjectDeadlineInputValue(booking)}
+                                onChange={event => updateProjectDeadlineDraft(booking.id, event.target.value)}
+                                onBlur={() => commitProjectDeadlineDraft(booking)}
                                 disabled={!canWriteBookings || isManageMode || savingId === booking.id}
                                 title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
                                 className="h-8 w-[160px] rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
@@ -1993,8 +2029,9 @@ export default function ClientStatusPage() {
                                 <div className="flex-1 space-y-1.5">
                                     <input
                                         type="date"
-                                        value={b.project_deadline_date ?? ""}
-                                        onChange={event => void updateProjectDeadline(b.id, event.target.value)}
+                                        value={getProjectDeadlineInputValue(b)}
+                                        onChange={event => updateProjectDeadlineDraft(b.id, event.target.value)}
+                                        onBlur={() => commitProjectDeadlineDraft(b)}
                                         disabled={!canWriteBookings || isManageMode || savingId === b.id}
                                         title={!canWriteBookings ? bookingWriteBlockedMessage : undefined}
                                         className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
