@@ -1,9 +1,0 @@
-<svg width="320" height="128" viewBox="0 0 320 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="320" height="128" rx="28" fill="#F8FAFC"/>
-  <rect x="12" y="12" width="296" height="104" rx="22" fill="#FDF2F8" stroke="#FBCFE8"/>
-  <rect x="46" y="36" width="56" height="56" rx="18" fill="#DB2777"/>
-  <path d="M60 77C62 60 72 51 88 51V77H60Z" fill="white"/>
-  <path d="M72 77V60H88" stroke="#DB2777" stroke-width="4"/>
-  <text x="118" y="56" fill="#9D174D" font-family="Arial, sans-serif" font-size="16" font-weight="700">Studio B</text>
-  <text x="118" y="77" fill="#6B7280" font-family="Arial, sans-serif" font-size="12">Placeholder Logo</text>
-</svg>

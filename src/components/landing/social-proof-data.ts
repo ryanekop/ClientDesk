@@ -1,8 +1,10 @@
 export type VendorLogo = {
+  darkModeTreatment?: "neutral-white" | "original";
   id: string;
   name: string;
   src: string;
   alt: string;
+  widthClass?: string;
 };
 
 export type VendorReview = {
@@ -18,71 +20,91 @@ export type VendorReview = {
 
 export const vendorLogos: VendorLogo[] = [
   {
-    id: "vendor-a",
-    name: "Vendor A",
-    src: "/landing/vendors/vendor-a.svg",
-    alt: "Placeholder logo Vendor A",
+    id: "alora-graduation",
+    name: "Alora Graduation",
+    src: "/landing/vendors/alora-graduation-optimized.png",
+    alt: "Logo Alora Graduation",
+    widthClass: "w-32 sm:w-36",
+    darkModeTreatment: "neutral-white",
   },
   {
-    id: "studio-b",
-    name: "Studio B",
-    src: "/landing/vendors/studio-b.svg",
-    alt: "Placeholder logo Studio B",
+    id: "dnix-visual",
+    name: "DNIX Visual",
+    src: "/landing/vendors/dnix-visual-optimized.png",
+    alt: "Logo DNIX Visual",
+    widthClass: "w-24 sm:w-28",
+    darkModeTreatment: "original",
   },
   {
-    id: "creative-c",
-    name: "Creative C",
-    src: "/landing/vendors/creative-c.svg",
-    alt: "Placeholder logo Creative C",
+    id: "dinakara-visual",
+    name: "Dinakara Visual",
+    src: "/landing/vendors/dinakara-visual-optimized.png",
+    alt: "Logo Dinakara Visual",
+    widthClass: "w-32 sm:w-36",
+    darkModeTreatment: "neutral-white",
   },
   {
-    id: "vendor-d",
-    name: "Vendor D",
-    src: "/landing/vendors/vendor-d.svg",
-    alt: "Placeholder logo Vendor D",
+    id: "lengkara-visual",
+    name: "Lengkara Visual",
+    src: "/landing/vendors/lengkara-visual-optimized.png",
+    alt: "Logo Lengkara Visual",
+    widthClass: "w-24 sm:w-28",
+    darkModeTreatment: "original",
   },
   {
-    id: "studio-e",
-    name: "Studio E",
-    src: "/landing/vendors/studio-e.svg",
-    alt: "Placeholder logo Studio E",
+    id: "lumiavoto",
+    name: "Lumiavoto",
+    src: "/landing/vendors/lumiavoto-optimized.png",
+    alt: "Logo Lumiavoto",
+    widthClass: "w-28 sm:w-32",
+    darkModeTreatment: "neutral-white",
   },
   {
-    id: "creative-f",
-    name: "Creative F",
-    src: "/landing/vendors/creative-f.svg",
-    alt: "Placeholder logo Creative F",
+    id: "mora-space",
+    name: "Mora Space",
+    src: "/landing/vendors/mora-space-optimized.png",
+    alt: "Logo Mora Space",
+    widthClass: "w-28 sm:w-32",
+    darkModeTreatment: "neutral-white",
+  },
+  {
+    id: "seraphic-graduation",
+    name: "Seraphic Graduation",
+    src: "/landing/vendors/seraphic-graduation-optimized.png",
+    alt: "Logo Seraphic Graduation",
+    widthClass: "w-28 sm:w-32",
+    darkModeTreatment: "neutral-white",
   },
 ];
 
 export const vendorReviews: VendorReview[] = [
   {
-    id: "review-vendor-a",
-    vendorName: "Vendor A",
-    businessLabel: "Vendor Wisuda",
+    id: "review-lengkara-visual",
+    vendorName: "Lengkara Visual",
+    businessLabel: "Lengkara Visual",
     quote: {
-      id: "Placeholder review ini membantu menunjukkan area testimoni sambil menunggu isi final dari vendor asli.",
-      en: "This placeholder review helps show the testimonial area while waiting for the final copy from the real vendor.",
+      id: "Workflow jadi jauh lebih rapi dan semuanya terasa lebih tersistem. Client Desk & Fastpik bikin operasional vendor terasa lebih profesional.",
+      en: "The workflow feels much neater and far more organized. Client Desk & Fastpik also make vendor operations feel more professional.",
     },
     rating: 5,
   },
   {
-    id: "review-studio-b",
-    vendorName: "Studio B",
-    businessLabel: "Studio Kreatif",
+    id: "review-seraphic-graduation",
+    vendorName: "Seraphic Graduation",
+    businessLabel: "Seraphic Graduation",
     quote: {
-      id: "Contoh ini dipakai dulu agar ritme layout, jarak, dan gaya kartu review bisa langsung disiapkan dengan rapi.",
-      en: "This example is here so the layout rhythm, spacing, and testimonial card styling can be prepared neatly right away.",
+      id: "Manage klien jadi jauh lebih otomatis dari booking sampai selesai. Vendor juga tidak perlu input manual lagi ke spreadsheet atau GCal.",
+      en: "Client management becomes far more automated from booking to completion. Vendors also no longer need to enter data manually into spreadsheets or Google Calendar.",
     },
     rating: 5,
   },
   {
-    id: "review-creative-c",
-    vendorName: "Creative C",
-    businessLabel: "Vendor Wedding",
+    id: "review-alora-graduation",
+    vendorName: "Alora Graduation",
+    businessLabel: "Alora Graduation",
     quote: {
-      id: "Nanti saat file dan review asli masuk, cukup ganti data tanpa perlu ubah struktur section social proof ini.",
-      en: "Once the real files and reviews arrive, you can simply swap the data without changing the social proof section structure.",
+      id: "Semua jadi lebih sistematis dan jauh lebih ringan buat admin karena banyak proses sudah otomatis. Ini juga terasa menaikkan value vendor dari booking sampai after editing.",
+      en: "Everything feels more systematic and much lighter for the admin side because so many steps are already automated. It also helps raise a vendor's value from booking through after editing.",
     },
     rating: 5,
   },

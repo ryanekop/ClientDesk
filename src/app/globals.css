@@ -95,8 +95,16 @@
 }
 
 .landing-marquee {
-    animation: landing-marquee 26s linear infinite;
+    animation: landing-marquee 34s linear infinite;
+    transform: translate3d(0, 0, 0);
     will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .landing-marquee {
+        animation: none;
+        transform: none;
+    }
 }
 
 .dark {
@@ -268,7 +276,7 @@
 
 @media (max-width: 767px) {
     .landing-marquee {
-        animation-duration: 22s;
+        animation-duration: 28s;
     }
 
     .admin-dashboard-scope :is(h1, [class*="text-5xl"], [class*="text-4xl"]) {
