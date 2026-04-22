@@ -21,6 +21,7 @@ import { TodaySessionsCount } from "@/components/dashboard/today-sessions-count"
 import { DashboardChangelogPopup } from "@/components/changelog-modal";
 import { CustomDomainPromo } from "@/components/dashboard/custom-domain-promo";
 import { OnboardingQuickSetup } from "@/components/dashboard/onboarding-quick-setup";
+import { StudioPlanPromo } from "@/components/dashboard/studio-plan-promo";
 import {
   MaskedCurrencyText,
   MoneyVisibilityToggle,
@@ -299,6 +300,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <DashboardChangelogPopup entries={changelogEntries} locale={locale} />
+      <StudioPlanPromo />
       <CustomDomainPromo />
 
       {/* Header */}

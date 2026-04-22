@@ -1182,6 +1182,19 @@
             "ctaButton": "Hubungi @ryanekoapps"
         }
     },
+    "StudioPlanPromo": {
+        "popupTitle": "Fitur Baru Plan Studio Sudah Tersedia",
+        "popupDesc": "Plan Studio sekarang mendapat beberapa fitur tambahan untuk membantu operasional, pembayaran, dan tampilan bisnis kamu jadi lebih lengkap.",
+        "featureListTitle": "Fitur baru yang sekarang sudah masuk ke Plan Studio",
+        "featureKanban": "View Kanban Board Status Klien",
+        "featureMidtrans": "Payment Gateway Midtrans",
+        "featureSpreadsheet": "Auto Sync Spreadsheet",
+        "featureMiniWebsite": "Mini Website",
+        "featureReview": "Rating & Review",
+        "viewVideo": "Lihat Video Kanban",
+        "dontShowAgain": "Jangan tampilkan lagi",
+        "closeButton": "Tutup"
+    },
     "FinancePage": {
         "clickToEditDP": "Klik untuk edit jumlah DP",
         "sendInvoiceWA": "Kirim Invoice via WA",

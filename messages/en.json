@@ -1182,6 +1182,19 @@
             "ctaButton": "Contact @ryanekoapps"
         }
     },
+    "StudioPlanPromo": {
+        "popupTitle": "New Studio Plan Features Are Now Available",
+        "popupDesc": "The Studio plan now includes several extra features to make your operations, payments, and business presence more complete.",
+        "featureListTitle": "New features now included in the Studio plan",
+        "featureKanban": "View Client Status Kanban Board",
+        "featureMidtrans": "Midtrans Payment Gateway",
+        "featureSpreadsheet": "Auto Spreadsheet Sync",
+        "featureMiniWebsite": "Mini Website",
+        "featureReview": "Rating & Review",
+        "viewVideo": "Watch Kanban Video",
+        "dontShowAgain": "Don't show again",
+        "closeButton": "Close"
+    },
     "FinancePage": {
         "clickToEditDP": "Click to edit DP amount",
         "sendInvoiceWA": "Send Invoice via WA",
