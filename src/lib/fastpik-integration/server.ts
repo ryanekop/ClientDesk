@@ -573,12 +573,7 @@ export async function syncBookingToFastpik(params: {
           : "Project Fastpik berhasil dibuat.";
       const fastpikProjectInfo = buildFastpikProjectInfoSnapshot({
         responsePayload: body,
-        defaults: {
-          password: profile.fastpik_default_password,
-          selection_days: profile.fastpik_default_selection_days,
-          download_days: profile.fastpik_default_download_days,
-          max_photos: profile.fastpik_default_max_photos,
-        },
+        fallbackSnapshot: existingFastpikProjectInfo,
         syncedAt,
       });
       await patchBookingSyncState(supabase, booking.id, userId, {

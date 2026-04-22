@@ -74,9 +74,14 @@ export default async function ComingSoonPage() {
       <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
         <div className="grid gap-6 px-6 py-8 lg:grid-cols-[1.25fr_0.9fr] lg:px-8">
           <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
-              <Compass className="h-3.5 w-3.5" />
-              {t("badge")}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+                <Compass className="h-3.5 w-3.5" />
+                {t("badge")}
+              </div>
+              <Badge variant="outline" className="rounded-full px-3 py-1 text-[11px] font-medium">
+                {t("proOnlyBadge")}
+              </Badge>
             </div>
             <div className="space-y-3">
               <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">

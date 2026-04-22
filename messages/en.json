@@ -74,10 +74,11 @@
     },
     "ComingSoonPage": {
         "badge": "Feature Roadmap",
-        "title": "Several Studio features are being prepared",
-        "description": "This page shows upcoming features that are still being refined before they officially become available inside Client Desk.",
+        "proOnlyBadge": "Pro users only",
+        "title": "Several Pro features are being prepared",
+        "description": "This page shows upcoming features that are still being refined before they officially become available for Pro users inside Client Desk.",
         "summaryTitle": "Rolling out gradually",
-        "summaryDescription": "These features are being polished so they fit naturally into the dashboard workflow you already use today.",
+        "summaryDescription": "These features are being polished so they fit naturally into the Pro dashboard workflow you already use today.",
         "note": "There is no ETA shown on this page yet. We keep it informational so you can see the direction of the features currently being prepared.",
         "featuresTitle": "Features currently in preparation",
         "featuresDescription": "Everything below is still informational. Only materials that already exist are given extra links.",
@@ -90,15 +91,15 @@
             },
             "midtrans": {
                 "title": "Midtrans Payment Gateway",
-                "description": "Payment integration is being prepared so invoices and client payments can feel more practical and streamlined."
+                "description": "Automatic payment integration is being prepared so incoming payments can be detected more practically without checking them manually one by one."
             },
             "spreadsheet": {
                 "title": "Auto Spreadsheet Sync",
-                "description": "Spreadsheet sync will help reduce repeated manual input for reporting needs or workflow backups."
+                "description": "Any data submitted from any booking form will be copied automatically into the connected spreadsheet, so the data stays backed up and can be reviewed directly from the spreadsheet."
             },
             "miniWebsite": {
                 "title": "Mini Website",
-                "description": "A mini website will provide a cleaner way to present your business profile and key studio information."
+                "description": "A mini website will be used to present the vendor profile, client testimonials, photo results, and pricelist in one cleaner studio page."
             },
             "review": {
                 "title": "Rating & Review",

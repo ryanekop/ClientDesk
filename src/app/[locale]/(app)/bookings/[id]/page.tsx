@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
 import { useLocale, useTranslations } from "next-intl";
+import { buildBookingStatusColorMap } from "@/lib/booking-status-badge";
 import {
     BookingWriteReadonlyBanner,
     useBookingWriteAccess,
@@ -25,7 +26,11 @@ import {
     extractCustomFieldSnapshots,
     type CustomFieldSnapshot,
 } from "@/components/form-builder/booking-form-layout";
-import { buildDriveImageUrl, type PaymentSource } from "@/lib/payment-config";
+import {
+    buildDriveImageUrl,
+    getPaymentSourceLabel,
+    type PaymentSource,
+} from "@/lib/payment-config";
 import {
     buildAutoDpVerificationPatch,
     getFinalAdjustmentsTotal,
@@ -326,16 +331,24 @@ function getAdminDeadlineBadgeClassName(deadlineDate: string | null | undefined)
     return "inline-flex self-start rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium leading-none text-muted-foreground";
 }
 
-function StatusBadge({ status }: { status: string }) {
-    const variants: Record<string, string> = {
-        pending: "bg-slate-100 text-slate-700 dark:bg-slate-500/10 dark:text-slate-400",
-        dp: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-        terjadwal: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-        selesai: "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
-        batal: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
-    };
-    const cls = variants[status.toLowerCase()] || "bg-muted text-muted-foreground";
-    return <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${cls}`}>{status}</span>;
+function StatusBadge({
+    status,
+    statusClass,
+}: {
+    status: string;
+    statusClass?: string;
+}) {
+    const fallbackClass =
+        status.toLowerCase() === "batal"
+            ? "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400"
+            : "bg-muted text-muted-foreground";
+    return (
+        <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap ${statusClass || fallbackClass}`}
+        >
+            {status}
+        </span>
+    );
 }
 
 function SettlementBadge({ status }: { status: SettlementStatus }) {
@@ -378,11 +391,59 @@ function formatPaymentMethod(method: string | null) {
 
 function formatPaymentSource(source: PaymentSource | null) {
     if (!source) return "-";
+    const label = getPaymentSourceLabel(source);
     if (source.type === "bank") {
         const accountSuffix = source.account_number ? ` • ${source.account_number}` : "";
-        return `${source.bank_name}${accountSuffix}`;
+        return label ? `${label}${accountSuffix}` : accountSuffix ? accountSuffix.slice(3) : "-";
     }
-    return source.label;
+    return label || "-";
+}
+
+function formatFastpikToggleLabel(
+    value: boolean | null | undefined,
+    locale: string,
+) {
+    if (value === null || value === undefined) return "-";
+    if (locale === "en") return value ? "Enabled" : "Disabled";
+    return value ? "Aktif" : "Nonaktif";
+}
+
+function formatFastpikDurationLabel(params: {
+    days: number | null | undefined;
+    enabled?: boolean | null | undefined;
+    locale: string;
+    unknownNullAsUnlimited?: boolean;
+}) {
+    const { days, enabled, locale, unknownNullAsUnlimited = false } = params;
+
+    if (typeof days === "number") {
+        return locale === "en" ? `${days} days` : `${days} hari`;
+    }
+
+    if (enabled === false) {
+        return locale === "en" ? "Disabled" : "Nonaktif";
+    }
+
+    if (enabled === true || unknownNullAsUnlimited) {
+        return locale === "en" ? "Unlimited" : "Selamanya";
+    }
+
+    return "-";
+}
+
+function formatFastpikProjectTypeLabel(
+    value: string | null | undefined,
+    locale: string,
+) {
+    const normalized = (value || "").trim().toLowerCase();
+    if (!normalized) return "-";
+    if (normalized === "print") {
+        return locale === "en" ? "Print" : "Cetak";
+    }
+    if (normalized === "edit") {
+        return locale === "en" ? "Photo Selection" : "Pilih Foto";
+    }
+    return value || "-";
 }
 
 function groupCustomSnapshotsBySection(snapshots: CustomFieldSnapshot[]) {
@@ -715,6 +776,10 @@ export default function BookingDetailPage() {
     const [cancelStatusConfirmOpen, setCancelStatusConfirmOpen] = React.useState(false);
     const [bookingStatuses, setBookingStatuses] = React.useState<string[]>(
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
+    );
+    const statusColors = React.useMemo(
+        () => buildBookingStatusColorMap(bookingStatuses),
+        [bookingStatuses],
     );
     const [studioName, setStudioName] = React.useState("");
     const [driveFolderPathHint, setDriveFolderPathHint] = React.useState("Data Booking Client Desk > {client_name} > File Client");
@@ -2812,7 +2877,10 @@ export default function BookingDetailPage() {
                     <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                             <h2 className="break-words text-2xl font-bold tracking-tight">{booking.client_name}</h2>
-                            <StatusBadge status={booking.status} />
+                            <StatusBadge
+                                status={normalizedCurrentStatus || booking.status}
+                                statusClass={statusColors[normalizedCurrentStatus || booking.status]}
+                            />
                             {isArchivedBooking(booking) ? (
                                 <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                                     {tCommon("diarsipkan")}
@@ -3586,18 +3654,67 @@ export default function BookingDetailPage() {
                             <InfoRow
                                 label={tBookingDetail("selectionLinkDurationLabel")}
                                 value={
-                                    fastpikProjectInfo.selection_days !== null
-                                        ? `${fastpikProjectInfo.selection_days} hari`
-                                        : "Selamanya"
+                                    formatFastpikDurationLabel({
+                                        days: fastpikProjectInfo.selection_days,
+                                        enabled: fastpikProjectInfo.selection_enabled,
+                                        locale,
+                                        unknownNullAsUnlimited: true,
+                                    })
                                 }
                             />
                             <InfoRow
                                 label="Durasi Link Download"
                                 value={
-                                    fastpikProjectInfo.download_days !== null
-                                        ? `${fastpikProjectInfo.download_days} hari`
-                                        : "Selamanya"
+                                    formatFastpikDurationLabel({
+                                        days: fastpikProjectInfo.download_days,
+                                        enabled: fastpikProjectInfo.download_enabled,
+                                        locale,
+                                        unknownNullAsUnlimited: true,
+                                    })
                                 }
+                            />
+                            <InfoRow
+                                label="Status Pilih Foto"
+                                value={formatFastpikToggleLabel(
+                                    fastpikProjectInfo.selection_enabled,
+                                    locale,
+                                )}
+                            />
+                            <InfoRow
+                                label="Status Download"
+                                value={formatFastpikToggleLabel(
+                                    fastpikProjectInfo.download_enabled,
+                                    locale,
+                                )}
+                            />
+                            <InfoRow
+                                label="Status Menu Cetak"
+                                value={formatFastpikToggleLabel(
+                                    fastpikProjectInfo.print_enabled,
+                                    locale,
+                                )}
+                            />
+                            <InfoRow
+                                label="Durasi Link Cetak"
+                                value={formatFastpikDurationLabel({
+                                    days: fastpikProjectInfo.print_days,
+                                    enabled: fastpikProjectInfo.print_enabled,
+                                    locale,
+                                })}
+                            />
+                            <InfoRow
+                                label="Tipe Project"
+                                value={formatFastpikProjectTypeLabel(
+                                    fastpikProjectInfo.project_type,
+                                    locale,
+                                )}
+                            />
+                            <InfoRow
+                                label="Deteksi Subfolder"
+                                value={formatFastpikToggleLabel(
+                                    fastpikProjectInfo.detect_subfolders,
+                                    locale,
+                                )}
                             />
                             <InfoRow
                                 label={tBookingDetail("maxPhotoCountLabel")}

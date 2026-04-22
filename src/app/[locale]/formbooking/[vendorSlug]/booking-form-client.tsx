@@ -39,7 +39,6 @@ import {
 } from "@/components/ui/dialog";
 import { useTranslations } from "next-intl";
 import {
-  buildCustomFieldTemplateVars,
   buildCustomFieldSnapshots,
   groupFormLayoutBySection,
   resolveBuiltInFieldRequired,
@@ -50,8 +49,6 @@ import {
 import { FileDropzone } from "@/components/public/file-dropzone";
 import { PaymentMethodSection } from "@/components/public/payment-method-section";
 import {
-  buildExtraFieldTemplateVars,
-  buildMultiSessionTemplateVars,
   getLayoutExtraFields,
 } from "@/utils/form-extra-fields";
 import { isRichTextEmpty, sanitizeRichTextHtml } from "@/utils/rich-text";
@@ -59,6 +56,7 @@ import {
   createPaymentSourceFromBank,
   getEnabledBankAccounts,
   getPaymentMethodLabel,
+  getPaymentSourceLabel,
   normalizeBankAccounts,
   normalizePaymentMethods,
   type BankAccount,
@@ -81,6 +79,7 @@ import {
   type BookingServiceQuantityMap,
   type BookingServiceSelection,
 } from "@/lib/booking-services";
+import { buildBookingWhatsAppTemplateVars } from "@/lib/booking-whatsapp-template-vars";
 import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import { resolveSessionDurationMinutesBySessionKey } from "@/lib/wisuda-session-duration";
 import {
@@ -90,10 +89,8 @@ import {
 } from "@/utils/location";
 import {
   formatSessionDate,
-  formatSessionTime,
   formatSessionTimeRange,
 } from "@/utils/format-date";
-import { buildInstagramTemplateVars } from "@/utils/instagram-template-vars";
 import { buildWhatsAppUrl, openWhatsAppUrl } from "@/utils/whatsapp-link";
 import {
   SPECIAL_LINK_EXPIRED_ERROR_CODE,
@@ -1947,65 +1944,37 @@ export function BookingFormClient({
         },
       })),
     ];
-    const totalDurationMinutes = getBookingDurationMinutes(
-      serviceSelectionsForTemplate,
-    );
-    const sessionsForTemplate = resolveBookingCalendarSessions({
-      eventType,
-      sessionDate: resolvedSessionDate || null,
-      extraFields: mergedExtraForTemplate,
-      defaultLocation: resolvedLocation.location,
-    });
-    const sessionDurationMinutesByKey = resolveSessionDurationMinutesBySessionKey({
-      eventType,
-      sessions: sessionsForTemplate,
-      totalDurationMinutes,
-      extraFields: mergedExtraForTemplate,
-    });
-    const primarySession = sessionsForTemplate.find(
-      (session) => session.sessionDate === resolvedSessionDate,
-    );
-    const primarySessionDurationMinutes = primarySession
-      ? sessionDurationMinutesByKey[primarySession.key] || totalDurationMinutes
-      : totalDurationMinutes;
-    const sessionTime = resolvedSessionDate
-      ? formatSessionTimeRange(resolvedSessionDate, primarySessionDurationMinutes)
-      : "-";
-    const sessionStart = resolvedSessionDate
-      ? formatSessionTime(resolvedSessionDate)
-      : "-";
-    const sessionEnd =
-      sessionTime === "-" ? "-" : sessionTime.split(" - ").at(1) || "-";
-
     const msg =
       (resultData.bookingConfirmTemplate || "").trim()
-        ? fillWhatsAppTemplate(resultData.bookingConfirmTemplate || "", {
-            client_name: clientName || "-",
-            client_whatsapp: clientWhatsapp,
-            ...buildInstagramTemplateVars(instagram),
-            booking_code: resultData.bookingCode || "-",
-            session_date: dateStr,
-            session_time: sessionTime,
-            session_start: sessionStart,
-            session_end: sessionEnd,
-            service_name: svcName,
-            total_price: formatCurrency(selectedBookingTotal),
-            dp_paid: formatCurrency(dpVal),
-            studio_name: resultData.vendorName || "Admin",
-            event_type: eventType || "-",
-            location: resolvedLocation.location || "-",
-            location_maps_url: mapsUrl,
-            detail_location: locationDetail || "-",
-            notes: notes || "-",
-            tracking_link: "-",
-            invoice_url: "-",
-            ...buildExtraFieldTemplateVars(mergedExtraForTemplate),
-            ...buildMultiSessionTemplateVars(mergedExtraForTemplate, {
+        ? fillWhatsAppTemplate(
+            resultData.bookingConfirmTemplate || "",
+            buildBookingWhatsAppTemplateVars({
+              booking: {
+                client_name: clientName || "-",
+                client_whatsapp: clientWhatsapp,
+                instagram,
+                booking_code: resultData.bookingCode || "-",
+                session_date: resolvedSessionDate || null,
+                total_price: selectedBookingTotal,
+                dp_paid: dpVal,
+                payment_method: selectedPaymentMethod,
+                payment_source: selectedPaymentSource,
+                event_type: eventType || null,
+                location: resolvedLocation.location || null,
+                location_lat: resolvedLocation.locationLat,
+                location_lng: resolvedLocation.locationLng,
+                location_detail: locationDetail || null,
+                notes: notes || null,
+                extra_fields: mergedExtraForTemplate,
+                service_label: svcName,
+                service_selections: serviceSelectionsForTemplate,
+              },
               locale: localeCode,
-              sessionDurationMinutesByKey,
+              studioName: resultData.vendorName || "Admin",
+              trackingLink: "-",
+              invoiceUrl: "-",
             }),
-            ...buildCustomFieldTemplateVars(mergedExtraForTemplate),
-          })
+          )
         : `Halo ${resultData.vendorName || "Admin"}, saya baru saja booking melalui form online.\n\n` +
           `📋 *Detail Booking*\n` +
           `Kode: *${resultData.bookingCode}*\n` +
@@ -2016,6 +1985,7 @@ export function BookingFormClient({
           `\n💰 Total: ${formatCurrency(selectedBookingTotal)}\n` +
           `✅ DP: ${formatCurrency(dpVal)}\n` +
           `💳 Metode: ${selectedPaymentMethod ? getPaymentMethodLabel(selectedPaymentMethod) : "-"}\n` +
+          `🏦 Sumber: ${getPaymentSourceLabel(selectedPaymentSource) || "-"}\n` +
           (proofFile ? "📎 Bukti transfer sudah diupload.\n" : "") +
           (instagram ? `📸 Instagram: ${instagram}\n` : "") +
           `\nMohon konfirmasi booking saya. Terima kasih! 🙏`;

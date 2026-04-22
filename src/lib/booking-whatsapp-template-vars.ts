@@ -6,6 +6,10 @@ import {
   normalizeBookingServiceSelections,
   type BookingServiceSelection,
 } from "@/lib/booking-services";
+import {
+  getPaymentMethodLabel,
+  getPaymentSourceLabel,
+} from "@/lib/payment-config";
 import { resolveBookingCalendarSessions } from "@/lib/booking-calendar-sessions";
 import { resolveSessionDurationMinutesBySessionKey } from "@/lib/wisuda-session-duration";
 import {
@@ -34,6 +38,8 @@ type BookingWhatsAppTemplateBooking = {
   session_date?: string | null;
   total_price?: number | null;
   dp_paid?: number | null;
+  payment_method?: string | null;
+  payment_source?: unknown;
   drive_folder_url?: string | null;
   event_type?: string | null;
   location?: string | null;
@@ -68,6 +74,13 @@ function formatCurrency(amount: number | null | undefined) {
     currency: "IDR",
     minimumFractionDigits: 0,
   }).format(amount || 0);
+}
+
+function formatPaymentMethodLabel(method: string | null | undefined) {
+  if (method === "bank" || method === "qris" || method === "cash") {
+    return getPaymentMethodLabel(method);
+  }
+  return method?.trim() || "-";
 }
 
 function resolveSessionTimeTemplateVars(
@@ -152,6 +165,8 @@ export function buildBookingWhatsAppTemplateVars({
     service_name: booking.service_label || booking.services?.name || "-",
     total_price: formatCurrency(totalPriceOverride ?? booking.total_price),
     dp_paid: formatCurrency(booking.dp_paid),
+    payment_method: formatPaymentMethodLabel(booking.payment_method),
+    payment_source: getPaymentSourceLabel(booking.payment_source) || "-",
     studio_name: studioName || "",
     freelancer_name: freelancerName || "",
     event_type: booking.event_type || "-",

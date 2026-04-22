@@ -97,6 +97,20 @@ export function getPaymentMethodLabel(method: PaymentMethod) {
   }
 }
 
+export function getPaymentSourceLabel(source: unknown) {
+  if (!source || typeof source !== "object") return "";
+
+  const record = source as Record<string, unknown>;
+  const label = record.label;
+  if (typeof label === "string" && label.trim()) return label.trim();
+
+  const bankName = record.bank_name;
+  if (typeof bankName === "string" && bankName.trim()) return bankName.trim();
+
+  const type = record.type;
+  return typeof type === "string" ? type : "";
+}
+
 export function createPaymentSourceFromBank(bank: BankAccount): PaymentSource {
   return {
     type: "bank",

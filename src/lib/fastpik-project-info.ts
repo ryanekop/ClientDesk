@@ -4,7 +4,13 @@ export type FastpikProjectInfoSnapshot = {
   password: string | null;
   selection_days: number | null;
   download_days: number | null;
+  print_days: number | null;
   max_photos: number | null;
+  detect_subfolders: boolean | null;
+  selection_enabled: boolean | null;
+  download_enabled: boolean | null;
+  print_enabled: boolean | null;
+  project_type: string | null;
   source: string | null;
   synced_at: string | null;
 };
@@ -30,6 +36,37 @@ function toNonNegativeInteger(value: unknown): number | null {
   if (!Number.isFinite(parsed)) return null;
   const rounded = Math.floor(parsed);
   return rounded >= 0 ? rounded : null;
+}
+
+function toNullableBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return null;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (
+      normalized === "true" ||
+      normalized === "1" ||
+      normalized === "yes" ||
+      normalized === "on" ||
+      normalized === "enabled"
+    ) {
+      return true;
+    }
+    if (
+      normalized === "false" ||
+      normalized === "0" ||
+      normalized === "no" ||
+      normalized === "off" ||
+      normalized === "disabled"
+    ) {
+      return false;
+    }
+  }
+  return null;
 }
 
 type ResolvedField<T> = {
@@ -75,6 +112,23 @@ function resolveFirstIntegerField(
   return { found: false, value: null };
 }
 
+function resolveFirstBooleanField(
+  records: Array<UnknownRecord | null>,
+  keys: string[],
+): ResolvedField<boolean> {
+  for (const record of records) {
+    if (!record) continue;
+    for (const key of keys) {
+      if (!hasOwnKey(record, key)) continue;
+      return {
+        found: true,
+        value: toNullableBoolean(record[key]),
+      };
+    }
+  }
+  return { found: false, value: null };
+}
+
 function normalizeFastpikProjectSnapshot(
   value: unknown,
 ): FastpikProjectInfoSnapshot | null {
@@ -85,7 +139,13 @@ function normalizeFastpikProjectSnapshot(
     password: toTrimmedString(record.password),
     selection_days: toNonNegativeInteger(record.selection_days),
     download_days: toNonNegativeInteger(record.download_days),
+    print_days: toNonNegativeInteger(record.print_days),
     max_photos: toNonNegativeInteger(record.max_photos),
+    detect_subfolders: toNullableBoolean(record.detect_subfolders),
+    selection_enabled: toNullableBoolean(record.selection_enabled),
+    download_enabled: toNullableBoolean(record.download_enabled),
+    print_enabled: toNullableBoolean(record.print_enabled),
+    project_type: toTrimmedString(record.project_type),
     source: toTrimmedString(record.source),
     synced_at: toTrimmedString(record.synced_at),
   };
@@ -104,12 +164,7 @@ export function resolveFastpikProjectInfoFromExtraFields(
 
 export function buildFastpikProjectInfoSnapshot(input: {
   responsePayload?: unknown;
-  defaults?: {
-    password?: unknown;
-    selection_days?: unknown;
-    download_days?: unknown;
-    max_photos?: unknown;
-  };
+  fallbackSnapshot?: FastpikProjectInfoSnapshot | null;
   syncedAt?: string;
 }): FastpikProjectInfoSnapshot {
   const payloadRoot = asRecord(input.responsePayload);
@@ -131,8 +186,10 @@ export function buildFastpikProjectInfoSnapshot(input: {
     payloadClientdeskDefaults,
     payloadRoot,
   ];
-  const defaultRecord = asRecord(input.defaults);
-  const fallbackCandidates: Array<UnknownRecord | null> = [defaultRecord];
+  const fallbackSnapshotRecord = asRecord(input.fallbackSnapshot);
+  const fallbackCandidates: Array<UnknownRecord | null> = [
+    fallbackSnapshotRecord,
+  ];
 
   const passwordKeys = [
     "password",
@@ -152,12 +209,23 @@ export function buildFastpikProjectInfoSnapshot(input: {
     "link_download_days",
     "download_duration_days",
   ];
+  const printDayKeys = [
+    "print_days",
+    "printDays",
+    "print_selection_days",
+    "print_duration_days",
+  ];
   const maxPhotoKeys = [
     "max_photos",
     "maxPhotos",
     "maximum_photos",
     "max_photo_count",
   ];
+  const detectSubfolderKeys = ["detect_subfolders", "detectSubfolders"];
+  const selectionEnabledKeys = ["selection_enabled", "selectionEnabled"];
+  const downloadEnabledKeys = ["download_enabled", "downloadEnabled"];
+  const printEnabledKeys = ["print_enabled", "printEnabled"];
+  const projectTypeKeys = ["project_type", "projectType"];
 
   const payloadPassword = resolveFirstStringField(payloadCandidates, passwordKeys);
   const payloadSelectionDays = resolveFirstIntegerField(
@@ -168,9 +236,30 @@ export function buildFastpikProjectInfoSnapshot(input: {
     payloadCandidates,
     downloadDayKeys,
   );
+  const payloadPrintDays = resolveFirstIntegerField(payloadCandidates, printDayKeys);
   const payloadMaxPhotos = resolveFirstIntegerField(
     payloadCandidates,
     maxPhotoKeys,
+  );
+  const payloadDetectSubfolders = resolveFirstBooleanField(
+    payloadCandidates,
+    detectSubfolderKeys,
+  );
+  const payloadSelectionEnabled = resolveFirstBooleanField(
+    payloadCandidates,
+    selectionEnabledKeys,
+  );
+  const payloadDownloadEnabled = resolveFirstBooleanField(
+    payloadCandidates,
+    downloadEnabledKeys,
+  );
+  const payloadPrintEnabled = resolveFirstBooleanField(
+    payloadCandidates,
+    printEnabledKeys,
+  );
+  const payloadProjectType = resolveFirstStringField(
+    payloadCandidates,
+    projectTypeKeys,
   );
 
   return {
@@ -186,18 +275,51 @@ export function buildFastpikProjectInfoSnapshot(input: {
       payloadDownloadDays.found
         ? payloadDownloadDays.value
         : resolveFirstIntegerField(fallbackCandidates, ["download_days"]).value,
+    print_days:
+      payloadPrintDays.found
+        ? payloadPrintDays.value
+        : resolveFirstIntegerField(fallbackCandidates, ["print_days"]).value,
     max_photos:
       payloadMaxPhotos.found
         ? payloadMaxPhotos.value
         : resolveFirstIntegerField(fallbackCandidates, ["max_photos"]).value,
+    detect_subfolders:
+      payloadDetectSubfolders.found
+        ? payloadDetectSubfolders.value
+        : resolveFirstBooleanField(fallbackCandidates, ["detect_subfolders"]).value,
+    selection_enabled:
+      payloadSelectionEnabled.found
+        ? payloadSelectionEnabled.value
+        : resolveFirstBooleanField(fallbackCandidates, ["selection_enabled"]).value,
+    download_enabled:
+      payloadDownloadEnabled.found
+        ? payloadDownloadEnabled.value
+        : resolveFirstBooleanField(fallbackCandidates, ["download_enabled"]).value,
+    print_enabled:
+      payloadPrintEnabled.found
+        ? payloadPrintEnabled.value
+        : resolveFirstBooleanField(fallbackCandidates, ["print_enabled"]).value,
+    project_type:
+      payloadProjectType.found
+        ? payloadProjectType.value
+        : resolveFirstStringField(fallbackCandidates, ["project_type"]).value,
     source:
       payloadPassword.found ||
       payloadSelectionDays.found ||
       payloadDownloadDays.found ||
-      payloadMaxPhotos.found
+      payloadPrintDays.found ||
+      payloadMaxPhotos.found ||
+      payloadDetectSubfolders.found ||
+      payloadSelectionEnabled.found ||
+      payloadDownloadEnabled.found ||
+      payloadPrintEnabled.found ||
+      payloadProjectType.found
         ? "project_response"
-        : "profile_default",
-    synced_at: toTrimmedString(input.syncedAt) ?? new Date().toISOString(),
+        : input.fallbackSnapshot?.source ?? null,
+    synced_at:
+      toTrimmedString(input.syncedAt) ??
+      input.fallbackSnapshot?.synced_at ??
+      new Date().toISOString(),
   };
 }
 

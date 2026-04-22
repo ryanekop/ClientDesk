@@ -59,7 +59,9 @@ const DEFAULT_WHATSAPP_TEMPLATES: Record<
       "Jadwal: {{session_date}}\n" +
       "Jam: {{session_time}}\n" +
       "Total: {{total_price}}\n" +
-      "DP: {{dp_paid}}\n\n" +
+      "DP: {{dp_paid}}\n" +
+      "Metode pembayaran: {{payment_method}}\n" +
+      "Sumber pembayaran: {{payment_source}}\n\n" +
       "Mohon konfirmasi booking saya. Terima kasih.",
     en:
       "Hello {{studio_name}}, I am {{client_name}} and I have submitted the booking form.\n\n" +
@@ -68,7 +70,9 @@ const DEFAULT_WHATSAPP_TEMPLATES: Record<
       "Schedule: {{session_date}}\n" +
       "Time: {{session_time}}\n" +
       "Total: {{total_price}}\n" +
-      "DP: {{dp_paid}}\n\n" +
+      "DP: {{dp_paid}}\n" +
+      "Payment method: {{payment_method}}\n" +
+      "Payment source: {{payment_source}}\n\n" +
       "Please confirm my booking. Thank you.",
   },
   whatsapp_session_reminder_client: {
@@ -190,7 +194,9 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
         "- Akad: {{akad_date}} {{akad_time}} di {{akad_location}}\n" +
         "- Resepsi: {{resepsi_date}} {{resepsi_time}} di {{resepsi_location}}\n" +
         "Total: {{total_price}}\n" +
-        "DP: {{dp_paid}}\n\n" +
+        "DP: {{dp_paid}}\n" +
+        "Metode pembayaran: {{payment_method}}\n" +
+        "Sumber pembayaran: {{payment_source}}\n\n" +
         "Mohon konfirmasi booking saya. Terima kasih.",
       en:
         "Hello {{studio_name}}, I am {{client_name}} and I have submitted the booking form.\n\n" +
@@ -200,7 +206,9 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
         "- Akad: {{akad_date}} {{akad_time}} at {{akad_location}}\n" +
         "- Resepsi: {{resepsi_date}} {{resepsi_time}} at {{resepsi_location}}\n" +
         "Total: {{total_price}}\n" +
-        "DP: {{dp_paid}}\n\n" +
+        "DP: {{dp_paid}}\n" +
+        "Payment method: {{payment_method}}\n" +
+        "Payment source: {{payment_source}}\n\n" +
         "Please confirm my booking. Thank you.",
     },
     whatsapp_freelancer: {
@@ -310,7 +318,9 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
         "- Sesi 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} di {{wisuda_session_1_location}}\n" +
         "- Sesi 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} di {{wisuda_session_2_location}}\n" +
         "Total: {{total_price}}\n" +
-        "DP: {{dp_paid}}\n\n" +
+        "DP: {{dp_paid}}\n" +
+        "Metode pembayaran: {{payment_method}}\n" +
+        "Sumber pembayaran: {{payment_source}}\n\n" +
         "Mohon konfirmasi booking saya. Terima kasih.",
       en:
         "Hello {{studio_name}}, I am {{client_name}} and I have submitted the booking form.\n\n" +
@@ -320,7 +330,9 @@ const DEFAULT_WHATSAPP_SPLIT_TEMPLATES: Record<
         "- Session 1: {{wisuda_session_1_date}} {{wisuda_session_1_time_range}} at {{wisuda_session_1_location}}\n" +
         "- Session 2: {{wisuda_session_2_date}} {{wisuda_session_2_time_range}} at {{wisuda_session_2_location}}\n" +
         "Total: {{total_price}}\n" +
-        "DP: {{dp_paid}}\n\n" +
+        "DP: {{dp_paid}}\n" +
+        "Payment method: {{payment_method}}\n" +
+        "Payment source: {{payment_source}}\n\n" +
         "Please confirm my booking. Thank you.",
     },
     whatsapp_freelancer: {
