@@ -2,6 +2,7 @@ export type DashboardRouteTitleKey =
   | "appDefault"
   | "dashboard"
   | "tutorial"
+  | "comingSoon"
   | "bookings"
   | "createBooking"
   | "editBooking"
@@ -44,6 +45,7 @@ export function resolveDashboardRouteTitleKey(pathname: string): DashboardRouteT
 
   if (normalizedPath.startsWith("/dashboard")) return "dashboard";
   if (normalizedPath.startsWith("/tutorial")) return "tutorial";
+  if (normalizedPath.startsWith("/coming-soon")) return "comingSoon";
   if (normalizedPath.startsWith("/bookings")) return "bookings";
   if (normalizedPath.startsWith("/client-status")) return "statusBooking";
   if (normalizedPath.startsWith("/calendar")) return "calendar";

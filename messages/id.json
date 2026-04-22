@@ -36,6 +36,8 @@
         "formBooking": "Form Booking",
         "formSettlement": "Form Pelunasan",
         "formSpecialBooking": "Form Booking Khusus",
+        "comingSoon": "Segera Hadir",
+        "newBadge": "New",
         "statusKlien": "Status Booking",
         "profile": "Profil",
         "logout": "Logout"
@@ -51,6 +53,7 @@
     "DashboardTitle": {
         "appDefault": "Client Desk",
         "dashboard": "Dashboard",
+        "comingSoon": "Segera Hadir",
         "bookings": "Daftar Booking",
         "createBooking": "Buat Booking",
         "editBooking": "Edit Booking",
@@ -68,6 +71,40 @@
         "changelog": "Log Perubahan",
         "settings": "Pengaturan",
         "profile": "Profil"
+    },
+    "ComingSoonPage": {
+        "badge": "Roadmap Fitur",
+        "title": "Beberapa fitur Studio sedang kami siapkan",
+        "description": "Halaman ini menampilkan fitur-fitur baru yang sedang disesuaikan sebelum resmi dipakai di Client Desk.",
+        "summaryTitle": "Akan hadir bertahap",
+        "summaryDescription": "Fitur-fitur ini sedang kami rapikan agar saat dirilis nanti alurnya benar-benar nyambung dengan dashboard yang sudah kamu pakai sekarang.",
+        "note": "Belum ada ETA di halaman ini. Kami sengaja menampilkannya sebagai referensi agar kamu tahu arah pengembangan yang sedang disiapkan.",
+        "featuresTitle": "Fitur yang sedang disiapkan",
+        "featuresDescription": "Semua item di bawah masih bersifat informasi. Hanya materi yang sudah benar-benar tersedia yang diberi tautan tambahan.",
+        "comingSoonBadge": "Coming Soon",
+        "watchVideo": "Lihat Video Kanban",
+        "features": {
+            "kanban": {
+                "title": "View Kanban Board Status Klien",
+                "description": "Tampilan kanban akan membantu memantau perpindahan status booking dengan lebih visual dan cepat dibaca."
+            },
+            "midtrans": {
+                "title": "Payment Gateway Midtrans",
+                "description": "Integrasi pembayaran sedang disiapkan agar proses tagihan dan pembayaran klien bisa terasa lebih praktis."
+            },
+            "spreadsheet": {
+                "title": "Auto Sync Spreadsheet",
+                "description": "Sinkronisasi spreadsheet akan membantu mengurangi input manual berulang untuk kebutuhan pelaporan atau backup alur kerja."
+            },
+            "miniWebsite": {
+                "title": "Mini Website",
+                "description": "Mini website akan memberi ruang presentasi yang lebih rapi untuk profil bisnis dan informasi penting studio."
+            },
+            "review": {
+                "title": "Rating & Review",
+                "description": "Fitur ulasan sedang disiapkan agar testimoni klien bisa tampil lebih terstruktur dan mendukung kepercayaan calon klien."
+            }
+        }
     },
     "Dashboard": {
         "welcome": "Selamat datang, {name}!",

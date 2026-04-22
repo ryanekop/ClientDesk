@@ -22,7 +22,9 @@ import {
     ReceiptText,
     FileCheck2,
     TicketPercent,
+    Compass,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { clearClientDeskSessionOnlyState } from "@/lib/auth/session-only";
 
@@ -30,6 +32,8 @@ interface SidebarProps {
     isOpen: boolean;
     setIsOpen: (open: boolean) => void;
 }
+
+const COMING_SOON_SEEN_STORAGE_KEY = "clientdesk_coming_soon_seen";
 
 const mainNavItems = [
     { titleKey: "dashboard" as const, href: "/dashboard", icon: LayoutDashboard },
@@ -45,6 +49,12 @@ const mainNavItems = [
     { titleKey: "formSpecialBooking" as const, href: "/special-booking-form", icon: TicketPercent },
 ];
 
+const spotlightNavItem = {
+    titleKey: "comingSoon" as const,
+    href: "/coming-soon",
+    icon: Compass,
+};
+
 export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     const pathname = usePathname();
     const t = useTranslations("Sidebar");
@@ -53,6 +63,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     const [userName, setUserName] = React.useState("");
     const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
     const [avatarTs, setAvatarTs] = React.useState(() => Date.now());
+    const [hasSeenComingSoon, setHasSeenComingSoon] = React.useState(true);
 
     React.useEffect(() => {
         try {
@@ -62,6 +73,26 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
             // Ignore storage read failures (e.g. strict privacy mode).
         }
     }, []);
+
+    React.useEffect(() => {
+        try {
+            setHasSeenComingSoon(
+                window.localStorage.getItem(COMING_SOON_SEEN_STORAGE_KEY) === "true"
+            );
+        } catch {
+            setHasSeenComingSoon(true);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        if (!pathname.startsWith("/coming-soon")) return;
+        try {
+            window.localStorage.setItem(COMING_SOON_SEEN_STORAGE_KEY, "true");
+        } catch {
+            // Ignore storage write failures.
+        }
+        setHasSeenComingSoon(true);
+    }, [pathname]);
 
     React.useEffect(() => {
         async function fetchUser() {
@@ -97,6 +128,15 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         clearClientDeskSessionOnlyState();
         void signOut(locale);
     }, [locale]);
+
+    const markComingSoonSeen = React.useCallback(() => {
+        try {
+            window.localStorage.setItem(COMING_SOON_SEEN_STORAGE_KEY, "true");
+        } catch {
+            // Ignore storage write failures.
+        }
+        setHasSeenComingSoon(true);
+    }, []);
 
     return (
         <>
@@ -159,6 +199,51 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                             </span>
                         </Link>
                     ))}
+
+                    <div className={cn("mx-2 my-3 border-t border-border/80", isCollapsed ? "mx-1.5" : "")} />
+
+                    <Link
+                        href={spotlightNavItem.href}
+                        onClick={() => {
+                            markComingSoonSeen();
+                            setIsOpen(false);
+                        }}
+                        title={isCollapsed ? t(spotlightNavItem.titleKey) : undefined}
+                        className={cn(
+                            "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                            isActive(spotlightNavItem.href)
+                                ? "bg-primary text-primary-foreground shadow-sm"
+                                : "border border-amber-200/70 bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 text-amber-950 hover:border-amber-300 hover:from-amber-100 hover:via-orange-50 hover:to-yellow-100 dark:border-amber-500/20 dark:from-amber-500/10 dark:via-orange-500/10 dark:to-yellow-500/10 dark:text-amber-100"
+                        )}
+                    >
+                        <div className="relative shrink-0">
+                            <spotlightNavItem.icon className={cn(
+                                "w-5 h-5",
+                                isActive(spotlightNavItem.href)
+                                    ? "text-primary-foreground"
+                                    : "text-amber-700 dark:text-amber-300"
+                            )} />
+                            {!hasSeenComingSoon && isCollapsed && (
+                                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
+                            )}
+                        </div>
+
+                        <span className={cn(
+                            "transition-opacity duration-300",
+                            isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto"
+                        )}>
+                            {t(spotlightNavItem.titleKey)}
+                        </span>
+
+                        {!hasSeenComingSoon && !isCollapsed && (
+                            <Badge
+                                variant="success"
+                                className="ml-auto rounded-full border-0 bg-emerald-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-emerald-500"
+                            >
+                                {t("newBadge")}
+                            </Badge>
+                        )}
+                    </Link>
                 </nav>
 
                 {/* Bottom: Settings + Profile */}

@@ -36,6 +36,8 @@
         "formBooking": "Booking Form",
         "formSettlement": "Settlement Form",
         "formSpecialBooking": "Special Booking Form",
+        "comingSoon": "Coming Soon",
+        "newBadge": "New",
         "statusKlien": "Booking Status",
         "profile": "Profile",
         "logout": "Logout"
@@ -51,6 +53,7 @@
     "DashboardTitle": {
         "appDefault": "Client Desk",
         "dashboard": "Dashboard",
+        "comingSoon": "Coming Soon",
         "bookings": "Bookings",
         "createBooking": "Create Booking",
         "editBooking": "Edit Booking",
@@ -68,6 +71,40 @@
         "changelog": "Changelog",
         "settings": "Settings",
         "profile": "Profile"
+    },
+    "ComingSoonPage": {
+        "badge": "Feature Roadmap",
+        "title": "Several Studio features are being prepared",
+        "description": "This page shows upcoming features that are still being refined before they officially become available inside Client Desk.",
+        "summaryTitle": "Rolling out gradually",
+        "summaryDescription": "These features are being polished so they fit naturally into the dashboard workflow you already use today.",
+        "note": "There is no ETA shown on this page yet. We keep it informational so you can see the direction of the features currently being prepared.",
+        "featuresTitle": "Features currently in preparation",
+        "featuresDescription": "Everything below is still informational. Only materials that already exist are given extra links.",
+        "comingSoonBadge": "Coming Soon",
+        "watchVideo": "Watch Kanban Video",
+        "features": {
+            "kanban": {
+                "title": "View Client Status Kanban Board",
+                "description": "A kanban view will make booking status transitions more visual and easier to scan at a glance."
+            },
+            "midtrans": {
+                "title": "Midtrans Payment Gateway",
+                "description": "Payment integration is being prepared so invoices and client payments can feel more practical and streamlined."
+            },
+            "spreadsheet": {
+                "title": "Auto Spreadsheet Sync",
+                "description": "Spreadsheet sync will help reduce repeated manual input for reporting needs or workflow backups."
+            },
+            "miniWebsite": {
+                "title": "Mini Website",
+                "description": "A mini website will provide a cleaner way to present your business profile and key studio information."
+            },
+            "review": {
+                "title": "Rating & Review",
+                "description": "The review feature is being prepared so client testimonials can appear in a more structured and trustworthy way."
+            }
+        }
     },
     "Dashboard": {
         "welcome": "Welcome, {name}!",
