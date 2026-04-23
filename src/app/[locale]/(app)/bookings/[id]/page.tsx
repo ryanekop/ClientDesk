@@ -79,6 +79,13 @@ import {
     resolveFastpikLinkDisplay,
     type FastpikLinkDisplayMode,
 } from "@/lib/fastpik-link-display";
+import {
+    formatFastpikDetailValue,
+    formatFastpikDurationLabel,
+    formatFastpikPhotoCountLabel,
+    formatFastpikProjectTypeLabel,
+    formatFastpikToggleLabel,
+} from "@/lib/fastpik-project-display";
 import { resolveFastpikProjectInfoFromExtraFields } from "@/lib/fastpik-project-info";
 import {
     clearConnectedGoogleAccountCache,
@@ -370,6 +377,25 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
     );
 }
 
+function renderFastpikDetailContent(params: {
+    primary: string | null | undefined;
+    description?: string | null | undefined;
+}) {
+    const detail = formatFastpikDetailValue(params);
+    if (detail.isEmpty) {
+        return "-";
+    }
+
+    return (
+        <div className="space-y-1">
+            <div>{detail.primary}</div>
+            {detail.description ? (
+                <p className="text-xs text-muted-foreground">{detail.description}</p>
+            ) : null}
+        </div>
+    );
+}
+
 function renderSessionDisplayValue(value: string) {
     return (
         <div className="space-y-1">
@@ -397,53 +423,6 @@ function formatPaymentSource(source: PaymentSource | null) {
         return label ? `${label}${accountSuffix}` : accountSuffix ? accountSuffix.slice(3) : "-";
     }
     return label || "-";
-}
-
-function formatFastpikToggleLabel(
-    value: boolean | null | undefined,
-    locale: string,
-) {
-    if (value === null || value === undefined) return "-";
-    if (locale === "en") return value ? "Enabled" : "Disabled";
-    return value ? "Aktif" : "Nonaktif";
-}
-
-function formatFastpikDurationLabel(params: {
-    days: number | null | undefined;
-    enabled?: boolean | null | undefined;
-    locale: string;
-    unknownNullAsUnlimited?: boolean;
-}) {
-    const { days, enabled, locale, unknownNullAsUnlimited = false } = params;
-
-    if (typeof days === "number") {
-        return locale === "en" ? `${days} days` : `${days} hari`;
-    }
-
-    if (enabled === false) {
-        return locale === "en" ? "Disabled" : "Nonaktif";
-    }
-
-    if (enabled === true || unknownNullAsUnlimited) {
-        return locale === "en" ? "Unlimited" : "Selamanya";
-    }
-
-    return "-";
-}
-
-function formatFastpikProjectTypeLabel(
-    value: string | null | undefined,
-    locale: string,
-) {
-    const normalized = (value || "").trim().toLowerCase();
-    if (!normalized) return "-";
-    if (normalized === "print") {
-        return locale === "en" ? "Print" : "Cetak";
-    }
-    if (normalized === "edit") {
-        return locale === "en" ? "Photo Selection" : "Pilih Foto";
-    }
-    return value || "-";
 }
 
 function groupCustomSnapshotsBySection(snapshots: CustomFieldSnapshot[]) {
@@ -3718,11 +3697,26 @@ export default function BookingDetailPage() {
                             />
                             <InfoRow
                                 label={tBookingDetail("maxPhotoCountLabel")}
-                                value={
-                                    fastpikProjectInfo.max_photos !== null
-                                        ? `${fastpikProjectInfo.max_photos} foto`
-                                        : "-"
-                                }
+                                value={formatFastpikPhotoCountLabel(
+                                    fastpikProjectInfo.max_photos,
+                                    locale,
+                                )}
+                            />
+                            <InfoRow
+                                label="Template Cetak"
+                                value={renderFastpikDetailContent({
+                                    primary: fastpikProjectInfo.print_template_label,
+                                    description:
+                                        fastpikProjectInfo.print_template_description,
+                                })}
+                            />
+                            <InfoRow
+                                label="Ukuran Cetak"
+                                value={renderFastpikDetailContent({
+                                    primary: fastpikProjectInfo.print_size_label,
+                                    description:
+                                        fastpikProjectInfo.print_size_description,
+                                })}
                             />
                         </div>
                     )}

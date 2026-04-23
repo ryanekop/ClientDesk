@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
 import type { BookingServiceSelection } from "@/lib/booking-services";
+import type { FastpikLinkDisplayMode } from "@/lib/fastpik-link-display";
 import {
   buildTrackCacheTag,
   buildTrackUserCacheTag,
@@ -69,12 +70,8 @@ export type TrackProfileRow = {
   tracking_file_links_visible_from_status?: string | null;
   tracking_video_links_visible_from_status?: string | null;
   tracking_hide_queue_number?: boolean | null;
-  fastpik_link_display_mode: "both" | "prefer_fastpik" | "drive_only" | null;
-  fastpik_link_display_mode_tracking?:
-    | "both"
-    | "prefer_fastpik"
-    | "drive_only"
-    | null;
+  fastpik_link_display_mode: FastpikLinkDisplayMode | null;
+  fastpik_link_display_mode_tracking?: FastpikLinkDisplayMode | null;
 };
 
 export type TrackBasePayload = {
@@ -95,7 +92,7 @@ export type TrackBasePayload = {
   trackingFileLinksVisibleFromStatus: string | null;
   trackingVideoLinksVisibleFromStatus: string | null;
   trackingHideQueueNumber: boolean;
-  fastpikLinkDisplayMode: "both" | "prefer_fastpik" | "drive_only";
+  fastpikLinkDisplayMode: FastpikLinkDisplayMode;
 };
 
 function normalizeTrackingUuid(uuid: string | null | undefined) {

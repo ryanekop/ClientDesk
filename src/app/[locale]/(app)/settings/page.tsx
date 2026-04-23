@@ -5066,6 +5066,9 @@ export default function SettingsPage() {
                       <option value="drive_only">
                         {tp("fastpikLinkModeDriveOnly")}
                       </option>
+                      <option value="fastpik_with_video_only">
+                        {tp("fastpikLinkModeFastpikWithVideoOnly")}
+                      </option>
                     </select>
                     <p className="text-xs text-muted-foreground">
                       {tp("fastpikLinkDisplayModeTrackingHint")}

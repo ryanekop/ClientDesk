@@ -19,6 +19,12 @@ import {
     getProjectDeadlineCountdownLabel,
 } from "@/lib/booking-deadline";
 import { resolveFastpikLinkDisplay } from "@/lib/fastpik-link-display";
+import {
+    formatFastpikDetailValue,
+    formatFastpikDurationLabel,
+    formatFastpikPhotoCountLabel,
+    formatFastpikToggleLabel,
+} from "@/lib/fastpik-project-display";
 import { useTenant } from "@/lib/tenant-context";
 import { shouldHideTenantBranding } from "@/lib/tenant-branding";
 
@@ -49,7 +55,11 @@ type BookingData = {
     fastpikUrl: string | null;
     driveUrl: string | null;
     videoUrl: string | null;
-    fastpikLinkDisplayMode: "both" | "prefer_fastpik" | "drive_only";
+    fastpikLinkDisplayMode:
+        | "both"
+        | "prefer_fastpik"
+        | "drive_only"
+        | "fastpik_with_video_only";
     createdAt: string;
     totalPrice: number;
     dpPaid: number;
@@ -70,7 +80,15 @@ type BookingData = {
         password: string | null;
         selection_days: number | null;
         download_days: number | null;
+        print_days: number | null;
         max_photos: number | null;
+        selection_enabled: boolean | null;
+        download_enabled: boolean | null;
+        print_enabled: boolean | null;
+        print_template_label: string | null;
+        print_template_description: string | null;
+        print_size_label: string | null;
+        print_size_description: string | null;
         source: string | null;
         synced_at: string | null;
     } | null;
@@ -169,6 +187,42 @@ function AnnouncementCard({
                 </div>
             </div>
         </div>
+    );
+}
+
+function DetailRow({
+    label,
+    value,
+}: {
+    label: string;
+    value: React.ReactNode;
+}) {
+    return (
+        <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="font-medium text-right">{value}</span>
+        </div>
+    );
+}
+
+function renderFastpikTextDetail(params: {
+    primary: string | null | undefined;
+    description?: string | null | undefined;
+}) {
+    const detail = formatFastpikDetailValue(params);
+    if (detail.isEmpty) {
+        return "-";
+    }
+
+    return (
+        <span className="inline-flex max-w-[220px] flex-col items-end gap-1 text-right">
+            <span>{detail.primary}</span>
+            {detail.description ? (
+                <span className="text-xs font-normal text-muted-foreground">
+                    {detail.description}
+                </span>
+            ) : null}
+        </span>
     );
 }
 
@@ -279,8 +333,12 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
     const photoResultUrl = booking.showFileResults ? galleryLinks.primaryUrl : null;
     const videoResultUrl =
         booking.showVideoResults && booking.videoUrl ? booking.videoUrl : null;
+    const shouldShowFastpikInfo =
+        booking.showFileResults && Boolean(booking.fastpikProjectInfo);
     const hasVisibleFileResults =
         Boolean(photoResultUrl) || Boolean(videoResultUrl);
+    const shouldRenderFileResultsSection =
+        hasVisibleFileResults || shouldShowFastpikInfo;
     const settlementStatusLabel = React.useMemo(() => {
         if (booking.isFullyPaid) return t("paid");
         if (booking.settlementStatus === "submitted") return t("awaitingVerification");
@@ -575,7 +633,7 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                 </div>
 
                 {/* Result links follow admin visibility thresholds from Status Settings */}
-                {hasVisibleFileResults && (
+                {shouldRenderFileResultsSection && (
                     <div
                         id="file-results"
                         className={`scroll-mt-24 rounded-2xl border bg-background p-6 shadow-lg transition-all duration-500 ${
@@ -585,7 +643,7 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                         }`}
                     >
                         <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground mb-3">{t("fileResults")}</h3>
-                        {photoResultUrl ? (
+                        {photoResultUrl || booking.fastpikProjectInfo ? (
                             <>
                                 <p className="mb-3 text-xs text-muted-foreground">
                                     {locale === "en" ? "Fastpik source:" : "Sumber Fastpik:"}{" "}
@@ -601,74 +659,124 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                                 ) : null}
                             </>
                         ) : null}
-                        <div className={`grid grid-cols-1 gap-2 ${photoResultUrl && videoResultUrl ? "sm:grid-cols-2" : ""}`}>
-                            {photoResultUrl && (
-                                <a
-                                    href={photoResultUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex min-h-11 items-center justify-center gap-2 rounded-lg border bg-muted/30 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-muted/60"
-                                >
-                                    <Camera className="w-4 h-4" />
-                                    {t("openPhotoLink")}
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
-                            )}
-                            {videoResultUrl && (
-                                <a
-                                    href={videoResultUrl}
-                                    className="flex min-h-11 items-center justify-center gap-2 rounded-lg border bg-muted/30 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-muted/60"
-                                >
-                                    <Video className="w-4 h-4" />
-                                    {t("openVideoLink")}
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
-                            )}
-                        </div>
-                        {photoResultUrl && booking.fastpikProjectInfo && (
+                        {(photoResultUrl || videoResultUrl) ? (
+                            <div className={`grid grid-cols-1 gap-2 ${photoResultUrl && videoResultUrl ? "sm:grid-cols-2" : ""}`}>
+                                {photoResultUrl && (
+                                    <a
+                                        href={photoResultUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex min-h-11 items-center justify-center gap-2 rounded-lg border bg-muted/30 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-muted/60"
+                                    >
+                                        <Camera className="w-4 h-4" />
+                                        {t("openPhotoLink")}
+                                        <ExternalLink className="w-3.5 h-3.5" />
+                                    </a>
+                                )}
+                                {videoResultUrl && (
+                                    <a
+                                        href={videoResultUrl}
+                                        className="flex min-h-11 items-center justify-center gap-2 rounded-lg border bg-muted/30 px-4 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-muted/60"
+                                    >
+                                        <Video className="w-4 h-4" />
+                                        {t("openVideoLink")}
+                                        <ExternalLink className="w-3.5 h-3.5" />
+                                    </a>
+                                )}
+                            </div>
+                        ) : null}
+                        {shouldShowFastpikInfo && booking.fastpikProjectInfo && (
                             <div className="mt-4 rounded-lg border bg-muted/20 p-3 space-y-2 text-sm">
                                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                     {t("fastpikProjectInfo")}
                                 </p>
-                                <div className="flex justify-between gap-4">
-                                    <span className="text-muted-foreground">{t("fastpikPassword")}</span>
-                                    <span className="font-medium flex items-center gap-2">
-                                        {booking.fastpikProjectInfo.password || t("notAvailable")}
-                                        {booking.fastpikProjectInfo.password ? (
-                                            <button
-                                                type="button"
-                                                onClick={handleCopyFastpikPassword}
-                                                className="rounded border px-2 py-0.5 text-[11px] text-primary hover:bg-muted/70 transition-colors"
-                                            >
-                                                {passwordCopied ? t("copied") : t("copy")}
-                                            </button>
-                                        ) : null}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between gap-4">
-                                    <span className="text-muted-foreground">{t("selectionDuration")}</span>
-                                    <span className="font-medium">
-                                        {booking.fastpikProjectInfo.selection_days !== null
-                                            ? t("days", { count: booking.fastpikProjectInfo.selection_days })
-                                            : t("foreverDuration")}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between gap-4">
-                                    <span className="text-muted-foreground">{t("downloadDuration")}</span>
-                                    <span className="font-medium">
-                                        {booking.fastpikProjectInfo.download_days !== null
-                                            ? t("days", { count: booking.fastpikProjectInfo.download_days })
-                                            : t("foreverDuration")}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between gap-4">
-                                    <span className="text-muted-foreground">{t("maxPhotos")}</span>
-                                    <span className="font-medium">
-                                        {booking.fastpikProjectInfo.max_photos !== null
-                                            ? t("photosCount", { count: booking.fastpikProjectInfo.max_photos })
-                                            : t("notAvailable")}
-                                    </span>
-                                </div>
+                                <DetailRow
+                                    label={t("fastpikPassword")}
+                                    value={
+                                        <span className="font-medium flex items-center gap-2">
+                                            {booking.fastpikProjectInfo.password || t("notAvailable")}
+                                            {booking.fastpikProjectInfo.password ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCopyFastpikPassword}
+                                                    className="rounded border px-2 py-0.5 text-[11px] text-primary hover:bg-muted/70 transition-colors"
+                                                >
+                                                    {passwordCopied ? t("copied") : t("copy")}
+                                                </button>
+                                            ) : null}
+                                        </span>
+                                    }
+                                />
+                                <DetailRow
+                                    label={t("selectionDuration")}
+                                    value={formatFastpikDurationLabel({
+                                        days: booking.fastpikProjectInfo.selection_days,
+                                        enabled: booking.fastpikProjectInfo.selection_enabled,
+                                        locale,
+                                        unknownNullAsUnlimited: true,
+                                    })}
+                                />
+                                <DetailRow
+                                    label={t("downloadDuration")}
+                                    value={formatFastpikDurationLabel({
+                                        days: booking.fastpikProjectInfo.download_days,
+                                        enabled: booking.fastpikProjectInfo.download_enabled,
+                                        locale,
+                                        unknownNullAsUnlimited: true,
+                                    })}
+                                />
+                                <DetailRow
+                                    label={t("selectionStatus")}
+                                    value={formatFastpikToggleLabel(
+                                        booking.fastpikProjectInfo.selection_enabled,
+                                        locale,
+                                    )}
+                                />
+                                <DetailRow
+                                    label={t("downloadStatus")}
+                                    value={formatFastpikToggleLabel(
+                                        booking.fastpikProjectInfo.download_enabled,
+                                        locale,
+                                    )}
+                                />
+                                <DetailRow
+                                    label={t("printMenuStatus")}
+                                    value={formatFastpikToggleLabel(
+                                        booking.fastpikProjectInfo.print_enabled,
+                                        locale,
+                                    )}
+                                />
+                                <DetailRow
+                                    label={t("printDuration")}
+                                    value={formatFastpikDurationLabel({
+                                        days: booking.fastpikProjectInfo.print_days,
+                                        enabled: booking.fastpikProjectInfo.print_enabled,
+                                        locale,
+                                    })}
+                                />
+                                <DetailRow
+                                    label={t("maxPhotos")}
+                                    value={formatFastpikPhotoCountLabel(
+                                        booking.fastpikProjectInfo.max_photos,
+                                        locale,
+                                    )}
+                                />
+                                <DetailRow
+                                    label={t("printTemplate")}
+                                    value={renderFastpikTextDetail({
+                                        primary: booking.fastpikProjectInfo.print_template_label,
+                                        description:
+                                            booking.fastpikProjectInfo.print_template_description,
+                                    })}
+                                />
+                                <DetailRow
+                                    label={t("printSize")}
+                                    value={renderFastpikTextDetail({
+                                        primary: booking.fastpikProjectInfo.print_size_label,
+                                        description:
+                                            booking.fastpikProjectInfo.print_size_description,
+                                    })}
+                                />
                             </div>
                         )}
                     </div>

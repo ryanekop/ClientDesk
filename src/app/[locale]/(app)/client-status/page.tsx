@@ -100,6 +100,9 @@ type BookingStatus = {
     dp_refund_amount?: number | null;
     dp_refunded_at?: string | null;
     tracking_uuid: string | null;
+    drive_folder_url?: string | null;
+    video_drive_folder_url?: string | null;
+    fastpik_project_link?: string | null;
     archived_at?: string | null;
     archived_by?: string | null;
     services: { id?: string; name: string; price?: number; is_addon?: boolean | null } | null;
@@ -108,6 +111,10 @@ type BookingStatus = {
     service_label?: string;
     event_type?: string | null;
     extra_fields?: Record<string, unknown> | null;
+    fastpik_project_info?: {
+        print_enabled: boolean | null;
+        max_photos: number | null;
+    } | null;
 };
 
 type ClientStatusPageMetadata = {
@@ -151,6 +158,70 @@ function getAdminDeadlineBadgeClassName(deadlineDate: string | null | undefined)
         return "inline-flex self-start rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium leading-none text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300";
     }
     return "inline-flex self-start rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium leading-none text-muted-foreground";
+}
+
+function getFastpikStatusBadges(
+    booking: BookingStatus,
+    locale: string,
+) {
+    const badges: Array<{
+        key: string;
+        label: string;
+        className: string;
+    }> = [];
+
+    if (
+        (booking.fastpik_project_link || "").trim() ||
+        (booking.drive_folder_url || "").trim()
+    ) {
+        badges.push({
+            key: "photo",
+            label: locale === "en" ? "Photo" : "Foto",
+            className:
+                "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300",
+        });
+    }
+
+    if ((booking.video_drive_folder_url || "").trim()) {
+        badges.push({
+            key: "video",
+            label: "Video",
+            className:
+                "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300",
+        });
+    }
+
+    if (booking.fastpik_project_info?.print_enabled !== null) {
+        badges.push({
+            key: "print-status",
+            label:
+                booking.fastpik_project_info?.print_enabled
+                    ? locale === "en"
+                        ? "Print Enabled"
+                        : "Cetak Aktif"
+                    : locale === "en"
+                      ? "Print Disabled"
+                      : "Cetak Nonaktif",
+            className:
+                booking.fastpik_project_info?.print_enabled
+                    ? "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300"
+                    : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
+        });
+    }
+
+    if (typeof booking.fastpik_project_info?.max_photos === "number") {
+        badges.push({
+            key: "max-photos",
+            label:
+                locale === "en"
+                    ? `Max ${booking.fastpik_project_info.max_photos} photos`
+                    : `Max ${booking.fastpik_project_info.max_photos} foto`,
+            className:
+                "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-500/30 dark:bg-slate-500/10 dark:text-slate-300",
+        });
+    }
+
+    return badges;
 }
 
 const BASE_CLIENT_STATUS_COLUMNS: TableColumnPreference[] = [
@@ -1558,15 +1629,29 @@ export default function ClientStatusPage() {
                         </div>
                     </td>
                 );
-            case "name":
+            case "name": {
+                const desktopBadges = getFastpikStatusBadges(booking, locale);
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
                         <Link href={`/bookings/${booking.id}`} className="hover:underline">
                             <p className="text-sm font-medium leading-tight">{booking.client_name}</p>
                             <p className="text-[11px] text-muted-foreground">{booking.booking_code}</p>
+                            {desktopBadges.length > 0 ? (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                    {desktopBadges.map((badge) => (
+                                        <span
+                                            key={badge.key}
+                                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${badge.className}`}
+                                        >
+                                            {badge.label}
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : null}
                         </Link>
                     </td>
                 );
+            }
             case "row_number":
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 text-center text-sm text-muted-foreground")}>
@@ -1926,7 +2011,9 @@ export default function ClientStatusPage() {
                         <CardListSkeleton count={Math.min(queryState.perPage, 4)} />
                     ) : queryState.totalItems === 0 ? (
                         <div className="text-center py-12 text-muted-foreground text-sm">{hasActiveFilters ? t("tidakAdaHasil") : t("belumAdaBooking")}</div>
-                    ) : bookings.map(b => (
+                    ) : bookings.map((b) => {
+                        const mobileBadges = getFastpikStatusBadges(b, locale);
+                        return (
                         <div
                             key={b.id}
                             className={cn(
@@ -1951,6 +2038,18 @@ export default function ClientStatusPage() {
                                 <Link href={`/bookings/${b.id}`} className="hover:underline">
                                     <p className="font-semibold">{b.client_name}</p>
                                     <p className="text-xs text-muted-foreground">{b.booking_code}</p>
+                                    {mobileBadges.length > 0 ? (
+                                        <div className="mt-2 flex flex-wrap gap-1">
+                                            {mobileBadges.map((badge) => (
+                                                <span
+                                                    key={badge.key}
+                                                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${badge.className}`}
+                                                >
+                                                    {badge.label}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    ) : null}
                                 </Link>
                             </div>
                             {b.client_status && (
@@ -2042,7 +2141,8 @@ export default function ClientStatusPage() {
                         </div>
                         ) : null}
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
                 {!queryState.isLoading && !queryState.isRefreshing && queryState.totalItems > 0 ? (
                     <div className="md:hidden">

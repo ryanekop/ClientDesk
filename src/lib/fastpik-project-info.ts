@@ -10,6 +10,11 @@ export type FastpikProjectInfoSnapshot = {
   selection_enabled: boolean | null;
   download_enabled: boolean | null;
   print_enabled: boolean | null;
+  print_template_label: string | null;
+  print_template_description: string | null;
+  print_size_label: string | null;
+  print_size_description: string | null;
+  print_template_raw: UnknownRecord | null;
   project_type: string | null;
   source: string | null;
   synced_at: string | null;
@@ -129,11 +134,111 @@ function resolveFirstBooleanField(
   return { found: false, value: null };
 }
 
+function resolveFirstUnknownField(
+  records: Array<UnknownRecord | null>,
+  keys: string[],
+): ResolvedField<unknown> {
+  for (const record of records) {
+    if (!record) continue;
+    for (const key of keys) {
+      if (!hasOwnKey(record, key)) continue;
+      return {
+        found: true,
+        value: record[key],
+      };
+    }
+  }
+  return { found: false, value: null };
+}
+
+type FastpikPrintDisplayDetail = {
+  label: string | null;
+  description: string | null;
+  raw: UnknownRecord | null;
+};
+
+function normalizeFastpikPrintDisplayDetail(
+  value: unknown,
+): FastpikPrintDisplayDetail {
+  if (typeof value === "string") {
+    return {
+      label: toTrimmedString(value),
+      description: null,
+      raw: null,
+    };
+  }
+
+  const record = asRecord(value);
+  if (!record) {
+    return {
+      label: null,
+      description: null,
+      raw: null,
+    };
+  }
+
+  const label = resolveFirstStringField(
+    [record],
+    [
+      "label",
+      "name",
+      "title",
+      "template_name",
+      "templateName",
+      "value",
+      "text",
+      "size_label",
+      "sizeLabel",
+      "print_size",
+      "printSize",
+    ],
+  ).value;
+  const description = resolveFirstStringField(
+    [record],
+    [
+      "description",
+      "summary",
+      "subtitle",
+      "details",
+      "helper_text",
+      "helperText",
+      "note",
+    ],
+  ).value;
+
+  return {
+    label,
+    description,
+    raw: record,
+  };
+}
+
 function normalizeFastpikProjectSnapshot(
   value: unknown,
 ): FastpikProjectInfoSnapshot | null {
   const record = asRecord(value);
   if (!record) return null;
+
+  const printTemplateRaw = asRecord(record.print_template_raw);
+  const parsedPrintTemplateRaw = normalizeFastpikPrintDisplayDetail(printTemplateRaw);
+  const parsedPrintSizeRaw = normalizeFastpikPrintDisplayDetail(
+    printTemplateRaw
+      ? resolveFirstUnknownField(
+          [printTemplateRaw],
+          [
+            "print_size",
+            "printSize",
+            "size",
+            "size_label",
+            "sizeLabel",
+            "selected_print_size",
+            "selectedPrintSize",
+            "ukuran_cetak",
+            "ukuranCetak",
+          ],
+        ).value
+      : null,
+  );
 
   const snapshot: FastpikProjectInfoSnapshot = {
     password: toTrimmedString(record.password),
@@ -145,6 +250,17 @@ function normalizeFastpikProjectSnapshot(
     selection_enabled: toNullableBoolean(record.selection_enabled),
     download_enabled: toNullableBoolean(record.download_enabled),
     print_enabled: toNullableBoolean(record.print_enabled),
+    print_template_label:
+      toTrimmedString(record.print_template_label) ?? parsedPrintTemplateRaw.label,
+    print_template_description:
+      toTrimmedString(record.print_template_description) ??
+      parsedPrintTemplateRaw.description,
+    print_size_label:
+      toTrimmedString(record.print_size_label) ?? parsedPrintSizeRaw.label,
+    print_size_description:
+      toTrimmedString(record.print_size_description) ??
+      parsedPrintSizeRaw.description,
+    print_template_raw: printTemplateRaw,
     project_type: toTrimmedString(record.project_type),
     source: toTrimmedString(record.source),
     synced_at: toTrimmedString(record.synced_at),
@@ -226,6 +342,27 @@ export function buildFastpikProjectInfoSnapshot(input: {
   const downloadEnabledKeys = ["download_enabled", "downloadEnabled"];
   const printEnabledKeys = ["print_enabled", "printEnabled"];
   const projectTypeKeys = ["project_type", "projectType"];
+  const printTemplateKeys = [
+    "print_template",
+    "printTemplate",
+    "selected_print_template",
+    "selectedPrintTemplate",
+    "print_template_detail",
+    "printTemplateDetail",
+    "template_cetak",
+    "templateCetak",
+  ];
+  const printSizeKeys = [
+    "print_size",
+    "printSize",
+    "size",
+    "size_label",
+    "sizeLabel",
+    "selected_print_size",
+    "selectedPrintSize",
+    "ukuran_cetak",
+    "ukuranCetak",
+  ];
 
   const payloadPassword = resolveFirstStringField(payloadCandidates, passwordKeys);
   const payloadSelectionDays = resolveFirstIntegerField(
@@ -260,6 +397,21 @@ export function buildFastpikProjectInfoSnapshot(input: {
   const payloadProjectType = resolveFirstStringField(
     payloadCandidates,
     projectTypeKeys,
+  );
+  const payloadPrintTemplate = resolveFirstUnknownField(
+    payloadCandidates,
+    printTemplateKeys,
+  );
+  const payloadPrintSize = resolveFirstUnknownField(payloadCandidates, printSizeKeys);
+
+  const parsedPrintTemplate = normalizeFastpikPrintDisplayDetail(
+    payloadPrintTemplate.value,
+  );
+  const nestedPrintSize = parsedPrintTemplate.raw
+    ? resolveFirstUnknownField([parsedPrintTemplate.raw], printSizeKeys)
+    : { found: false, value: null };
+  const parsedPrintSize = normalizeFastpikPrintDisplayDetail(
+    payloadPrintSize.found ? payloadPrintSize.value : nestedPrintSize.value,
   );
 
   return {
@@ -299,6 +451,35 @@ export function buildFastpikProjectInfoSnapshot(input: {
       payloadPrintEnabled.found
         ? payloadPrintEnabled.value
         : resolveFirstBooleanField(fallbackCandidates, ["print_enabled"]).value,
+    print_template_label:
+      payloadPrintTemplate.found
+        ? parsedPrintTemplate.label
+        : resolveFirstStringField(
+            fallbackCandidates,
+            ["print_template_label"],
+          ).value,
+    print_template_description:
+      payloadPrintTemplate.found
+        ? parsedPrintTemplate.description
+        : resolveFirstStringField(
+            fallbackCandidates,
+            ["print_template_description"],
+          ).value,
+    print_size_label:
+      payloadPrintSize.found || nestedPrintSize.found
+        ? parsedPrintSize.label
+        : resolveFirstStringField(fallbackCandidates, ["print_size_label"]).value,
+    print_size_description:
+      payloadPrintSize.found || nestedPrintSize.found
+        ? parsedPrintSize.description
+        : resolveFirstStringField(
+            fallbackCandidates,
+            ["print_size_description"],
+          ).value,
+    print_template_raw:
+      payloadPrintTemplate.found && parsedPrintTemplate.raw
+        ? parsedPrintTemplate.raw
+        : asRecord(input.fallbackSnapshot?.print_template_raw),
     project_type:
       payloadProjectType.found
         ? payloadProjectType.value
@@ -313,6 +494,9 @@ export function buildFastpikProjectInfoSnapshot(input: {
       payloadSelectionEnabled.found ||
       payloadDownloadEnabled.found ||
       payloadPrintEnabled.found ||
+      payloadPrintTemplate.found ||
+      payloadPrintSize.found ||
+      nestedPrintSize.found ||
       payloadProjectType.found
         ? "project_response"
         : input.fallbackSnapshot?.source ?? null,

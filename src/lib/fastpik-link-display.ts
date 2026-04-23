@@ -1,10 +1,19 @@
-export type FastpikLinkDisplayMode = "both" | "prefer_fastpik" | "drive_only";
+export type FastpikLinkDisplayMode =
+  | "both"
+  | "prefer_fastpik"
+  | "drive_only"
+  | "fastpik_with_video_only";
 
 export function normalizeFastpikLinkDisplayMode(
   value: unknown,
 ): FastpikLinkDisplayMode {
   const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (raw === "both" || raw === "prefer_fastpik" || raw === "drive_only") {
+  if (
+    raw === "both" ||
+    raw === "prefer_fastpik" ||
+    raw === "drive_only" ||
+    raw === "fastpik_with_video_only"
+  ) {
     return raw;
   }
   return "prefer_fastpik";
@@ -52,6 +61,20 @@ export function resolveFastpikLinkDisplay(params: {
       driveUrl,
       primaryUrl: driveUrl,
       primaryType: driveUrl ? "drive" : null,
+    } as const;
+  }
+
+  if (mode === "fastpik_with_video_only") {
+    return {
+      mode,
+      hasFastpik,
+      hasDrive,
+      showFastpik: hasFastpik,
+      showDrive: false,
+      fastpikUrl,
+      driveUrl,
+      primaryUrl: fastpikUrl,
+      primaryType: fastpikUrl ? "fastpik" : null,
     } as const;
   }
 

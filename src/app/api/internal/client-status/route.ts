@@ -18,6 +18,7 @@ import {
   normalizeClientStatusDeadlineDefaultDays,
   normalizeClientStatusDeadlineTriggerStatus,
 } from "@/lib/booking-deadline";
+import { resolveFastpikProjectInfoFromExtraFields } from "@/lib/fastpik-project-info";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 10;
@@ -158,6 +159,9 @@ type BookingStatusRow = {
   dp_refund_amount?: number | null;
   dp_refunded_at?: string | null;
   tracking_uuid: string | null;
+  drive_folder_url?: string | null;
+  video_drive_folder_url?: string | null;
+  fastpik_project_link?: string | null;
   archived_at?: string | null;
   archived_by?: string | null;
   event_type?: string | null;
@@ -176,6 +180,14 @@ type BookingStatusRow = {
 type BookingPageRpcResponse = {
   items?: BookingStatusRow[];
   totalItems?: number;
+};
+
+type BookingSupplementRow = {
+  id: string;
+  drive_folder_url: string | null;
+  video_drive_folder_url: string | null;
+  fastpik_project_link: string | null;
+  extra_fields: Record<string, unknown> | null;
 };
 
 type BookingMetadataResponse = {
@@ -386,7 +398,36 @@ export async function GET(request: NextRequest) {
       ? statusOptions
       : getBookingStatusOptions(profileStatuses);
 
-  const items = (Array.isArray(pageData?.items) ? pageData.items : []).map((booking) => {
+  const baseItems = Array.isArray(pageData?.items) ? pageData.items : [];
+  const bookingIds = baseItems
+    .map((booking) => booking.id)
+    .filter((bookingId): bookingId is string => typeof bookingId === "string" && bookingId.length > 0);
+
+  let supplementMap = new Map<string, BookingSupplementRow>();
+  if (bookingIds.length > 0) {
+    const { data: supplementRows } = await supabase
+      .from("bookings")
+      .select("id, drive_folder_url, video_drive_folder_url, fastpik_project_link, extra_fields")
+      .in("id", bookingIds);
+
+    supplementMap = new Map(
+      (Array.isArray(supplementRows) ? supplementRows : [])
+        .filter(
+          (row): row is BookingSupplementRow =>
+            Boolean(row) &&
+            typeof row === "object" &&
+            typeof (row as { id?: unknown }).id === "string",
+        )
+        .map((row) => [row.id, row]),
+    );
+  }
+
+  const items = baseItems.map((booking) => {
+    const supplement = supplementMap.get(booking.id);
+    const resolvedExtraFields =
+      supplement?.extra_fields !== undefined
+        ? supplement.extra_fields
+        : booking.extra_fields;
     const legacyService = normalizeLegacyServiceRecord(booking.services);
     const serviceSelections = normalizeBookingServiceSelections(
       booking.booking_services,
@@ -400,6 +441,22 @@ export async function GET(request: NextRequest) {
 
     return {
       ...booking,
+      drive_folder_url:
+        supplement?.drive_folder_url !== undefined
+          ? supplement.drive_folder_url
+          : booking.drive_folder_url ?? null,
+      video_drive_folder_url:
+        supplement?.video_drive_folder_url !== undefined
+          ? supplement.video_drive_folder_url
+          : booking.video_drive_folder_url ?? null,
+      fastpik_project_link:
+        supplement?.fastpik_project_link !== undefined
+          ? supplement.fastpik_project_link
+          : booking.fastpik_project_link ?? null,
+      extra_fields: resolvedExtraFields,
+      fastpik_project_info: resolveFastpikProjectInfoFromExtraFields(
+        resolvedExtraFields,
+      ),
       status: syncedStatus,
       client_status: syncedStatus,
       service_selections: serviceSelections,
