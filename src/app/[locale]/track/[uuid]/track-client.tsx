@@ -23,7 +23,6 @@ import {
     formatFastpikDetailValue,
     formatFastpikDurationLabel,
     formatFastpikPhotoCountLabel,
-    formatFastpikToggleLabel,
 } from "@/lib/fastpik-project-display";
 import { useTenant } from "@/lib/tenant-context";
 import { shouldHideTenantBranding } from "@/lib/tenant-branding";
@@ -721,27 +720,6 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                                         locale,
                                         unknownNullAsUnlimited: true,
                                     })}
-                                />
-                                <DetailRow
-                                    label={t("selectionStatus")}
-                                    value={formatFastpikToggleLabel(
-                                        booking.fastpikProjectInfo.selection_enabled,
-                                        locale,
-                                    )}
-                                />
-                                <DetailRow
-                                    label={t("downloadStatus")}
-                                    value={formatFastpikToggleLabel(
-                                        booking.fastpikProjectInfo.download_enabled,
-                                        locale,
-                                    )}
-                                />
-                                <DetailRow
-                                    label={t("printMenuStatus")}
-                                    value={formatFastpikToggleLabel(
-                                        booking.fastpikProjectInfo.print_enabled,
-                                        locale,
-                                    )}
                                 />
                                 <DetailRow
                                     label={t("printDuration")}
