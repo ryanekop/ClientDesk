@@ -40,7 +40,8 @@
         "newBadge": "New",
         "statusKlien": "Booking Status",
         "profile": "Profile",
-        "logout": "Logout"
+        "logout": "Logout",
+        "logoutLoading": "Logging out..."
     },
     "Topbar": {
         "profil": "Profile",
@@ -48,7 +49,8 @@
         "paket": "Packages",
         "tutorial": "Tutorial",
         "pengaturan": "Settings",
-        "logout": "Log out"
+        "logout": "Log out",
+        "logoutLoading": "Logging out..."
     },
     "DashboardTitle": {
         "appDefault": "Client Desk",

@@ -183,10 +183,10 @@ type ExtraFieldDefinition = {
 
 const EXTRA_FIELDS_DEF: Record<string, ExtraFieldDefinition[]> = {
     Wisuda: [
-        { key: "universitas", labelKey: "university" },
+        { key: "universitas", labelKey: "university", required: true },
         { key: "fakultas", labelKey: "faculty" },
-        { key: "tempat_wisuda_1", labelKey: "wisudaSession1Venue", isLocation: true },
-        { key: "tempat_wisuda_2", labelKey: "wisudaSession2Venue", isLocation: true },
+        { key: "tempat_wisuda_1", labelKey: "wisudaSession1Venue", isLocation: true, required: true },
+        { key: "tempat_wisuda_2", labelKey: "wisudaSession2Venue", isLocation: true, required: true },
     ],
     Wedding: [
         { key: "nama_pasangan", labelKey: "partnerName", fullWidth: true, required: true },
@@ -2539,6 +2539,7 @@ export default function EditBookingPage() {
                                             }
                                             initialLat={extraLocationCoords[f.key]?.lat ?? null}
                                             initialLng={extraLocationCoords[f.key]?.lng ?? null}
+                                            required={f.required}
                                         />
                                     ) : f.isNumeric ? (
                                         <input placeholder={fieldLabel} value={extraFields[f.key] || ""} onChange={e => {
@@ -2847,6 +2848,7 @@ export default function EditBookingPage() {
                                                 initialLng={
                                                     extraLocationCoords[field.key]?.lng ?? null
                                                 }
+                                                required={field.required}
                                             />
                                         </div>
                                     );

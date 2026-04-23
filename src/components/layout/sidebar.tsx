@@ -16,6 +16,7 @@ import {
     X,
     ListOrdered,
     LogOut,
+    Loader2,
     Menu,
     FileEdit,
     Activity,
@@ -64,6 +65,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
     const [avatarTs, setAvatarTs] = React.useState(() => Date.now());
     const [hasSeenComingSoon, setHasSeenComingSoon] = React.useState(true);
+    const [isLogoutPending, startLogoutTransition] = React.useTransition();
 
     React.useEffect(() => {
         try {
@@ -125,9 +127,12 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
     const handleLogout = React.useCallback(() => {
-        clearClientDeskSessionOnlyState();
-        void signOut(locale);
-    }, [locale]);
+        if (isLogoutPending) return;
+        startLogoutTransition(async () => {
+            clearClientDeskSessionOnlyState();
+            await signOut(locale);
+        });
+    }, [isLogoutPending, locale]);
 
     const markComingSoonSeen = React.useCallback(() => {
         try {
@@ -291,13 +296,23 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                             </Link>
                             <button
                                 onClick={handleLogout}
-                                title="Logout"
+                                disabled={isLogoutPending}
+                                aria-busy={isLogoutPending}
+                                aria-label={isLogoutPending ? t("logoutLoading") : t("logout")}
+                                title={isLogoutPending ? t("logoutLoading") : t("logout")}
                                 className={cn(
-                                    "p-2 rounded-md hover:bg-muted transition-colors cursor-pointer shrink-0",
+                                    "p-2 rounded-md transition-colors shrink-0",
+                                    isLogoutPending
+                                        ? "cursor-wait opacity-70"
+                                        : "cursor-pointer hover:bg-muted",
                                     isCollapsed ? "hidden" : ""
                                 )}
                             >
-                                <LogOut className="w-4 h-4 text-muted-foreground" />
+                                {isLogoutPending ? (
+                                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                                ) : (
+                                    <LogOut className="w-4 h-4 text-muted-foreground" />
+                                )}
                             </button>
                         </div>
                     </div>

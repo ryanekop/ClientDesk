@@ -3203,6 +3203,7 @@ export function BookingFormClient({
             placeholder={`Cari lokasi ${label.toLowerCase()}...`}
             initialLat={extraLocationCoords[field.key]?.lat ?? null}
             initialLng={extraLocationCoords[field.key]?.lng ?? null}
+            required={field.required}
           />
         ) : field.isNumeric ? (
           <input
@@ -3737,6 +3738,7 @@ export function BookingFormClient({
               placeholder={t("cariLokasi")}
               initialLat={locationCoords.lat}
               initialLng={locationCoords.lng}
+              required={builtInFieldRequired}
             />
           </div>
         );

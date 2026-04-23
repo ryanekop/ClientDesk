@@ -92,6 +92,7 @@ interface LocationAutocompleteProps {
   onLocationChange?: (meta: LocationSelectionMeta) => void;
   placeholder?: string;
   name?: string;
+  required?: boolean;
   initialLat?: number | null;
   initialLng?: number | null;
   mapsLanguage?: string;
@@ -110,6 +111,7 @@ export function LocationAutocomplete({
   onLocationChange,
   placeholder,
   name,
+  required = false,
   initialLat,
   initialLng,
   mapsLanguage,
@@ -293,6 +295,7 @@ export function LocationAutocomplete({
               onBlur={onBlur}
               placeholder={resolvedPlaceholder}
               className={`${inputClass} pr-8 ${inputClassName || ""}`}
+              required={required}
               autoComplete="off"
             />
             {loadTriggered && !ready && (

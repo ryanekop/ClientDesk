@@ -21,17 +21,19 @@ export type EventExtraField = {
 
 export const EVENT_EXTRA_FIELDS: Record<string, EventExtraField[]> = {
   Wisuda: [
-    { key: "universitas", label: "Universitas" },
+    { key: "universitas", label: "Universitas", required: true },
     { key: "fakultas", label: "Fakultas" },
     {
       key: "tempat_wisuda_1",
       label: "Lokasi Sesi 1",
       isLocation: true,
+      required: true,
     },
     {
       key: "tempat_wisuda_2",
       label: "Lokasi Sesi 2",
       isLocation: true,
+      required: true,
     },
   ],
   Wedding: [

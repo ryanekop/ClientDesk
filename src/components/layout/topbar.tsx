@@ -14,6 +14,7 @@ import {
   Megaphone,
   Sparkles,
   BookOpen,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, usePathname, useRouter } from "@/i18n/routing";
@@ -81,6 +82,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
     tier: string;
     status: string;
   } | null>(null);
+  const [isLogoutPending, startLogoutTransition] = React.useTransition();
   const ref = React.useRef<HTMLDivElement>(null);
   const t = useTranslations("Topbar");
   const tOnboarding = useTranslations("Onboarding");
@@ -165,9 +167,13 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   ];
 
   const handleLogout = React.useCallback(() => {
-    clearClientDeskSessionOnlyState();
-    void signOut(locale);
-  }, [locale]);
+    if (isLogoutPending) return;
+    setProfileOpen(false);
+    startLogoutTransition(async () => {
+      clearClientDeskSessionOnlyState();
+      await signOut(locale);
+    });
+  }, [isLogoutPending, locale]);
 
   const handleOpenOnboardingReview = React.useCallback(() => {
     requestOpenOnboardingReviewModal();
@@ -307,10 +313,20 @@ export function Topbar({ onMenuClick }: TopbarProps) {
             <div className="border-t py-1">
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-3 px-4 py-2 text-sm text-red-500 hover:bg-muted/50 transition-colors w-full cursor-pointer"
+                disabled={isLogoutPending}
+                aria-busy={isLogoutPending}
+                className={`flex w-full items-center gap-3 px-4 py-2 text-sm text-red-500 transition-colors ${
+                  isLogoutPending
+                    ? "cursor-wait opacity-70"
+                    : "cursor-pointer hover:bg-muted/50"
+                }`}
               >
-                <LogOut className="w-4 h-4" />
-                {t("logout")}
+                {isLogoutPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <LogOut className="w-4 h-4" />
+                )}
+                {isLogoutPending ? t("logoutLoading") : t("logout")}
               </button>
             </div>
           </div>
