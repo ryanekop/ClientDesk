@@ -126,6 +126,8 @@ import {
 } from "@/lib/service-availability";
 import { MAX_GOOGLE_UPLOAD_BYTES } from "@/lib/security/public-upload";
 
+const CONFIRMATION_SUBMIT_GUARD_MS = 350;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Service = {
@@ -915,10 +917,13 @@ export function BookingFormClient({
   const [error, setError] = React.useState("");
   const [currentStep, setCurrentStep] = React.useState<BookingStep>(1);
   const [maxUnlockedStep, setMaxUnlockedStep] = React.useState<BookingStep>(1);
+  const [confirmationSubmitEnabled, setConfirmationSubmitEnabled] =
+    React.useState(true);
   const [draftHydrated, setDraftHydrated] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement | null>(null);
 
   const autoDpAmountRef = React.useRef<number | null>(null);
+  const confirmationSubmitTimerRef = React.useRef<number | null>(null);
   const isSpecialOfferActive = Boolean(
     resolvedSpecialOfferStatus === "active" &&
       normalizedOfferToken &&
@@ -964,6 +969,24 @@ export function BookingFormClient({
     if (!specialOfferStatus) return;
     setResolvedSpecialOfferStatus(specialOfferStatus);
   }, [specialOfferStatus]);
+
+  const clearConfirmationSubmitTimer = React.useCallback(() => {
+    if (confirmationSubmitTimerRef.current === null || typeof window === "undefined") {
+      return;
+    }
+    window.clearTimeout(confirmationSubmitTimerRef.current);
+    confirmationSubmitTimerRef.current = null;
+  }, []);
+
+  const temporarilyDisableConfirmationSubmit = React.useCallback(() => {
+    clearConfirmationSubmitTimer();
+    setConfirmationSubmitEnabled(false);
+    if (typeof window === "undefined") return;
+    confirmationSubmitTimerRef.current = window.setTimeout(() => {
+      confirmationSubmitTimerRef.current = null;
+      setConfirmationSubmitEnabled(true);
+    }, CONFIRMATION_SUBMIT_GUARD_MS);
+  }, [clearConfirmationSubmitTimer]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1325,6 +1348,9 @@ export function BookingFormClient({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (currentStep !== 4) {
+      return;
+    }
+    if (!confirmationSubmitEnabled) {
       return;
     }
     setError("");
@@ -2902,6 +2928,16 @@ export function BookingFormClient({
     }
   }, [currentStep, step1ValidationState.valid, step2ValidationState.valid]);
 
+  React.useEffect(() => {
+    if (currentStep === 4) return;
+    clearConfirmationSubmitTimer();
+    setConfirmationSubmitEnabled(true);
+  }, [clearConfirmationSubmitTimer, currentStep]);
+
+  React.useEffect(() => () => {
+    clearConfirmationSubmitTimer();
+  }, [clearConfirmationSubmitTimer]);
+
   const scrollToFormTop = React.useCallback(() => {
     requestAnimationFrame(() => {
       formRef.current?.scrollIntoView({
@@ -2979,6 +3015,7 @@ export function BookingFormClient({
 
     if (currentStep === 3) {
       setError("");
+      temporarilyDisableConfirmationSubmit();
       setMaxUnlockedStep((prev) => (prev < 4 ? 4 : prev));
       setCurrentStep(4);
       scrollToFormTop();
@@ -5131,8 +5168,10 @@ export function BookingFormClient({
 
             {currentStep < 4 ? (
               <button
+                key="footer-next-button"
                 type="button"
                 onClick={goNextStep}
+                data-step-action="next"
                 className="inline-flex h-11 items-center justify-center rounded-lg px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
                 style={{ backgroundColor: brandColor }}
               >
@@ -5140,8 +5179,10 @@ export function BookingFormClient({
               </button>
             ) : (
               <button
+                key="footer-submit-button"
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !confirmationSubmitEnabled}
+                data-step-action="submit"
                 className="flex items-center justify-center gap-2 h-11 rounded-lg px-4 text-white font-semibold hover:opacity-90 transition-opacity shadow-lg cursor-pointer disabled:opacity-50 text-sm"
                 style={{
                   backgroundColor: brandColor,
