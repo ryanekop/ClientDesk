@@ -737,14 +737,6 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                                     )}
                                 />
                                 <DetailRow
-                                    label={t("printTemplate")}
-                                    value={renderFastpikTextDetail({
-                                        primary: booking.fastpikProjectInfo.print_template_label,
-                                        description:
-                                            booking.fastpikProjectInfo.print_template_description,
-                                    })}
-                                />
-                                <DetailRow
                                     label={t("printSize")}
                                     value={renderFastpikTextDetail({
                                         primary: booking.fastpikProjectInfo.print_size_label,
