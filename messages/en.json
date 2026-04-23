@@ -956,7 +956,6 @@
         "fastpikLinkModeBoth": "Show Fastpik & Google Drive links",
         "fastpikLinkModePreferFastpik": "Show Fastpik link when available, otherwise Google Drive",
         "fastpikLinkModeDriveOnly": "Show Google Drive link only",
-        "fastpikLinkModeFastpikWithVideoOnly": "Show Fastpik + Video only (without Google Drive photo)",
         "fastpikDefaultsTitle": "ClientDesk Default Preset",
         "fastpikDefaultMaxPhotos": "Max Photos",
         "fastpikDefaultSelectionDays": "Selection Duration (days)",

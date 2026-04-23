@@ -55,11 +55,7 @@ type BookingData = {
     fastpikUrl: string | null;
     driveUrl: string | null;
     videoUrl: string | null;
-    fastpikLinkDisplayMode:
-        | "both"
-        | "prefer_fastpik"
-        | "drive_only"
-        | "fastpik_with_video_only";
+    fastpikLinkDisplayMode: "both" | "prefer_fastpik" | "drive_only";
     createdAt: string;
     totalPrice: number;
     dpPaid: number;
@@ -325,14 +321,15 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
             ),
         };
     }, [booking.projectDeadlineDate, booking.showProjectDeadline, dateLocale]);
+    const videoResultUrl =
+        booking.showVideoResults && booking.videoUrl ? booking.videoUrl : null;
     const galleryLinks = resolveFastpikLinkDisplay({
         mode: booking.fastpikLinkDisplayMode,
         fastpikUrl: booking.fastpikUrl,
         driveUrl: booking.driveUrl,
+        hideDriveWhenFastpikAndVideoVisible: Boolean(videoResultUrl),
     });
     const photoResultUrl = booking.showFileResults ? galleryLinks.primaryUrl : null;
-    const videoResultUrl =
-        booking.showVideoResults && booking.videoUrl ? booking.videoUrl : null;
     const shouldShowFastpikInfo =
         booking.showFileResults && Boolean(booking.fastpikProjectInfo);
     const hasVisibleFileResults =

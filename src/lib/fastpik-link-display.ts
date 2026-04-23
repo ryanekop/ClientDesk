@@ -1,20 +1,14 @@
-export type FastpikLinkDisplayMode =
-  | "both"
-  | "prefer_fastpik"
-  | "drive_only"
-  | "fastpik_with_video_only";
+export type FastpikLinkDisplayMode = "both" | "prefer_fastpik" | "drive_only";
 
 export function normalizeFastpikLinkDisplayMode(
   value: unknown,
 ): FastpikLinkDisplayMode {
   const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (
-    raw === "both" ||
-    raw === "prefer_fastpik" ||
-    raw === "drive_only" ||
-    raw === "fastpik_with_video_only"
-  ) {
+  if (raw === "both" || raw === "prefer_fastpik" || raw === "drive_only") {
     return raw;
+  }
+  if (raw === "fastpik_with_video_only") {
+    return "both";
   }
   return "prefer_fastpik";
 }
@@ -28,6 +22,7 @@ export function resolveFastpikLinkDisplay(params: {
   mode: unknown;
   fastpikUrl: string | null | undefined;
   driveUrl: string | null | undefined;
+  hideDriveWhenFastpikAndVideoVisible?: boolean;
 }) {
   const mode = normalizeFastpikLinkDisplayMode(params.mode);
   const fastpikUrl = normalizeUrl(params.fastpikUrl);
@@ -35,6 +30,9 @@ export function resolveFastpikLinkDisplay(params: {
 
   const hasFastpik = Boolean(fastpikUrl);
   const hasDrive = Boolean(driveUrl);
+  const hideDriveWhenFastpikAndVideoVisible = Boolean(
+    params.hideDriveWhenFastpikAndVideoVisible && hasFastpik,
+  );
 
   if (mode === "both") {
     return {
@@ -42,7 +40,7 @@ export function resolveFastpikLinkDisplay(params: {
       hasFastpik,
       hasDrive,
       showFastpik: hasFastpik,
-      showDrive: hasDrive,
+      showDrive: hasDrive && !hideDriveWhenFastpikAndVideoVisible,
       fastpikUrl,
       driveUrl,
       primaryUrl: fastpikUrl || driveUrl,
@@ -61,20 +59,6 @@ export function resolveFastpikLinkDisplay(params: {
       driveUrl,
       primaryUrl: driveUrl,
       primaryType: driveUrl ? "drive" : null,
-    } as const;
-  }
-
-  if (mode === "fastpik_with_video_only") {
-    return {
-      mode,
-      hasFastpik,
-      hasDrive,
-      showFastpik: hasFastpik,
-      showDrive: false,
-      fastpikUrl,
-      driveUrl,
-      primaryUrl: fastpikUrl,
-      primaryType: fastpikUrl ? "fastpik" : null,
     } as const;
   }
 
