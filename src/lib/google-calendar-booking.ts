@@ -38,6 +38,7 @@ type CalendarBookingConfig = {
   id: string;
   bookingCode: string;
   bookingDetailLink?: string | null;
+  driveFolderUrl?: string | null;
   clientName: string;
   clientWhatsapp?: string | null;
   instagram?: string | null;
@@ -156,6 +157,7 @@ export async function syncBookingCalendarEvent({
         event_type: booking.eventType || "-",
         booking_code: booking.bookingCode,
         booking_detail_link: booking.bookingDetailLink || "-",
+        drive_link: booking.driveFolderUrl?.trim() || "-",
         studio_name: profile.studioName || "Client Desk",
         location: sessionLocation,
         location_maps_url: buildGoogleMapsUrlOrFallback(

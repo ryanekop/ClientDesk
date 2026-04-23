@@ -10,7 +10,7 @@ import {
 } from "@/lib/google-calendar-sync";
 
 export const GOOGLE_CALENDAR_SYNC_BOOKING_SELECT =
-  "id, booking_code, client_name, client_whatsapp, instagram, session_date, location, location_lat, location_lng, location_detail, notes, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, quantity, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))";
+  "id, booking_code, client_name, client_whatsapp, instagram, session_date, location, location_lat, location_lng, location_detail, notes, event_type, extra_fields, drive_folder_url, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, quantity, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))";
 
 type SupabaseLike = any;
 
@@ -28,6 +28,7 @@ export type GoogleCalendarSyncBookingRow = {
   notes: string | null;
   event_type: string | null;
   extra_fields: Record<string, unknown> | null;
+  drive_folder_url: string | null;
   google_calendar_event_id: string | null;
   google_calendar_event_ids: unknown;
   services: unknown;
@@ -114,6 +115,7 @@ export async function syncSingleBookingCalendar(args: {
           locale: args.locale,
           bookingId: args.booking.id,
         }),
+        driveFolderUrl: args.booking.drive_folder_url,
         clientName: args.booking.client_name,
         clientWhatsapp: args.booking.client_whatsapp,
         instagram: args.booking.instagram,

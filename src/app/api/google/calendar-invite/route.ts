@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
         // Get booking details including service duration
         const { data: booking } = await supabase
             .from("bookings")
-            .select("id, booking_code, client_name, client_whatsapp, instagram, session_date, location, location_lat, location_lng, location_detail, notes, event_type, extra_fields, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, quantity, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))")
+            .select("id, booking_code, client_name, client_whatsapp, instagram, session_date, location, location_lat, location_lng, location_detail, notes, event_type, extra_fields, drive_folder_url, google_calendar_event_id, google_calendar_event_ids, services(id, name, duration_minutes, is_addon, affects_schedule), booking_services(id, kind, sort_order, quantity, service:services(id, name, duration_minutes, is_addon, affects_schedule)), freelance(name), booking_freelance(freelance(name))")
             .eq("id", bookingId)
             .eq("user_id", user.id)
             .single();
@@ -140,6 +140,7 @@ export async function POST(req: NextRequest) {
         try {
             const bookingRecord = booking as {
                 extra_fields?: Record<string, unknown> | null;
+                drive_folder_url?: string | null;
                 google_calendar_event_id?: string | null;
                 google_calendar_event_ids?: unknown;
                 booking_services?: unknown;
@@ -162,6 +163,7 @@ export async function POST(req: NextRequest) {
                         locale,
                         bookingId: booking.id,
                     }),
+                    driveFolderUrl: bookingRecord.drive_folder_url ?? null,
                     clientName: booking.client_name,
                     clientWhatsapp: booking.client_whatsapp,
                     instagram: booking.instagram,
