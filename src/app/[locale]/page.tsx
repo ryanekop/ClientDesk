@@ -14,6 +14,7 @@ import {
 } from "@/components/landing/landing-client";
 import {
   AnimatedHero,
+  LandingHeroDemo,
   AnimatedFeatures,
   AnimatedWorkflow,
   AnimatedSection,
@@ -64,25 +65,32 @@ export default async function Home() {
       <section className="relative overflow-hidden bg-gradient-to-b from-background via-muted/30 to-background py-20 sm:py-32">
         <div className="absolute inset-0 bg-grid-pattern opacity-5 pointer-events-none"></div>
         <div className="container mx-auto px-4">
-          <AnimatedHero>
-            <Badge variant="secondary" className="mb-4">
-              <Sparkles className="h-3 w-3 mr-1" />
-              {t("heroTagline")}
-            </Badge>
+          <div className="mx-auto grid max-w-[84rem] items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-14 xl:gap-16">
+            <AnimatedHero>
+              <Badge variant="secondary" className="mb-4">
+                <Sparkles className="h-3 w-3 mr-1" />
+                {t("heroTagline")}
+              </Badge>
 
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight">
-              {t("title")}
-              <span className="block text-primary mt-2">{t("subtitle")}</span>
-            </h1>
+              <h1 className="text-5xl sm:text-6xl lg:text-5xl xl:text-6xl font-extrabold tracking-tight">
+                {t("title")}
+                <span className="block text-primary mt-2">{t("subtitle")}</span>
+              </h1>
 
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              {t("description")}
-            </p>
+              <p className="text-xl text-muted-foreground max-w-2xl mx-auto lg:mx-0">
+                {t("description")}
+              </p>
 
-            <HeroCTA isAuthenticated={isAuthenticated} />
+              <HeroCTA
+                isAuthenticated={isAuthenticated}
+                className="lg:justify-start"
+              />
 
-            <p className="text-sm text-muted-foreground pt-4">✨ {t("trustedBy")}</p>
-          </AnimatedHero>
+              <p className="text-sm text-muted-foreground pt-4">✨ {t("trustedBy")}</p>
+            </AnimatedHero>
+
+            <LandingHeroDemo />
+          </div>
         </div>
       </section>
 

@@ -815,7 +815,8 @@
         "resendVerificationSent": "Email verifikasi baru sudah dikirim. Silakan cek inbox/spam Anda.",
         "resendVerificationFailed": "Gagal mengirim ulang email verifikasi. Silakan coba lagi.",
         "requestNewResetLink": "Minta Link Reset Baru",
-        "requestNewVerificationLink": "Minta Link Verifikasi Baru"
+        "requestNewVerificationLink": "Minta Link Verifikasi Baru",
+        "authHandoffExpired": "Sesi login tenant sudah kedaluwarsa. Silakan login lagi dari halaman tenant."
     },
     "BookingsPage": {
         "addClient": "Tambah Klien Baru",

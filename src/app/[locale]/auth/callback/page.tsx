@@ -5,11 +5,13 @@ import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { useLocale, useTranslations } from 'next-intl'
 import { Loader2 } from 'lucide-react'
+import { normalizeAuthLocale, resolveSafeNextPath } from '@/lib/auth/public-origin'
+import { applyClientDeskRememberMeSelection } from '@/lib/auth/session-only'
 
 type ErrorAction = 'forgot-password' | 'register' | null
 
 export default function AuthCallbackPage() {
-    const locale = useLocale()
+    const locale = normalizeAuthLocale(useLocale())
     const supabase = createClient()
     const searchParams = useSearchParams()
     const t = useTranslations('Auth')
@@ -40,6 +42,7 @@ export default function AuthCallbackPage() {
                 // Check for PKCE code in URL query params
                 const code = searchParams.get('code')
                 const type = searchParams.get('type') || ''
+                const nextPath = resolveSafeNextPath(searchParams.get('next'), locale)
 
                 // Check hash for implicit flow
                 const hashParams = new URLSearchParams(
@@ -50,6 +53,7 @@ export default function AuthCallbackPage() {
                 const hashType = hashParams.get('type')
                 const hashError = hashParams.get('error')
                 const errorDescription = hashParams.get('error_description')
+                const rememberMe = hashParams.get('remember_me')
 
                 const authType = type || hashType || ''
 
@@ -71,7 +75,7 @@ export default function AuthCallbackPage() {
 
                     // Auto-create trial subscription for new users
                     const { data: { user } } = await supabase.auth.getUser()
-                    if (user) {
+                    if (user && authType !== 'login') {
                         await fetch('/api/auth/callback', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -85,6 +89,8 @@ export default function AuthCallbackPage() {
 
                     if (authType === 'recovery' || authType === 'invite') {
                         window.location.href = `/${locale}/reset-password`
+                    } else if (authType === 'login') {
+                        window.location.replace(nextPath)
                     } else {
                         window.location.href = `/${locale}/dashboard`
                     }
@@ -102,10 +108,13 @@ export default function AuthCallbackPage() {
                         setError(sessionError.message)
                         return
                     }
+                    if (authType === 'login') {
+                        applyClientDeskRememberMeSelection(rememberMe !== 'false')
+                    }
 
                     // Auto-create trial subscription for new users
                     const { data: { user: implicitUser } } = await supabase.auth.getUser()
-                    if (implicitUser) {
+                    if (implicitUser && authType !== 'login') {
                         await fetch('/api/auth/callback', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -119,6 +128,8 @@ export default function AuthCallbackPage() {
 
                     if (authType === 'invite' || authType === 'recovery') {
                         window.location.href = `/${locale}/reset-password`
+                    } else if (authType === 'login') {
+                        window.location.replace(nextPath)
                     } else {
                         window.location.href = `/${locale}/dashboard`
                     }
@@ -130,6 +141,8 @@ export default function AuthCallbackPage() {
                 if (user) {
                     if (authType === 'recovery' || authType === 'invite') {
                         window.location.href = `/${locale}/reset-password`
+                    } else if (authType === 'login') {
+                        window.location.replace(nextPath)
                     } else {
                         window.location.href = `/${locale}/dashboard`
                     }

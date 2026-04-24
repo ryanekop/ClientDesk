@@ -815,7 +815,8 @@
         "resendVerificationSent": "A new verification email has been sent. Please check your inbox/spam folder.",
         "resendVerificationFailed": "Failed to resend the verification email. Please try again.",
         "requestNewResetLink": "Request New Reset Link",
-        "requestNewVerificationLink": "Request New Verification Link"
+        "requestNewVerificationLink": "Request New Verification Link",
+        "authHandoffExpired": "The tenant login session has expired. Please start login again from the tenant page."
     },
     "BookingsPage": {
         "addClient": "Add New Client",

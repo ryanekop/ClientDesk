@@ -3,6 +3,7 @@ import { getBookingWriteAccessForUser } from "@/lib/booking-write-access.server"
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { normalizeAuthLocale } from "@/lib/auth/public-origin";
+import { headers } from "next/headers";
 
 export default async function Layout({
     children,
@@ -17,7 +18,9 @@ export default async function Layout({
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-        redirect(`/${locale}/login`);
+        const headersList = await headers();
+        const currentPath = headersList.get("x-current-path") || `/${locale}/dashboard`;
+        redirect(`/${locale}/login?next=${encodeURIComponent(currentPath)}`);
     }
 
     const bookingWriteAccess = await getBookingWriteAccessForUser(user.id);

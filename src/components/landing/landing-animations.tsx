@@ -1,11 +1,11 @@
 "use client"
 
-import { motion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
 import { useTranslations } from 'next-intl'
 import {
     CalendarDays, ClipboardCheck, FileText, Globe, LayoutDashboard,
-    MessageSquare, FolderPlus, Share2, CheckCircle2
+    MessageSquare, FolderPlus, Share2, CheckCircle2, Check, Send
 } from "lucide-react"
 
 const features = [
@@ -28,9 +28,230 @@ export function AnimatedHero({ children }: { children: React.ReactNode }) {
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-center space-y-6 max-w-4xl mx-auto"
+            className="mx-auto max-w-4xl space-y-6 text-center lg:mx-0 lg:max-w-2xl lg:text-left"
         >
             {children}
+        </motion.div>
+    )
+}
+
+const bookingFields = [
+    { label: "Nama Klien", value: "Nadia Putri" },
+    { label: "Paket", value: "Graduation Premium" },
+    { label: "Tanggal", value: "24 Apr 2026, 09.00" },
+]
+
+const calendarDays = [
+    ["20", "21", "22", "23", "24", "25", "26"],
+    ["27", "28", "29", "30", "1", "2", "3"],
+]
+
+export function LandingHeroDemo() {
+    const shouldReduceMotion = useReducedMotion()
+    const loopTransition = shouldReduceMotion
+        ? { duration: 0 }
+        : { duration: 12, repeat: Infinity, ease: "easeInOut" as const }
+    const finalOpacity = shouldReduceMotion ? 1 : undefined
+    const finalY = shouldReduceMotion ? 0 : undefined
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.55, ease: "easeOut" }}
+            className="relative hidden w-full max-w-[43rem] justify-self-end lg:block"
+            aria-hidden="true"
+        >
+            <div className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-primary/10 via-background to-muted/70 blur-2xl" />
+            <div className="relative overflow-hidden rounded-3xl border bg-card/95 shadow-2xl">
+                <div className="flex items-center justify-between border-b bg-muted/35 px-5 py-3">
+                    <div>
+                        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            Live booking flow
+                        </p>
+                        <p className="text-sm font-semibold">ClientDesk Demo</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+                        <span className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
+                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                    </div>
+                </div>
+
+                <div className="grid gap-4 p-5">
+                    <div className="rounded-2xl border bg-background p-4 shadow-sm">
+                        <div className="mb-3 flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-semibold">Form Booking</p>
+                                <p className="text-xs text-muted-foreground">Diisi otomatis oleh klien</p>
+                            </div>
+                            <motion.span
+                                animate={
+                                    shouldReduceMotion
+                                        ? { opacity: 1 }
+                                        : { opacity: [0.5, 1, 0.5] }
+                                }
+                                transition={loopTransition}
+                                className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+                            >
+                                Online
+                            </motion.span>
+                        </div>
+
+                        <div className="space-y-3">
+                            {bookingFields.map((field, index) => (
+                                <div key={field.label} className="space-y-1.5">
+                                    <span className="text-xs font-medium text-muted-foreground">
+                                        {field.label}
+                                    </span>
+                                    <div className="h-9 overflow-hidden rounded-lg border bg-muted/20 px-3">
+                                        <motion.div
+                                            animate={{
+                                                width: shouldReduceMotion
+                                                    ? "100%"
+                                                    : ["0%", "0%", "100%", "100%", "100%", "100%"],
+                                            }}
+                                            transition={{
+                                                ...loopTransition,
+                                                delay: shouldReduceMotion ? 0 : index * 0.45,
+                                                times: [0, 0.08, 0.22, 0.58, 0.9, 1],
+                                            }}
+                                            className="flex h-full max-w-full items-center overflow-hidden whitespace-nowrap"
+                                        >
+                                            <span className="text-sm font-medium">{field.value}</span>
+                                            {!shouldReduceMotion ? (
+                                                <motion.span
+                                                    animate={{ opacity: [0, 1, 0] }}
+                                                    transition={{ duration: 0.8, repeat: Infinity }}
+                                                    className="ml-0.5 h-4 w-px bg-foreground"
+                                                />
+                                            ) : null}
+                                        </motion.div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <motion.div
+                            animate={
+                                shouldReduceMotion
+                                    ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }
+                                    : {
+                                          backgroundColor: [
+                                              "var(--primary)",
+                                              "var(--primary)",
+                                              "var(--primary)",
+                                              "oklch(0.696 0.17 162.48)",
+                                              "oklch(0.696 0.17 162.48)",
+                                              "var(--primary)",
+                                          ],
+                                      }
+                            }
+                            transition={{ ...loopTransition, times: [0, 0.42, 0.5, 0.58, 0.82, 1] }}
+                            className="relative mt-4 flex h-9 items-center justify-center gap-2 overflow-hidden rounded-lg text-sm font-semibold text-primary-foreground"
+                        >
+                            <motion.span
+                                animate={shouldReduceMotion ? { opacity: 0 } : { opacity: [1, 1, 0, 0, 0, 1] }}
+                                transition={{ ...loopTransition, times: [0, 0.45, 0.52, 0.82, 0.9, 1] }}
+                                className="absolute flex items-center gap-2"
+                            >
+                                <Send className="h-4 w-4" /> Kirim booking
+                            </motion.span>
+                            <motion.span
+                                animate={{ opacity: shouldReduceMotion ? 1 : [0, 0, 1, 1, 1, 0] }}
+                                transition={{ ...loopTransition, times: [0, 0.45, 0.54, 0.82, 0.9, 1] }}
+                                className="absolute flex items-center gap-2"
+                            >
+                                <Check className="h-4 w-4" /> Booking masuk
+                            </motion.span>
+                        </motion.div>
+                    </div>
+
+                    <div className="grid grid-cols-[1.05fr_0.95fr] gap-4">
+                        <div className="rounded-2xl border bg-background p-4 shadow-sm">
+                            <div className="mb-3 flex items-center justify-between">
+                                <p className="text-sm font-semibold">Data Booking</p>
+                                <span className="text-xs text-muted-foreground">Hari ini</span>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="rounded-xl border bg-muted/25 p-3">
+                                    <p className="text-sm font-medium">Raka & Tim</p>
+                                    <p className="text-xs text-muted-foreground">Family Portrait - 13.00</p>
+                                </div>
+                                <motion.div
+                                    animate={{
+                                        opacity: finalOpacity ?? [0, 0, 0, 1, 1, 0],
+                                        y: finalY ?? [12, 12, 12, 0, 0, -6],
+                                    }}
+                                    transition={{ ...loopTransition, times: [0, 0.5, 0.58, 0.68, 0.9, 1] }}
+                                    className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3"
+                                >
+                                    <p className="text-sm font-semibold">Nadia Putri</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        Graduation Premium - 09.00
+                                    </p>
+                                </motion.div>
+                            </div>
+                        </div>
+
+                        <div className="rounded-2xl border bg-background p-4 shadow-sm">
+                            <div className="mb-3 flex items-center justify-between">
+                                <p className="text-sm font-semibold">Kalender</p>
+                                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-muted-foreground">
+                                {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
+                                    <span key={`${day}-${index}`}>{day}</span>
+                                ))}
+                            </div>
+                            <div className="mt-2 space-y-1">
+                                {calendarDays.map((week, weekIndex) => (
+                                    <div key={weekIndex} className="grid grid-cols-7 gap-1">
+                                        {week.map((day) => {
+                                            const isTarget = day === "24"
+                                            return (
+                                                <span
+                                                    key={day}
+                                                    className="relative flex aspect-square items-center justify-center text-xs font-semibold"
+                                                >
+                                                    {isTarget ? (
+                                                        <motion.span
+                                                            animate={{
+                                                                opacity: finalOpacity ?? [0, 0, 0, 1, 1, 0],
+                                                                scale: shouldReduceMotion
+                                                                    ? 1
+                                                                    : [0.7, 0.7, 0.7, 1, 1, 0.85],
+                                                            }}
+                                                            transition={{
+                                                                ...loopTransition,
+                                                                times: [0, 0.58, 0.68, 0.76, 0.9, 1],
+                                                            }}
+                                                            className="absolute inset-1 rounded-full border border-emerald-500/40 bg-emerald-500/15 shadow-[0_0_0_3px_rgba(16,185,129,0.08)]"
+                                                        />
+                                                    ) : null}
+                                                    <span className="relative z-10 text-foreground">{day}</span>
+                                                </span>
+                                            )
+                                        })}
+                                    </div>
+                                ))}
+                            </div>
+                            <motion.div
+                                animate={{
+                                    opacity: finalOpacity ?? [0, 0, 0, 1, 1, 0],
+                                    y: finalY ?? [8, 8, 8, 0, 0, -4],
+                                }}
+                                transition={{ ...loopTransition, times: [0, 0.62, 0.72, 0.8, 0.9, 1] }}
+                                className="mt-3 rounded-lg border bg-muted/25 px-3 py-2"
+                            >
+                                <p className="text-[11px] font-semibold">09.00 Graduation</p>
+                                <p className="text-[10px] text-muted-foreground">Slot otomatis terisi</p>
+                            </motion.div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
         </motion.div>
     )
 }

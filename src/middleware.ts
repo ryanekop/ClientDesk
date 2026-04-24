@@ -107,6 +107,11 @@ export default async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     const skipAuthRefresh = shouldSkipAuthRefresh(request);
 
+    request.headers.set(
+        'x-current-path',
+        `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    );
+
     const hostname = request.headers.get('host') || '';
     const tenant = await resolveTenant(hostname, {
         bypassCache: shouldBypassTenantCache(pathname),

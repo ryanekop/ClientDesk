@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 import { clearClientDeskSessionOnlyState } from "@/lib/auth/session-only";
@@ -23,6 +24,10 @@ import { getClientDeskRegisterHref } from "@/lib/auth/register-url";
 
 type LandingAuthProps = {
   isAuthenticated?: boolean;
+};
+
+type HeroCTAProps = LandingAuthProps & {
+  className?: string;
 };
 
 function scrollToSection(id: string) {
@@ -352,13 +357,13 @@ export function LandingNav() {
   );
 }
 
-export function HeroCTA({ isAuthenticated = false }: LandingAuthProps) {
+export function HeroCTA({ isAuthenticated = false, className }: HeroCTAProps) {
   const t = useTranslations("Landing");
   const locale = useLocale();
   const registerHref = getClientDeskRegisterHref(locale);
 
   return (
-    <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+    <div className={cn("flex flex-col sm:flex-row gap-4 justify-center pt-4", className)}>
       {isAuthenticated ? (
         <Button size="lg" asChild className="gap-2 cursor-pointer text-lg px-8">
           <Link href={`/${locale}/dashboard`}>
