@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: "clientdesk",
-      script: "server.js",
-      cwd: "/var/www/clientdesk/current",
+      script: ".next/standalone/server.js",
+      cwd: "/var/www/clientdesk",
       env: {
         PORT: 3001,
         NODE_ENV: "production",

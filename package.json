@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "next dev --webpack",
     "build": "NODE_OPTIONS='--max-old-space-size=4096' next build",
-    "typecheck": "tsc --noEmit",
     "start": "next start",
     "lint": "eslint",
     "audit:cache-staleness": "node scripts/audit-cache-staleness.mjs",
