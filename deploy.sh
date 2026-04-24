@@ -97,12 +97,16 @@ echo "✅ .env.local copied to standalone"
 
 echo ""
 echo "♻️  [5/5] Reloading PM2..."
-if pm2 describe "${APP_NAME}" > /dev/null 2>&1; then
-    pm2 reload "${APP_NAME}" --update-env
+if pm2 reload "${APP_NAME}" --update-env; then
+    echo "✅ PM2 reload succeeded"
+elif pm2 restart "${APP_NAME}" --update-env; then
+    echo "✅ PM2 restart fallback succeeded"
 else
+    echo "⚠️  PM2 reload/restart failed. Starting from ecosystem.config.js..."
     pm2 start ecosystem.config.js
 fi
 pm2 save
+pm2 describe "${APP_NAME}" > /dev/null
 
 echo ""
 echo "═══════════════════════════════════════════"
