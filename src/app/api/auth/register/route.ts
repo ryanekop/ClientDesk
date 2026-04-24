@@ -12,6 +12,35 @@ function getSupabaseAdmin() {
     )
 }
 
+async function findAuthUserByEmail(email: string) {
+    const admin = getSupabaseAdmin()
+    const normalizedEmail = email.trim().toLowerCase()
+    let page = 1
+
+    while (true) {
+        const { data, error } = await admin.auth.admin.listUsers({
+            page,
+            perPage: 1000,
+        })
+
+        if (error) {
+            throw error
+        }
+
+        const users = data?.users || []
+        const existingUser = users.find((u) => u.email?.toLowerCase() === normalizedEmail)
+        if (existingUser) {
+            return existingUser
+        }
+
+        if (users.length < 1000) {
+            return null
+        }
+
+        page += 1
+    }
+}
+
 export async function POST(request: NextRequest) {
     const locale = resolveApiLocale(request)
 
@@ -43,20 +72,20 @@ export async function POST(request: NextRequest) {
         }
 
         // Check if email already registered using admin API
-        const admin = getSupabaseAdmin()
-        const { data: { users } } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-        const existingUser = users?.find((u) => u.email?.toLowerCase() === email.toLowerCase())
+        const existingUser = await findAuthUserByEmail(email)
 
         if (existingUser) {
             if (existingUser.email_confirmed_at) {
                 return NextResponse.json({ error: apiT(locale, 'emailAlreadyRegisteredPleaseLogin') }, { status: 409 })
-            } else {
-                // Unconfirmed user — delete stale record so they can re-register
-                await admin.auth.admin.deleteUser(existingUser.id)
             }
+
+            return NextResponse.json({
+                error: apiT(locale, 'emailNotConfirmedResend'),
+                status: 'unconfirmed',
+            }, { status: 409 })
         }
 
-        return NextResponse.json({ valid: true })
+        return NextResponse.json({ valid: true, status: 'available' })
     } catch (error) {
         console.error('[Register] Validate error:', error)
         return NextResponse.json({ error: apiT(locale, 'validationUnexpectedError') }, { status: 500 })

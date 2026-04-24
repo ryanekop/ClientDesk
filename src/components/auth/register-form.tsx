@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useLocale, useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
-import { Loader2, Eye, EyeOff, UserPlus, Mail, ArrowLeft } from "lucide-react"
+import { Loader2, Eye, EyeOff, UserPlus, Mail, ArrowLeft, Send } from "lucide-react"
 import Link from "next/link"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -23,9 +23,12 @@ export function RegisterForm() {
     const [showPassword, setShowPassword] = useState(false)
     const [showConfirmPassword, setShowConfirmPassword] = useState(false)
     const [captchaToken, setCaptchaToken] = useState("")
+    const [captchaKey, setCaptchaKey] = useState(0)
     const [loading, setLoading] = useState(false)
+    const [resending, setResending] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState(false)
+    const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null)
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -61,6 +64,15 @@ export function RegisterForm() {
             const data = await res.json()
 
             if (!res.ok) {
+                if (data.status === "unconfirmed") {
+                    setUnconfirmedEmail(email.trim())
+                    setError(data.error || t("emailNotConfirmedResend"))
+                    setCaptchaToken("")
+                    setCaptchaKey((value) => value + 1)
+                    setLoading(false)
+                    return
+                }
+
                 setError(data.error || t("genericError"))
                 setLoading(false)
                 return
@@ -95,6 +107,39 @@ export function RegisterForm() {
             setError(t("genericError"))
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleResendVerification = async () => {
+        const targetEmail = unconfirmedEmail || email.trim()
+        if (!targetEmail) return
+
+        setResending(true)
+        setError(null)
+
+        try {
+            const res = await fetch('/api/auth/resend-confirmation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: targetEmail, captchaToken, locale }),
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                setError(data.error || t("resendVerificationFailed"))
+                setCaptchaToken("")
+                setCaptchaKey((value) => value + 1)
+                return
+            }
+
+            setEmail(targetEmail)
+            setSuccess(true)
+        } catch {
+            setError(t("resendVerificationFailed"))
+            setCaptchaToken("")
+            setCaptchaKey((value) => value + 1)
+        } finally {
+            setResending(false)
         }
     }
 
@@ -169,7 +214,10 @@ export function RegisterForm() {
                                     placeholder="email@example.com"
                                     required
                                     value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
+                                    onChange={(e) => {
+                                        setEmail(e.target.value)
+                                        setUnconfirmedEmail(null)
+                                    }}
                                     className={inputClass}
                                 />
                             </div>
@@ -213,12 +261,39 @@ export function RegisterForm() {
                             </div>
 
                             {error && (
-                                <div className="p-3 bg-destructive/15 text-destructive text-sm rounded-md">
-                                    {error}
+                                <div className="space-y-3 rounded-md bg-destructive/15 p-3 text-sm text-destructive">
+                                    <p>{error}</p>
+                                    {unconfirmedEmail && (
+                                        <div className="space-y-3 text-foreground">
+                                            <p className="text-xs text-muted-foreground">
+                                                {t("resendVerificationHint")}
+                                            </p>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="w-full gap-2 bg-background"
+                                                disabled={resending || !captchaToken}
+                                                onClick={handleResendVerification}
+                                            >
+                                                {resending ? (
+                                                    <>
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                        {t("sending")}
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Send className="h-4 w-4" />
+                                                        {t("resendVerification")}
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
                             <Turnstile
+                                key={captchaKey}
                                 siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
                                 onSuccess={(token) => setCaptchaToken(token)}
                                 onExpire={() => setCaptchaToken("")}

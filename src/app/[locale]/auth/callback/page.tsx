@@ -6,12 +6,33 @@ import { createClient } from '@/utils/supabase/client'
 import { useLocale, useTranslations } from 'next-intl'
 import { Loader2 } from 'lucide-react'
 
+type ErrorAction = 'forgot-password' | 'register' | null
+
 export default function AuthCallbackPage() {
     const locale = useLocale()
     const supabase = createClient()
     const searchParams = useSearchParams()
     const t = useTranslations('Auth')
     const [error, setError] = useState<string | null>(null)
+    const [errorAction, setErrorAction] = useState<ErrorAction>(null)
+
+    const getErrorAction = (message: string, authType: string): ErrorAction => {
+        const normalizedMessage = message.toLowerCase()
+        if (authType === 'signup') {
+            return 'register'
+        }
+        if (
+            authType === 'recovery' ||
+            authType === 'invite' ||
+            normalizedMessage.includes('expired') ||
+            normalizedMessage.includes('invalid token') ||
+            normalizedMessage.includes('token')
+        ) {
+            return 'forgot-password'
+        }
+
+        return null
+    }
 
     useEffect(() => {
         const handleAuthCallback = async () => {
@@ -33,7 +54,9 @@ export default function AuthCallbackPage() {
                 const authType = type || hashType || ''
 
                 if (hashError) {
-                    setError(errorDescription || hashError)
+                    const message = errorDescription || hashError
+                    setError(message)
+                    setErrorAction(getErrorAction(message, authType))
                     return
                 }
 
@@ -42,6 +65,7 @@ export default function AuthCallbackPage() {
                     const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
                     if (exchangeError) {
                         setError(exchangeError.message)
+                        setErrorAction(getErrorAction(exchangeError.message, authType))
                         return
                     }
 
@@ -111,6 +135,7 @@ export default function AuthCallbackPage() {
                     }
                 } else {
                     setError(t('authTokenNotFound'))
+                    setErrorAction(getErrorAction(t('authTokenNotFound'), authType))
                 }
             } catch {
                 setError(t('authFailed'))
@@ -134,6 +159,22 @@ export default function AuthCallbackPage() {
                     >
                         {t('backToLogin')}
                     </button>
+                    {errorAction === 'forgot-password' && (
+                        <button
+                            onClick={() => window.location.href = `/${locale}/forgot-password`}
+                            className="block w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+                        >
+                            {t('requestNewResetLink')}
+                        </button>
+                    )}
+                    {errorAction === 'register' && (
+                        <button
+                            onClick={() => window.location.href = `/${locale}/register`}
+                            className="block w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+                        >
+                            {t('requestNewVerificationLink')}
+                        </button>
+                    )}
                 </div>
             </div>
         )

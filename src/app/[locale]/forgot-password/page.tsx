@@ -87,6 +87,9 @@ export default function ForgotPasswordPage() {
                         <div className="text-muted-foreground text-sm text-center">
                             {t("forgotSubtitle")}
                         </div>
+                        <p className="text-muted-foreground text-xs text-center leading-relaxed">
+                            {t("forgotExpiredHint")}
+                        </p>
                     </div>
 
                     <div className="px-6">

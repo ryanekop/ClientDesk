@@ -794,6 +794,7 @@
         "emailAlreadyRegistered": "Email ini sudah terdaftar. Silakan login.",
         "forgotTitle": "Lupa Kata Sandi",
         "forgotSubtitle": "Masukkan email Anda untuk menerima link reset kata sandi",
+        "forgotExpiredHint": "Jika link aktivasi atau reset sebelumnya sudah kedaluwarsa, masukkan email di sini untuk menerima link baru.",
         "sending": "Mengirim...",
         "sendResetLink": "Kirim Link Reset",
         "resetEmailSent": "Kami telah mengirimkan link reset kata sandi ke email Anda. Klik link tersebut untuk mengatur kata sandi baru.",
@@ -807,7 +808,14 @@
         "authenticating": "Mengautentikasi...",
         "authError": "Kesalahan Autentikasi",
         "authTokenNotFound": "Token autentikasi tidak ditemukan. Coba klik link lagi atau minta link baru.",
-        "authFailed": "Gagal mengautentikasi. Silakan coba lagi."
+        "authFailed": "Gagal mengautentikasi. Silakan coba lagi.",
+        "emailNotConfirmedResend": "Email belum diverifikasi. Silakan cek inbox/spam, atau kirim ulang email verifikasi.",
+        "resendVerification": "Kirim Ulang Email Verifikasi",
+        "resendVerificationHint": "Selesaikan captcha, lalu kirim ulang link verifikasi ke email ini.",
+        "resendVerificationSent": "Email verifikasi baru sudah dikirim. Silakan cek inbox/spam Anda.",
+        "resendVerificationFailed": "Gagal mengirim ulang email verifikasi. Silakan coba lagi.",
+        "requestNewResetLink": "Minta Link Reset Baru",
+        "requestNewVerificationLink": "Minta Link Verifikasi Baru"
     },
     "BookingsPage": {
         "addClient": "Tambah Klien Baru",
@@ -2473,6 +2481,9 @@
         "captchaNotVerified": "Captcha belum diverifikasi.",
         "captchaVerificationFailed": "Verifikasi captcha gagal.",
         "emailAlreadyRegisteredPleaseLogin": "Email ini sudah terdaftar. Silakan login.",
+        "emailNotConfirmedResend": "Email belum diverifikasi. Silakan kirim ulang email verifikasi.",
+        "emailNotFound": "Email tidak ditemukan.",
+        "failedResendVerification": "Gagal mengirim ulang email verifikasi.",
         "validationUnexpectedError": "Terjadi kesalahan saat validasi.",
         "untitled": "(Tanpa Judul)",
         "freelancerCalendarNotFound": "Kalender freelancer tidak ditemukan. Pastikan freelancer sudah share kalendernya ke email Anda.",

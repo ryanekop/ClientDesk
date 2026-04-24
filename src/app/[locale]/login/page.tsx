@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Loader2, Eye, EyeOff, UserPlus, Lock } from "lucide-react"
+import { Loader2, Eye, EyeOff, UserPlus, Lock, Send } from "lucide-react"
 import { useLocale, useTranslations } from "next-intl"
 import Link from "next/link"
 import { LanguageSwitcher } from "@/components/language-switcher"
@@ -12,6 +12,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { applyClientDeskRememberMeSelection } from "@/lib/auth/session-only"
 import { AppCheckbox } from "@/components/ui/app-checkbox"
 import { getClientDeskRegisterHref } from "@/lib/auth/register-url"
+import { Turnstile } from "@marsidev/react-turnstile"
 
 export default function LoginPage() {
     const router = useRouter()
@@ -24,14 +25,21 @@ export default function LoginPage() {
     const [password, setPassword] = useState("")
     const [showPassword, setShowPassword] = useState(false)
     const [rememberMe, setRememberMe] = useState(true)
+    const [captchaToken, setCaptchaToken] = useState("")
+    const [captchaKey, setCaptchaKey] = useState(0)
     const [loading, setLoading] = useState(false)
+    const [resending, setResending] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [feedbackTone, setFeedbackTone] = useState<"error" | "success">("error")
+    const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null)
     const rememberMeId = "remember-me"
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
         setError(null)
+        setFeedbackTone("error")
+        setUnconfirmedEmail(null)
 
         try {
             const { error } = await supabase.auth.signInWithPassword({
@@ -43,7 +51,10 @@ export default function LoginPage() {
                 if (error.message.toLowerCase().includes('invalid login credentials')) {
                     setError(t("invalidCredentials"))
                 } else if (error.message.toLowerCase().includes('email not confirmed')) {
-                    setError("Email belum diverifikasi. Silakan cek inbox email Anda dan klik link verifikasi yang telah dikirim saat pendaftaran. Periksa juga folder spam/junk.")
+                    setError(t("emailNotConfirmedResend"))
+                    setUnconfirmedEmail(email.trim())
+                    setCaptchaToken("")
+                    setCaptchaKey((value) => value + 1)
                 } else {
                     setError(error.message)
                 }
@@ -57,6 +68,41 @@ export default function LoginPage() {
         } catch {
             setError(t("genericError"))
             setLoading(false)
+        }
+    }
+
+    const handleResendVerification = async () => {
+        const targetEmail = unconfirmedEmail || email.trim()
+        if (!targetEmail) return
+
+        setResending(true)
+        setError(null)
+        setFeedbackTone("error")
+
+        try {
+            const res = await fetch("/api/auth/resend-confirmation", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: targetEmail, captchaToken, locale }),
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                setError(data.error || t("resendVerificationFailed"))
+                setCaptchaToken("")
+                setCaptchaKey((value) => value + 1)
+                return
+            }
+
+            setError(t("resendVerificationSent"))
+            setFeedbackTone("success")
+            setUnconfirmedEmail(null)
+        } catch {
+            setError(t("resendVerificationFailed"))
+            setCaptchaToken("")
+            setCaptchaKey((value) => value + 1)
+        } finally {
+            setResending(false)
         }
     }
 
@@ -86,7 +132,11 @@ export default function LoginPage() {
                                     placeholder="admin@example.com"
                                     required
                                     value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
+                                    onChange={(e) => {
+                                        setEmail(e.target.value)
+                                        setUnconfirmedEmail(null)
+                                        setCaptchaToken("")
+                                    }}
                                     className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                                 />
                             </div>
@@ -128,8 +178,41 @@ export default function LoginPage() {
                             </div>
 
                             {error && (
-                                <div className="p-3 bg-destructive/15 text-destructive text-sm rounded-md">
-                                    {error}
+                                <div className={`space-y-3 rounded-md p-3 text-sm ${feedbackTone === "success" ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-destructive/15 text-destructive"}`}>
+                                    <p>{error}</p>
+                                    {unconfirmedEmail && (
+                                        <div className="space-y-3 text-foreground">
+                                            <p className="text-xs text-muted-foreground">
+                                                {t("resendVerificationHint")}
+                                            </p>
+                                            <Turnstile
+                                                key={captchaKey}
+                                                siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+                                                onSuccess={(token) => setCaptchaToken(token)}
+                                                onExpire={() => setCaptchaToken("")}
+                                                options={{ theme: 'auto', size: 'flexible' }}
+                                            />
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="w-full gap-2 bg-background"
+                                                disabled={resending || !captchaToken}
+                                                onClick={handleResendVerification}
+                                            >
+                                                {resending ? (
+                                                    <>
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                        {t("sending")}
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Send className="h-4 w-4" />
+                                                        {t("resendVerification")}
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 

@@ -794,6 +794,7 @@
         "emailAlreadyRegistered": "This email is already registered. Please login.",
         "forgotTitle": "Forgot Password",
         "forgotSubtitle": "Enter your email to receive a password reset link",
+        "forgotExpiredHint": "If your activation or reset link has expired, enter your email here to receive a new link.",
         "sending": "Sending...",
         "sendResetLink": "Send Reset Link",
         "resetEmailSent": "We have sent a password reset link to your email. Click the link to set a new password.",
@@ -807,7 +808,14 @@
         "authenticating": "Authenticating...",
         "authError": "Authentication Error",
         "authTokenNotFound": "Authentication token not found. Try clicking the link again or request a new one.",
-        "authFailed": "Authentication failed. Please try again."
+        "authFailed": "Authentication failed. Please try again.",
+        "emailNotConfirmedResend": "Email has not been verified. Please check your inbox/spam folder, or resend the verification email.",
+        "resendVerification": "Resend Verification Email",
+        "resendVerificationHint": "Complete the captcha, then resend the verification link to this email.",
+        "resendVerificationSent": "A new verification email has been sent. Please check your inbox/spam folder.",
+        "resendVerificationFailed": "Failed to resend the verification email. Please try again.",
+        "requestNewResetLink": "Request New Reset Link",
+        "requestNewVerificationLink": "Request New Verification Link"
     },
     "BookingsPage": {
         "addClient": "Add New Client",
@@ -2473,6 +2481,9 @@
         "captchaNotVerified": "Captcha has not been verified.",
         "captchaVerificationFailed": "Captcha verification failed.",
         "emailAlreadyRegisteredPleaseLogin": "This email is already registered. Please log in.",
+        "emailNotConfirmedResend": "Email has not been verified. Please resend the verification email.",
+        "emailNotFound": "Email was not found.",
+        "failedResendVerification": "Failed to resend verification email.",
         "validationUnexpectedError": "An unexpected validation error occurred.",
         "untitled": "(Untitled)",
         "freelancerCalendarNotFound": "Freelancer calendar not found. Ensure the freelancer has shared their calendar with your email.",
