@@ -2,6 +2,7 @@ import {
   ArrowUpRight,
   Brush,
   Compass,
+  Mail,
   PanelsTopLeft,
   RefreshCcw,
   ShieldCheck,
@@ -60,6 +61,16 @@ const FEATURE_META = [
       iconBg: "bg-amber-100 dark:bg-amber-500/10",
       iconBorder: "border-amber-200 dark:border-amber-500/20",
       icon: "text-amber-700 dark:text-amber-300",
+    },
+  },
+  {
+    key: "emailUpdates",
+    icon: Mail,
+    hasVideo: false,
+    accent: {
+      iconBg: "bg-cyan-100 dark:bg-cyan-500/10",
+      iconBorder: "border-cyan-200 dark:border-cyan-500/20",
+      icon: "text-cyan-700 dark:text-cyan-300",
     },
   },
 ] as const;

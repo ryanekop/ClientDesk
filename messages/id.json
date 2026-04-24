@@ -107,6 +107,10 @@
             "review": {
                 "title": "Rating & Review",
                 "description": "Fitur ulasan sedang disiapkan agar testimoni klien bisa tampil lebih terstruktur dan mendukung kepercayaan calon klien."
+            },
+            "emailUpdates": {
+                "title": "Email Updates untuk Klien",
+                "description": "Klien akan mendapatkan email otomatis saat booking masuk atau ketika ada update penting pada booking."
             }
         }
     },

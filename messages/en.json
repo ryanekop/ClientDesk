@@ -107,6 +107,10 @@
             "review": {
                 "title": "Rating & Review",
                 "description": "The review feature is being prepared so client testimonials can appear in a more structured and trustworthy way."
+            },
+            "emailUpdates": {
+                "title": "Email Updates for Clients",
+                "description": "Clients will receive automatic emails when a booking comes in or when there is an important booking update."
             }
         }
     },

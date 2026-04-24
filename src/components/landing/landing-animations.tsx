@@ -132,24 +132,7 @@ export function LandingHeroDemo() {
                             ))}
                         </div>
 
-                        <motion.div
-                            animate={
-                                shouldReduceMotion
-                                    ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }
-                                    : {
-                                          backgroundColor: [
-                                              "var(--primary)",
-                                              "var(--primary)",
-                                              "var(--primary)",
-                                              "oklch(0.696 0.17 162.48)",
-                                              "oklch(0.696 0.17 162.48)",
-                                              "var(--primary)",
-                                          ],
-                                      }
-                            }
-                            transition={{ ...loopTransition, times: [0, 0.42, 0.5, 0.58, 0.82, 1] }}
-                            className="relative mt-4 flex h-9 items-center justify-center gap-2 overflow-hidden rounded-lg text-sm font-semibold text-primary-foreground"
-                        >
+                        <div className="relative mt-4 flex h-9 items-center justify-center gap-2 overflow-hidden rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
                             <motion.span
                                 animate={shouldReduceMotion ? { opacity: 0 } : { opacity: [1, 1, 0, 0, 0, 1] }}
                                 transition={{ ...loopTransition, times: [0, 0.45, 0.52, 0.82, 0.9, 1] }}
@@ -164,7 +147,7 @@ export function LandingHeroDemo() {
                             >
                                 <Check className="h-4 w-4" /> Booking masuk
                             </motion.span>
-                        </motion.div>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-[1.05fr_0.95fr] gap-4">
