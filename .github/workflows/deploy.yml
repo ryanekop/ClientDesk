@@ -1,0 +1,91 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: clientdesk-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      APP_NAME: clientdesk
+      APP_DIR: /var/www/clientdesk
+      APP_PORT: "3001"
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack standalone artifact
+        run: |
+          mkdir -p .next/standalone/.next/static .next/standalone/public
+          cp -a .next/static/. .next/standalone/.next/static/
+          cp -a public/. .next/standalone/public/
+          cp ecosystem.config.js .next/standalone/ecosystem.config.js
+          tar -C .next/standalone -czf "$APP_NAME-$GITHUB_SHA.tar.gz" .
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload artifact
+        run: |
+          scp -i ~/.ssh/deploy_key "$APP_NAME-$GITHUB_SHA.tar.gz" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/$APP_NAME-$GITHUB_SHA.tar.gz"
+
+      - name: Activate release
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "APP_NAME='$APP_NAME' APP_DIR='$APP_DIR' APP_PORT='$APP_PORT' RELEASE_SHA='$GITHUB_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          release_dir="$APP_DIR/releases/$RELEASE_SHA"
+          artifact="/tmp/$APP_NAME-$RELEASE_SHA.tar.gz"
+          previous=""
+          if [ -L "$APP_DIR/current" ]; then
+            previous="$(readlink -f "$APP_DIR/current" || true)"
+          fi
+
+          mkdir -p "$release_dir"
+          tar -xzf "$artifact" -C "$release_dir"
+          rm -f "$artifact"
+
+          if [ -f "$APP_DIR/.env.local" ]; then
+            cp "$APP_DIR/.env.local" "$release_dir/.env.local"
+          fi
+          ln -sfn "$release_dir" "$APP_DIR/current"
+
+          pm2 startOrReload "$release_dir/ecosystem.config.js" --update-env
+
+          sleep 3
+          if ! curl -fsS -I "http://127.0.0.1:$APP_PORT" >/dev/null; then
+            if [ -n "$previous" ] && [ -d "$previous" ]; then
+              ln -sfn "$previous" "$APP_DIR/current"
+              pm2 startOrReload "$previous/ecosystem.config.js" --update-env
+            fi
+            exit 1
+          fi
+
+          pm2 save
+          find "$APP_DIR/releases" -mindepth 1 -maxdepth 1 -type d | sort | head -n -5 | xargs -r rm -rf
+          REMOTE
