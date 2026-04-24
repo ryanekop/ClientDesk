@@ -47,7 +47,7 @@ Current CSP defaults include:
 
 - `http://localhost:3000` in `connect-src` for local development flows.
 - Google Maps hosts (`https://maps.googleapis.com` and `https://maps.gstatic.com`) in `script-src` and `connect-src`.
-- Umami host (`https://cloud.umami.is`) for analytics script and network requests.
+- Umami host (`https://umami.ryanekoapp.web.id`) for analytics and replay scripts/network requests.
 
 If you use vendor/custom domains, also allowlist those domains in external service dashboards:
 
