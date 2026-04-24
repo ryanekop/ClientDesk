@@ -24,6 +24,7 @@ import {
     FileCheck2,
     TicketPercent,
     Compass,
+    MessageSquarePlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -255,6 +256,21 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
                 <div className="mt-auto border-t">
                     {/* Settings */}
                     <div className="px-2.5 pt-2">
+                        <a
+                            href="/api/feedback/bridge"
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={() => setIsOpen(false)}
+                            title={isCollapsed ? t("feedback") : undefined}
+                            className={cn(
+                                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-muted-foreground hover:bg-muted hover:text-foreground"
+                            )}
+                        >
+                            <MessageSquarePlus className="w-5 h-5 shrink-0 text-muted-foreground" />
+                            <span className={cn("transition-opacity duration-300", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
+                                {t("feedback")}
+                            </span>
+                        </a>
                         <Link
                             href="/settings"
                             onClick={() => setIsOpen(false)}
