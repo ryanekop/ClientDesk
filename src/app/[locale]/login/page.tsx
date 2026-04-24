@@ -45,16 +45,20 @@ export default function LoginPage() {
             const { error } = await supabase.auth.signInWithPassword({
                 email,
                 password,
+                options: {
+                    captchaToken,
+                },
             })
 
             if (error) {
+                setCaptchaToken("")
+                setCaptchaKey((value) => value + 1)
+
                 if (error.message.toLowerCase().includes('invalid login credentials')) {
                     setError(t("invalidCredentials"))
                 } else if (error.message.toLowerCase().includes('email not confirmed')) {
                     setError(t("emailNotConfirmedResend"))
                     setUnconfirmedEmail(email.trim())
-                    setCaptchaToken("")
-                    setCaptchaKey((value) => value + 1)
                 } else {
                     setError(error.message)
                 }
@@ -67,6 +71,8 @@ export default function LoginPage() {
             router.push(`/${locale}/dashboard`)
         } catch {
             setError(t("genericError"))
+            setCaptchaToken("")
+            setCaptchaKey((value) => value + 1)
             setLoading(false)
         }
     }
@@ -135,7 +141,6 @@ export default function LoginPage() {
                                     onChange={(e) => {
                                         setEmail(e.target.value)
                                         setUnconfirmedEmail(null)
-                                        setCaptchaToken("")
                                     }}
                                     className="placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                                 />
@@ -185,13 +190,6 @@ export default function LoginPage() {
                                             <p className="text-xs text-muted-foreground">
                                                 {t("resendVerificationHint")}
                                             </p>
-                                            <Turnstile
-                                                key={captchaKey}
-                                                siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
-                                                onSuccess={(token) => setCaptchaToken(token)}
-                                                onExpire={() => setCaptchaToken("")}
-                                                options={{ theme: 'auto', size: 'flexible' }}
-                                            />
                                             <Button
                                                 type="button"
                                                 variant="outline"
@@ -216,7 +214,16 @@ export default function LoginPage() {
                                 </div>
                             )}
 
-                            <Button type="submit" className="w-full hover:opacity-90 transition-opacity" disabled={loading}>
+                            <Turnstile
+                                key={captchaKey}
+                                siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+                                onSuccess={(token) => setCaptchaToken(token)}
+                                onExpire={() => setCaptchaToken("")}
+                                onError={() => setCaptchaToken("")}
+                                options={{ theme: 'auto', size: 'flexible' }}
+                            />
+
+                            <Button type="submit" className="w-full hover:opacity-90 transition-opacity" disabled={loading || !captchaToken}>
                                 {loading ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
