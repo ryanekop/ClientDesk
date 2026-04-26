@@ -23,6 +23,11 @@ import { shouldHideTenantBranding } from "@/lib/tenant-branding";
 import { verifyInvoiceAccessToken } from "@/lib/security/invoice-access";
 import { enforceRateLimit, withNoStoreHeaders } from "@/lib/security/rate-limit";
 import { validateExternalHttpsUrl } from "@/lib/security/url-validation";
+import {
+  getInvoicePaymentBankAccounts,
+  normalizeBankAccounts,
+  normalizeInvoicePaymentBankAccountIds,
+} from "@/lib/payment-config";
 
 export const dynamic = "force-dynamic";
 
@@ -138,6 +143,10 @@ const labels: Record<string, Record<string, string>> = {
     addOnSection: "Add On",
     accommodationFee: "Akomodasi",
     specialDiscount: "Diskon Khusus",
+    paymentInfo: "Informasi Pembayaran",
+    bankName: "Bank",
+    accountNumber: "Nomor Rekening",
+    accountName: "Nama Rekening",
   },
   en: {
     clientDetail: "CLIENT DETAIL",
@@ -169,6 +178,10 @@ const labels: Record<string, Record<string, string>> = {
     addOnSection: "Add On",
     accommodationFee: "Accommodation",
     specialDiscount: "Special Discount",
+    paymentInfo: "Payment Information",
+    bankName: "Bank",
+    accountNumber: "Account Number",
+    accountName: "Account Name",
   },
 };
 
@@ -291,6 +304,15 @@ export async function GET(request: NextRequest) {
   const studioName = profile?.studio_name || "Studio";
   const studioAddress = profile?.studio_address?.trim() || "";
   const logoSource = profile?.invoice_logo_url || null;
+  const invoicePaymentBankAccounts =
+    profile?.invoice_payment_accounts_enabled === true
+      ? getInvoicePaymentBankAccounts(
+          normalizeBankAccounts(profile.bank_accounts),
+          normalizeInvoicePaymentBankAccountIds(
+            profile.invoice_payment_bank_account_ids,
+          ),
+        )
+      : [];
   const specialOffer = resolveSpecialOfferSnapshotFromExtraFields(booking.extra_fields);
   const adjustments = normalizeFinalAdjustments(booking.final_adjustments);
   const adjustmentsTotal = getFinalAdjustmentsTotal(adjustments);
@@ -1048,6 +1070,62 @@ export async function GET(request: NextRequest) {
     size: 13,
     color: black,
   });
+
+  if (invoicePaymentBankAccounts.length > 0) {
+    y -= 34;
+    ensureSpace(28 + invoicePaymentBankAccounts.length * 52);
+
+    page.drawText(t.paymentInfo, {
+      x: MARGIN_X,
+      y,
+      font: helveticaBold,
+      size: 10,
+      color: black,
+    });
+
+    y -= 16;
+    invoicePaymentBankAccounts.forEach((bank, index) => {
+      ensureSpace(44);
+      const blockTopY = y + 8;
+      page.drawRectangle({
+        x: MARGIN_X,
+        y: blockTopY - 42,
+        width: contentW,
+        height: 42,
+        color: index % 2 === 0 ? rgb(0.985, 0.987, 0.99) : rgb(1, 1, 1),
+      });
+
+      page.drawText(`${t.bankName}: ${bank.bank_name.trim()}`, {
+        x: MARGIN_X + 10,
+        y,
+        font: helveticaBold,
+        size: 10,
+        color: black,
+      });
+
+      const accountNumberText = `${t.accountNumber}: ${bank.account_number.trim()}`;
+      const accountNameText = `${t.accountName}: ${
+        bank.account_name.trim() || "-"
+      }`;
+
+      page.drawText(accountNumberText, {
+        x: MARGIN_X + 10,
+        y: y - 14,
+        font: helvetica,
+        size: 9,
+        color: gray,
+      });
+      page.drawText(accountNameText, {
+        x: MARGIN_X + 10,
+        y: y - 28,
+        font: helvetica,
+        size: 9,
+        color: gray,
+      });
+
+      y -= 52;
+    });
+  }
 
   y -= 50;
   ensureSpace(30);

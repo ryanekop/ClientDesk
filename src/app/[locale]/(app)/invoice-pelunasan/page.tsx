@@ -97,6 +97,13 @@ import {
     toggleSelectAllVisible,
     toggleSelection,
 } from "@/lib/manage-selection";
+import {
+    getInvoicePaymentBankAccounts,
+    getValidBankAccounts,
+    normalizeBankAccounts,
+    normalizeInvoicePaymentBankAccountIds,
+    type BankAccount,
+} from "@/lib/payment-config";
 
 type BookingFinance = {
     id: string;
@@ -207,6 +214,9 @@ type FinancePageMetadata = {
     availableEventTypes: string[];
     bookingTableColorEnabled: boolean;
     financeTableColorEnabled: boolean;
+    bankAccounts: BankAccount[];
+    invoicePaymentAccountsEnabled: boolean;
+    invoicePaymentBankAccountIds: string[];
     canManageOperationalCosts: boolean;
     tableColumnPreferences: TableColumnPreference[] | null;
     formSectionsByEventType: Record<string, FormLayoutItem[]>;
@@ -338,6 +348,10 @@ export default function FinancePage() {
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
     );
     const [financeTableColorEnabled, setFinanceTableColorEnabled] = React.useState(false);
+    const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
+    const [invoicePaymentAccountsEnabled, setInvoicePaymentAccountsEnabled] = React.useState(false);
+    const [invoicePaymentBankAccountIds, setInvoicePaymentBankAccountIds] = React.useState<string[]>([]);
+    const [savingInvoicePaymentAccounts, setSavingInvoicePaymentAccounts] = React.useState(false);
     const [canManageOperationalCosts, setCanManageOperationalCosts] = React.useState(false);
     const [currentPage, setCurrentPage] = React.useState(1);
     const [itemsPerPage, setItemsPerPage] = React.useState(10);
@@ -574,6 +588,16 @@ export default function FinancePage() {
                 setPackageOptions(metadata.packageOptions || []);
                 setAvailableEventTypes(metadata.availableEventTypes || []);
                 setFinanceTableColorEnabled(metadata.financeTableColorEnabled === true);
+                const loadedBankAccounts = normalizeBankAccounts(metadata.bankAccounts);
+                setBankAccounts(loadedBankAccounts);
+                setInvoicePaymentAccountsEnabled(
+                    metadata.invoicePaymentAccountsEnabled === true,
+                );
+                setInvoicePaymentBankAccountIds(
+                    normalizeInvoicePaymentBankAccountIds(
+                        metadata.invoicePaymentBankAccountIds,
+                    ),
+                );
                 setCanManageOperationalCosts(metadata.canManageOperationalCosts === true);
                 setStudioName(metadata.studioName || "");
                 setFormSectionsByEventType(metadata.formSectionsByEventType || {});
@@ -2108,12 +2132,99 @@ export default function FinancePage() {
         () => new Set(selectedBookingIds),
         [selectedBookingIds],
     );
+    const validInvoicePaymentBankAccounts = React.useMemo(
+        () => getValidBankAccounts(bankAccounts),
+        [bankAccounts],
+    );
+    const selectedInvoicePaymentBankAccounts = React.useMemo(
+        () =>
+            getInvoicePaymentBankAccounts(
+                bankAccounts,
+                invoicePaymentBankAccountIds,
+            ),
+        [bankAccounts, invoicePaymentBankAccountIds],
+    );
+    const selectedInvoicePaymentBankAccountIdSet = React.useMemo(
+        () => new Set(invoicePaymentBankAccountIds),
+        [invoicePaymentBankAccountIds],
+    );
+    const invoicePaymentSummaryText = invoicePaymentAccountsEnabled
+        ? tf("invoicePaymentAccountsSummaryEnabled", {
+            count: selectedInvoicePaymentBankAccounts.length,
+        })
+        : tf("invoicePaymentAccountsSummaryDisabled");
     React.useEffect(() => {
         setSelectedBookingIds((current) => {
             const next = pruneSelection(current, visibleBookingIds);
             return next.length === current.length ? current : next;
         });
     }, [visibleBookingIds]);
+
+    function toggleInvoicePaymentBankAccount(bankId: string) {
+        setInvoicePaymentBankAccountIds((current) => {
+            const normalized = normalizeInvoicePaymentBankAccountIds(current);
+            return normalized.includes(bankId)
+                ? normalized.filter((id) => id !== bankId)
+                : [...normalized, bankId];
+        });
+    }
+
+    async function saveInvoicePaymentAccountSettings() {
+        const validAccountIds = new Set(validInvoicePaymentBankAccounts.map((bank) => bank.id));
+        const normalizedSelectedIds = normalizeInvoicePaymentBankAccountIds(
+            invoicePaymentBankAccountIds,
+        ).filter((id) => validAccountIds.has(id));
+
+        if (invoicePaymentAccountsEnabled && normalizedSelectedIds.length === 0) {
+            setFeedbackDialog({
+                open: true,
+                message: tf("invoicePaymentAccountsNeedOne"),
+            });
+            return;
+        }
+
+        setSavingInvoicePaymentAccounts(true);
+        try {
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
+
+            if (!user) {
+                throw new Error(tf("failedLoadFinance"));
+            }
+
+            const { error } = await supabase
+                .from("profiles")
+                .update({
+                    invoice_payment_accounts_enabled: invoicePaymentAccountsEnabled,
+                    invoice_payment_bank_account_ids: normalizedSelectedIds,
+                })
+                .eq("id", user.id);
+
+            if (error) {
+                throw error;
+            }
+
+            setInvoicePaymentBankAccountIds(normalizedSelectedIds);
+            if (financeMetadataCacheRef.current) {
+                financeMetadataCacheRef.current = {
+                    ...financeMetadataCacheRef.current,
+                    invoicePaymentAccountsEnabled,
+                    invoicePaymentBankAccountIds: normalizedSelectedIds,
+                };
+            }
+            await invalidateProfilePublicCache();
+            showSuccessToast(tf("invoicePaymentAccountsSaved"));
+        } catch (error) {
+            console.error("[FinancePage] Failed to save invoice payment accounts", error);
+            setFeedbackDialog({
+                open: true,
+                message: tf("invoicePaymentAccountsSaveFailed"),
+            });
+        } finally {
+            setSavingInvoicePaymentAccounts(false);
+        }
+    }
 
     async function exportFinance() {
         try {
@@ -2379,6 +2490,97 @@ export default function FinancePage() {
                         </div>
                         <div className="text-2xl font-bold">{formatSensitiveCurrency(summary.totalPending)}</div>
                         <p className="text-xs text-muted-foreground mt-1">{t("dariBookingBelumLunas", { count: summary.unpaidCount })}</p>
+                    </div>
+                </div>
+            ) : null}
+
+            {showFinanceContent ? (
+                <div className="rounded-xl border bg-card p-4 shadow-sm sm:p-5">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0 space-y-1">
+                            <div className="flex items-center gap-2">
+                                <Receipt className="h-4 w-4 text-indigo-600 dark:text-indigo-300" />
+                                <h3 className="text-sm font-semibold">{tf("invoicePaymentAccountsTitle")}</h3>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                                {tf("invoicePaymentAccountsDescription")}
+                            </p>
+                            <p className="text-xs font-medium text-muted-foreground">
+                                {invoicePaymentSummaryText}
+                            </p>
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:justify-end">
+                            <label className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium">
+                                <input
+                                    type="checkbox"
+                                    checked={invoicePaymentAccountsEnabled}
+                                    onChange={(event) =>
+                                        setInvoicePaymentAccountsEnabled(event.target.checked)
+                                    }
+                                    className="h-4 w-4 accent-primary"
+                                />
+                                {tf("invoicePaymentAccountsToggle")}
+                            </label>
+                            <Button
+                                type="button"
+                                size="sm"
+                                className="gap-2"
+                                disabled={savingInvoicePaymentAccounts}
+                                onClick={() => {
+                                    void saveInvoicePaymentAccountSettings();
+                                }}
+                            >
+                                {savingInvoicePaymentAccounts ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Settings2 className="h-4 w-4" />
+                                )}
+                                {tf("invoicePaymentAccountsSave")}
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {validInvoicePaymentBankAccounts.length === 0 ? (
+                            <div className="rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground md:col-span-2 xl:col-span-3">
+                                {tf("invoicePaymentAccountsEmpty")}
+                            </div>
+                        ) : (
+                            validInvoicePaymentBankAccounts.map((bank) => {
+                                const checked = selectedInvoicePaymentBankAccountIdSet.has(bank.id);
+                                return (
+                                    <label
+                                        key={bank.id}
+                                        className={`flex min-h-[116px] cursor-pointer flex-col gap-3 rounded-lg border p-4 transition-colors ${
+                                            checked
+                                                ? "border-primary bg-primary/5"
+                                                : "border-input bg-background hover:bg-muted/40"
+                                        }`}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-semibold">
+                                                    {bank.bank_name}
+                                                </p>
+                                                <p className="mt-1 truncate text-xs text-muted-foreground">
+                                                    {bank.account_name || "-"}
+                                                </p>
+                                            </div>
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={() => toggleInvoicePaymentBankAccount(bank.id)}
+                                                className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                                            />
+                                        </div>
+                                        <div className="rounded-md bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                                            {tf("invoicePaymentAccountsNumberLabel")}:{" "}
+                                            <span className="text-foreground">{bank.account_number}</span>
+                                        </div>
+                                    </label>
+                                );
+                            })
+                        )}
                     </div>
                 </div>
             ) : null}

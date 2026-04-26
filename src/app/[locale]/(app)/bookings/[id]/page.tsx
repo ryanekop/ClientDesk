@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, FolderPlus, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink, Upload, FileText, Trash2, AlertCircle, Image as ImageIcon, RefreshCcw, Archive } from "lucide-react";
+import { ArrowLeft, Edit2, MessageSquare, Phone, Folder, Loader2, MapPin, Instagram, Navigation, Link2, Copy, ClipboardCheck, ListOrdered, ExternalLink, Upload, FileText, Trash2, AlertCircle, Image as ImageIcon, RefreshCcw, Archive } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FileDropzone } from "@/components/public/file-dropzone";
 import { ActionFeedbackDialog } from "@/components/ui/action-feedback-dialog";
@@ -738,7 +738,6 @@ export default function BookingDetailPage() {
     const [booking, setBooking] = React.useState<Booking | null>(null);
     const [loading, setLoading] = React.useState(true);
     const [isCurrentUserAdmin, setIsCurrentUserAdmin] = React.useState(false);
-    const [creatingFolder, setCreatingFolder] = React.useState(false);
     const [isDriveConnected, setIsDriveConnected] = React.useState(false);
     const [clientStatus, setClientStatus] = React.useState("");
     const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
@@ -792,6 +791,9 @@ export default function BookingDetailPage() {
     const [customAddonPrice, setCustomAddonPrice] = React.useState("");
     const [customAddonDescription, setCustomAddonDescription] = React.useState("");
     const [creatingCustomAddon, setCreatingCustomAddon] = React.useState(false);
+    const [driveLinkPopupOpen, setDriveLinkPopupOpen] = React.useState(false);
+    const [driveLinkInput, setDriveLinkInput] = React.useState("");
+    const [savingDriveLink, setSavingDriveLink] = React.useState(false);
 
     // File upload states
     const [uploadingFile, setUploadingFile] = React.useState(false);
@@ -1880,25 +1882,125 @@ export default function BookingDetailPage() {
         openWhatsAppUrl(buildWhatsAppUrl(cleaned, msg));
     }
 
-    async function handleCreateFolder() {
+    function openDriveLinkPopup() {
+        if (!requireBookingWrite()) return;
+        setDriveLinkInput(booking?.drive_folder_url || "");
+        setDriveLinkPopupOpen(true);
+    }
+
+    async function triggerFastpikAutoSync(bookingId: string) {
+        if (!bookingId) return;
+        try {
+            const response = await fetch("/api/integrations/fastpik/sync-booking", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    bookingId,
+                    locale,
+                    mode: "auto",
+                }),
+                keepalive: true,
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok || payload?.success === false) {
+                setFastpikDataSource("fallback");
+                setFastpikDataMessage(
+                    typeof payload?.message === "string"
+                        ? payload.message
+                        : typeof payload?.error === "string"
+                          ? payload.error
+                          : tBookingDetail("fastpikSyncFailed"),
+                );
+                return;
+            }
+
+            const nowIso = new Date().toISOString();
+            setBooking((prev) =>
+                prev
+                    ? {
+                          ...prev,
+                          fastpik_project_id:
+                              typeof payload?.projectId === "string"
+                                  ? payload.projectId
+                                  : prev.fastpik_project_id,
+                          fastpik_project_link:
+                              typeof payload?.projectLink === "string"
+                                  ? payload.projectLink
+                                  : prev.fastpik_project_link,
+                          fastpik_project_edit_link:
+                              typeof payload?.projectEditLink === "string"
+                                  ? payload.projectEditLink
+                                  : prev.fastpik_project_edit_link,
+                          fastpik_sync_status:
+                              typeof payload?.status === "string"
+                                  ? payload.status
+                                  : prev.fastpik_sync_status,
+                          fastpik_last_synced_at: nowIso,
+                          extra_fields:
+                              payload?.fastpikProjectInfo &&
+                              typeof payload.fastpikProjectInfo === "object" &&
+                              !Array.isArray(payload.fastpikProjectInfo)
+                                  ? {
+                                        ...(prev.extra_fields || {}),
+                                        fastpik_project: payload.fastpikProjectInfo,
+                                    }
+                                  : prev.extra_fields,
+                      }
+                    : prev,
+            );
+            setFastpikDataSource("live");
+            setFastpikDataSyncedAt(nowIso);
+            setFastpikDataMessage(
+                typeof payload?.message === "string" ? payload.message : null,
+            );
+        } catch {
+            setFastpikDataSource("fallback");
+            setFastpikDataMessage(tBookingDetail("fastpikSyncFailed"));
+        }
+    }
+
+    async function handleSaveDriveLink() {
         if (!requireBookingWrite()) return;
         if (!booking) return;
-        setCreatingFolder(true);
-        const res = await fetch("/api/google/drive/create-folder", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ bookingId: booking.id, bookingCode: booking.booking_code, clientName: booking.client_name }),
-        });
-        const result = await res.json();
-        if (result.success && result.folderUrl) {
-            window.open(result.folderUrl, "_blank");
-            setBooking(prev => prev ? { ...prev, drive_folder_url: result.folderUrl } : prev);
-        } else {
-            clearConnectedGoogleAccountCache();
-            await refreshDriveConnectionStatus(true);
-            showFeedback(result.error || tBookingDetail("failedCreateFolder"));
+
+        const normalizedDriveUrl = normalizeSafeExternalUrl(driveLinkInput);
+        if (!normalizedDriveUrl) {
+            showFeedback(
+                locale === "en"
+                    ? "Please enter a valid Google Drive photo link."
+                    : "Masukkan link Google Drive hasil foto yang valid.",
+                warningTitle,
+            );
+            return;
         }
-        setCreatingFolder(false);
+
+        setSavingDriveLink(true);
+        const { error } = await supabase
+            .from("bookings")
+            .update({ drive_folder_url: normalizedDriveUrl })
+            .eq("id", booking.id);
+
+        if (error) {
+            setSavingDriveLink(false);
+            showFeedback(error.message || tBookingDetail("failedSaveStatus"), warningTitle);
+            return;
+        }
+
+        await invalidateBookingPublicCache({
+            bookingCode: booking.booking_code,
+            trackingUuid: booking.tracking_uuid,
+        });
+        setBooking((prev) =>
+            prev ? { ...prev, drive_folder_url: normalizedDriveUrl } : prev,
+        );
+        setSavingDriveLink(false);
+        setDriveLinkPopupOpen(false);
+        showSuccessToast(
+            locale === "en"
+                ? "Photo selection link saved."
+                : "Link pilih foto berhasil disimpan.",
+        );
+        void triggerFastpikAutoSync(booking.id);
     }
 
     async function handleUploadClientFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -2927,13 +3029,30 @@ export default function BookingDetailPage() {
                     </Button>
                 )}
                 {booking.drive_folder_url ? (
-                    <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
-                        <Folder className="w-4 h-4 text-yellow-600" /> Buka Drive Folder
-                    </Button>
+                    <>
+                        <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} onClick={() => window.open(booking.drive_folder_url!, "_blank")}>
+                            <Folder className="w-4 h-4 text-yellow-600" /> Buka Link Pilih Foto
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
+                            disabled={!canWriteBookings}
+                            onClick={openDriveLinkPopup}
+                        >
+                            <Link2 className="w-4 h-4 text-blue-600" /> Ubah Link Pilih Foto
+                        </Button>
+                    </>
                 ) : (
-                    <Button variant="outline" size="sm" className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`} disabled={!isDriveConnected || creatingFolder || !canWriteBookings} onClick={handleCreateFolder}>
-                        {creatingFolder ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderPlus className="w-4 h-4 text-yellow-600" />}
-                        Buat Drive Folder
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className={`${RESPONSIVE_ACTION_BUTTON_CLASS} gap-1.5`}
+                        disabled={!canWriteBookings}
+                        onClick={openDriveLinkPopup}
+                    >
+                        <Link2 className="w-4 h-4 text-blue-600" />
+                        Masukkan Link Pilih Foto
                     </Button>
                 )}
             </div>
@@ -3974,6 +4093,56 @@ export default function BookingDetailPage() {
                             </button>
                         ))}
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={driveLinkPopupOpen}
+                onOpenChange={(open) => {
+                    setDriveLinkPopupOpen(open);
+                    if (!open) setDriveLinkInput("");
+                }}
+            >
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Link Pilih Foto</DialogTitle>
+                        <DialogDescription>
+                            Tempelkan link Google Drive hasil foto klien. Link ini akan dipakai untuk Sync FastPick.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-2 py-2">
+                        <label className="text-sm font-medium" htmlFor="booking-photo-drive-link">
+                            Link Google Drive Hasil Foto
+                        </label>
+                        <input
+                            id="booking-photo-drive-link"
+                            type="url"
+                            value={driveLinkInput}
+                            onChange={(event) => setDriveLinkInput(event.target.value)}
+                            placeholder="https://drive.google.com/drive/folders/..."
+                            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                            autoFocus
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setDriveLinkPopupOpen(false)}
+                            disabled={savingDriveLink}
+                        >
+                            Batal
+                        </Button>
+                        <Button
+                            type="button"
+                            className="gap-2"
+                            onClick={() => { void handleSaveDriveLink(); }}
+                            disabled={!driveLinkInput.trim() || savingDriveLink || !canWriteBookings}
+                        >
+                            {savingDriveLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                            Simpan & Sync FastPick
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 

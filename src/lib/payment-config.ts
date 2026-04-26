@@ -84,6 +84,35 @@ export function getEnabledBankAccounts(
   return getValidBankAccounts(bankAccounts).filter((bank) => bank.enabled);
 }
 
+export function normalizeInvoicePaymentBankAccountIds(
+  value: unknown,
+): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  value.forEach((item) => {
+    if (typeof item !== "string") return;
+    const id = item.trim();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    normalized.push(id);
+  });
+
+  return normalized;
+}
+
+export function getInvoicePaymentBankAccounts(
+  bankAccounts: BankAccount[],
+  selectedIds: string[],
+): BankAccount[] {
+  const selected = new Set(normalizeInvoicePaymentBankAccountIds(selectedIds));
+  if (selected.size === 0) return [];
+
+  return getValidBankAccounts(bankAccounts).filter((bank) => selected.has(bank.id));
+}
+
 export function getPaymentMethodLabel(method: PaymentMethod) {
   switch (method) {
     case "bank":

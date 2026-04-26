@@ -58,6 +58,9 @@ export type InvoiceProfileRow = {
   studio_name: string | null;
   studio_address: string | null;
   invoice_logo_url: string | null;
+  bank_accounts?: unknown;
+  invoice_payment_accounts_enabled?: boolean | null;
+  invoice_payment_bank_account_ids?: string[] | null;
 };
 
 export type InvoicePayload = {
@@ -107,7 +110,8 @@ async function fetchInvoicePayload(bookingCode: string) {
     return null;
   }
 
-  const profileSelect = "studio_name, studio_address, invoice_logo_url";
+  const profileSelect =
+    "studio_name, studio_address, invoice_logo_url, bank_accounts, invoice_payment_accounts_enabled, invoice_payment_bank_account_ids";
   const { data: profileWithAddress, error: profileWithAddressError } =
     await supabase
       .from("profiles")
@@ -125,13 +129,20 @@ async function fetchInvoicePayload(bookingCode: string) {
   if (missingStudioAddressColumn) {
     const { data: legacyProfile } = await supabase
       .from("profiles")
-      .select("studio_name, invoice_logo_url")
+      .select("studio_name, invoice_logo_url, bank_accounts")
       .eq("id", booking.user_id)
-      .maybeSingle<Pick<InvoiceProfileRow, "studio_name" | "invoice_logo_url">>();
+      .maybeSingle<
+        Pick<
+          InvoiceProfileRow,
+          "studio_name" | "invoice_logo_url" | "bank_accounts"
+        >
+      >();
     profile = legacyProfile
       ? {
           ...legacyProfile,
           studio_address: null,
+          invoice_payment_accounts_enabled: false,
+          invoice_payment_bank_account_ids: [],
         }
       : null;
   }

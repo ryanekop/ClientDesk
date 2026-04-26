@@ -1288,7 +1288,18 @@
         "retryLoadFinance": "Retry",
         "exportOutstandingUnpaidLabel": "Outstanding Balance (Unpaid)",
         "exportUnpaidBookingCountLabel": "Number of Unpaid Bookings",
-        "exportClientNameLabel": "Client Name"
+        "exportClientNameLabel": "Client Name",
+        "invoicePaymentAccountsTitle": "Invoice Payment Accounts",
+        "invoicePaymentAccountsDescription": "Choose which payment accounts appear in initial and final invoice PDFs.",
+        "invoicePaymentAccountsToggle": "Show in invoice PDF",
+        "invoicePaymentAccountsSave": "Save",
+        "invoicePaymentAccountsEmpty": "No complete bank accounts yet. Add bank accounts from Form Booking settings first.",
+        "invoicePaymentAccountsSummaryEnabled": "{count} account(s) will appear in invoice PDFs.",
+        "invoicePaymentAccountsSummaryDisabled": "Payment account information is hidden from invoice PDFs.",
+        "invoicePaymentAccountsNumberLabel": "Account Number",
+        "invoicePaymentAccountsNeedOne": "Choose at least one account to show in invoice PDFs.",
+        "invoicePaymentAccountsSaved": "Invoice payment account settings saved.",
+        "invoicePaymentAccountsSaveFailed": "Failed to save invoice payment account settings."
     },
     "CancelStatusDialog": {
         "title": "DP Handling for Cancelled Booking",

@@ -82,6 +82,9 @@ type FinanceMetadataResponse = {
   }>;
   bookingTableColorEnabled?: boolean;
   financeTableColorEnabled?: boolean;
+  bankAccounts?: unknown;
+  invoicePaymentAccountsEnabled?: boolean;
+  invoicePaymentBankAccountIds?: string[];
   summary?: {
     totalRevenue?: number;
     totalPending?: number;
@@ -348,7 +351,7 @@ export async function GET(request: NextRequest) {
   const profileSettingsPromise = includeMetadata && user?.id
     ? supabase
       .from("profiles")
-      .select("role, booking_table_color_enabled, finance_table_color_enabled")
+      .select("role, booking_table_color_enabled, finance_table_color_enabled, bank_accounts, invoice_payment_accounts_enabled, invoice_payment_bank_account_ids")
       .eq("id", user.id)
       .maybeSingle()
     : Promise.resolve({ data: null, error: null });
@@ -519,6 +522,11 @@ export async function GET(request: NextRequest) {
     profileSettingsResult.data?.booking_table_color_enabled === true;
   const financeTableColorEnabled =
     profileSettingsResult.data?.finance_table_color_enabled === true;
+  const invoicePaymentAccountsEnabled =
+    profileSettingsResult.data?.invoice_payment_accounts_enabled === true;
+  const invoicePaymentBankAccountIds = readStringArray(
+    profileSettingsResult.data?.invoice_payment_bank_account_ids,
+  );
   const canManageOperationalCosts =
     typeof profileSettingsResult.data?.role === "string" &&
     profileSettingsResult.data.role.trim().toLowerCase() === "admin";
@@ -543,6 +551,11 @@ export async function GET(request: NextRequest) {
           metadataRows: readMetadataRows(metadataData?.metadataRows),
           bookingTableColorEnabled,
           financeTableColorEnabled,
+          bankAccounts: Array.isArray(profileSettingsResult.data?.bank_accounts)
+            ? profileSettingsResult.data.bank_accounts
+            : [],
+          invoicePaymentAccountsEnabled,
+          invoicePaymentBankAccountIds,
           canManageOperationalCosts,
           summary: readSummary(metadataData?.summary),
         },

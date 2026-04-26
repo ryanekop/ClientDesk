@@ -2119,7 +2119,7 @@ export default function BookingsPage() {
                             ) : (
                                 <ActionIconButton
                                     tone="blue"
-                                    title={!canWriteBookings ? bookingWriteBlockedMessage : "Set Link Drive"}
+                                    title={!canWriteBookings ? bookingWriteBlockedMessage : "Masukkan Link Pilih Foto"}
                                     onClick={() => { setDriveLinkInput(""); setDriveLinkPopup({ open: true, booking }); }}
                                     disabled={!canWriteBookings}
                                 >
@@ -3703,8 +3703,8 @@ export default function BookingsPage() {
                                     bookingCode: driveLinkPopup.booking.booking_code,
                                     trackingUuid: driveLinkPopup.booking.tracking_uuid,
                                 });
+                                void triggerFastpikAutoSync(driveLinkPopup.booking.id);
                             }
-                            void triggerFastpikAutoSync(driveLinkPopup.booking.id);
                             setSavingDriveLink(false);
                             setDriveLinkPopup({ open: false, booking: null });
                             void fetchData("refresh");
