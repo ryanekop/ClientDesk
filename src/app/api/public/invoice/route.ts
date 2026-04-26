@@ -50,16 +50,28 @@ function formatCurrency(n: number) {
   }).format(n);
 }
 
+function sanitizePdfText(value: string | null | undefined) {
+  if (!value) return "";
+
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF]/g, "")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
+
 function wrapTextLines(
   text: string,
   font: PDFFont,
   size: number,
   maxWidth: number,
 ): string[] {
-  if (!text.trim()) return [];
+  const safeText = sanitizePdfText(text);
+  if (!safeText) return [];
 
   const lines: string[] = [];
-  const paragraphs = text.replace(/\r/g, "").split("\n");
+  const paragraphs = safeText.replace(/\r/g, "").split("\n");
 
   for (const paragraph of paragraphs) {
     if (!paragraph.trim()) {
@@ -511,6 +523,16 @@ export async function GET(request: NextRequest) {
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+  const textWidth = (font: PDFFont, text: string, size: number) =>
+    font.widthOfTextAtSize(sanitizePdfText(text), size);
+
+  const drawText = (
+    text: string,
+    options: Parameters<PDFPage["drawText"]>[1],
+  ) => {
+    page.drawText(sanitizePdfText(text), options);
+  };
+
   const black = rgb(0.1, 0.1, 0.1);
   const gray = rgb(0.42, 0.44, 0.47);
   const lightGray = rgb(0.9, 0.91, 0.92);
@@ -571,7 +593,7 @@ export async function GET(request: NextRequest) {
 
     if (lines.length === 0) {
       ensureSpace(params.lineHeight);
-      page.drawText(t.noDescription, {
+      drawText(t.noDescription, {
         x: params.x,
         y,
         font: params.font,
@@ -585,7 +607,7 @@ export async function GET(request: NextRequest) {
     lines.forEach((line) => {
       ensureSpace(params.lineHeight);
       if (line) {
-        page.drawText(line, {
+        drawText(line, {
           x: params.x,
           y,
           font: params.font,
@@ -629,7 +651,7 @@ export async function GET(request: NextRequest) {
 
   let leftBlockBottomY = logoDrawn ? logoBottomY : y;
   if (!logoDrawn) {
-    page.drawText(studioName, {
+    drawText(studioName, {
       x: MARGIN_X,
       y,
       font: helveticaBold,
@@ -639,8 +661,8 @@ export async function GET(request: NextRequest) {
     leftBlockBottomY = y - 18;
   }
 
-  page.drawText(invoiceTitle, {
-    x: PAGE_WIDTH - MARGIN_X - helveticaBold.widthOfTextAtSize(invoiceTitle, 22),
+  drawText(invoiceTitle, {
+    x: PAGE_WIDTH - MARGIN_X - textWidth(helveticaBold, invoiceTitle, 22),
     y,
     font: helveticaBold,
     size: 22,
@@ -649,7 +671,7 @@ export async function GET(request: NextRequest) {
 
   const codeY = y - 18;
   if (!logoDrawn) {
-    page.drawText(t.studioManagement, {
+    drawText(t.studioManagement, {
       x: MARGIN_X,
       y: codeY,
       font: helvetica,
@@ -659,8 +681,8 @@ export async function GET(request: NextRequest) {
     leftBlockBottomY = Math.min(leftBlockBottomY, codeY - 9);
   }
 
-  const codeW = helvetica.widthOfTextAtSize(booking.booking_code, 10);
-  page.drawText(booking.booking_code, {
+  const codeW = textWidth(helvetica, booking.booking_code, 10);
+  drawText(booking.booking_code, {
     x: PAGE_WIDTH - MARGIN_X - codeW,
     y: codeY,
     font: helvetica,
@@ -669,8 +691,8 @@ export async function GET(request: NextRequest) {
   });
 
   const dateY = codeY - 14;
-  const dateW = helvetica.widthOfTextAtSize(invoiceHeaderDate, 9);
-  page.drawText(invoiceHeaderDate, {
+  const dateW = textWidth(helvetica, invoiceHeaderDate, 9);
+  drawText(invoiceHeaderDate, {
     x: PAGE_WIDTH - MARGIN_X - dateW,
     y: dateY,
     font: helvetica,
@@ -685,7 +707,7 @@ export async function GET(request: NextRequest) {
       const addressLineHeight = 10;
       const addressStartY = (logoDrawn ? logoBottomY : leftBlockBottomY) - 12;
       addressLines.forEach((line, index) => {
-        page.drawText(line, {
+        drawText(line, {
           x: MARGIN_X,
           y: addressStartY - index * addressLineHeight,
           font: helvetica,
@@ -704,7 +726,7 @@ export async function GET(request: NextRequest) {
   drawHorizontalLine(MARGIN_X, PAGE_WIDTH - MARGIN_X, 1);
 
   y -= 24;
-  page.drawText(t.clientDetail, {
+  drawText(t.clientDetail, {
     x: MARGIN_X,
     y,
     font: helveticaBold,
@@ -713,7 +735,7 @@ export async function GET(request: NextRequest) {
   });
 
   y -= 18;
-  page.drawText(booking.client_name, {
+  drawText(booking.client_name, {
     x: MARGIN_X,
     y,
     font: helveticaBold,
@@ -722,7 +744,7 @@ export async function GET(request: NextRequest) {
   });
 
   y -= 16;
-  page.drawText(booking.client_whatsapp || "-", {
+  drawText(booking.client_whatsapp || "-", {
     x: MARGIN_X,
     y,
     font: helvetica,
@@ -744,9 +766,9 @@ export async function GET(request: NextRequest) {
   headers.forEach((header, index) => {
     const tx =
       index === 3
-        ? colX[index] - helveticaBold.widthOfTextAtSize(header, 8)
+        ? colX[index] - textWidth(helveticaBold, header, 8)
         : colX[index] + 8;
-    page.drawText(header, {
+    drawText(header, {
       x: tx,
       y: y + 6,
       font: helveticaBold,
@@ -777,7 +799,7 @@ export async function GET(request: NextRequest) {
         height: 22,
         color: rgb(0.98, 0.986, 0.992),
       });
-      page.drawText(t.addOnSection, {
+      drawText(t.addOnSection, {
         x: MARGIN_X + 8,
         y: y + 4,
         font: helveticaBold,
@@ -816,7 +838,7 @@ export async function GET(request: NextRequest) {
     ensureSpace(rowHeight + 4);
     y -= 20;
 
-    page.drawText(serviceRow.name, {
+    drawText(serviceRow.name, {
       x: colX[0] + 8,
       y,
       font: helvetica,
@@ -826,7 +848,7 @@ export async function GET(request: NextRequest) {
     scheduleLines.forEach((line, index) => {
       const textLine = line || (index === 0 ? "-" : "");
       if (!textLine) return;
-      page.drawText(textLine, {
+      drawText(textLine, {
         x: colX[1] + 8,
         y: y - index * 12,
         font: helvetica,
@@ -834,7 +856,7 @@ export async function GET(request: NextRequest) {
         color: black,
       });
     });
-    page.drawText(paymentStatus, {
+    drawText(paymentStatus, {
       x: colX[2] + 8,
       y,
       font: helveticaBold,
@@ -843,8 +865,8 @@ export async function GET(request: NextRequest) {
     });
 
     const totalStr = formatCurrency(serviceRow.price);
-    page.drawText(totalStr, {
-      x: colX[3] - helvetica.widthOfTextAtSize(totalStr, 10),
+    drawText(totalStr, {
+      x: colX[3] - textWidth(helvetica, totalStr, 10),
       y,
       font: helvetica,
       size: 10,
@@ -855,7 +877,7 @@ export async function GET(request: NextRequest) {
     descriptionLines.forEach((line, index) => {
       const textLine = line || (index === 0 ? t.noDescription : "");
       if (!textLine) return;
-      page.drawText(textLine, {
+      drawText(textLine, {
         x: colX[0] + 8,
         y,
         font: helvetica,
@@ -881,7 +903,7 @@ export async function GET(request: NextRequest) {
   if (specialOffer) {
     y -= 20;
     ensureSpace(92);
-    page.drawText(t.initialBreakdown, {
+    drawText(t.initialBreakdown, {
       x: MARGIN_X,
       y,
       font: helveticaBold,
@@ -911,15 +933,15 @@ export async function GET(request: NextRequest) {
     y -= 16;
     breakdownRows.forEach((row) => {
       ensureSpace(14);
-      page.drawText(row.label, {
+      drawText(row.label, {
         x: MARGIN_X + 8,
         y,
         font: helvetica,
         size: 9,
         color: gray,
       });
-      page.drawText(row.value, {
-        x: PAGE_WIDTH - MARGIN_X - helvetica.widthOfTextAtSize(row.value, 9),
+      drawText(row.value, {
+        x: PAGE_WIDTH - MARGIN_X - textWidth(helvetica, row.value, 9),
         y,
         font: helvetica,
         size: 9,
@@ -934,7 +956,7 @@ export async function GET(request: NextRequest) {
   if (isFinalStage) {
     y -= 22;
     ensureSpace(28);
-    page.drawText(t.adjustments, {
+    drawText(t.adjustments, {
       x: MARGIN_X,
       y,
       font: helveticaBold,
@@ -945,7 +967,7 @@ export async function GET(request: NextRequest) {
 
     if (adjustments.length === 0) {
       ensureSpace(12);
-      page.drawText("-", {
+      drawText("-", {
         x: MARGIN_X,
         y,
         font: helvetica,
@@ -956,7 +978,7 @@ export async function GET(request: NextRequest) {
     } else {
       adjustments.forEach((item) => {
         ensureSpace(24);
-        page.drawText(item.label, {
+        drawText(item.label, {
           x: MARGIN_X,
           y,
           font: helveticaBold,
@@ -965,8 +987,8 @@ export async function GET(request: NextRequest) {
         });
 
         const amountText = formatCurrency(item.amount);
-        page.drawText(amountText, {
-          x: PAGE_WIDTH - MARGIN_X - helveticaBold.widthOfTextAtSize(amountText, 10),
+        drawText(amountText, {
+          x: PAGE_WIDTH - MARGIN_X - textWidth(helveticaBold, amountText, 10),
           y,
           font: helveticaBold,
           size: 10,
@@ -999,7 +1021,7 @@ export async function GET(request: NextRequest) {
   const sumX = PAGE_WIDTH - MARGIN_X - 220;
   const sumValX = PAGE_WIDTH - MARGIN_X;
 
-  page.drawText(t.subTotal, {
+  drawText(t.subTotal, {
     x: sumX,
     y,
     font: helvetica,
@@ -1007,8 +1029,8 @@ export async function GET(request: NextRequest) {
     color: black,
   });
   const subTotalText = formatCurrency(booking.total_price);
-  page.drawText(subTotalText, {
-    x: sumValX - helvetica.widthOfTextAtSize(subTotalText, 10),
+  drawText(subTotalText, {
+    x: sumValX - textWidth(helvetica, subTotalText, 10),
     y,
     font: helvetica,
     size: 10,
@@ -1017,7 +1039,7 @@ export async function GET(request: NextRequest) {
 
   if (isFinalStage) {
     y -= 22;
-    page.drawText(t.adjustmentTotal, {
+    drawText(t.adjustmentTotal, {
       x: sumX,
       y,
       font: helvetica,
@@ -1025,8 +1047,8 @@ export async function GET(request: NextRequest) {
       color: black,
     });
     const adjText = formatCurrency(adjustmentsTotal);
-    page.drawText(adjText, {
-      x: sumValX - helvetica.widthOfTextAtSize(adjText, 10),
+    drawText(adjText, {
+      x: sumValX - textWidth(helvetica, adjText, 10),
       y,
       font: helvetica,
       size: 10,
@@ -1035,7 +1057,7 @@ export async function GET(request: NextRequest) {
   }
 
   y -= 22;
-  page.drawText(t.dpPaid, {
+  drawText(t.dpPaid, {
     x: sumX,
     y,
     font: helvetica,
@@ -1043,8 +1065,8 @@ export async function GET(request: NextRequest) {
     color: black,
   });
   const dpText = `- ${formatCurrency(booking.dp_paid)}`;
-  page.drawText(dpText, {
-    x: sumValX - helvetica.widthOfTextAtSize(dpText, 10),
+  drawText(dpText, {
+    x: sumValX - textWidth(helvetica, dpText, 10),
     y,
     font: helvetica,
     size: 10,
@@ -1055,7 +1077,7 @@ export async function GET(request: NextRequest) {
   drawHorizontalLine(sumX, sumValX, 1.5, black);
 
   y -= 20;
-  page.drawText(t.remainingPayment, {
+  drawText(t.remainingPayment, {
     x: sumX,
     y,
     font: helveticaBold,
@@ -1063,8 +1085,8 @@ export async function GET(request: NextRequest) {
     color: black,
   });
   const remainingText = formatCurrency(remaining);
-  page.drawText(remainingText, {
-    x: sumValX - helveticaBold.widthOfTextAtSize(remainingText, 13),
+  drawText(remainingText, {
+    x: sumValX - textWidth(helveticaBold, remainingText, 13),
     y,
     font: helveticaBold,
     size: 13,
@@ -1075,7 +1097,7 @@ export async function GET(request: NextRequest) {
     y -= 34;
     ensureSpace(28 + invoicePaymentBankAccounts.length * 52);
 
-    page.drawText(t.paymentInfo, {
+    drawText(t.paymentInfo, {
       x: MARGIN_X,
       y,
       font: helveticaBold,
@@ -1095,7 +1117,7 @@ export async function GET(request: NextRequest) {
         color: index % 2 === 0 ? rgb(0.985, 0.987, 0.99) : rgb(1, 1, 1),
       });
 
-      page.drawText(`${t.bankName}: ${bank.bank_name.trim()}`, {
+      drawText(`${t.bankName}: ${bank.bank_name.trim()}`, {
         x: MARGIN_X + 10,
         y,
         font: helveticaBold,
@@ -1108,14 +1130,14 @@ export async function GET(request: NextRequest) {
         bank.account_name.trim() || "-"
       }`;
 
-      page.drawText(accountNumberText, {
+      drawText(accountNumberText, {
         x: MARGIN_X + 10,
         y: y - 14,
         font: helvetica,
         size: 9,
         color: gray,
       });
-      page.drawText(accountNameText, {
+      drawText(accountNameText, {
         x: MARGIN_X + 10,
         y: y - 28,
         font: helvetica,
@@ -1135,8 +1157,8 @@ export async function GET(request: NextRequest) {
   const footerText = hideTenantBranding
     ? UNBRANDED_FOOTER_TEXT_BY_LANG[lang] || UNBRANDED_FOOTER_TEXT_BY_LANG.id
     : t.footerText;
-  const footerWidth = helvetica.widthOfTextAtSize(footerText, 9);
-  page.drawText(footerText, {
+  const footerWidth = textWidth(helvetica, footerText, 9);
+  drawText(footerText, {
     x: (PAGE_WIDTH - footerWidth) / 2,
     y,
     font: helvetica,
