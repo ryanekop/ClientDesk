@@ -21,6 +21,7 @@ import {
   Search,
   Bot,
   ClipboardPaste,
+  CreditCard,
 } from "lucide-react";
 import { adminNativeSelectClass } from "@/components/ui/admin-native-form-controls";
 import { Button } from "@/components/ui/button";
@@ -123,6 +124,13 @@ import {
   type OperationalCostTemplate,
 } from "@/lib/operational-costs";
 import {
+  getInvoicePaymentBankAccounts,
+  getValidBankAccounts,
+  normalizeBankAccounts,
+  normalizeInvoicePaymentBankAccountIds,
+  type BankAccount,
+} from "@/lib/payment-config";
+import {
   getOnboardingActiveStep,
   isOnboardingGoogleStep,
   ONBOARDING_ACTIVE_STEP_EVENT,
@@ -176,6 +184,9 @@ type Profile = {
   default_wa_target?: "client" | "freelancer" | null;
   booking_table_color_enabled?: boolean | null;
   finance_table_color_enabled?: boolean | null;
+  bank_accounts?: unknown;
+  invoice_payment_accounts_enabled?: boolean | null;
+  invoice_payment_bank_account_ids?: string[] | null;
   form_event_types?: string[] | null;
   custom_event_types?: string[] | null;
   drive_folder_structure_map?: Record<string, string[]> | null;
@@ -680,6 +691,9 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "default_wa_target",
   "booking_table_color_enabled",
   "finance_table_color_enabled",
+  "bank_accounts",
+  "invoice_payment_accounts_enabled",
+  "invoice_payment_bank_account_ids",
   "final_invoice_visible_from_status",
   "tracking_file_links_visible_from_status",
   "tracking_video_links_visible_from_status",
@@ -1108,6 +1122,11 @@ export default function SettingsPage() {
     React.useState(false);
   const [financeTableColorEnabled, setFinanceTableColorEnabled] =
     React.useState(false);
+  const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
+  const [invoicePaymentAccountsEnabled, setInvoicePaymentAccountsEnabled] =
+    React.useState(false);
+  const [invoicePaymentBankAccountIds, setInvoicePaymentBankAccountIds] =
+    React.useState<string[]>([]);
   const [operationalCostTemplates, setOperationalCostTemplates] =
     React.useState<OperationalCostTemplate[]>([]);
 
@@ -1277,6 +1296,27 @@ export default function SettingsPage() {
   const isTenantAdmin = profileRole === "admin";
   const canEditTenantBookingMode = isCustomTenantDomain && isTenantAdmin;
   const slugInputReadOnly = isCustomTenantDomain && disableBookingSlug;
+  const validInvoicePaymentBankAccounts = React.useMemo(
+    () => getValidBankAccounts(bankAccounts),
+    [bankAccounts],
+  );
+  const selectedInvoicePaymentBankAccounts = React.useMemo(
+    () =>
+      getInvoicePaymentBankAccounts(
+        bankAccounts,
+        invoicePaymentBankAccountIds,
+      ),
+    [bankAccounts, invoicePaymentBankAccountIds],
+  );
+  const selectedInvoicePaymentBankAccountIdSet = React.useMemo(
+    () => new Set(invoicePaymentBankAccountIds),
+    [invoicePaymentBankAccountIds],
+  );
+  const invoicePaymentSummaryText = invoicePaymentAccountsEnabled
+    ? tp("invoicePaymentAccountsSummaryEnabled", {
+        count: selectedInvoicePaymentBankAccounts.length,
+      })
+    : tp("invoicePaymentAccountsSummaryDisabled");
   React.useEffect(() => {
     if (activeTab === "keuangan" && !isTenantAdmin) {
       setActiveTab("umum");
@@ -1824,6 +1864,15 @@ export default function SettingsPage() {
     setFinanceTableColorEnabled(
       Boolean((prof as any)?.finance_table_color_enabled),
     );
+    setBankAccounts(normalizeBankAccounts((prof as any)?.bank_accounts));
+    setInvoicePaymentAccountsEnabled(
+      Boolean((prof as any)?.invoice_payment_accounts_enabled),
+    );
+    setInvoicePaymentBankAccountIds(
+      normalizeInvoicePaymentBankAccountIds(
+        (prof as any)?.invoice_payment_bank_account_ids,
+      ),
+    );
     setOperationalCostTemplates(
       normalizeOperationalCostTemplates((prof as any)?.operational_cost_templates),
     );
@@ -2332,23 +2381,48 @@ export default function SettingsPage() {
     );
   }
 
-  async function handleSaveOperationalCostTemplates() {
+  function toggleInvoicePaymentBankAccount(bankId: string) {
+    setInvoicePaymentBankAccountIds((current) => {
+      const normalized = normalizeInvoicePaymentBankAccountIds(current);
+      return normalized.includes(bankId)
+        ? normalized.filter((id) => id !== bankId)
+        : [...normalized, bankId];
+    });
+  }
+
+  async function handleSaveFinanceSettings() {
     if (!profile || !isTenantAdmin) return;
+
+    const validAccountIds = new Set(
+      validInvoicePaymentBankAccounts.map((bank) => bank.id),
+    );
+    const normalizedSelectedIds = normalizeInvoicePaymentBankAccountIds(
+      invoicePaymentBankAccountIds,
+    ).filter((id) => validAccountIds.has(id));
+
+    if (invoicePaymentAccountsEnabled && normalizedSelectedIds.length === 0) {
+      showFeedback(tp("invoicePaymentAccountsNeedOne"));
+      return;
+    }
+
     setSaving(true);
 
     try {
       const normalizedTemplates =
         normalizeOperationalCostTemplates(operationalCostTemplates);
       await saveProfilePatch({
+        invoice_payment_accounts_enabled: invoicePaymentAccountsEnabled,
+        invoice_payment_bank_account_ids: normalizedSelectedIds,
         operational_cost_templates: normalizedTemplates,
       });
+      setInvoicePaymentBankAccountIds(normalizedSelectedIds);
       setOperationalCostTemplates(normalizedTemplates);
       setSavedMsg(settingsSavedMessage);
       showSettingsSavedToast();
       setTimeout(() => setSavedMsg(""), 3000);
       void fetchAll(true);
     } catch (error) {
-      console.error("Operational cost template save error:", error);
+      console.error("Finance settings save error:", error);
       setSavedMsg(tp("failedSave"));
       setTimeout(() => setSavedMsg(""), 3000);
     } finally {
@@ -5308,6 +5382,89 @@ export default function SettingsPage() {
         {activeTab === "keuangan" && isTenantAdmin && (
           <div className="space-y-6">
             <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+              <div className="flex flex-col gap-3 border-b px-6 py-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-indigo-600 dark:text-indigo-300" />
+                    <h3 className="font-semibold">
+                      {tp("invoicePaymentAccountsTitle")}
+                    </h3>
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {tp("invoicePaymentAccountsDescription")}
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-muted-foreground">
+                    {invoicePaymentSummaryText}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:justify-end">
+                  <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      checked={invoicePaymentAccountsEnabled}
+                      onChange={(event) =>
+                        setInvoicePaymentAccountsEnabled(event.target.checked)
+                      }
+                      className="h-4 w-4 accent-primary"
+                    />
+                    {tp("invoicePaymentAccountsToggle")}
+                  </label>
+                </div>
+              </div>
+
+              <div className="p-6">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {validInvoicePaymentBankAccounts.length === 0 ? (
+                    <div className="rounded-lg border border-dashed bg-muted/10 px-4 py-5 text-sm text-muted-foreground md:col-span-2 xl:col-span-3">
+                      {tp("invoicePaymentAccountsEmpty")}
+                    </div>
+                  ) : (
+                    validInvoicePaymentBankAccounts.map((bank) => {
+                      const checked = selectedInvoicePaymentBankAccountIdSet.has(
+                        bank.id,
+                      );
+                      return (
+                        <label
+                          key={bank.id}
+                          className={`flex min-h-[116px] cursor-pointer flex-col gap-3 rounded-lg border p-4 transition-colors ${
+                            checked
+                              ? "border-primary bg-primary/5"
+                              : "border-input bg-background hover:bg-muted/40"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold">
+                                {bank.bank_name}
+                              </p>
+                              <p className="mt-1 truncate text-xs text-muted-foreground">
+                                {bank.account_name || "-"}
+                              </p>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() =>
+                                toggleInvoicePaymentBankAccount(bank.id)
+                              }
+                              className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                            />
+                          </div>
+                          <div className="rounded-md bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                            {tp("invoicePaymentAccountsNumberLabel")}:{" "}
+                            <span className="text-foreground">
+                              {bank.account_number}
+                            </span>
+                          </div>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
               <div className="flex flex-col gap-3 border-b px-6 py-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="font-semibold">Template Biaya Operasional</h3>
@@ -5454,7 +5611,7 @@ export default function SettingsPage() {
                 <Button
                   type="button"
                   disabled={saving}
-                  onClick={handleSaveOperationalCostTemplates}
+                  onClick={handleSaveFinanceSettings}
                   className={unifiedSaveButtonClass}
                 >
                   {saving ? (
