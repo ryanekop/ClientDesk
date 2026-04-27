@@ -1752,6 +1752,7 @@ export default function BookingDetailPage() {
             dp_verified_at: null,
             dp_refund_amount: 0,
             dp_refunded_at: null,
+            payment_source: null,
         };
 
         const { error } = await supabase
@@ -2453,6 +2454,7 @@ export default function BookingDetailPage() {
                 settlement_status: nextSettlementStatus,
                 final_payment_amount: 0,
                 final_paid_at: null,
+                final_payment_source: null,
             })
             .eq("id", booking.id);
         setMarkingFinalUnpaid(false);
@@ -2474,6 +2476,7 @@ export default function BookingDetailPage() {
                     settlement_status: nextSettlementStatus,
                     final_payment_amount: 0,
                     final_paid_at: null,
+                    final_payment_source: null,
                 }
                 : prev,
         );

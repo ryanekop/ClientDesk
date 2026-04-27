@@ -42,6 +42,14 @@ import {
   buildEditableSpecialOfferSnapshot,
   mergeSpecialOfferSnapshotIntoExtraFields,
 } from "@/lib/booking-special-offer";
+import {
+  getEnabledBankAccounts,
+  getPaymentSourceLabel,
+  normalizeBankAccounts,
+  resolvePaymentSourceFromOptionValue,
+  type BankAccount,
+  type PaymentSource,
+} from "@/lib/payment-config";
 import type {
   ImportContext,
   ImportCustomFieldDefinition,
@@ -74,6 +82,10 @@ export const IMPORT_COLUMNS = {
   wisudaSession1Date: "wisuda_session_1_date",
   wisudaSession2Date: "wisuda_session_2_date",
   dpPaid: "dp_paid",
+  dpVerifiedAt: "dp_verified_at",
+  paymentSource: "payment_source",
+  finalPaidAt: "final_paid_at",
+  finalPaymentSource: "final_payment_source",
   status: "status",
   addonServices: "addon_services",
   addonServiceIds: "addon_service_ids",
@@ -117,6 +129,7 @@ type ProfileImportRow = {
   form_sections?: unknown;
   form_event_types?: string[] | null;
   custom_event_types?: unknown;
+  bank_accounts?: unknown;
 };
 
 type ServiceImportRow = {
@@ -422,6 +435,33 @@ function normalizeBookingDateInput(value: unknown): string | null {
   return parseSessionDateParts(`${normalized}T00:00`) ? normalized : null;
 }
 
+function normalizeVerificationDateInput(value: unknown): string | null {
+  const normalizedDate = normalizeBookingDateInput(value);
+  if (!normalizedDate) return null;
+  const parsed = new Date(`${normalizedDate}T12:00:00+07:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function resolveImportPaymentSource(input: {
+  rawValue: unknown;
+  bankAccounts: BankAccount[];
+  fieldName: string;
+  normalizedRow: NormalizedImportRow;
+}): PaymentSource | null {
+  const raw = normalizeText(input.rawValue);
+  if (!raw) return null;
+
+  const source = resolvePaymentSourceFromOptionValue(raw.toLowerCase(), input.bankAccounts);
+  if (!source) {
+    pushIssue(
+      input.normalizedRow,
+      "error",
+      `${input.fieldName} tidak valid. Gunakan cash, qris, atau bank:<id> dari sheet Lookups.`,
+    );
+  }
+  return source;
+}
+
 function combineSessionDateAndTime(input: {
   sessionDate: string | null;
   sessionTimeRaw: unknown;
@@ -610,6 +650,10 @@ function getTemplateHeaders(context: ImportContext): string[] {
     IMPORT_COLUMNS.wisudaSession1Date,
     IMPORT_COLUMNS.wisudaSession2Date,
     IMPORT_COLUMNS.dpPaid,
+    IMPORT_COLUMNS.dpVerifiedAt,
+    IMPORT_COLUMNS.paymentSource,
+    IMPORT_COLUMNS.finalPaidAt,
+    IMPORT_COLUMNS.finalPaymentSource,
     IMPORT_COLUMNS.status,
     IMPORT_COLUMNS.addonServices,
     IMPORT_COLUMNS.addonServiceIds,
@@ -681,6 +725,10 @@ function resolveHeaderAlias(
     waktu: "sessionTime",
     waktu_sesi: "sessionTime",
     tanggal_booking: "bookingDate",
+    tanggal_verifikasi_dp: "dpVerifiedAt",
+    sumber_dp: "paymentSource",
+    tanggal_pelunasan: "finalPaidAt",
+    sumber_pelunasan: "finalPaymentSource",
     catatan: "notes",
     catatan_admin: "adminNotes",
     lokasi_detail: "locationDetail",
@@ -875,6 +923,10 @@ function buildTemplateSampleRows(
     [IMPORT_COLUMNS.akadDate]: "",
     [IMPORT_COLUMNS.resepsiDate]: "",
     [IMPORT_COLUMNS.dpPaid]: "1000000",
+    [IMPORT_COLUMNS.dpVerifiedAt]: "2026-07-01",
+    [IMPORT_COLUMNS.paymentSource]: "cash",
+    [IMPORT_COLUMNS.finalPaidAt]: "",
+    [IMPORT_COLUMNS.finalPaymentSource]: "",
     [IMPORT_COLUMNS.status]: context.initialStatus,
     [IMPORT_COLUMNS.addonServices]: nonWeddingAddonService?.name || "",
     [IMPORT_COLUMNS.addonServiceIds]: "",
@@ -922,6 +974,10 @@ function buildTemplateSampleRows(
       [IMPORT_COLUMNS.akadDate]: "2026-08-20T09:00",
       [IMPORT_COLUMNS.resepsiDate]: "2026-08-20T18:00",
       [IMPORT_COLUMNS.dpPaid]: "1500000",
+      [IMPORT_COLUMNS.dpVerifiedAt]: "2026-08-01",
+      [IMPORT_COLUMNS.paymentSource]: "qris",
+      [IMPORT_COLUMNS.finalPaidAt]: "",
+      [IMPORT_COLUMNS.finalPaymentSource]: "",
       [IMPORT_COLUMNS.status]: context.initialStatus,
       [IMPORT_COLUMNS.addonServices]: weddingAddonService?.name || "",
       [IMPORT_COLUMNS.addonServiceIds]: "",
@@ -983,6 +1039,10 @@ function buildTemplateSampleRows(
       [IMPORT_COLUMNS.wisudaSession1Date]: "2026-09-10T07:30",
       [IMPORT_COLUMNS.wisudaSession2Date]: "2026-09-10T13:00",
       [IMPORT_COLUMNS.dpPaid]: "1000000",
+      [IMPORT_COLUMNS.dpVerifiedAt]: "2026-09-01",
+      [IMPORT_COLUMNS.paymentSource]: "cash",
+      [IMPORT_COLUMNS.finalPaidAt]: "",
+      [IMPORT_COLUMNS.finalPaymentSource]: "",
       [IMPORT_COLUMNS.status]: context.initialStatus,
       [IMPORT_COLUMNS.addonServices]: wisudaAddonService?.name || "",
       [IMPORT_COLUMNS.addonServiceIds]: "",
@@ -1271,7 +1331,7 @@ export async function loadImportContext(
     await Promise.all([
       supabase
         .from("profiles")
-        .select("custom_client_statuses, form_sections, form_event_types, custom_event_types")
+        .select("custom_client_statuses, form_sections, form_event_types, custom_event_types, bank_accounts")
         .eq("id", userId)
         .single(),
       supabase
@@ -1379,6 +1439,7 @@ export async function loadImportContext(
   const freelancerRows = ((freelancers || []) as FreelancerImportRow[])
     .map((item) => ({ id: item.id, name: item.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
+  const bankAccounts = normalizeBankAccounts(profileRow.bank_accounts);
 
   const customFieldsByEventType = extractCustomFieldsByEventType(
     profileRow.form_sections,
@@ -1399,6 +1460,7 @@ export async function loadImportContext(
       mainServices,
       addonServices,
       freelancers: freelancerRows,
+      bankAccounts,
       cityOptions,
       customFieldsByEventType,
       customFieldUnion,
@@ -1425,6 +1487,15 @@ export function buildTemplateWorkbookBuffer(context: ImportContext): Buffer {
     ["lookup_type", "key", "name", "id", "meta"],
     ...context.eventTypeOptions.map((item) => ["event_type", item, item, "", ""]),
     ...context.statusOptions.map((item) => ["status", item, item, "", ""]),
+    ["payment_source", "cash", "Cash", "cash", "Gunakan di payment_source/final_payment_source"],
+    ["payment_source", "qris", "QRIS", "qris", "Gunakan di payment_source/final_payment_source"],
+    ...getEnabledBankAccounts(context.bankAccounts).map((bank) => [
+      "payment_source",
+      `bank:${bank.id}`,
+      `${bank.bank_name}${bank.account_number ? ` - ${bank.account_number}` : ""}`,
+      bank.id,
+      bank.account_name || "",
+    ]),
     ...context.mainServices.map((item) => [
       "main_service",
       item.name,
@@ -1488,10 +1559,12 @@ export function buildTemplateWorkbookBuffer(context: ImportContext): Buffer {
     ["11. Gunakan pemisah | atau koma untuk multi-value (services/addons/freelancers)."],
     ["12. Mapping Name + ID fallback: isi nama untuk mudah dibaca, pakai ID bila ada nama ganda."],
     ["13. Kolom dynamic: extra.<key> untuk built-in extra fields, cf.<id> untuk custom fields."],
-    ["14. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
-    ["15. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
-    ["16. Batas maksimum 500 baris per file .xlsx."],
-    ["17. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
+    ["14. Source pembayaran opsional: cash, qris, atau bank:<id> dari sheet Lookups."],
+    ["15. dp_verified_at/final_paid_at cukup tanggal; sistem menyimpan timestamp stabil otomatis."],
+    ["16. external_import_id dibuat otomatis oleh sistem saat validate/commit."],
+    ["17. Commit hanya aktif saat tidak ada error validasi (warning masih boleh)."],
+    ["18. Batas maksimum 500 baris per file .xlsx."],
+    ["19. Sheet Bookings berisi baris contoh, silakan ubah/hapus sebelum commit final."],
   ];
   const guideSheet = XLSX.utils.aoa_to_sheet(guideRows);
   guideSheet["!cols"] = [{ wch: 140 }];
@@ -1605,6 +1678,10 @@ function toPreviewRows(rows: NormalizedImportRow[]): ImportPreviewRow[] {
     addonServices: row.addonServiceNames,
     freelancers: row.freelancerNames,
     dpPaid: row.dpPaid,
+    dpVerifiedAt: row.dpVerifiedAt,
+    paymentSourceLabel: getPaymentSourceLabel(row.paymentSource),
+    finalPaidAt: row.finalPaidAt,
+    finalPaymentSourceLabel: getPaymentSourceLabel(row.finalPaymentSource),
     packageTotal: row.packageTotal,
     addonTotal: row.addonTotal,
     totalPrice: row.totalPrice,
@@ -1632,6 +1709,10 @@ function buildValidationReportBuffer(rows: ImportPreviewRow[]): Buffer {
       addon_services: row.addonServices.join(" | "),
       freelancers: row.freelancers.join(" | "),
       dp_paid: row.dpPaid,
+      dp_verified_at: row.dpVerifiedAt || "",
+      payment_source: row.paymentSourceLabel,
+      final_paid_at: row.finalPaidAt || "",
+      final_payment_source: row.finalPaymentSourceLabel,
       total_price: row.totalPrice,
     };
   });
@@ -1650,6 +1731,10 @@ function buildValidationReportBuffer(rows: ImportPreviewRow[]): Buffer {
     { wch: 35 },
     { wch: 35 },
     { wch: 14 },
+    { wch: 24 },
+    { wch: 28 },
+    { wch: 24 },
+    { wch: 28 },
     { wch: 14 },
   ];
 
@@ -1844,6 +1929,10 @@ function buildEmptyNormalizedRow(rowNumber: number): NormalizedImportRow {
     addonServiceNames: [],
     freelancerNames: [],
     dpPaid: 0,
+    dpVerifiedAt: null,
+    paymentSource: null,
+    finalPaidAt: null,
+    finalPaymentSource: null,
     packageTotal: 0,
     addonTotal: 0,
     totalPrice: 0,
@@ -2021,6 +2110,67 @@ function validateOneRow(input: {
     { required: true },
   );
   normalized.dpPaid = dp.value;
+
+  const dpVerifiedRaw = normalizeText(input.row[IMPORT_COLUMNS.dpVerifiedAt]);
+  if (dpVerifiedRaw) {
+    const dpVerifiedAt = normalizeVerificationDateInput(input.row[IMPORT_COLUMNS.dpVerifiedAt]);
+    if (!dpVerifiedAt) {
+      pushIssue(
+        normalized,
+        "error",
+        "dp_verified_at tidak valid. Gunakan format YYYY-MM-DD, DD/MM/YYYY, atau DD-MM-YYYY.",
+      );
+    } else {
+      normalized.dpVerifiedAt = dpVerifiedAt;
+    }
+  }
+
+  normalized.paymentSource = resolveImportPaymentSource({
+    rawValue: input.row[IMPORT_COLUMNS.paymentSource],
+    bankAccounts: input.context.bankAccounts,
+    fieldName: "payment_source",
+    normalizedRow: normalized,
+  });
+  if (normalized.paymentSource && !normalized.dpVerifiedAt) {
+    pushIssue(
+      normalized,
+      "warning",
+      "payment_source diabaikan karena dp_verified_at kosong.",
+    );
+    normalized.paymentSource = null;
+  }
+  if (normalized.dpVerifiedAt && normalized.dpPaid <= 0) {
+    pushIssue(normalized, "error", "dp_verified_at hanya boleh diisi jika dp_paid lebih dari 0.");
+  }
+
+  const finalPaidRaw = normalizeText(input.row[IMPORT_COLUMNS.finalPaidAt]);
+  if (finalPaidRaw) {
+    const finalPaidAt = normalizeVerificationDateInput(input.row[IMPORT_COLUMNS.finalPaidAt]);
+    if (!finalPaidAt) {
+      pushIssue(
+        normalized,
+        "error",
+        "final_paid_at tidak valid. Gunakan format YYYY-MM-DD, DD/MM/YYYY, atau DD-MM-YYYY.",
+      );
+    } else {
+      normalized.finalPaidAt = finalPaidAt;
+    }
+  }
+
+  normalized.finalPaymentSource = resolveImportPaymentSource({
+    rawValue: input.row[IMPORT_COLUMNS.finalPaymentSource],
+    bankAccounts: input.context.bankAccounts,
+    fieldName: "final_payment_source",
+    normalizedRow: normalized,
+  });
+  if (normalized.finalPaymentSource && !normalized.finalPaidAt) {
+    pushIssue(
+      normalized,
+      "warning",
+      "final_payment_source diabaikan karena final_paid_at kosong.",
+    );
+    normalized.finalPaymentSource = null;
+  }
 
   const accommodation = parseNonNegativeMoney(
     input.row[IMPORT_COLUMNS.accommodationFee],
@@ -2698,6 +2848,10 @@ function makeHeaderErrorValidationResult(
       addonServices: [],
       freelancers: [],
       dpPaid: 0,
+      dpVerifiedAt: null,
+      paymentSourceLabel: "",
+      finalPaidAt: null,
+      finalPaymentSourceLabel: "",
       packageTotal: 0,
       addonTotal: 0,
       totalPrice: 0,
@@ -2898,6 +3052,10 @@ export function buildCommitReportFile(
       addon_services: preview.addonServices.join(" | "),
       freelancers: preview.freelancers.join(" | "),
       dp_paid: preview.dpPaid,
+      dp_verified_at: preview.dpVerifiedAt || "",
+      payment_source: preview.paymentSourceLabel,
+      final_paid_at: preview.finalPaidAt || "",
+      final_payment_source: preview.finalPaymentSourceLabel,
       total_price: preview.totalPrice,
     };
   });
@@ -2918,6 +3076,10 @@ export function buildCommitReportFile(
     { wch: 35 },
     { wch: 35 },
     { wch: 14 },
+    { wch: 24 },
+    { wch: 28 },
+    { wch: 24 },
+    { wch: 28 },
     { wch: 14 },
   ];
   const wb = XLSX.utils.book_new();

@@ -63,6 +63,13 @@ AS $$
   booking_metrics AS (
     SELECT
       booking_rows.*,
+      to_char(
+        COALESCE(
+          booking_rows.booking_date,
+          timezone(anchors.time_zone, booking_rows.created_at)::date
+        ),
+        'YYYY-MM'
+      ) AS booking_period_key,
       public.cd_net_verified_revenue_amount(
         booking_rows.dp_verified_amount,
         booking_rows.dp_refund_amount,
@@ -88,6 +95,7 @@ AS $$
         booking_rows.final_payment_amount
       ) AS remaining_payment
     FROM booking_rows
+    CROSS JOIN anchors
   ),
   transaction_events AS (
     SELECT
@@ -96,7 +104,7 @@ AS $$
       public.cd_verified_dp_amount(booking_metrics.dp_verified_amount) AS amount,
       booking_metrics.dp_verified_at AS event_at,
       booking_metrics.payment_source AS source_json,
-      to_char(timezone(anchors.time_zone, booking_metrics.dp_verified_at), 'YYYY-MM') AS period_key
+      booking_metrics.booking_period_key AS period_key
     FROM booking_metrics
     CROSS JOIN anchors
     WHERE booking_metrics.dp_verified_at IS NOT NULL
@@ -114,7 +122,7 @@ AS $$
       ) AS amount,
       booking_metrics.final_paid_at AS event_at,
       booking_metrics.final_payment_source AS source_json,
-      to_char(timezone(anchors.time_zone, booking_metrics.final_paid_at), 'YYYY-MM') AS period_key
+      booking_metrics.booking_period_key AS period_key
     FROM booking_metrics
     CROSS JOIN anchors
     WHERE booking_metrics.final_paid_at IS NOT NULL
@@ -135,7 +143,7 @@ AS $$
       ) * -1 AS amount,
       booking_metrics.dp_refunded_at AS event_at,
       booking_metrics.payment_source AS source_json,
-      to_char(timezone(anchors.time_zone, booking_metrics.dp_refunded_at), 'YYYY-MM') AS period_key
+      booking_metrics.booking_period_key AS period_key
     FROM booking_metrics
     CROSS JOIN anchors
     WHERE booking_metrics.dp_refunded_at IS NOT NULL
@@ -149,13 +157,7 @@ AS $$
       booking_metrics.id AS booking_id,
       COALESCE((item.value ->> 'amount')::numeric, 0) AS amount,
       COALESCE((item.value ->> 'created_at')::timestamptz, NOW()) AS event_at,
-      to_char(
-        timezone(
-          anchors.time_zone,
-          COALESCE((item.value ->> 'created_at')::timestamptz, NOW())
-        ),
-        'YYYY-MM'
-      ) AS period_key
+      booking_metrics.booking_period_key AS period_key
     FROM booking_metrics
     CROSS JOIN anchors
     CROSS JOIN LATERAL jsonb_array_elements(
@@ -189,7 +191,7 @@ AS $$
     FROM booking_metrics
     CROSS JOIN anchors
     WHERE anchors.period_key = 'all'
-       OR booking_metrics.id IN (SELECT booking_id FROM selected_booking_ids)
+       OR booking_metrics.booking_period_key = anchors.period_key
   ),
   transaction_summary AS (
     SELECT
@@ -223,13 +225,7 @@ AS $$
     FROM booking_metrics
     CROSS JOIN anchors
     WHERE anchors.period_key = 'all'
-       OR to_char(
-         COALESCE(
-           booking_metrics.booking_date,
-           timezone(anchors.time_zone, booking_metrics.created_at)::date
-         ),
-         'YYYY-MM'
-       ) = anchors.period_key
+       OR booking_metrics.booking_period_key = anchors.period_key
   ),
   period_candidates AS (
     SELECT anchors.current_period_key AS period_key
@@ -249,19 +245,10 @@ AS $$
 
     UNION
 
-    SELECT to_char(
-      COALESCE(
-        booking_metrics.booking_date,
-        timezone(anchors.time_zone, booking_metrics.created_at)::date
-      ),
-      'YYYY-MM'
-    ) AS period_key
+    SELECT booking_metrics.booking_period_key AS period_key
     FROM booking_metrics
     CROSS JOIN anchors
-    WHERE COALESCE(
-      booking_metrics.booking_date,
-      timezone(anchors.time_zone, booking_metrics.created_at)::date
-    ) IS NOT NULL
+    WHERE booking_metrics.booking_period_key IS NOT NULL
   ),
   source_breakdown AS (
     SELECT

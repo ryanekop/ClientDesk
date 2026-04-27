@@ -1,3 +1,5 @@
+import type { BankAccount, PaymentSource } from "@/lib/payment-config";
+
 export type ImportIssueLevel = "error" | "warning";
 
 export type ImportIssue = {
@@ -28,6 +30,10 @@ export type ImportPreviewRow = {
   addonServices: string[];
   freelancers: string[];
   dpPaid: number;
+  dpVerifiedAt: string | null;
+  paymentSourceLabel: string;
+  finalPaidAt: string | null;
+  finalPaymentSourceLabel: string;
   packageTotal: number;
   addonTotal: number;
   totalPrice: number;
@@ -75,6 +81,7 @@ export type ImportContext = {
   mainServices: ImportServiceRow[];
   addonServices: ImportServiceRow[];
   freelancers: ImportFreelancerRow[];
+  bankAccounts: BankAccount[];
   cityOptions: Array<{
     city_code: string;
     city_name: string;
@@ -111,6 +118,10 @@ export type NormalizedImportRow = {
   addonServiceNames: string[];
   freelancerNames: string[];
   dpPaid: number;
+  dpVerifiedAt: string | null;
+  paymentSource: PaymentSource | null;
+  finalPaidAt: string | null;
+  finalPaymentSource: PaymentSource | null;
   packageTotal: number;
   addonTotal: number;
   totalPrice: number;

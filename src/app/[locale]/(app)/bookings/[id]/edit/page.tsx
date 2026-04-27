@@ -117,6 +117,15 @@ import {
     isCityScopedBookingEventType,
 } from "@/lib/service-availability";
 import {
+    getEnabledBankAccounts,
+    getPaymentMethodLabel,
+    getPaymentSourceOptionValue,
+    normalizeBankAccounts,
+    resolvePaymentSourceFromOptionValue,
+    type BankAccount,
+    type PaymentSource,
+} from "@/lib/payment-config";
+import {
     buildServiceSoftPalette,
     normalizeHexColor,
     resolveHexColor,
@@ -263,6 +272,7 @@ type ProfileRow = {
     form_brand_color?: string | null;
     team_badge_colors?: unknown;
     operational_cost_templates?: unknown;
+    bank_accounts?: unknown;
 };
 
 type BadgeColorMap = Record<string, string>;
@@ -364,6 +374,25 @@ function formatCurrency(n: number) {
         currency: "IDR",
         minimumFractionDigits: 0,
     }).format(n || 0);
+}
+
+function formatDateInputValue(value: string | null | undefined) {
+    if (!value) return "";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : "";
+    }
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function dateInputToStableIso(value: string) {
+    const normalized = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
+    const parsed = new Date(`${normalized}T12:00:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 const SAFE_EDITOR_RETURN_TO_PATHS = new Set([
@@ -574,9 +603,12 @@ export default function EditBookingPage() {
     const [operationalCostTemplateDialogOpen, setOperationalCostTemplateDialogOpen] = React.useState(false);
     const [operationalCostTemplateSearchQuery, setOperationalCostTemplateSearchQuery] = React.useState("");
     const [isCurrentUserAdmin, setIsCurrentUserAdmin] = React.useState(false);
+    const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
     const [highlightOperationalCosts, setHighlightOperationalCosts] = React.useState(false);
     const [finalPaymentAmount, setFinalPaymentAmount] = React.useState(0);
     const [finalPaidAt, setFinalPaidAt] = React.useState<string | null>(null);
+    const [paymentSourceValue, setPaymentSourceValue] = React.useState("");
+    const [finalPaymentSourceValue, setFinalPaymentSourceValue] = React.useState("");
     const [baseExtraFieldsObject, setBaseExtraFieldsObject] = React.useState<Record<string, unknown> | null>(null);
     const [markingDpVerified, setMarkingDpVerified] = React.useState(false);
     const [markingDpUnverified, setMarkingDpUnverified] = React.useState(false);
@@ -702,13 +734,25 @@ export default function EditBookingPage() {
         [cacheInvalidationBooking.bookingCode, cacheInvalidationBooking.trackingUuid],
     );
 
+    const paymentSourceOptions = React.useMemo(() => {
+        const enabledBanks = getEnabledBankAccounts(bankAccounts);
+        return [
+            { value: "cash", label: getPaymentMethodLabel("cash") },
+            { value: "qris", label: getPaymentMethodLabel("qris") },
+            ...enabledBanks.map((bank) => ({
+                value: `bank:${bank.id}`,
+                label: `${bank.bank_name}${bank.account_number ? ` - ${bank.account_number}` : ""}`,
+            })),
+        ];
+    }, [bankAccounts]);
+
     React.useEffect(() => {
         async function load() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
             let { data: prof, error: profileError } = await supabase
                 .from("profiles")
-                .select("role, custom_client_statuses, dp_verify_trigger_status, form_sections, form_event_types, custom_event_types, form_brand_color, team_badge_colors, operational_cost_templates")
+                .select("role, custom_client_statuses, dp_verify_trigger_status, form_sections, form_event_types, custom_event_types, form_brand_color, team_badge_colors, operational_cost_templates, bank_accounts")
                 .eq("id", user.id)
                 .single();
             if (
@@ -717,7 +761,7 @@ export default function EditBookingPage() {
             ) {
                 const fallbackProfile = await supabase
                     .from("profiles")
-                    .select("role, custom_client_statuses, dp_verify_trigger_status, form_sections, form_event_types, custom_event_types, form_brand_color, team_badge_colors")
+                    .select("role, custom_client_statuses, dp_verify_trigger_status, form_sections, form_event_types, custom_event_types, form_brand_color, team_badge_colors, bank_accounts")
                     .eq("id", user.id)
                     .single();
                 prof = fallbackProfile.data;
@@ -729,6 +773,7 @@ export default function EditBookingPage() {
             const profileRow = (prof ?? null) as ProfileRow | null;
             const userIsAdmin = (profileRow?.role || "").trim().toLowerCase() === "admin";
             setIsCurrentUserAdmin(userIsAdmin);
+            setBankAccounts(userIsAdmin ? normalizeBankAccounts(profileRow?.bank_accounts) : []);
             setOperationalCostTemplates(
                 userIsAdmin
                     ? normalizeOperationalCostTemplates(profileRow?.operational_cost_templates)
@@ -903,6 +948,11 @@ export default function EditBookingPage() {
                 setInitialDpPaid(normalizedDpPaid);
                 setDpVerifiedAmount(Number((booking as Record<string, unknown>).dp_verified_amount) || 0);
                 setDpVerifiedAt(((booking as Record<string, unknown>).dp_verified_at as string | null) || null);
+                setPaymentSourceValue(
+                    getPaymentSourceOptionValue(
+                        (booking as Record<string, unknown>).payment_source as PaymentSource | null,
+                    ),
+                );
                 setDpRefundAmount(Number((booking as Record<string, unknown>).dp_refund_amount) || 0);
                 setDpRefundedAt(((booking as Record<string, unknown>).dp_refunded_at as string | null) || null);
                 setSettlementStatusValue(
@@ -922,6 +972,11 @@ export default function EditBookingPage() {
                 );
                 setFinalPaymentAmount(Number((booking as Record<string, unknown>).final_payment_amount) || 0);
                 setFinalPaidAt(((booking as Record<string, unknown>).final_paid_at as string | null) || null);
+                setFinalPaymentSourceValue(
+                    getPaymentSourceOptionValue(
+                        (booking as Record<string, unknown>).final_payment_source as PaymentSource | null,
+                    ),
+                );
                 const unifiedStatus = resolveUnifiedBookingStatus({
                     status: booking.status,
                     clientStatus: booking.client_status,
@@ -2034,14 +2089,6 @@ export default function EditBookingPage() {
             const nextStatus = status;
             const dpChanged = dPaid !== initialDpPaid;
             const shouldResetVerifiedDp = dpChanged && Boolean(dpVerifiedAt);
-            const verifiedDpResetPatch = shouldResetVerifiedDp
-                ? {
-                    dp_verified_amount: 0,
-                    dp_verified_at: null,
-                    dp_refund_amount: 0,
-                    dp_refunded_at: null,
-                }
-                : {};
             const isCancelling = isTransitionToCancelled(previousStatus, nextStatus);
             const cancelPatch = isCancelling
                 ? buildCancelPaymentPatch({
@@ -2057,17 +2104,57 @@ export default function EditBookingPage() {
                 dpPaid: dPaid,
                 dpVerifiedAt,
             });
+            const normalizedFinalAdjustments = normalizeFinalAdjustments(finalAdjustmentsRaw);
+            const nextDpVerifiedAt = shouldResetVerifiedDp
+                ? null
+                : autoDpPatch?.dp_verified_at || dpVerifiedAt;
+            const nextDpVerifiedAmount = nextDpVerifiedAt ? dPaid : 0;
+            const nextDpRefundAmount = nextDpVerifiedAt
+                ? shouldResetVerifiedDp
+                    ? 0
+                    : dpRefundAmount
+                : 0;
+            const nextDpRefundedAt = nextDpVerifiedAt
+                ? shouldResetVerifiedDp
+                    ? null
+                    : dpRefundedAt
+                : null;
+            const nextPaymentSource = isCurrentUserAdmin && nextDpVerifiedAt
+                ? resolvePaymentSourceFromOptionValue(paymentSourceValue, bankAccounts)
+                : null;
+            const finalPaymentAmountForCheck = finalPaidAt
+                ? Math.max(
+                    finalPaymentAmount,
+                    getRemainingFinalPayment({
+                        total_price: tPrice,
+                        dp_paid: dPaid,
+                        dp_verified_amount: nextDpVerifiedAmount,
+                        dp_verified_at: nextDpVerifiedAt,
+                        dp_refund_amount: nextDpRefundAmount,
+                        dp_refunded_at: nextDpRefundedAt,
+                        final_adjustments: normalizedFinalAdjustments,
+                        final_payment_amount: 0,
+                        final_paid_at: null,
+                        settlement_status: settlementStatusValue,
+                        is_fully_paid: false,
+                    }),
+                )
+                : 0;
+            const nextFinalPaymentSource = isCurrentUserAdmin && finalPaidAt
+                ? resolvePaymentSourceFromOptionValue(finalPaymentSourceValue, bankAccounts)
+                : null;
+            const nextSettlementStatus = finalPaidAt ? "paid" : settlementStatusValue;
             const nextIsFullyPaid = isBookingFullyPaid({
                 total_price: tPrice,
                 dp_paid: dPaid,
-                dp_verified_amount: shouldResetVerifiedDp ? 0 : dpVerifiedAmount,
-                dp_verified_at: shouldResetVerifiedDp ? null : dpVerifiedAt,
-                dp_refund_amount: shouldResetVerifiedDp ? 0 : dpRefundAmount,
-                dp_refunded_at: shouldResetVerifiedDp ? null : dpRefundedAt,
-                final_adjustments: normalizeFinalAdjustments(finalAdjustmentsRaw),
-                final_payment_amount: finalPaymentAmount,
+                dp_verified_amount: nextDpVerifiedAmount,
+                dp_verified_at: nextDpVerifiedAt,
+                dp_refund_amount: nextDpRefundAmount,
+                dp_refunded_at: nextDpRefundedAt,
+                final_adjustments: normalizedFinalAdjustments,
+                final_payment_amount: finalPaymentAmountForCheck,
                 final_paid_at: finalPaidAt,
-                settlement_status: settlementStatusValue,
+                settlement_status: nextSettlementStatus,
                 is_fully_paid: isFullyPaid,
             });
 
@@ -2091,19 +2178,28 @@ export default function EditBookingPage() {
                 freelance_id: freelancerIdsForSave[0] || null,
                 total_price: tPrice,
                 dp_paid: dPaid,
+                dp_verified_amount: nextDpVerifiedAmount,
+                dp_verified_at: nextDpVerifiedAt,
+                dp_refund_amount: nextDpRefundAmount,
+                dp_refunded_at: nextDpRefundedAt,
                 is_fully_paid: nextIsFullyPaid,
-                ...verifiedDpResetPatch,
+                settlement_status: nextSettlementStatus,
+                final_payment_amount: finalPaymentAmountForCheck,
+                final_paid_at: finalPaidAt,
                 status: nextStatus,
                 client_status: nextStatus,
                 ...(cancelPatch || {}),
-                ...(autoDpPatch || {}),
                 notes: notes || null,
                 admin_notes: adminNotes || null,
                 drive_folder_url: driveFolderUrl || null,
                 video_drive_folder_url: videoDriveFolderUrl || null,
                 portfolio_url: portfolioUrl || null,
                 ...(isCurrentUserAdmin
-                    ? { operational_costs: normalizedOperationalCosts }
+                    ? {
+                        operational_costs: normalizedOperationalCosts,
+                        payment_source: nextPaymentSource,
+                        final_payment_source: nextFinalPaymentSource,
+                    }
                     : {}),
                 extra_fields: nextExtraFieldsPayload,
                 updated_at: new Date().toISOString(),
@@ -2210,12 +2306,12 @@ export default function EditBookingPage() {
 
             setInitialStatus(nextStatus);
             setInitialDpPaid(dPaid);
-            if (shouldResetVerifiedDp) {
-                setDpVerifiedAmount(0);
-                setDpVerifiedAt(null);
-                setDpRefundAmount(0);
-                setDpRefundedAt(null);
-            }
+            setDpVerifiedAmount(nextDpVerifiedAmount);
+            setDpVerifiedAt(nextDpVerifiedAt);
+            setDpRefundAmount(nextDpRefundAmount);
+            setDpRefundedAt(nextDpRefundedAt);
+            setFinalPaymentAmount(finalPaymentAmountForCheck);
+            setSettlementStatusValue(nextSettlementStatus);
             setCancelStatusConfirmOpen(false);
             void triggerFastpikAutoSync(id);
             setIsFullyPaid(nextIsFullyPaid);
@@ -2240,11 +2336,15 @@ export default function EditBookingPage() {
 
         setMarkingDpVerified(true);
         const verifiedAt = new Date().toISOString();
+        const nextPaymentSource = isCurrentUserAdmin
+            ? resolvePaymentSourceFromOptionValue(paymentSourceValue, bankAccounts)
+            : null;
         const patch = {
             dp_verified_amount: dpValue,
             dp_verified_at: verifiedAt,
             dp_refund_amount: 0,
             dp_refunded_at: null,
+            ...(isCurrentUserAdmin ? { payment_source: nextPaymentSource } : {}),
         };
 
         const { error } = await supabase.from("bookings").update(patch).eq("id", id);
@@ -2270,6 +2370,7 @@ export default function EditBookingPage() {
             dp_verified_at: null,
             dp_refund_amount: 0,
             dp_refunded_at: null,
+            ...(isCurrentUserAdmin ? { payment_source: null } : {}),
         };
         const { error } = await supabase.from("bookings").update(patch).eq("id", id);
         setMarkingDpUnverified(false);
@@ -2284,6 +2385,7 @@ export default function EditBookingPage() {
         setDpVerifiedAt(null);
         setDpRefundAmount(0);
         setDpRefundedAt(null);
+        setPaymentSourceValue("");
     }
 
     function addOperationalCostItem() {
@@ -3318,6 +3420,78 @@ export default function EditBookingPage() {
                                 </Button>
                             )}
                         </div>
+                        {isCurrentUserAdmin && (
+                            <div className="col-span-full grid gap-3 md:grid-cols-2">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Sumber DP</label>
+                                    <select
+                                        value={paymentSourceValue}
+                                        onChange={(event) => setPaymentSourceValue(event.target.value)}
+                                        className={selectClass}
+                                    >
+                                        <option value="">Belum dipilih</option>
+                                        {paymentSourceOptions.map((option) => (
+                                            <option key={`dp-${option.value}`} value={option.value}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Tanggal Verifikasi DP</label>
+                                    <input
+                                        type="date"
+                                        value={formatDateInputValue(dpVerifiedAt)}
+                                        onChange={(event) => {
+                                            const nextVerifiedAt = dateInputToStableIso(event.target.value);
+                                            setDpVerifiedAt(nextVerifiedAt);
+                                            setDpVerifiedAmount(nextVerifiedAt ? dpPaidValue : 0);
+                                            if (!nextVerifiedAt) {
+                                                setPaymentSourceValue("");
+                                                setDpRefundAmount(0);
+                                                setDpRefundedAt(null);
+                                            }
+                                        }}
+                                        className={adminNativeDateTimeInputClass}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Sumber Pelunasan</label>
+                                    <select
+                                        value={finalPaymentSourceValue}
+                                        onChange={(event) => setFinalPaymentSourceValue(event.target.value)}
+                                        className={selectClass}
+                                    >
+                                        <option value="">Belum dipilih</option>
+                                        {paymentSourceOptions.map((option) => (
+                                            <option key={`final-${option.value}`} value={option.value}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">Tanggal Pelunasan</label>
+                                    <input
+                                        type="date"
+                                        value={formatDateInputValue(finalPaidAt)}
+                                        onChange={(event) => {
+                                            const nextFinalPaidAt = dateInputToStableIso(event.target.value);
+                                            setFinalPaidAt(nextFinalPaidAt);
+                                            if (nextFinalPaidAt) {
+                                                setFinalPaymentAmount((prev) => prev > 0 ? prev : remainingPayment);
+                                                setSettlementStatusValue("paid");
+                                            } else {
+                                                setFinalPaymentAmount(0);
+                                                setFinalPaymentSourceValue("");
+                                                setSettlementStatusValue("draft");
+                                            }
+                                        }}
+                                        className={adminNativeDateTimeInputClass}
+                                    />
+                                </div>
+                            </div>
+                        )}
                         {paymentCustomItems.length > 0 && (
                             <BookingAdminCustomFields
                                 items={paymentCustomItems}

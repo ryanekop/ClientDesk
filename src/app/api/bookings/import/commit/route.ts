@@ -61,6 +61,9 @@ async function insertOneBooking(
   const extraFields = buildImportedBookingExtraFields(row);
   const resolvedLocation = resolveImportedLocation(row);
   const shouldPersistCity = isCityScopedBookingEventType(row.eventType);
+  const finalPaymentAmount = row.finalPaidAt
+    ? Math.max(row.totalPrice - row.dpPaid, 0)
+    : 0;
 
   const bookingPayload: Record<string, unknown> = {
     user_id: userId,
@@ -80,7 +83,14 @@ async function insertOneBooking(
     freelance_id: row.freelancerIds[0] || null,
     total_price: row.totalPrice,
     dp_paid: row.dpPaid,
-    is_fully_paid: row.dpPaid >= row.totalPrice,
+    dp_verified_amount: row.dpVerifiedAt ? row.dpPaid : 0,
+    dp_verified_at: row.dpVerifiedAt,
+    payment_source: row.dpVerifiedAt ? row.paymentSource : null,
+    settlement_status: row.finalPaidAt ? "paid" : "draft",
+    final_payment_amount: finalPaymentAmount,
+    final_paid_at: row.finalPaidAt,
+    final_payment_source: row.finalPaidAt ? row.finalPaymentSource : null,
+    is_fully_paid: row.finalPaidAt ? true : row.dpPaid >= row.totalPrice,
     status: row.status,
     client_status: row.status,
     notes: row.notes,

@@ -151,6 +151,37 @@ export function createPaymentSourceFromBank(bank: BankAccount): PaymentSource {
   };
 }
 
+export function createPaymentSourceFromMethod(method: "qris" | "cash"): PaymentSource {
+  return {
+    type: method,
+    label: getPaymentMethodLabel(method),
+  };
+}
+
+export function getPaymentSourceOptionValue(source: PaymentSource | null | undefined) {
+  if (!source) return "";
+  if (source.type === "bank") return source.bank_id ? `bank:${source.bank_id}` : "";
+  if (source.type === "qris" || source.type === "cash") return source.type;
+  return "";
+}
+
+export function resolvePaymentSourceFromOptionValue(
+  value: string | null | undefined,
+  bankAccounts: BankAccount[],
+): PaymentSource | null {
+  const normalized = value?.trim() || "";
+  if (!normalized) return null;
+  if (normalized === "cash" || normalized === "qris") {
+    return createPaymentSourceFromMethod(normalized);
+  }
+  if (normalized.startsWith("bank:")) {
+    const bankId = normalized.slice("bank:".length).trim();
+    const bank = getValidBankAccounts(bankAccounts).find((item) => item.id === bankId);
+    return bank ? createPaymentSourceFromBank(bank) : null;
+  }
+  return null;
+}
+
 export function buildDriveImageUrl(fileId: string) {
   return `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`;
 }
