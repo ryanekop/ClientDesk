@@ -837,6 +837,7 @@
         "sortBookingDateOldest": "Urutkan: Tanggal Booking Terlama",
         "sortSessionDateNearest": "Urutkan: Tanggal Sesi Terdekat",
         "sortSessionDateFarthest": "Urutkan: Tanggal Sesi Terjauh",
+        "sortEditQueueNumber": "Urutkan: Nomor Antrian Edit",
         "dateRangeLabel": "Rentang Tanggal",
         "dateRangePlaceholder": "Semua Tanggal",
         "dateRangePickerTitle": "Pilih Rentang Tanggal",

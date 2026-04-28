@@ -203,6 +203,12 @@ AS $$
       filtered.id,
       row_number() OVER (
         ORDER BY
+          CASE WHEN params.sort_order = 'queue_position_asc'
+            THEN CASE WHEN filtered.queue_position IS NULL THEN 1 ELSE 0 END
+          END ASC,
+          CASE WHEN params.sort_order = 'queue_position_asc'
+            THEN filtered.queue_position
+          END ASC,
           CASE WHEN params.sort_order = 'booking_newest'
             THEN COALESCE(filtered.booking_date::text, filtered.created_at::text, '')
           END DESC,
@@ -218,7 +224,7 @@ AS $$
           CASE WHEN params.sort_order = 'session_newest'
             THEN COALESCE(filtered.session_date::text, '')
           END ASC,
-          CASE WHEN params.sort_order NOT IN ('booking_newest', 'booking_oldest', 'session_newest')
+          CASE WHEN params.sort_order NOT IN ('booking_newest', 'booking_oldest', 'session_newest', 'queue_position_asc')
             THEN COALESCE(filtered.session_date::text, '')
           END DESC,
           filtered.created_at DESC,

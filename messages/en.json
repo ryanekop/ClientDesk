@@ -837,6 +837,7 @@
         "sortBookingDateOldest": "Sort: Oldest Booking Date",
         "sortSessionDateNearest": "Sort: Nearest Session Date",
         "sortSessionDateFarthest": "Sort: Farthest Session Date",
+        "sortEditQueueNumber": "Sort: Edit Queue Number",
         "dateRangeLabel": "Date Range",
         "dateRangePlaceholder": "All Dates",
         "dateRangePickerTitle": "Select Date Range",

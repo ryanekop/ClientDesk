@@ -261,6 +261,7 @@ const CLIENT_STATUS_SORT_ORDERS = [
     "booking_oldest",
     "session_newest",
     "session_oldest",
+    "queue_position_asc",
 ] as const;
 type ClientStatusSortOrder = (typeof CLIENT_STATUS_SORT_ORDERS)[number];
 type ClientStatusDateBasis = "booking_date" | "session_date";
@@ -1378,6 +1379,7 @@ export default function ClientStatusPage() {
             { value: "booking_oldest", label: tb("sortBookingDateOldest") },
             { value: "session_newest", label: tb("sortSessionDateNearest") },
             { value: "session_oldest", label: tb("sortSessionDateFarthest") },
+            { value: "queue_position_asc", label: tb("sortEditQueueNumber") },
         ],
         [tb],
     );

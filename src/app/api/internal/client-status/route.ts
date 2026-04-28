@@ -23,6 +23,13 @@ import { resolveFastpikProjectInfoFromExtraFields } from "@/lib/fastpik-project-
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 10;
 const MAX_PER_PAGE = 100;
+const CLIENT_STATUS_SORT_ORDERS = new Set([
+  "booking_newest",
+  "booking_oldest",
+  "session_newest",
+  "session_oldest",
+  "queue_position_asc",
+]);
 
 function parsePositiveInt(value: string | null, fallback: number) {
   const parsed = Number(value);
@@ -108,6 +115,11 @@ function parseIncludeMetadata(value: string | null) {
 
 function parseArchiveMode(value: string | null) {
   return normalizeBookingArchiveMode(value);
+}
+
+function parseSortOrder(value: string | null) {
+  const trimmed = value?.trim() || "";
+  return CLIENT_STATUS_SORT_ORDERS.has(trimmed) ? trimmed : "booking_newest";
 }
 
 function isInvalidEscapeStringError(message: string) {
@@ -264,7 +276,7 @@ export async function GET(request: NextRequest) {
   const dateBasis = parseDateBasis(searchParams.get("dateBasis"));
   const timeZone = parseTimeZone(searchParams.get("timeZone"));
   const includeMetadata = parseIncludeMetadata(searchParams.get("includeMetadata"));
-  const sortOrder = searchParams.get("sortOrder")?.trim() || "booking_newest";
+  const sortOrder = parseSortOrder(searchParams.get("sortOrder"));
 
   const effectiveStatusFilters =
     statusFilters.length > 0
