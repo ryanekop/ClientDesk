@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,11 @@ import { useLocale, useTranslations } from "next-intl"
 import Link from "next/link"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { applyClientDeskRememberMeSelection } from "@/lib/auth/session-only"
+import {
+    applyClientDeskRememberMeSelection,
+    clearClientDeskSessionOnlyState,
+    evaluateClientDeskSessionOnlyState,
+} from "@/lib/auth/session-only"
 import { AppCheckbox } from "@/components/ui/app-checkbox"
 import { getClientDeskRegisterHref } from "@/lib/auth/register-url"
 import { Turnstile } from "@marsidev/react-turnstile"
@@ -60,6 +64,7 @@ export function LoginForm({ handoffTarget, handoffError = false }: LoginFormProp
     const [captchaToken, setCaptchaToken] = useState("")
     const [captchaKey, setCaptchaKey] = useState(0)
     const [loading, setLoading] = useState(false)
+    const [autoHandoffChecking, setAutoHandoffChecking] = useState(Boolean(handoffTarget && !handoffError))
     const [resending, setResending] = useState(false)
     const [error, setError] = useState<string | null>(
         handoffError ? t("authHandoffExpired") : null,
@@ -67,6 +72,59 @@ export function LoginForm({ handoffTarget, handoffError = false }: LoginFormProp
     const [feedbackTone, setFeedbackTone] = useState<"error" | "success">("error")
     const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null)
     const rememberMeId = "remember-me"
+
+    useEffect(() => {
+        if (!handoffTarget || handoffError) {
+            setAutoHandoffChecking(false)
+            return
+        }
+
+        let cancelled = false
+
+        const attemptExistingSessionHandoff = async () => {
+            setAutoHandoffChecking(true)
+
+            const {
+                data: { session },
+                error: sessionError,
+            } = await supabase.auth.getSession()
+
+            if (cancelled) return
+
+            if (sessionError || !session?.access_token || !session.refresh_token) {
+                setAutoHandoffChecking(false)
+                return
+            }
+
+            const { shouldSignOut, sessionOnlyActive } =
+                evaluateClientDeskSessionOnlyState(session.user.id)
+
+            if (shouldSignOut) {
+                clearClientDeskSessionOnlyState()
+                await supabase.auth.signOut()
+
+                if (!cancelled) {
+                    setAutoHandoffChecking(false)
+                }
+                return
+            }
+
+            window.location.replace(buildHandoffCallbackUrl({
+                origin: handoffTarget.origin,
+                locale,
+                returnPath: handoffTarget.returnPath,
+                accessToken: session.access_token,
+                refreshToken: session.refresh_token,
+                rememberMe: !sessionOnlyActive,
+            }))
+        }
+
+        attemptExistingSessionHandoff()
+
+        return () => {
+            cancelled = true
+        }
+    }, [handoffError, handoffTarget, locale, supabase.auth])
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -159,6 +217,17 @@ export function LoginForm({ handoffTarget, handoffError = false }: LoginFormProp
         } finally {
             setResending(false)
         }
+    }
+
+    if (autoHandoffChecking) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+                <div className="bg-card text-card-foreground flex w-full max-w-sm flex-col items-center justify-center gap-4 rounded-xl border p-8 text-center shadow-sm">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">{t("authenticating")}</p>
+                </div>
+            </div>
+        )
     }
 
     return (
