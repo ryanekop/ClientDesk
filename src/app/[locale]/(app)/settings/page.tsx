@@ -207,6 +207,8 @@ type Profile = {
     | null;
   fastpik_last_sync_message?: string | null;
   fastpik_default_max_photos?: number | null;
+  fastpik_default_selection_enabled?: boolean | null;
+  fastpik_default_download_enabled?: boolean | null;
   fastpik_default_selection_days?: number | null;
   fastpik_default_download_days?: number | null;
   fastpik_default_detect_subfolders?: boolean | null;
@@ -709,6 +711,8 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "fastpik_last_sync_status",
   "fastpik_last_sync_message",
   "fastpik_default_max_photos",
+  "fastpik_default_selection_enabled",
+  "fastpik_default_download_enabled",
   "fastpik_default_selection_days",
   "fastpik_default_download_days",
   "fastpik_default_detect_subfolders",
@@ -990,6 +994,10 @@ export default function SettingsPage() {
     React.useState("");
   const [fastpikDefaultMaxPhotos, setFastpikDefaultMaxPhotos] =
     React.useState(50);
+  const [fastpikDefaultSelectionEnabled, setFastpikDefaultSelectionEnabled] =
+    React.useState(true);
+  const [fastpikDefaultDownloadEnabled, setFastpikDefaultDownloadEnabled] =
+    React.useState(true);
   const [fastpikDefaultSelectionDays, setFastpikDefaultSelectionDays] =
     React.useState(14);
   const [fastpikDefaultDownloadDays, setFastpikDefaultDownloadDays] =
@@ -1928,6 +1936,12 @@ export default function SettingsPage() {
         ? Number((prof as any)?.fastpik_default_max_photos)
         : 50,
     );
+    setFastpikDefaultSelectionEnabled(
+      (prof as any)?.fastpik_default_selection_enabled !== false,
+    );
+    setFastpikDefaultDownloadEnabled(
+      (prof as any)?.fastpik_default_download_enabled !== false,
+    );
     setFastpikDefaultSelectionDays(
       Number((prof as any)?.fastpik_default_selection_days) > 0
         ? Number((prof as any)?.fastpik_default_selection_days)
@@ -2485,19 +2499,25 @@ export default function SettingsPage() {
       fastpik_preset_source: fastpikPresetSource,
       fastpik_api_key: fastpikApiKey.trim() || null,
       fastpik_default_max_photos:
-        Number.isFinite(fastpikDefaultMaxPhotos) && fastpikDefaultMaxPhotos > 0
+        fastpikDefaultSelectionEnabled &&
+        Number.isFinite(fastpikDefaultMaxPhotos) &&
+        fastpikDefaultMaxPhotos > 0
           ? Math.floor(fastpikDefaultMaxPhotos)
-          : 50,
+          : null,
+      fastpik_default_selection_enabled: fastpikDefaultSelectionEnabled,
+      fastpik_default_download_enabled: fastpikDefaultDownloadEnabled,
       fastpik_default_selection_days:
+        fastpikDefaultSelectionEnabled &&
         Number.isFinite(fastpikDefaultSelectionDays) &&
         fastpikDefaultSelectionDays > 0
           ? Math.floor(fastpikDefaultSelectionDays)
-          : 14,
+          : null,
       fastpik_default_download_days:
+        fastpikDefaultDownloadEnabled &&
         Number.isFinite(fastpikDefaultDownloadDays) &&
         fastpikDefaultDownloadDays > 0
           ? Math.floor(fastpikDefaultDownloadDays)
-          : 14,
+          : null,
       fastpik_default_detect_subfolders: fastpikDefaultDetectSubfolders,
       fastpik_default_password: fastpikDefaultPassword.trim() || null,
       fastpik_link_display_mode_booking_detail:
@@ -5152,6 +5172,38 @@ export default function SettingsPage() {
                         {tp("fastpikDefaultsTitle")}
                       </p>
                       <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={fastpikDefaultSelectionEnabled}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setFastpikDefaultSelectionEnabled(checked);
+                              if (!checked) {
+                                setFastpikDefaultDownloadEnabled(true);
+                              }
+                            }}
+                            className="accent-primary"
+                          />
+                          {tp("fastpikDefaultSelectionEnabled")}
+                        </label>
+                        <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={fastpikDefaultDownloadEnabled}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setFastpikDefaultDownloadEnabled(checked);
+                              if (!checked) {
+                                setFastpikDefaultSelectionEnabled(true);
+                              }
+                            }}
+                            className="accent-primary"
+                          />
+                          {tp("fastpikDefaultDownloadEnabled")}
+                        </label>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
                           <label className="text-xs text-muted-foreground">
                             {tp("fastpikDefaultMaxPhotos")}
@@ -5163,6 +5215,7 @@ export default function SettingsPage() {
                             onChange={(e) =>
                               setFastpikDefaultMaxPhotos(Number(e.target.value))
                             }
+                            disabled={!fastpikDefaultSelectionEnabled}
                             className={inputClass}
                           />
                         </div>
@@ -5179,6 +5232,7 @@ export default function SettingsPage() {
                                 Number(e.target.value),
                               )
                             }
+                            disabled={!fastpikDefaultSelectionEnabled}
                             className={inputClass}
                           />
                         </div>
@@ -5195,6 +5249,7 @@ export default function SettingsPage() {
                                 Number(e.target.value),
                               )
                             }
+                            disabled={!fastpikDefaultDownloadEnabled}
                             className={inputClass}
                           />
                         </div>

@@ -973,6 +973,8 @@
         "fastpikLinkModePreferFastpik": "Show Fastpik link when available, otherwise Google Drive",
         "fastpikLinkModeDriveOnly": "Show Google Drive link only",
         "fastpikDefaultsTitle": "ClientDesk Default Preset",
+        "fastpikDefaultSelectionEnabled": "Enable Select Photos",
+        "fastpikDefaultDownloadEnabled": "Enable Download Photos",
         "fastpikDefaultMaxPhotos": "Max Photos",
         "fastpikDefaultSelectionDays": "Selection Duration (days)",
         "fastpikDefaultDownloadDays": "Download Duration (days)",

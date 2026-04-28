@@ -9,6 +9,8 @@ ADD COLUMN IF NOT EXISTS fastpik_last_sync_at timestamptz,
 ADD COLUMN IF NOT EXISTS fastpik_last_sync_status text DEFAULT 'idle',
 ADD COLUMN IF NOT EXISTS fastpik_last_sync_message text,
 ADD COLUMN IF NOT EXISTS fastpik_default_max_photos integer,
+ADD COLUMN IF NOT EXISTS fastpik_default_selection_enabled boolean DEFAULT true,
+ADD COLUMN IF NOT EXISTS fastpik_default_download_enabled boolean DEFAULT true,
 ADD COLUMN IF NOT EXISTS fastpik_default_selection_days integer,
 ADD COLUMN IF NOT EXISTS fastpik_default_download_days integer,
 ADD COLUMN IF NOT EXISTS fastpik_default_detect_subfolders boolean DEFAULT false,
@@ -82,4 +84,3 @@ ON public.bookings (user_id, fastpik_sync_status, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS bookings_user_drive_link_idx
 ON public.bookings (user_id, drive_folder_url);
-

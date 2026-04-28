@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   client_status_deadline_default_days INTEGER NOT NULL DEFAULT 7,
   tracking_project_deadline_visible BOOLEAN NOT NULL DEFAULT FALSE,
   tracking_video_links_visible_from_status TEXT DEFAULT 'File Siap',
+  fastpik_default_selection_enabled BOOLEAN DEFAULT TRUE,
+  fastpik_default_download_enabled BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

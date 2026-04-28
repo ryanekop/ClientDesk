@@ -973,6 +973,8 @@
         "fastpikLinkModePreferFastpik": "Tampilkan Link Fastpik saja jika sudah terhubung, selain itu ke Google Drive",
         "fastpikLinkModeDriveOnly": "Tampilkan Link Google Drive saja",
         "fastpikDefaultsTitle": "Preset Default dari ClientDesk",
+        "fastpikDefaultSelectionEnabled": "Aktifkan Pilih Foto",
+        "fastpikDefaultDownloadEnabled": "Aktifkan Download Foto",
         "fastpikDefaultMaxPhotos": "Maksimal Foto",
         "fastpikDefaultSelectionDays": "Durasi Pilih Foto (hari)",
         "fastpikDefaultDownloadDays": "Durasi Download (hari)",

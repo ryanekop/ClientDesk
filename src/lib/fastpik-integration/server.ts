@@ -21,6 +21,8 @@ type ProfileFastpikSettings = {
   fastpik_last_sync_status: FastpikSyncStatus | null;
   fastpik_last_sync_message: string | null;
   fastpik_default_max_photos: number | null;
+  fastpik_default_selection_enabled: boolean | null;
+  fastpik_default_download_enabled: boolean | null;
   fastpik_default_selection_days: number | null;
   fastpik_default_download_days: number | null;
   fastpik_default_detect_subfolders: boolean | null;
@@ -235,7 +237,7 @@ async function getProfileFastpikSettings(supabase: any, userId: string) {
   const { data, error } = await supabase
     .from("profiles")
     .select(
-      "id, fastpik_integration_enabled, fastpik_sync_mode, fastpik_preset_source, fastpik_api_key, fastpik_last_sync_at, fastpik_last_sync_status, fastpik_last_sync_message, fastpik_default_max_photos, fastpik_default_selection_days, fastpik_default_download_days, fastpik_default_detect_subfolders, fastpik_default_password",
+      "id, fastpik_integration_enabled, fastpik_sync_mode, fastpik_preset_source, fastpik_api_key, fastpik_last_sync_at, fastpik_last_sync_status, fastpik_last_sync_message, fastpik_default_max_photos, fastpik_default_selection_enabled, fastpik_default_download_enabled, fastpik_default_selection_days, fastpik_default_download_days, fastpik_default_detect_subfolders, fastpik_default_password",
     )
     .eq("id", userId)
     .single();
@@ -275,6 +277,8 @@ async function callFastpikUpsert(
   }
 
   const freelancers = resolveFreelancersSnapshotPayload(booking);
+  const selectionEnabled = profile.fastpik_default_selection_enabled !== false;
+  const downloadEnabled = profile.fastpik_default_download_enabled !== false;
   const payload = {
     source_app: "clientdesk",
     source_ref_id: booking.id,
@@ -287,9 +291,11 @@ async function callFastpikUpsert(
     freelancers,
     sync_offset_ms: Math.max(0, Math.floor(options?.syncOffsetMs || 0)),
     clientdesk_defaults: {
-      max_photos: profile.fastpik_default_max_photos,
-      selection_days: profile.fastpik_default_selection_days,
-      download_days: profile.fastpik_default_download_days,
+      max_photos: selectionEnabled ? profile.fastpik_default_max_photos : null,
+      selection_enabled: selectionEnabled,
+      download_enabled: downloadEnabled,
+      selection_days: selectionEnabled ? profile.fastpik_default_selection_days : null,
+      download_days: downloadEnabled ? profile.fastpik_default_download_days : null,
       detect_subfolders: Boolean(profile.fastpik_default_detect_subfolders),
       default_password: profile.fastpik_default_password,
     },
