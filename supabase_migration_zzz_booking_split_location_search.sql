@@ -204,10 +204,10 @@ AS $$
       row_number() OVER (
         ORDER BY
           CASE WHEN params.sort_order = 'queue_position_asc'
-            THEN CASE WHEN filtered.queue_position IS NULL THEN 1 ELSE 0 END
+            THEN CASE WHEN queue_booking.queue_position IS NULL THEN 1 ELSE 0 END
           END ASC,
           CASE WHEN params.sort_order = 'queue_position_asc'
-            THEN filtered.queue_position
+            THEN queue_booking.queue_position
           END ASC,
           CASE WHEN params.sort_order = 'booking_newest'
             THEN COALESCE(filtered.booking_date::text, filtered.created_at::text, '')
@@ -232,6 +232,8 @@ AS $$
       ) AS row_num
     FROM filtered
     CROSS JOIN params
+    LEFT JOIN public.bookings queue_booking
+      ON queue_booking.id = filtered.id
   ),
   paged_ids AS (
     SELECT ordered.id, ordered.row_num
