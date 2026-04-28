@@ -821,7 +821,8 @@
         "resendVerificationFailed": "Failed to resend the verification email. Please try again.",
         "requestNewResetLink": "Request New Reset Link",
         "requestNewVerificationLink": "Request New Verification Link",
-        "authHandoffExpired": "The tenant login session has expired. Please start login again from the tenant page."
+        "authHandoffExpired": "The tenant login session has expired. Please start login again from the tenant page.",
+        "accountAccessUnavailable": "Account access is currently unavailable. Contact support if you need help."
     },
     "BookingsPage": {
         "addClient": "Add New Client",
@@ -2502,6 +2503,7 @@
         "emailNotConfirmedResend": "Email has not been verified. Please resend the verification email.",
         "emailNotFound": "Email was not found.",
         "failedResendVerification": "Failed to resend verification email.",
+        "accountAccessUnavailable": "This request cannot be processed. Contact support if you need help.",
         "validationUnexpectedError": "An unexpected validation error occurred.",
         "untitled": "(Untitled)",
         "freelancerCalendarNotFound": "Freelancer calendar not found. Ensure the freelancer has shared their calendar with your email.",

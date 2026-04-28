@@ -26,6 +26,7 @@ type LoginHandoffTarget = {
 type LoginFormProps = {
     handoffTarget?: LoginHandoffTarget | null
     handoffError?: boolean
+    accountUnavailable?: boolean
 }
 
 function buildHandoffCallbackUrl(args: {
@@ -50,7 +51,7 @@ function buildHandoffCallbackUrl(args: {
     return callbackUrl.toString()
 }
 
-export function LoginForm({ handoffTarget, handoffError = false }: LoginFormProps) {
+export function LoginForm({ handoffTarget, handoffError = false, accountUnavailable = false }: LoginFormProps) {
     const router = useRouter()
     const supabase = createClient()
     const locale = useLocale()
@@ -67,7 +68,11 @@ export function LoginForm({ handoffTarget, handoffError = false }: LoginFormProp
     const [autoHandoffChecking, setAutoHandoffChecking] = useState(Boolean(handoffTarget && !handoffError))
     const [resending, setResending] = useState(false)
     const [error, setError] = useState<string | null>(
-        handoffError ? t("authHandoffExpired") : null,
+        handoffError
+            ? t("authHandoffExpired")
+            : accountUnavailable
+                ? t("accountAccessUnavailable")
+                : null,
     )
     const [feedbackTone, setFeedbackTone] = useState<"error" | "success">("error")
     const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null)
@@ -134,6 +139,24 @@ export function LoginForm({ handoffTarget, handoffError = false }: LoginFormProp
         setUnconfirmedEmail(null)
 
         try {
+            const blockCheckRes = await fetch('/api/auth/blocked-login-attempt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+            })
+            const blockCheckData = await blockCheckRes.json().catch(() => null) as {
+                blocked?: boolean
+                error?: string
+            } | null
+
+            if (blockCheckData?.blocked || blockCheckRes.status === 403) {
+                setCaptchaToken("")
+                setCaptchaKey((value) => value + 1)
+                setError(blockCheckData?.error || t("accountAccessUnavailable"))
+                setLoading(false)
+                return
+            }
+
             const { data, error } = await supabase.auth.signInWithPassword({
                 email,
                 password,

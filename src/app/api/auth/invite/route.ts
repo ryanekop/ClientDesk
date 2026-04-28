@@ -11,6 +11,7 @@ import {
     normalizeAuthLocale,
     resolvePublicOrigin,
 } from '@/lib/auth/public-origin'
+import { findActiveBlockForEmail } from '@/lib/auth/email-blocklist'
 
 function getSupabaseAdmin() {
     return createSupabaseAdminClient(
@@ -87,6 +88,10 @@ export async function POST(request: NextRequest) {
         const redirectTo = `${redirectOrigin}/${locale}/auth/callback?type=invite`
 
         const supabaseAdmin = getSupabaseAdmin()
+        const activeBlock = await findActiveBlockForEmail(supabaseAdmin, email)
+        if (activeBlock) {
+            return NextResponse.json({ error: apiT(requestLocale, 'accountAccessUnavailable') }, { status: 403 })
+        }
 
         // Invite user via magic link
         const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {

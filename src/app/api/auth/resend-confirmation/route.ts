@@ -4,6 +4,11 @@ import { createClient } from '@supabase/supabase-js'
 import { resolveApiLocale } from '@/lib/i18n/api-locale'
 import { apiT } from '@/lib/i18n/api-errors'
 import { normalizeAuthLocale, resolvePublicOrigin } from '@/lib/auth/public-origin'
+import {
+    findActiveBlockForEmail,
+    findAuthUserByNormalizedEmail,
+    normalizeBlocklistEmail,
+} from '@/lib/auth/email-blocklist'
 
 function getSupabaseAdmin() {
     return createClient(
@@ -27,31 +32,7 @@ function isValidEmail(value: string) {
 
 async function findAuthUserByEmail(email: string) {
     const admin = getSupabaseAdmin()
-    const normalizedEmail = email.trim().toLowerCase()
-    let page = 1
-
-    while (true) {
-        const { data, error } = await admin.auth.admin.listUsers({
-            page,
-            perPage: 1000,
-        })
-
-        if (error) {
-            throw error
-        }
-
-        const users = data?.users || []
-        const existingUser = users.find((u) => u.email?.toLowerCase() === normalizedEmail)
-        if (existingUser) {
-            return existingUser
-        }
-
-        if (users.length < 1000) {
-            return null
-        }
-
-        page += 1
-    }
+    return findAuthUserByNormalizedEmail(admin, normalizeBlocklistEmail(email))
 }
 
 export async function POST(request: NextRequest) {
@@ -89,6 +70,12 @@ export async function POST(request: NextRequest) {
         const turnstileData = await turnstileRes.json()
         if (!turnstileData.success) {
             return NextResponse.json({ error: apiT(requestLocale, 'captchaVerificationFailed') }, { status: 400 })
+        }
+
+        const supabaseAdmin = getSupabaseAdmin()
+        const activeBlock = await findActiveBlockForEmail(supabaseAdmin, email)
+        if (activeBlock) {
+            return NextResponse.json({ error: apiT(requestLocale, 'accountAccessUnavailable') }, { status: 403 })
         }
 
         const existingUser = await findAuthUserByEmail(email)

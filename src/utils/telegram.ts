@@ -14,22 +14,20 @@ function getBotToken(): string {
     return token
 }
 
-function getChatId(): string {
-    const chatId = process.env.TELEGRAM_CHAT_ID
-    if (!chatId) throw new Error('TELEGRAM_CHAT_ID is not set')
-    return chatId
-}
-
-function getSignupAlertConfig(): { botToken: string; chatId: string } | null {
+function getGlobalTelegramConfig(context: string): { botToken: string; chatId: string } | null {
     const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim()
     const chatId = process.env.TELEGRAM_CHAT_ID?.trim()
 
     if (!botToken || !chatId) {
-        console.warn('[Telegram] Signup alert skipped: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID')
+        console.warn(`[Telegram] ${context} skipped: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID`)
         return null
     }
 
     return { botToken, chatId }
+}
+
+function getSignupAlertConfig(): { botToken: string; chatId: string } | null {
+    return getGlobalTelegramConfig('Signup alert')
 }
 
 export async function sendTelegramMessage(
@@ -142,6 +140,48 @@ export async function notifyNewSignup(opts: {
         console.error('[Telegram] Failed to send signup notification:', {
             err,
             type: opts.type,
+            email: opts.email,
+        })
+    }
+}
+
+export async function notifyBlockedLoginAttempt(opts: {
+    email: string
+    reason?: string | null
+    suspendedUserId?: string | null
+    ip?: string
+    device?: string
+}) {
+    const config = getGlobalTelegramConfig('Blocked login alert')
+    if (!config) {
+        return
+    }
+
+    const now = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
+    const deviceInfo = parseDevice(opts.device)
+    const message = [
+        `⚠️ <b>ClientDesk Blocked Login Attempt</b>`,
+        '',
+        `📧 Email: ${escapeTelegramHtml(opts.email)}`,
+        `📝 Reason: ${escapeTelegramHtml(opts.reason || '-')}`,
+        `🆔 Suspended User: <code>${escapeTelegramHtml(opts.suspendedUserId || '-')}</code>`,
+        `🕐 Waktu: ${escapeTelegramHtml(now)}`,
+        `🌐 IP: ${escapeTelegramHtml(opts.ip || 'unknown')}`,
+        `📱 Device: ${escapeTelegramHtml(deviceInfo)}`,
+    ].join('\n')
+
+    try {
+        const result = await sendTelegramMessage(config.chatId, message, config.botToken)
+        if (!result.ok) {
+            console.error('[Telegram] Failed to send blocked login notification:', {
+                status: result.status,
+                description: result.description || null,
+                email: opts.email,
+            })
+        }
+    } catch (err) {
+        console.error('[Telegram] Failed to send blocked login notification:', {
+            err,
             email: opts.email,
         })
     }

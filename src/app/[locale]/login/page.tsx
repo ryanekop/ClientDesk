@@ -33,7 +33,7 @@ export default async function LoginPage({
     searchParams,
 }: {
     params: Promise<{ locale: string }>
-    searchParams?: Promise<{ handoff?: string; next?: string }>
+    searchParams?: Promise<{ handoff?: string; next?: string; account_status?: string }>
 }) {
     const { locale: rawLocale } = await params
     const locale = normalizeAuthLocale(rawLocale)
@@ -82,5 +82,11 @@ export default async function LoginPage({
         }
     }
 
-    return <LoginForm handoffTarget={handoffTarget} handoffError={handoffError} />
+    return (
+        <LoginForm
+            handoffTarget={handoffTarget}
+            handoffError={handoffError}
+            accountUnavailable={resolvedSearchParams?.account_status === "unavailable"}
+        />
+    )
 }
