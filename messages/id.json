@@ -838,6 +838,7 @@
         "sortSessionDateNearest": "Urutkan: Tanggal Sesi Terdekat",
         "sortSessionDateFarthest": "Urutkan: Tanggal Sesi Terjauh",
         "sortEditQueueNumber": "Urutkan: Nomor Antrian Edit",
+        "sortDeadlineNearest": "Urutkan: Deadline Terdekat",
         "dateRangeLabel": "Rentang Tanggal",
         "dateRangePlaceholder": "Semua Tanggal",
         "dateRangePickerTitle": "Pilih Rentang Tanggal",

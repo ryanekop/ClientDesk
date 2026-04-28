@@ -29,6 +29,7 @@ const CLIENT_STATUS_SORT_ORDERS = new Set([
   "session_newest",
   "session_oldest",
   "queue_position_asc",
+  "deadline_nearest",
 ]);
 
 function parsePositiveInt(value: string | null, fallback: number) {

@@ -838,6 +838,7 @@
         "sortSessionDateNearest": "Sort: Nearest Session Date",
         "sortSessionDateFarthest": "Sort: Farthest Session Date",
         "sortEditQueueNumber": "Sort: Edit Queue Number",
+        "sortDeadlineNearest": "Sort: Nearest Deadline",
         "dateRangeLabel": "Date Range",
         "dateRangePlaceholder": "All Dates",
         "dateRangePickerTitle": "Select Date Range",

@@ -209,6 +209,12 @@ AS $$
           CASE WHEN params.sort_order = 'queue_position_asc'
             THEN queue_booking.queue_position
           END ASC,
+          CASE WHEN params.sort_order = 'deadline_nearest'
+            THEN CASE WHEN queue_booking.project_deadline_date IS NULL THEN 1 ELSE 0 END
+          END ASC,
+          CASE WHEN params.sort_order = 'deadline_nearest'
+            THEN queue_booking.project_deadline_date
+          END ASC,
           CASE WHEN params.sort_order = 'booking_newest'
             THEN COALESCE(filtered.booking_date::text, filtered.created_at::text, '')
           END DESC,
@@ -224,7 +230,7 @@ AS $$
           CASE WHEN params.sort_order = 'session_newest'
             THEN COALESCE(filtered.session_date::text, '')
           END ASC,
-          CASE WHEN params.sort_order NOT IN ('booking_newest', 'booking_oldest', 'session_newest', 'queue_position_asc')
+          CASE WHEN params.sort_order NOT IN ('booking_newest', 'booking_oldest', 'session_newest', 'queue_position_asc', 'deadline_nearest')
             THEN COALESCE(filtered.session_date::text, '')
           END DESC,
           filtered.created_at DESC,
