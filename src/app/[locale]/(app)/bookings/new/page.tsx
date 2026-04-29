@@ -2429,11 +2429,11 @@ export default function NewBookingPage() {
                             </div>
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-muted-foreground">DP Dibayar{reqMark}</label>
+                            <label className="text-xs font-medium text-muted-foreground">DP Dibayar</label>
                             <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
                                 <input
-                                    required type="text" inputMode="numeric"
+                                    type="text" inputMode="numeric"
                                     value={formatNumber(dpPaid)}
                                     onChange={e => setDpPaid(parseFormattedNumber(e.target.value))}
                                     placeholder="0"

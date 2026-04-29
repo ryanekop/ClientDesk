@@ -117,7 +117,7 @@ import {
     isCityScopedBookingEventType,
 } from "@/lib/service-availability";
 import {
-    getEnabledBankAccounts,
+    getValidBankAccounts,
     getPaymentMethodLabel,
     getPaymentSourceOptionValue,
     normalizeBankAccounts,
@@ -735,11 +735,11 @@ export default function EditBookingPage() {
     );
 
     const paymentSourceOptions = React.useMemo(() => {
-        const enabledBanks = getEnabledBankAccounts(bankAccounts);
+        const validBanks = getValidBankAccounts(bankAccounts);
         return [
             { value: "cash", label: getPaymentMethodLabel("cash") },
             { value: "qris", label: getPaymentMethodLabel("qris") },
-            ...enabledBanks.map((bank) => ({
+            ...validBanks.map((bank) => ({
                 value: `bank:${bank.id}`,
                 label: `${bank.bank_name}${bank.account_number ? ` - ${bank.account_number}` : ""}`,
             })),
@@ -3333,12 +3333,11 @@ export default function EditBookingPage() {
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-medium text-muted-foreground">
-                                DP Dibayar{isDpDisabledForThisBooking ? null : reqMark}
+                                DP Dibayar
                             </label>
                             <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-medium text-muted-foreground shrink-0">Rp</span>
                                 <input
-                                    required={!isDpDisabledForThisBooking}
                                     type="text"
                                     inputMode="numeric"
                                     value={
