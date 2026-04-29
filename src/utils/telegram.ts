@@ -14,12 +14,12 @@ function getBotToken(): string {
     return token
 }
 
-function getGlobalTelegramConfig(context: string): { botToken: string; chatId: string } | null {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim()
-    const chatId = process.env.TELEGRAM_CHAT_ID?.trim()
+function getAlertTelegramConfig(context: string): { botToken: string; chatId: string } | null {
+    const botToken = process.env.ALERT_TELEGRAM_BOT_TOKEN?.trim()
+    const chatId = process.env.ALERT_TELEGRAM_CHAT_ID?.trim()
 
     if (!botToken || !chatId) {
-        console.warn(`[Telegram] ${context} skipped: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID`)
+        console.warn(`[Telegram] ${context} skipped: missing ALERT_TELEGRAM_BOT_TOKEN or ALERT_TELEGRAM_CHAT_ID`)
         return null
     }
 
@@ -27,7 +27,7 @@ function getGlobalTelegramConfig(context: string): { botToken: string; chatId: s
 }
 
 function getSignupAlertConfig(): { botToken: string; chatId: string } | null {
-    return getGlobalTelegramConfig('Signup alert')
+    return getAlertTelegramConfig('Signup alert')
 }
 
 export async function sendTelegramMessage(
@@ -152,7 +152,7 @@ export async function notifyBlockedLoginAttempt(opts: {
     ip?: string
     device?: string
 }) {
-    const config = getGlobalTelegramConfig('Blocked login alert')
+    const config = getAlertTelegramConfig('Blocked login alert')
     if (!config) {
         return
     }
