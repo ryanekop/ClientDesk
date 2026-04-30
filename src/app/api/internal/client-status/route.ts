@@ -19,6 +19,7 @@ import {
   normalizeClientStatusDeadlineTriggerStatus,
 } from "@/lib/booking-deadline";
 import { resolveFastpikProjectInfoFromExtraFields } from "@/lib/fastpik-project-info";
+import { mergeStatusMetaWithDefaults } from "@/lib/booking-status-meta";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 10;
@@ -228,7 +229,7 @@ export async function GET(request: NextRequest) {
   const profileResult = await supabase
     .from("profiles")
     .select(
-      "custom_client_statuses, client_status_deadline_trigger_status, client_status_deadline_default_days, table_column_preferences",
+      "custom_client_statuses, custom_client_status_meta, client_status_deadline_trigger_status, client_status_deadline_default_days, table_column_preferences",
     )
     .eq("id", user.id)
     .single();
@@ -242,6 +243,7 @@ export async function GET(request: NextRequest) {
 
   const profileData = profileResult.data as {
     custom_client_statuses?: string[] | null;
+    custom_client_status_meta?: unknown;
     client_status_deadline_trigger_status?: string | null;
     client_status_deadline_default_days?: number | null;
     table_column_preferences?: { client_status?: unknown } | null;
@@ -493,6 +495,10 @@ export async function GET(request: NextRequest) {
     metadata: {
       clientStatuses: resolvedStatusOptions.filter(
         (status) => status !== CANCELLED_BOOKING_STATUS,
+      ),
+      customClientStatusMeta: mergeStatusMetaWithDefaults(
+        resolvedStatusOptions,
+        profileData?.custom_client_status_meta,
       ),
       queueTriggerStatus:
         typeof metadataData?.queueTriggerStatus === "string"

@@ -10,6 +10,14 @@ import {
     CreditCard,
     ExternalLink,
     Download,
+    Edit3,
+    FolderCheck,
+    ListOrdered,
+    PartyPopper,
+    RefreshCw,
+    Truck,
+    UploadCloud,
+    CalendarCheck,
     Video,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -26,6 +34,10 @@ import {
 } from "@/lib/fastpik-project-display";
 import { useTenant } from "@/lib/tenant-context";
 import { shouldHideTenantBranding } from "@/lib/tenant-branding";
+import type {
+    BookingStatusIconKey,
+    BookingStatusMetaMap,
+} from "@/lib/booking-status-meta";
 
 type BookingData = {
     bookingCode: string;
@@ -40,6 +52,7 @@ type BookingData = {
     }>;
     eventType: string | null;
     clientStatus: string | null;
+    statusMeta?: BookingStatusMetaMap;
     projectDeadlineDate: string | null;
     projectDeadlineLabel?: string | null;
     projectDeadlineCountdown?: string | null;
@@ -105,6 +118,24 @@ const DEFAULT_STEPS = [
     { key: "File Siap", labelKey: "stepFileReady" },
     { key: "Selesai", labelKey: "stepDone" },
 ];
+
+const BOOKING_STATUS_ICON_COMPONENTS: Record<
+    BookingStatusIconKey,
+    React.ComponentType<{ className?: string }>
+> = {
+    clock: Clock,
+    "check-circle-2": CheckCircle2,
+    camera: Camera,
+    "list-ordered": ListOrdered,
+    "edit-3": Edit3,
+    "refresh-cw": RefreshCw,
+    "folder-check": FolderCheck,
+    "party-popper": PartyPopper,
+    "credit-card": CreditCard,
+    "upload-cloud": UploadCloud,
+    truck: Truck,
+    "calendar-check": CalendarCheck,
+};
 
 interface TrackingClientProps {
     booking: BookingData;
@@ -576,9 +607,14 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                                 !shouldHideQueueNumber;
                             const showInProgress = isCurrent && !isLast;
                             const showCompleted = isPast || (isCurrent && isLast);
+                            const customIconKey = booking.statusMeta?.[step.key]?.icon;
+                            const CustomIcon = customIconKey
+                                ? BOOKING_STATUS_ICON_COMPONENTS[customIconKey]
+                                : null;
+                            const StepIcon = CustomIcon || Check;
 
                             return (
-                                <div key={step.key} className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-2 sm:gap-3">
+                                <div key={step.key} className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-2 sm:gap-3">
                                     <div className="relative">
                                         {!isFirst && (
                                             <span
@@ -591,14 +627,14 @@ export default function TrackingClient({ booking: initialBooking, vendorName, cu
                                             />
                                         )}
                                         <span
-                                            className={`absolute left-1/2 top-1/2 z-10 flex h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full transition-all ${isCurrent
-                                                ? "bg-foreground ring-4 ring-foreground/10"
+                                            className={`absolute left-1/2 top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full transition-all ${isCurrent
+                                                ? "bg-foreground text-background ring-4 ring-foreground/10"
                                                 : isPast
-                                                    ? "bg-foreground"
-                                                    : "border-2 border-border bg-background"
+                                                    ? "bg-foreground text-background"
+                                                    : "border-2 border-border bg-background text-muted-foreground"
                                                 }`}
                                         >
-                                            {isPast && !isCurrent && <Check className="h-2.5 w-2.5 text-background" />}
+                                            {(CustomIcon || isDone) && <StepIcon className="h-5 w-5" />}
                                         </span>
                                     </div>
 

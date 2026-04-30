@@ -67,6 +67,11 @@ import {
 import { buildCancelPaymentPatch, type CancelPaymentPolicy } from "@/lib/cancel-payment";
 import { buildAutoDpVerificationPatch } from "@/lib/final-settlement";
 import { updateBookingStatusWithQueueTransition } from "@/lib/booking-status-queue";
+import { buildBookingStatusBadgeStyleMap } from "@/lib/booking-status-badge";
+import type {
+    BookingStatusBadgeStyle,
+    BookingStatusMetaMap,
+} from "@/lib/booking-status-meta";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
@@ -119,6 +124,7 @@ type BookingStatus = {
 
 type ClientStatusPageMetadata = {
     clientStatuses: string[];
+    customClientStatusMeta?: BookingStatusMetaMap;
     queueTriggerStatus: string;
     dpVerifyTriggerStatus: string;
     clientStatusDeadlineTriggerStatus: string | null;
@@ -133,18 +139,28 @@ type ClientStatusPageMetadata = {
     }>;
 };
 
-const STATUS_COLOR_PALETTE = [
-    "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
-    "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400",
-    "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-    "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400",
-    "bg-pink-100 text-pink-700 dark:bg-pink-500/10 dark:text-pink-400",
-    "bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400",
-    "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
-    "bg-cyan-100 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-400",
-    "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400",
-    "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400",
-];
+function ClientStatusBadge({
+    status,
+    statusStyle,
+    className,
+}: {
+    status: string;
+    statusStyle?: BookingStatusBadgeStyle;
+    className?: string;
+}) {
+    return (
+        <span
+            style={statusStyle?.style}
+            className={cn(
+                "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                statusStyle?.className || "bg-muted text-muted-foreground",
+                className,
+            )}
+        >
+            {status}
+        </span>
+    );
+}
 
 function getAdminDeadlineBadgeClassName(deadlineDate: string | null | undefined) {
     const tone = getProjectDeadlineTone(deadlineDate);
@@ -382,6 +398,7 @@ export default function ClientStatusPage() {
     const [browserTimeZone, setBrowserTimeZone] = React.useState("UTC");
     const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
     const [clientStatuses, setClientStatuses] = React.useState<string[]>(DEFAULT_CLIENT_STATUSES);
+    const [statusMeta, setStatusMeta] = React.useState<BookingStatusMetaMap>({});
     const [packages, setPackages] = React.useState<string[]>([]);
     const [availableEventTypes, setAvailableEventTypes] = React.useState<string[]>([]);
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
@@ -530,12 +547,10 @@ export default function ClientStatusPage() {
         }
     }, []);
 
-    const statusColors = React.useMemo(() => {
-        const map: Record<string, string> = {};
-        clientStatuses.forEach((s, i) => { map[s] = STATUS_COLOR_PALETTE[i % STATUS_COLOR_PALETTE.length]; });
-        map[CANCELLED_BOOKING_STATUS] = "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400";
-        return map;
-    }, [clientStatuses]);
+    const statusBadgeStyles = React.useMemo(
+        () => buildBookingStatusBadgeStyleMap(clientStatuses, statusMeta),
+        [clientStatuses, statusMeta],
+    );
 
     React.useEffect(() => {
         const timer = window.setTimeout(() => {
@@ -609,6 +624,7 @@ export default function ClientStatusPage() {
             setTotalItems(response.totalItems);
             if (metadata) {
                 setClientStatuses(metadata.clientStatuses || DEFAULT_CLIENT_STATUSES);
+                setStatusMeta(metadata.customClientStatusMeta || {});
                 setQueueTriggerStatus(
                     normalizeQueueTriggerStatus(metadata.queueTriggerStatus),
                 );
@@ -1682,9 +1698,11 @@ export default function ClientStatusPage() {
                             usePortalDesktopMenu
                         />
                         {booking.client_status && (
-                            <span className={`ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusColors[booking.client_status] || "bg-muted text-muted-foreground"}`}>
-                                {booking.client_status}
-                            </span>
+                            <ClientStatusBadge
+                                status={booking.client_status}
+                                statusStyle={statusBadgeStyles[booking.client_status]}
+                                className="ml-2"
+                            />
                         )}
                     </td>
                 );
@@ -2057,9 +2075,10 @@ export default function ClientStatusPage() {
                                 </Link>
                             </div>
                             {b.client_status && (
-                                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusColors[b.client_status] || "bg-muted text-muted-foreground"}`}>
-                                    {b.client_status}
-                                </span>
+                                <ClientStatusBadge
+                                    status={b.client_status}
+                                    statusStyle={statusBadgeStyles[b.client_status]}
+                                />
                             )}
                         </div>
                         <div className="border-t pt-2 space-y-2">

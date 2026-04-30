@@ -121,6 +121,7 @@ async function getBookingData(
         seoTrackMetaDescription: basePayload.seoTrackMetaDescription,
         seoTrackMetaKeywords: basePayload.seoTrackMetaKeywords,
         customClientStatuses: basePayload.customClientStatuses,
+        customClientStatusMeta: basePayload.customClientStatusMeta,
         queueTriggerStatus: basePayload.queueTriggerStatus,
         finalInvoiceVisibleFromStatus: basePayload.finalInvoiceVisibleFromStatus,
         trackingProjectDeadlineVisible: basePayload.trackingProjectDeadlineVisible,
@@ -206,6 +207,7 @@ export default async function TrackingPage({ params }: PageProps) {
         booking,
         vendorName,
         customClientStatuses,
+        customClientStatusMeta,
         finalInvoiceVisibleFromStatus,
         trackingFileLinksVisibleFromStatus,
         trackingVideoLinksVisibleFromStatus,
@@ -260,6 +262,7 @@ export default async function TrackingPage({ params }: PageProps) {
         sessionRows,
         eventType: booking.event_type,
         clientStatus: effectiveClientStatus,
+        statusMeta: customClientStatusMeta,
         projectDeadlineDate,
         projectDeadlineLabel: projectDeadlineDate
             ? formatProjectDeadlineDate(projectDeadlineDate, deadlineLocale)

@@ -52,7 +52,11 @@ import {
 import {
     type BookingServiceSelection,
 } from "@/lib/booking-services";
-import { buildBookingStatusColorMap } from "@/lib/booking-status-badge";
+import { buildBookingStatusBadgeStyleMap } from "@/lib/booking-status-badge";
+import type {
+    BookingStatusBadgeStyle,
+    BookingStatusMetaMap,
+} from "@/lib/booking-status-meta";
 import {
     buildBookingSessionDisplay,
     splitBookingSessionDisplayLines,
@@ -300,6 +304,7 @@ type BookingPageMetadata = {
     defaultWaTarget: "client" | "freelancer";
     bookingTableColorEnabled: boolean;
     financeTableColorEnabled: boolean;
+    customClientStatusMeta?: BookingStatusMetaMap;
     packages: string[];
     freelancerNames: string[];
     availableEventTypes: string[];
@@ -491,6 +496,7 @@ export default function BookingsPage() {
     const [copiedFreelancerTemplateId, setCopiedFreelancerTemplateId] = React.useState<string | null>(null);
     const [studioName, setStudioName] = React.useState("");
     const [statusOpts, setStatusOpts] = React.useState<string[]>(DEFAULT_STATUS_OPTS);
+    const [statusMeta, setStatusMeta] = React.useState<BookingStatusMetaMap>({});
     const [queueTriggerStatus, setQueueTriggerStatus] = React.useState("Antrian Edit");
     const [dpVerifyTriggerStatus, setDpVerifyTriggerStatus] = React.useState("");
     const [defaultWaTarget, setDefaultWaTarget] = React.useState<"client" | "freelancer">("client");
@@ -566,9 +572,9 @@ export default function BookingsPage() {
     const [setFreelanceSearchQuery, setSetFreelanceSearchQuery] = React.useState("");
     const [setFreelanceActiveSessionKey, setSetFreelanceActiveSessionKey] = React.useState("primary");
     const [setFreelanceAssignments, setSetFreelanceAssignments] = React.useState<SessionFreelancerAssignments>({});
-    const statusColors = React.useMemo(
-        () => buildBookingStatusColorMap(statusOpts),
-        [statusOpts],
+    const statusBadgeStyles = React.useMemo(
+        () => buildBookingStatusBadgeStyleMap(statusOpts, statusMeta),
+        [statusMeta, statusOpts],
     );
 
     // WA Freelancer popup
@@ -964,6 +970,7 @@ export default function BookingsPage() {
                 ]);
                 setStudioName(metadata.studioName || "");
                 setStatusOpts(metadata.statusOptions || DEFAULT_STATUS_OPTS);
+                setStatusMeta(metadata.customClientStatusMeta || {});
                 setQueueTriggerStatus(metadata.queueTriggerStatus ?? "Antrian Edit");
                 setDpVerifyTriggerStatus(metadata.dpVerifyTriggerStatus || "");
                 setDefaultWaTarget(metadata.defaultWaTarget || "client");
@@ -1977,7 +1984,7 @@ export default function BookingsPage() {
                     </td>
                 );
             case "status":
-                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 whitespace-nowrap")}><StatusBadge status={booking.status} statusClass={statusColors[booking.status]} /></td>;
+                return <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 whitespace-nowrap")}><StatusBadge status={booking.status} statusStyle={statusBadgeStyles[booking.status]} /></td>;
             case "freelancer":
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3 max-w-[130px] truncate text-muted-foreground")} title={booking.booking_freelancers.length > 0 ? booking.booking_freelancers.map(f => f.name).join(", ") : "-"}>
@@ -3009,7 +3016,7 @@ export default function BookingsPage() {
                                         <p className="text-xs text-muted-foreground">{booking.booking_code}</p>
                                     </div>
                                 </div>
-                                <StatusBadge status={booking.status} statusClass={statusColors[booking.status]} />
+                                <StatusBadge status={booking.status} statusStyle={statusBadgeStyles[booking.status]} />
                             </div>
                             <div className="border-t pt-2 space-y-1.5 text-sm text-muted-foreground">
                                 {orderedVisibleColumns
@@ -3181,7 +3188,7 @@ export default function BookingsPage() {
                                     newStatus === opt ? "border-foreground bg-foreground/5 dark:bg-foreground/10" : "border-border text-muted-foreground")}>
                                 <StatusBadge
                                     status={opt}
-                                    statusClass={statusColors[opt]}
+                                    statusStyle={statusBadgeStyles[opt]}
                                     className="h-auto max-w-full justify-center whitespace-normal break-words px-2 py-1 text-center leading-snug"
                                 />
                             </button>
@@ -3719,9 +3726,9 @@ export default function BookingsPage() {
     );
 }
 
-function StatusBadge({ status, className, statusClass }: { status: string; className?: string; statusClass?: string }) {
-    if (statusClass) {
-        return <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 font-medium rounded-full whitespace-nowrap border-none", statusClass, className)}>{status}</Badge>;
+function StatusBadge({ status, className, statusStyle }: { status: string; className?: string; statusStyle?: BookingStatusBadgeStyle }) {
+    if (statusStyle) {
+        return <Badge variant="outline" style={statusStyle.style} className={cn("text-[10px] px-2 py-0.5 font-medium rounded-full whitespace-nowrap border-none", statusStyle.className, className)}>{status}</Badge>;
     }
     let variant: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" = "default";
     let customClass = "";

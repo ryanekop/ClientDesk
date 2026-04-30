@@ -14,7 +14,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { createClient } from "@/utils/supabase/client";
 import { Link } from "@/i18n/routing";
 import { useLocale, useTranslations } from "next-intl";
-import { buildBookingStatusColorMap } from "@/lib/booking-status-badge";
+import { buildBookingStatusBadgeStyleMap } from "@/lib/booking-status-badge";
+import {
+    mergeStatusMetaWithDefaults,
+    type BookingStatusBadgeStyle,
+    type BookingStatusMetaMap,
+} from "@/lib/booking-status-meta";
 import {
     BookingWriteReadonlyBanner,
     useBookingWriteAccess,
@@ -287,6 +292,7 @@ type DrivePathProfile = {
 type BookingProfileRow = {
     role?: string | null;
     custom_client_statuses?: string[] | null;
+    custom_client_status_meta?: unknown;
     dp_verify_trigger_status?: string | null;
     queue_trigger_status?: string | null;
     client_status_deadline_trigger_status?: string | null;
@@ -340,10 +346,10 @@ function getAdminDeadlineBadgeClassName(deadlineDate: string | null | undefined)
 
 function StatusBadge({
     status,
-    statusClass,
+    statusStyle,
 }: {
     status: string;
-    statusClass?: string;
+    statusStyle?: BookingStatusBadgeStyle;
 }) {
     const fallbackClass =
         status.toLowerCase() === "batal"
@@ -351,7 +357,8 @@ function StatusBadge({
             : "bg-muted text-muted-foreground";
     return (
         <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap ${statusClass || fallbackClass}`}
+            style={statusStyle?.style}
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap ${statusStyle?.className || fallbackClass}`}
         >
             {status}
         </span>
@@ -755,9 +762,10 @@ export default function BookingDetailPage() {
     const [bookingStatuses, setBookingStatuses] = React.useState<string[]>(
         getBookingStatusOptions(DEFAULT_CLIENT_STATUSES),
     );
-    const statusColors = React.useMemo(
-        () => buildBookingStatusColorMap(bookingStatuses),
-        [bookingStatuses],
+    const [statusMeta, setStatusMeta] = React.useState<BookingStatusMetaMap>({});
+    const statusBadgeStyles = React.useMemo(
+        () => buildBookingStatusBadgeStyleMap(bookingStatuses, statusMeta),
+        [bookingStatuses, statusMeta],
     );
     const [studioName, setStudioName] = React.useState("");
     const [driveFolderPathHint, setDriveFolderPathHint] = React.useState("Data Booking Client Desk > {client_name} > File Client");
@@ -1271,7 +1279,7 @@ export default function BookingDetailPage() {
 
             const { data: profile } = await supabase
                 .from("profiles")
-                .select("role, studio_name, custom_client_statuses, dp_verify_trigger_status, queue_trigger_status, client_status_deadline_trigger_status, client_status_deadline_default_days, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof")
+                .select("role, studio_name, custom_client_statuses, custom_client_status_meta, dp_verify_trigger_status, queue_trigger_status, client_status_deadline_trigger_status, client_status_deadline_default_days, drive_folder_format, drive_folder_format_map, drive_folder_structure_map, fastpik_link_display_mode, form_show_proof")
                 .eq("id", user.id)
                 .single();
             const profileRow = (profile ?? null) as BookingProfileRow | null;
@@ -1307,6 +1315,12 @@ export default function BookingDetailPage() {
                     | null
             )?.fastpik_link_display_mode_booking_detail;
             const statusOptions = getBookingStatusOptions(profileRow?.custom_client_statuses as string[] | null | undefined);
+            setStatusMeta(
+                mergeStatusMetaWithDefaults(
+                    statusOptions,
+                    profileRow?.custom_client_status_meta,
+                ),
+            );
             setDpVerifyTriggerStatus(profileRow?.dp_verify_trigger_status ?? "");
             setQueueTriggerStatus((profileRow?.queue_trigger_status || "Antrian Edit").trim() || "Antrian Edit");
             setClientStatusDeadlineTriggerStatus(
@@ -2963,7 +2977,7 @@ export default function BookingDetailPage() {
                             <h2 className="break-words text-2xl font-bold tracking-tight">{booking.client_name}</h2>
                             <StatusBadge
                                 status={normalizedCurrentStatus || booking.status}
-                                statusClass={statusColors[normalizedCurrentStatus || booking.status]}
+                                statusStyle={statusBadgeStyles[normalizedCurrentStatus || booking.status]}
                             />
                             {isArchivedBooking(booking) ? (
                                 <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300">

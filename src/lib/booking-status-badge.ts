@@ -1,4 +1,10 @@
 import { CANCELLED_BOOKING_STATUS } from "@/lib/client-status";
+import {
+  buildCustomStatusBadgeStyle,
+  mergeStatusMetaWithDefaults,
+  type BookingStatusBadgeStyle,
+  type BookingStatusMetaMap,
+} from "@/lib/booking-status-meta";
 
 export const BOOKING_STATUS_COLOR_PALETTE = [
   "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border-none",
@@ -28,6 +34,30 @@ export function buildBookingStatusColorMap(statuses: string[]) {
 
   map[CANCELLED_BOOKING_STATUS] =
     "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400 border-none";
+
+  return map;
+}
+
+export function buildBookingStatusBadgeStyleMap(
+  statuses: string[],
+  statusMeta?: BookingStatusMetaMap | null,
+) {
+  const fallbackMap = buildBookingStatusColorMap(statuses);
+  const mergedStatusMeta = mergeStatusMetaWithDefaults(statuses, statusMeta);
+  const map: Record<string, BookingStatusBadgeStyle> = {};
+
+  for (const status of statuses) {
+    const customStyle = buildCustomStatusBadgeStyle(mergedStatusMeta[status]?.color);
+    map[status] = customStyle || {
+      className: fallbackMap[status] || "bg-muted text-muted-foreground",
+    };
+  }
+
+  map[CANCELLED_BOOKING_STATUS] = {
+    className:
+      fallbackMap[CANCELLED_BOOKING_STATUS] ||
+      "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400 border-none",
+  };
 
   return map;
 }

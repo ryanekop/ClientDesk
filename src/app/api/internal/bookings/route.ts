@@ -13,6 +13,7 @@ import {
   getBookingStatusOptions,
   resolveUnifiedBookingStatus,
 } from "@/lib/client-status";
+import { mergeStatusMetaWithDefaults } from "@/lib/booking-status-meta";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 10;
@@ -86,6 +87,7 @@ type BookingMetadataResponse = {
   defaultWaTarget?: "client" | "freelancer";
   bookingTableColorEnabled?: boolean;
   financeTableColorEnabled?: boolean;
+  customClientStatusMeta?: unknown;
   packages?: string[];
   freelancerNames?: string[];
   availableEventTypes?: string[];
@@ -392,7 +394,7 @@ export async function GET(request: NextRequest) {
   const profileSettingsPromise = includeMetadata && user?.id
     ? supabase
       .from("profiles")
-      .select("booking_table_color_enabled, finance_table_color_enabled")
+      .select("booking_table_color_enabled, finance_table_color_enabled, custom_client_status_meta")
       .eq("id", user.id)
       .maybeSingle()
     : Promise.resolve({ data: null, error: null });
@@ -584,6 +586,10 @@ export async function GET(request: NextRequest) {
     profileSettingsResult.data?.booking_table_color_enabled === true;
   const financeTableColorEnabled =
     profileSettingsResult.data?.finance_table_color_enabled === true;
+  const customClientStatusMeta = mergeStatusMetaWithDefaults(
+    resolvedStatusOptions,
+    profileSettingsResult.data?.custom_client_status_meta,
+  );
 
   return NextResponse.json({
     items: bookings,
@@ -606,6 +612,7 @@ export async function GET(request: NextRequest) {
             metadataData?.defaultWaTarget === "freelancer" ? "freelancer" : "client",
           bookingTableColorEnabled,
           financeTableColorEnabled,
+          customClientStatusMeta,
           packages: readStringArray(metadataData?.packages),
           freelancerNames: readStringArray(metadataData?.freelancerNames),
           availableEventTypes: readStringArray(metadataData?.availableEventTypes),

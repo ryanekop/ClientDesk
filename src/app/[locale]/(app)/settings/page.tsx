@@ -14,14 +14,30 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  AlarmClock,
+  CalendarCheck,
+  Camera,
+  CheckCircle2,
+  ChevronDown,
   ImagePlus,
+  Clock,
+  Edit3,
+  EyeOff,
+  FileText,
+  FolderCheck,
+  ListOrdered,
+  Palette,
+  PartyPopper,
+  RefreshCw,
   Trash2,
   Upload,
+  UploadCloud,
   Plus,
   Search,
   Bot,
   ClipboardPaste,
   CreditCard,
+  Truck,
 } from "lucide-react";
 import { adminNativeSelectClass } from "@/components/ui/admin-native-form-controls";
 import { Button } from "@/components/ui/button";
@@ -116,6 +132,19 @@ import {
   type SortableConfigItem,
 } from "@/components/ui/sortable-config-list";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
   normalizeFastpikLinkDisplayMode,
   type FastpikLinkDisplayMode,
 } from "@/lib/fastpik-link-display";
@@ -123,6 +152,18 @@ import {
   normalizeOperationalCostTemplates,
   type OperationalCostTemplate,
 } from "@/lib/operational-costs";
+import {
+  BOOKING_STATUS_ICON_OPTIONS,
+  buildCustomStatusBadgeStyle,
+  getDefaultStatusColor,
+  getDefaultStatusMeta,
+  isValidBookingStatusIconKey,
+  mergeStatusMetaWithDefaults,
+  normalizeHexColor,
+  updateBookingStatusMetaKey,
+  type BookingStatusIconKey,
+  type BookingStatusMetaMap,
+} from "@/lib/booking-status-meta";
 import {
   getInvoicePaymentBankAccounts,
   getValidBankAccounts,
@@ -150,6 +191,195 @@ const COUNTRY_CODES = [
   { code: "+63", flag: "🇵🇭", name: "Philippines" },
   { code: "+84", flag: "🇻🇳", name: "Vietnam" },
 ];
+
+const BOOKING_STATUS_ICON_COMPONENTS: Record<
+  BookingStatusIconKey,
+  React.ComponentType<{ className?: string }>
+> = {
+  clock: Clock,
+  "check-circle-2": CheckCircle2,
+  camera: Camera,
+  "list-ordered": ListOrdered,
+  "edit-3": Edit3,
+  "refresh-cw": RefreshCw,
+  "folder-check": FolderCheck,
+  "party-popper": PartyPopper,
+  "credit-card": CreditCard,
+  "upload-cloud": UploadCloud,
+  truck: Truck,
+  "calendar-check": CalendarCheck,
+};
+
+function StatusSettingCard({
+  icon,
+  toneClassName,
+  title,
+  description,
+  children,
+}: {
+  icon: React.ReactNode;
+  toneClassName: string;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border bg-muted/30 p-4">
+      <div className="flex items-start gap-3">
+        <div
+          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${toneClassName}`}
+        >
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">{title}</p>
+            <p className="text-xs text-muted-foreground">{description}</p>
+          </div>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusIconPicker({
+  value,
+  color,
+  onChange,
+}: {
+  value?: BookingStatusIconKey;
+  color?: string;
+  onChange: (icon: string) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  const selectedOption = BOOKING_STATUS_ICON_OPTIONS.find(
+    (option) => option.key === value,
+  );
+  const Icon =
+    value && BOOKING_STATUS_ICON_COMPONENTS[value]
+      ? BOOKING_STATUS_ICON_COMPONENTS[value]
+      : Palette;
+  const customBadgeStyle = buildCustomStatusBadgeStyle(color);
+  const filteredOptions = BOOKING_STATUS_ICON_OPTIONS.filter((option) => {
+    const haystack = `${option.key} ${option.label}`.toLowerCase();
+    return haystack.includes(query.trim().toLowerCase());
+  });
+  const triggerButton = (className?: string) => (
+    <button
+      type="button"
+      className={`h-8 items-center gap-2 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/50 ${className || ""}`}
+      title="Pilih icon tracking"
+    >
+      <span
+        className={`inline-flex h-6 w-6 items-center justify-center rounded-full ${
+          customBadgeStyle
+            ? customBadgeStyle.className
+            : "border bg-muted/50 text-muted-foreground"
+        }`}
+        style={customBadgeStyle?.style}
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <span className="hidden max-w-24 truncate sm:inline">
+        {selectedOption?.label || "Icon"}
+      </span>
+      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+    </button>
+  );
+  const pickerContent = (options?: { compact?: boolean }) => (
+    <div className={options?.compact ? "space-y-2 p-3" : "space-y-3 p-4"}>
+      <div className="flex overflow-hidden rounded-lg border bg-background">
+        <div className="flex min-w-0 flex-1 items-center gap-2 px-3">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search"
+            className={`${options?.compact ? "h-9" : "h-10"} min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground`}
+          />
+        </div>
+      </div>
+
+      <div className={`${options?.compact ? "max-h-52" : "max-h-[50dvh]"} overflow-y-auto rounded-lg border bg-muted/10 p-2`}>
+        <div className={`grid gap-1 ${options?.compact ? "grid-cols-5" : "grid-cols-5"}`}>
+          <button
+            type="button"
+            onClick={() => {
+              onChange("");
+              setOpen(false);
+              setSheetOpen(false);
+            }}
+            className={`flex ${options?.compact ? "h-10" : "h-11"} items-center justify-center rounded-lg border text-xs font-semibold transition-colors hover:bg-muted ${
+              !value
+                ? "border-primary bg-primary/10 text-primary ring-1 ring-primary"
+                : "border-transparent text-muted-foreground"
+            }`}
+            title="Default"
+          >
+            Default
+          </button>
+          {filteredOptions.map((option) => {
+            const OptionIcon = BOOKING_STATUS_ICON_COMPONENTS[option.key];
+            const selected = value === option.key;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => {
+                  onChange(option.key);
+                  setOpen(false);
+                  setSheetOpen(false);
+                }}
+                className={`flex ${options?.compact ? "h-10" : "h-11"} items-center justify-center rounded-lg border transition-colors hover:bg-muted ${
+                  selected
+                    ? "border-primary bg-primary/10 text-primary ring-1 ring-primary"
+                    : "border-transparent text-muted-foreground"
+                }`}
+                title={option.label}
+              >
+                <OptionIcon className="h-5 w-5" />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetTrigger asChild>{triggerButton("inline-flex sm:hidden")}</SheetTrigger>
+        <SheetContent
+          side="bottom"
+          className="max-h-[70dvh] rounded-t-2xl p-0"
+        >
+          <SheetHeader className="px-4 pb-1 pt-4">
+            <SheetTitle className="text-base">Pilih Icon</SheetTitle>
+            <SheetDescription className="sr-only">
+              Pilih icon untuk status booking.
+            </SheetDescription>
+          </SheetHeader>
+          {pickerContent()}
+        </SheetContent>
+      </Sheet>
+
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>{triggerButton("hidden sm:inline-flex")}</PopoverTrigger>
+        <PopoverContent
+          align="end"
+          className="w-[23rem] p-0"
+          sideOffset={8}
+        >
+          {pickerContent({ compact: true })}
+        </PopoverContent>
+      </Popover>
+    </>
+  );
+}
 
 type Profile = {
   id: string;
@@ -181,6 +411,7 @@ type Profile = {
   tracking_file_links_visible_from_status?: string | null;
   tracking_video_links_visible_from_status?: string | null;
   tracking_hide_queue_number?: boolean | null;
+  custom_client_status_meta?: unknown;
   default_wa_target?: "client" | "freelancer" | null;
   booking_table_color_enabled?: boolean | null;
   finance_table_color_enabled?: boolean | null;
@@ -683,6 +914,7 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "invoice_logo_url",
   "custom_statuses",
   "custom_client_statuses",
+  "custom_client_status_meta",
   "queue_trigger_status",
   "dp_verify_trigger_status",
   "client_status_deadline_trigger_status",
@@ -1089,6 +1321,12 @@ export default function SettingsPage() {
   const [customClientStatuses, setCustomClientStatuses] = React.useState<
     string[]
   >(normalizeClientProgressStatuses(DEFAULT_CLIENT_STATUSES));
+  const [customClientStatusMeta, setCustomClientStatusMeta] =
+    React.useState<BookingStatusMetaMap>({});
+  const customClientStatusMetaWithDefaults = React.useMemo(
+    () => mergeStatusMetaWithDefaults(customClientStatuses, customClientStatusMeta),
+    [customClientStatuses, customClientStatusMeta],
+  );
   const [newClientStatusName, setNewClientStatusName] = React.useState("");
   const [queueTriggerStatus, setQueueTriggerStatus] =
     React.useState(DEFAULT_QUEUE_TRIGGER_STATUS);
@@ -1484,7 +1722,42 @@ export default function SettingsPage() {
         typeof nextStatuses === "function"
           ? nextStatuses(prev)
           : nextStatuses;
-      return normalizeClientProgressStatuses(resolved);
+      const normalized = normalizeClientProgressStatuses(resolved);
+      setCustomClientStatusMeta((current) =>
+        mergeStatusMetaWithDefaults(normalized, current),
+      );
+      return normalized;
+    });
+  }
+
+  function updateClientStatusIcon(status: string, icon: string) {
+    setCustomClientStatusMeta((prev) => {
+      const current = prev[status] || {};
+      const next = { ...prev };
+      if (isValidBookingStatusIconKey(icon)) {
+        next[status] = { ...current, icon };
+      } else if (current.color) {
+        next[status] = { color: current.color };
+      } else {
+        delete next[status];
+      }
+      return mergeStatusMetaWithDefaults(customClientStatuses, next);
+    });
+  }
+
+  function updateClientStatusColor(status: string, color: string) {
+    setCustomClientStatusMeta((prev) => {
+      const current = prev[status] || {};
+      const normalizedColor = normalizeHexColor(color);
+      const next = { ...prev };
+      if (normalizedColor) {
+        next[status] = { ...current, color: normalizedColor };
+      } else if (current.icon) {
+        next[status] = { icon: current.icon };
+      } else {
+        delete next[status];
+      }
+      return mergeStatusMetaWithDefaults(customClientStatuses, next);
     });
   }
 
@@ -1787,6 +2060,12 @@ export default function SettingsPage() {
         customClientStatuses,
     );
     setCustomClientStatuses(loadedClientStatuses);
+    setCustomClientStatusMeta(
+      mergeStatusMetaWithDefaults(
+        loadedClientStatuses,
+        (prof as any)?.custom_client_status_meta,
+      ),
+    );
     if (Object.prototype.hasOwnProperty.call(prof, "queue_trigger_status")) {
       const rawQueueTriggerStatus = (prof as any)?.queue_trigger_status;
       setQueueTriggerStatus(
@@ -2817,6 +3096,10 @@ export default function SettingsPage() {
     const normalizedClientStatuses = normalizeClientProgressStatuses(
       customClientStatuses,
     );
+    const normalizedClientStatusMeta = mergeStatusMetaWithDefaults(
+      normalizedClientStatuses,
+      customClientStatusMeta,
+    );
     const nextVisibleFromStatus = resolveFinalInvoiceVisibleFromStatus(
       normalizedClientStatuses,
       finalInvoiceVisibleFromStatus,
@@ -2884,6 +3167,7 @@ export default function SettingsPage() {
       await saveProfilePatch({
         custom_statuses: normalizedClientStatuses,
         custom_client_statuses: normalizedClientStatuses,
+        custom_client_status_meta: normalizedClientStatusMeta,
         queue_trigger_status: queueTriggerStatus,
         dp_verify_trigger_status: nextDpVerifyTriggerStatus || null,
         client_status_deadline_trigger_status:
@@ -2905,6 +3189,7 @@ export default function SettingsPage() {
         tracking_hide_queue_number: trackingHideQueueNumber,
       });
       setCustomClientStatuses(normalizedClientStatuses);
+      setCustomClientStatusMeta(normalizedClientStatusMeta);
       setDpVerifyTriggerStatus(nextDpVerifyTriggerStatus);
       setClientStatusDeadlineTriggerStatus(nextClientStatusDeadlineTriggerStatus);
       setClientStatusDeadlineDefaultDays(nextClientStatusDeadlineDefaultDays);
@@ -3017,6 +3302,7 @@ export default function SettingsPage() {
         nextClientStatuses,
         DEFAULT_TRACKING_VIDEO_LINKS_VISIBLE_FROM_STATUS,
       );
+    const nextClientStatusMeta = getDefaultStatusMeta(nextClientStatuses);
 
     setCustomClientStatuses(nextClientStatuses);
     setQueueTriggerStatus(DEFAULT_QUEUE_TRIGGER_STATUS);
@@ -3030,10 +3316,12 @@ export default function SettingsPage() {
     setTrackingVideoLinksVisibleFromStatus(nextTrackingVideoVisibleFromStatus);
     setTrackingProjectDeadlineVisible(false);
     setTrackingHideQueueNumber(false);
+    setCustomClientStatusMeta(nextClientStatusMeta);
 
     await saveProfilePatch({
       custom_statuses: nextClientStatuses,
       custom_client_statuses: nextClientStatuses,
+      custom_client_status_meta: nextClientStatusMeta,
       queue_trigger_status: DEFAULT_QUEUE_TRIGGER_STATUS,
       dp_verify_trigger_status: DEFAULT_DP_VERIFY_TRIGGER_STATUS || null,
       client_status_deadline_trigger_status: null,
@@ -5715,6 +6003,14 @@ export default function SettingsPage() {
                       if (!nextLabel) {
                         return;
                       }
+                      setCustomClientStatusMeta((prev) =>
+                        mergeStatusMetaWithDefaults(
+                          customClientStatuses.map((status) =>
+                            status === id ? nextLabel : status,
+                          ),
+                          updateBookingStatusMetaKey(prev, id, nextLabel),
+                        ),
+                      );
                       setClientStatusDeadlineTriggerStatus((prev) =>
                         prev === id ? nextLabel : prev,
                       );
@@ -5739,8 +6035,43 @@ export default function SettingsPage() {
                     setClientStatusDeadlineTriggerStatus((prev) =>
                       prev === id ? null : prev,
                     );
+                    setCustomClientStatusMeta((prev) => {
+                      const next = { ...prev };
+                      delete next[id];
+                      return mergeStatusMetaWithDefaults(
+                        customClientStatuses.filter((status) => status !== id),
+                        next,
+                      );
+                    });
                     setNormalizedClientStatuses((prev) =>
                       prev.filter((status) => status !== id),
+                    );
+                  }}
+                  renderControls={(item) => {
+                    const meta = customClientStatusMetaWithDefaults[item.id] || {};
+                    const colorValue =
+                      meta.color ||
+                      getDefaultStatusColor(customClientStatuses, item.id) ||
+                      "#64748b";
+                    return (
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <StatusIconPicker
+                          value={meta.icon}
+                          color={colorValue}
+                          onChange={(nextIcon) =>
+                            updateClientStatusIcon(item.id, nextIcon)
+                          }
+                        />
+                        <input
+                          type="color"
+                          value={colorValue}
+                          onChange={(event) =>
+                            updateClientStatusColor(item.id, event.target.value)
+                          }
+                          className="h-8 w-10 rounded-md border border-input bg-background p-1"
+                          title="Pilih warna badge admin"
+                        />
+                      </div>
                     );
                   }}
                 />
@@ -5781,13 +6112,12 @@ export default function SettingsPage() {
                 </div>
 
                 {/* Queue trigger setting */}
-                <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
-                  <p className="text-sm font-medium">Trigger Auto-Queue</p>
-                  <p className="text-xs text-muted-foreground">
-                    Pilih status klien yang akan otomatis men-trigger antrian
-                    (posisi antrian otomatis terisi saat klien masuk ke status
-                    ini).
-                  </p>
+                <StatusSettingCard
+                  icon={<ListOrdered className="h-4 w-4" />}
+                  toneClassName="bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300"
+                  title="Trigger Auto-Queue"
+                  description="Pilih status klien yang akan otomatis men-trigger antrian (posisi antrian otomatis terisi saat klien masuk ke status ini)."
+                >
                   <select
                     value={queueTriggerStatus}
                     onChange={(e) => setQueueTriggerStatus(e.target.value)}
@@ -5800,16 +6130,35 @@ export default function SettingsPage() {
                       </option>
                     ))}
                   </select>
-                </div>
+                </StatusSettingCard>
 
-                <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
-                  <p className="text-sm font-medium">
-                    Trigger Auto-DP Terverifikasi
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Pilih status klien yang otomatis menandai DP sebagai
-                    terverifikasi saat booking masuk ke status ini.
-                  </p>
+                <StatusSettingCard
+                  icon={<EyeOff className="h-4 w-4" />}
+                  toneClassName="bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300"
+                  title={tp("hideQueueNumberVisibilityTitle")}
+                  description={tp("hideQueueNumberVisibilityDescription")}
+                >
+                  <label className="flex items-center gap-3 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={trackingHideQueueNumber}
+                      onChange={(event) =>
+                        setTrackingHideQueueNumber(event.target.checked)
+                      }
+                      className="accent-primary"
+                    />
+                    <span className="font-medium">
+                      {trackingHideQueueNumber ? "Aktif" : "Nonaktif"}
+                    </span>
+                  </label>
+                </StatusSettingCard>
+
+                <StatusSettingCard
+                  icon={<CreditCard className="h-4 w-4" />}
+                  toneClassName="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                  title="Trigger Auto-DP Terverifikasi"
+                  description="Pilih status klien yang otomatis menandai DP sebagai terverifikasi saat booking masuk ke status ini."
+                >
                   <select
                     value={resolveDpVerifyTriggerStatus(
                       customClientStatuses,
@@ -5825,19 +6174,14 @@ export default function SettingsPage() {
                       </option>
                     ))}
                   </select>
-                </div>
+                </StatusSettingCard>
 
-                <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">
-                      Trigger Deadline Otomatis
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Pilih satu status trigger agar deadline otomatis dibuat
-                      saat booking masuk ke status tersebut. Deadline manual
-                      yang sudah ada tidak akan ditimpa.
-                    </p>
-                  </div>
+                <StatusSettingCard
+                  icon={<AlarmClock className="h-4 w-4" />}
+                  toneClassName="bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                  title="Trigger Deadline Otomatis"
+                  description="Pilih satu status trigger agar deadline otomatis dibuat saat booking masuk ke status tersebut. Deadline manual yang sudah ada tidak akan ditimpa."
+                >
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-muted-foreground">
@@ -5880,9 +6224,14 @@ export default function SettingsPage() {
                       />
                     </label>
                   </div>
-                </div>
+                </StatusSettingCard>
 
-                <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
+                <StatusSettingCard
+                  icon={<CalendarCheck className="h-4 w-4" />}
+                  toneClassName="bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300"
+                  title={tp("projectDeadlineVisibilityTitle")}
+                  description={tp("projectDeadlineVisibilityDescription")}
+                >
                   <label className="flex items-start gap-3 text-sm cursor-pointer">
                     <input
                       type="checkbox"
@@ -5892,29 +6241,18 @@ export default function SettingsPage() {
                       }
                       className="mt-0.5 accent-primary"
                     />
-                    <span>
-                      <span className="font-medium block">
-                        {tp("projectDeadlineVisibilityTitle")}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {tp("projectDeadlineVisibilityDescription")}
-                      </span>
+                    <span className="font-medium">
+                      {trackingProjectDeadlineVisible ? "Aktif" : "Nonaktif"}
                     </span>
                   </label>
-                </div>
+                </StatusSettingCard>
 
-                <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">
-                      Trigger Otomatis Saat Jam Sesi Tiba
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Booking otomatis pindah status saat jam sesi sudah tiba.
-                      Untuk booking split, semua jam sesi valid diperiksa dan
-                      trigger jalan saat sesi pertama yang sudah due tercapai.
-                    </p>
-                  </div>
-
+                <StatusSettingCard
+                  icon={<Clock className="h-4 w-4" />}
+                  toneClassName="bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+                  title="Trigger Otomatis Saat Jam Sesi Tiba"
+                  description="Booking otomatis pindah status saat jam sesi sudah tiba. Untuk booking split, semua jam sesi valid diperiksa dan trigger jalan saat sesi pertama yang sudah due tercapai."
+                >
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="space-y-1">
                       <span className="text-xs font-medium text-muted-foreground">
@@ -5962,15 +6300,14 @@ export default function SettingsPage() {
                       </select>
                     </label>
                   </div>
-                </div>
+                </StatusSettingCard>
 
-                <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
-                  <p className="text-sm font-medium">
-                    {tp("finalInvoiceVisibilityTitle")}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {tp("finalInvoiceVisibilityDescription")}
-                  </p>
+                <StatusSettingCard
+                  icon={<FileText className="h-4 w-4" />}
+                  toneClassName="bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300"
+                  title={tp("finalInvoiceVisibilityTitle")}
+                  description={tp("finalInvoiceVisibilityDescription")}
+                >
                   <select
                     value={resolveFinalInvoiceVisibleFromStatus(
                       customClientStatuses,
@@ -5994,15 +6331,14 @@ export default function SettingsPage() {
                       </option>
                     ))}
                   </select>
-                </div>
+                </StatusSettingCard>
 
-                <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
-                  <p className="text-sm font-medium">
-                    {tp("fileLinkVisibilityTitle")}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {tp("fileLinkVisibilityDescription")}
-                  </p>
+                <StatusSettingCard
+                  icon={<FolderCheck className="h-4 w-4" />}
+                  toneClassName="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                  title={tp("fileLinkVisibilityTitle")}
+                  description={tp("fileLinkVisibilityDescription")}
+                >
                   <select
                     value={resolveTrackingFileLinksVisibleFromStatus(
                       customClientStatuses,
@@ -6026,15 +6362,14 @@ export default function SettingsPage() {
                       </option>
                     ))}
                   </select>
-                </div>
+                </StatusSettingCard>
 
-                <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
-                  <p className="text-sm font-medium">
-                    {tp("videoLinkVisibilityTitle")}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {tp("videoLinkVisibilityDescription")}
-                  </p>
+                <StatusSettingCard
+                  icon={<UploadCloud className="h-4 w-4" />}
+                  toneClassName="bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300"
+                  title={tp("videoLinkVisibilityTitle")}
+                  description={tp("videoLinkVisibilityDescription")}
+                >
                   <select
                     value={resolveTrackingVideoLinksVisibleFromStatus(
                       customClientStatuses,
@@ -6058,28 +6393,7 @@ export default function SettingsPage() {
                       </option>
                     ))}
                   </select>
-                </div>
-
-                <div className="p-4 rounded-lg border bg-muted/30 space-y-2">
-                  <label className="flex items-start gap-3 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={trackingHideQueueNumber}
-                      onChange={(event) =>
-                        setTrackingHideQueueNumber(event.target.checked)
-                      }
-                      className="mt-0.5 accent-primary"
-                    />
-                    <span>
-                      <span className="font-medium block">
-                        {tp("hideQueueNumberVisibilityTitle")}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {tp("hideQueueNumberVisibilityDescription")}
-                      </span>
-                    </span>
-                  </label>
-                </div>
+                </StatusSettingCard>
               </div>
             </div>
             <div className="pt-1">

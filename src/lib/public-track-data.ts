@@ -8,6 +8,10 @@ import {
 } from "@/lib/public-cache-tags";
 import { normalizeFastpikLinkDisplayMode } from "@/lib/fastpik-link-display";
 import { createServiceClient } from "@/lib/supabase/service";
+import {
+  normalizeBookingStatusMeta,
+  type BookingStatusMetaMap,
+} from "@/lib/booking-status-meta";
 
 type BookingStampRow = {
   id: string;
@@ -64,6 +68,7 @@ export type TrackProfileRow = {
   seo_track_meta_description?: string | null;
   seo_track_meta_keywords?: string | null;
   custom_client_statuses: string[] | null;
+  custom_client_status_meta?: unknown;
   queue_trigger_status?: string | null;
   final_invoice_visible_from_status: string | null;
   tracking_project_deadline_visible?: boolean | null;
@@ -86,6 +91,7 @@ export type TrackBasePayload = {
   seoTrackMetaDescription: string | null;
   seoTrackMetaKeywords: string | null;
   customClientStatuses: string[] | null;
+  customClientStatusMeta: BookingStatusMetaMap;
   queueTriggerStatus: string | null;
   finalInvoiceVisibleFromStatus: string | null;
   trackingProjectDeadlineVisible: boolean;
@@ -140,7 +146,7 @@ async function fetchTrackBasePayload(trackingUuid: string) {
   const { data: profileWithSplitMode, error: profileWithSplitModeError } = await supabase
     .from("profiles")
     .select(
-      "studio_name, avatar_url, invoice_logo_url, seo_meta_title, seo_meta_description, seo_meta_keywords, seo_track_meta_title, seo_track_meta_description, seo_track_meta_keywords, custom_client_statuses, queue_trigger_status, final_invoice_visible_from_status, tracking_project_deadline_visible, tracking_file_links_visible_from_status, tracking_video_links_visible_from_status, tracking_hide_queue_number, fastpik_link_display_mode, fastpik_link_display_mode_tracking",
+      "studio_name, avatar_url, invoice_logo_url, seo_meta_title, seo_meta_description, seo_meta_keywords, seo_track_meta_title, seo_track_meta_description, seo_track_meta_keywords, custom_client_statuses, custom_client_status_meta, queue_trigger_status, final_invoice_visible_from_status, tracking_project_deadline_visible, tracking_file_links_visible_from_status, tracking_video_links_visible_from_status, tracking_hide_queue_number, fastpik_link_display_mode, fastpik_link_display_mode_tracking",
     )
     .eq("id", booking.user_id)
     .maybeSingle<TrackProfileRow>();
@@ -169,6 +175,10 @@ async function fetchTrackBasePayload(trackingUuid: string) {
     seoTrackMetaDescription: profile?.seo_track_meta_description || null,
     seoTrackMetaKeywords: profile?.seo_track_meta_keywords || null,
     customClientStatuses: profile?.custom_client_statuses || null,
+    customClientStatusMeta: normalizeBookingStatusMeta(
+      profile?.custom_client_status_meta,
+      profile?.custom_client_statuses || [],
+    ),
     queueTriggerStatus: profile?.queue_trigger_status || null,
     finalInvoiceVisibleFromStatus: profile?.final_invoice_visible_from_status || null,
     trackingProjectDeadlineVisible: Boolean(

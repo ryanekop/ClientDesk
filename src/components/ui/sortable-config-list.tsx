@@ -51,6 +51,7 @@ function SortableRow({
   onConfirmEdit,
   onToggleActive,
   onDelete,
+  renderControls,
 }: {
   item: SortableConfigItem;
   editingId: string | null;
@@ -61,6 +62,7 @@ function SortableRow({
   onConfirmEdit: (id: string) => void;
   onToggleActive?: (id: string) => void;
   onDelete?: (id: string) => void;
+  renderControls?: (item: SortableConfigItem) => React.ReactNode;
 }) {
   /* eslint-disable react-hooks/refs */
   const sortable = useSortable({ id: item.id, disabled: item.locked });
@@ -136,6 +138,7 @@ function SortableRow({
                 {item.badge}
               </div>
             </div>
+            {renderControls ? renderControls(item) : null}
             {typeof item.active === "boolean" && onToggleActive ? (
               <button
                 type="button"
@@ -184,12 +187,14 @@ export function SortableConfigList({
   onRename,
   onToggleActive,
   onDelete,
+  renderControls,
 }: {
   items: SortableConfigItem[];
   onReorder: (items: SortableConfigItem[]) => void;
   onRename: (id: string, label: string) => void;
   onToggleActive?: (id: string) => void;
   onDelete?: (id: string) => void;
+  renderControls?: (item: SortableConfigItem) => React.ReactNode;
 }) {
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -265,6 +270,7 @@ export function SortableConfigList({
               onConfirmEdit={confirmEdit}
               onToggleActive={onToggleActive}
               onDelete={onDelete}
+              renderControls={renderControls}
             />
           ))}
         </div>
