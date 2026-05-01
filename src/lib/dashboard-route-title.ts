@@ -11,6 +11,7 @@ export type DashboardRouteTitleKey =
   | "services"
   | "finance"
   | "invoiceSettlement"
+  | "teamPayments"
   | "team"
   | "formBooking"
   | "formSettlement"
@@ -52,6 +53,7 @@ export function resolveDashboardRouteTitleKey(pathname: string): DashboardRouteT
   if (normalizedPath.startsWith("/services")) return "services";
   if (normalizedPath.startsWith("/finance")) return "finance";
   if (normalizedPath.startsWith("/invoice-pelunasan")) return "invoiceSettlement";
+  if (normalizedPath.startsWith("/team-payments")) return "teamPayments";
   if (normalizedPath.startsWith("/team")) return "team";
   if (normalizedPath.startsWith("/form-booking")) return "formBooking";
   if (normalizedPath.startsWith("/settlement-form")) return "formSettlement";

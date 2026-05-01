@@ -25,6 +25,7 @@ import {
     TicketPercent,
     Compass,
     MessageSquarePlus,
+    HandCoins,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,18 +38,34 @@ interface SidebarProps {
 
 const COMING_SOON_SEEN_STORAGE_KEY = "clientdesk_coming_soon_seen";
 
-const mainNavItems = [
-    { titleKey: "dashboard" as const, href: "/dashboard", icon: LayoutDashboard },
-    { titleKey: "bookings" as const, href: "/bookings", icon: ListOrdered },
-    { titleKey: "statusKlien" as const, href: "/client-status", icon: Activity },
-    { titleKey: "calendar" as const, href: "/calendar", icon: CalendarDays },
-    { titleKey: "services" as const, href: "/services", icon: Briefcase },
-    { titleKey: "finance" as const, href: "/finance", icon: Wallet },
-    { titleKey: "invoiceSettlement" as const, href: "/invoice-pelunasan", icon: FileCheck2 },
-    { titleKey: "team" as const, href: "/team", icon: Users },
-    { titleKey: "formBooking" as const, href: "/form-booking", icon: FileEdit },
-    { titleKey: "formSettlement" as const, href: "/settlement-form", icon: ReceiptText },
-    { titleKey: "formSpecialBooking" as const, href: "/special-booking-form", icon: TicketPercent },
+const navGroups = [
+    {
+        titleKey: "groupOperational" as const,
+        items: [
+            { titleKey: "dashboard" as const, href: "/dashboard", icon: LayoutDashboard },
+            { titleKey: "bookings" as const, href: "/bookings", icon: ListOrdered },
+            { titleKey: "statusKlien" as const, href: "/client-status", icon: Activity },
+            { titleKey: "calendar" as const, href: "/calendar", icon: CalendarDays },
+            { titleKey: "services" as const, href: "/services", icon: Briefcase },
+            { titleKey: "team" as const, href: "/team", icon: Users },
+        ],
+    },
+    {
+        titleKey: "groupFinancial" as const,
+        items: [
+            { titleKey: "finance" as const, href: "/finance", icon: Wallet },
+            { titleKey: "invoiceSettlement" as const, href: "/invoice-pelunasan", icon: FileCheck2 },
+            { titleKey: "teamPayments" as const, href: "/team-payments", icon: HandCoins },
+        ],
+    },
+    {
+        titleKey: "groupForms" as const,
+        items: [
+            { titleKey: "formBooking" as const, href: "/form-booking", icon: FileEdit },
+            { titleKey: "formSettlement" as const, href: "/settlement-form", icon: ReceiptText },
+            { titleKey: "formSpecialBooking" as const, href: "/special-booking-form", icon: TicketPercent },
+        ],
+    },
 ];
 
 const spotlightNavItem = {
@@ -186,24 +203,38 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
 
                 {/* Main Navigation */}
                 <nav className="flex-1 overflow-y-auto py-4 px-2.5 space-y-1">
-                    {mainNavItems.map((item) => (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            onClick={() => setIsOpen(false)}
-                            title={isCollapsed ? t(item.titleKey) : undefined}
-                            className={cn(
-                                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                                isActive(item.href)
-                                    ? "bg-primary text-primary-foreground shadow-sm"
-                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                            )}
-                        >
-                            <item.icon className={cn("w-5 h-5 shrink-0", isActive(item.href) ? "text-primary-foreground" : "text-muted-foreground")} />
-                            <span className={cn("transition-opacity duration-300", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
-                                {t(item.titleKey)}
-                            </span>
-                        </Link>
+                    {navGroups.map((group, groupIndex) => (
+                        <div key={group.titleKey} className={cn(groupIndex > 0 && "pt-3")}>
+                            <div
+                                className={cn(
+                                    "px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70 transition-opacity duration-300",
+                                    isCollapsed ? "h-0 overflow-hidden p-0 opacity-0" : "opacity-100",
+                                )}
+                            >
+                                {t(group.titleKey)}
+                            </div>
+                            <div className="space-y-1">
+                                {group.items.map((item) => (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        onClick={() => setIsOpen(false)}
+                                        title={isCollapsed ? t(item.titleKey) : undefined}
+                                        className={cn(
+                                            "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+                                            isActive(item.href)
+                                                ? "bg-primary text-primary-foreground shadow-sm"
+                                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        )}
+                                    >
+                                        <item.icon className={cn("w-5 h-5 shrink-0", isActive(item.href) ? "text-primary-foreground" : "text-muted-foreground")} />
+                                        <span className={cn("transition-opacity duration-300", isCollapsed ? "opacity-0 invisible w-0" : "opacity-100 visible w-auto")}>
+                                            {t(item.titleKey)}
+                                        </span>
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
                     ))}
 
                     <div className={cn("mx-2 my-3 border-t border-border/80", isCollapsed ? "mx-1.5" : "")} />

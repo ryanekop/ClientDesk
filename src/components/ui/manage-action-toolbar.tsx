@@ -3,10 +3,12 @@ import {
     Archive,
     ArchiveRestore,
     CheckCheck,
+    CheckCircle2,
     FolderOpen,
     Settings2,
     Trash2,
     X,
+    XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -68,9 +70,33 @@ type ArchiveManageActionToolbarProps = {
     deleteDisabled?: boolean;
 };
 
+type PaymentManageActionToolbarProps = {
+    variant: "payment-status";
+    isManageMode: boolean;
+    labels: CommonLabels & {
+        markPaid: string;
+        markUnpaid: string;
+    };
+    selectedCount: number;
+    onEnterManage: () => void;
+    onToggleSelectAll: () => void;
+    onMarkPaid: () => void;
+    onMarkUnpaid: () => void;
+    onCloseManage: () => void;
+    className?: string;
+    actionsClassName?: string;
+    manageButtonClassName?: string;
+    manageDisabled?: boolean;
+    manageDisabledReason?: string;
+    selectAllDisabled?: boolean;
+    markPaidDisabled?: boolean;
+    markUnpaidDisabled?: boolean;
+};
+
 export type ManageActionToolbarProps =
     | SimpleManageActionToolbarProps
-    | ArchiveManageActionToolbarProps;
+    | ArchiveManageActionToolbarProps
+    | PaymentManageActionToolbarProps;
 
 const responsiveActionButtonClassName =
     "h-9 w-9 px-0 sm:w-auto sm:px-3";
@@ -155,6 +181,65 @@ function ManageModeActions({
 }
 
 export function ManageActionToolbar(props: ManageActionToolbarProps) {
+    if (props.variant === "payment-status") {
+        return (
+            <div className={cn("flex flex-wrap items-center gap-2", props.className)}>
+                {props.isManageMode ? (
+                    <div className={cn("flex flex-wrap items-center gap-2", props.actionsClassName)}>
+                        <span className="text-sm font-medium text-foreground">
+                            {props.labels.selectedCount}
+                        </span>
+                        <ToolbarActionButton
+                            label={props.labels.selectAll}
+                            variant="outline"
+                            onClick={props.onToggleSelectAll}
+                            disabled={props.selectAllDisabled}
+                        >
+                            <CheckCheck className="h-4 w-4" />
+                        </ToolbarActionButton>
+                        <ToolbarActionButton
+                            label={props.labels.markPaid}
+                            variant="outline"
+                            onClick={props.onMarkPaid}
+                            disabled={props.markPaidDisabled}
+                        >
+                            <CheckCircle2 className="h-4 w-4" />
+                        </ToolbarActionButton>
+                        <ToolbarActionButton
+                            label={props.labels.markUnpaid}
+                            variant="outline"
+                            onClick={props.onMarkUnpaid}
+                            disabled={props.markUnpaidDisabled}
+                        >
+                            <XCircle className="h-4 w-4" />
+                        </ToolbarActionButton>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            aria-label={props.labels.closeManage}
+                            title={props.labels.closeManage}
+                            className="h-9 w-9 px-0"
+                            onClick={props.onCloseManage}
+                        >
+                            <X className="h-4 w-4" />
+                        </Button>
+                    </div>
+                ) : (
+                    <ToolbarActionButton
+                        label={props.labels.manage}
+                        variant="outline"
+                        onClick={props.onEnterManage}
+                        disabled={props.manageDisabled}
+                        className={props.manageButtonClassName}
+                        title={props.manageDisabled ? props.manageDisabledReason : props.labels.manage}
+                    >
+                        <Settings2 className="h-4 w-4" />
+                    </ToolbarActionButton>
+                )}
+            </div>
+        );
+    }
+
     if (props.variant === "archive-capable") {
         const isArchiveView = props.archiveMode === "archived";
         const primaryBulkLabel = isArchiveView
