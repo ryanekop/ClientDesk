@@ -1,4 +1,4 @@
-export type TableMenuKey = "bookings" | "client_status" | "finance" | "team";
+export type TableMenuKey = "bookings" | "client_status" | "finance" | "team" | "team_payments";
 
 export type TableColumnPin = "left" | "right" | null;
 
@@ -39,7 +39,7 @@ function dedupeTableColumnPreferences(columns: TableColumnPreference[]) {
 }
 
 export function isBoundaryTableColumnId(columnId: string) {
-  return columnId === "name" || columnId === "actions";
+  return columnId === "name" || columnId === "booking" || columnId === "actions";
 }
 
 export function isAlwaysVisibleTableColumnId(columnId: string) {

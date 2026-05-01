@@ -91,6 +91,9 @@
         "filterButton": "Filter",
         "sort": "Urutkan",
         "resetFilters": "Reset filter",
+        "manageColumns": "Kelola Kolom",
+        "columnManagerTitle": "Kelola Kolom Pembayaran Tim",
+        "columnManagerDescription": "Atur kolom yang tampil di tabel pembayaran tim. Kolom Freelance, Booking, dan Aksi selalu tampil.",
         "manage": "Kelola",
         "selectAll": "Pilih semua",
         "clearSelection": "Batalkan pilihan",
@@ -122,6 +125,8 @@
         "bookingOldest": "Booking terlama",
         "sessionNewest": "Sesi terbaru",
         "sessionOldest": "Sesi terlama",
+        "paymentUnpaidFirst": "Belum Lunas dulu",
+        "paymentPaidFirst": "Lunas dulu",
         "freelance": "Freelance",
         "jobs": "Job",
         "unpaidTotal": "Total belum dibayar",
@@ -147,7 +152,8 @@
         "close": "Tutup",
         "empty": "Belum ada pembayaran tim.",
         "loadFailed": "Gagal memuat pembayaran tim.",
-        "updateFailed": "Gagal memperbarui pembayaran tim."
+        "updateFailed": "Gagal memperbarui pembayaran tim.",
+        "exportFailed": "Gagal export pembayaran tim."
     },
     "ComingSoonPage": {
         "badge": "Roadmap Fitur",

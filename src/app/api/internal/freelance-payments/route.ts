@@ -11,6 +11,7 @@ import {
   getBookingStatusOptions,
   resolveUnifiedBookingStatus,
 } from "@/lib/client-status";
+import { normalizeOperationalCosts } from "@/lib/operational-costs";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 10;
@@ -22,6 +23,8 @@ const SORT_ORDERS = [
   "booking_oldest",
   "session_newest",
   "session_oldest",
+  "payment_unpaid_first",
+  "payment_paid_first",
 ] as const;
 
 type PaymentStatusFilter = (typeof PAYMENT_STATUSES)[number];
@@ -46,6 +49,7 @@ type BookingRow = {
   event_type: string | null;
   status: string | null;
   client_status: string | null;
+  operational_costs?: unknown;
   services?: { id?: string; name: string; price?: number; is_addon?: boolean | null } | null;
   booking_services?: unknown[];
 };
@@ -173,6 +177,12 @@ function compareNullableDates(left: string | null, right: string | null, ascendi
   return ascending ? leftValue - rightValue : rightValue - leftValue;
 }
 
+function getPaymentPriority(status: PaymentEntryStatus, sort: SortOrder) {
+  if (sort === "payment_unpaid_first") return status === "unpaid" ? 0 : 1;
+  if (sort === "payment_paid_first") return status === "paid" ? 0 : 1;
+  return 0;
+}
+
 function normalizeEntryStatus(value: unknown): PaymentEntryStatus {
   return value === "paid" ? "paid" : "unpaid";
 }
@@ -187,29 +197,100 @@ function readMaybeSingle<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? value[0] || null : value || null;
 }
 
-async function ensureMissingEntries(supabase: Awaited<ReturnType<typeof requireRouteUser>>["supabase"], userId: string) {
-  const { data, error } = await supabase
-    .from("booking_freelance")
-    .select("booking_id, freelance_id, bookings!inner(user_id)")
-    .eq("bookings.user_id", userId)
-    .limit(MAX_FETCH_ROWS);
+function normalizeMatchText(value: unknown) {
+  return typeof value === "string"
+    ? value.trim().toLowerCase().replace(/\s+/g, " ")
+    : "";
+}
 
-  if (error || !Array.isArray(data) || data.length === 0) return;
+function getMatchedOperationalCostAmount(
+  operationalCosts: unknown,
+  freelance: Pick<FreelanceRow, "name" | "role"> | null | undefined,
+) {
+  const name = normalizeMatchText(freelance?.name);
+  const role = normalizeMatchText(freelance?.role);
+  const needles = [name, role].filter((item) => item.length >= 2);
+  if (needles.length === 0) return 0;
+
+  return normalizeOperationalCosts(operationalCosts).reduce((sum, item) => {
+    const label = normalizeMatchText(item.label);
+    if (!label) return sum;
+    return needles.some((needle) => label.includes(needle))
+      ? sum + item.amount
+      : sum;
+  }, 0);
+}
+
+async function ensureMissingEntries(supabase: Awaited<ReturnType<typeof requireRouteUser>>["supabase"], userId: string) {
+  const [junctionResult, legacyResult] = await Promise.all([
+    supabase
+      .from("booking_freelance")
+      .select("booking_id, freelance_id, bookings!inner(user_id, operational_costs), freelance(id, name, role)")
+      .eq("bookings.user_id", userId)
+      .limit(MAX_FETCH_ROWS),
+    supabase
+      .from("bookings")
+      .select("id, freelance_id, operational_costs, freelance(id, name, role)")
+      .eq("user_id", userId)
+      .not("freelance_id", "is", null)
+      .limit(MAX_FETCH_ROWS),
+  ]);
+
+  const rows = [
+    ...(Array.isArray(junctionResult.data)
+      ? junctionResult.data.map((row) => ({
+        booking_id: row.booking_id,
+        freelance_id: row.freelance_id,
+        amount: getMatchedOperationalCostAmount(
+          readMaybeSingle(row.bookings)?.operational_costs,
+          readMaybeSingle(row.freelance),
+        ),
+      }))
+      : []),
+    ...(Array.isArray(legacyResult.data)
+      ? legacyResult.data.map((row) => ({
+        booking_id: row.id,
+        freelance_id: row.freelance_id,
+        amount: getMatchedOperationalCostAmount(
+          row.operational_costs,
+          readMaybeSingle(row.freelance),
+        ),
+      }))
+      : []),
+  ];
+
+  if (rows.length === 0) return;
 
   await supabase
     .from("freelance_payment_entries")
     .upsert(
-      data
+      rows
         .filter((row) => row.booking_id && row.freelance_id)
         .map((row) => ({
           user_id: userId,
           booking_id: row.booking_id,
           freelance_id: row.freelance_id,
-          amount: 0,
+          amount: row.amount,
           status: "unpaid",
         })),
       { onConflict: "booking_id,freelance_id", ignoreDuplicates: true },
     );
+
+  const zeroAmountRows = rows.filter((row) => row.booking_id && row.freelance_id && row.amount > 0);
+  await Promise.all(
+    zeroAmountRows.map((row) =>
+      supabase
+        .from("freelance_payment_entries")
+        .update({ amount: row.amount })
+        .eq("user_id", userId)
+        .eq("booking_id", row.booking_id)
+        .eq("freelance_id", row.freelance_id)
+        .eq("amount", 0)
+        .eq("status", "unpaid")
+        .is("paid_at", null)
+        .is("notes", null),
+    ),
+  );
 }
 
 export async function GET(request: NextRequest) {
@@ -254,6 +335,7 @@ export async function GET(request: NextRequest) {
           event_type,
           status,
           client_status,
+          operational_costs,
           services(id, name, price, is_addon),
           booking_services(*)
         )
@@ -262,7 +344,7 @@ export async function GET(request: NextRequest) {
       .limit(MAX_FETCH_ROWS),
     supabase
       .from("profiles")
-      .select("custom_client_statuses")
+      .select("custom_client_statuses, table_column_preferences")
       .eq("id", user.id)
       .single(),
   ]);
@@ -355,6 +437,13 @@ export async function GET(request: NextRequest) {
       ].some((value) => value.toLowerCase().includes(search));
     })
     .sort((left, right) => {
+      if (sort === "payment_unpaid_first" || sort === "payment_paid_first") {
+        const statusCompare = getPaymentPriority(left.status, sort) - getPaymentPriority(right.status, sort);
+        if (statusCompare !== 0) return statusCompare;
+        const dateCompare = compareNullableDates(left.bookingDate, right.bookingDate, false);
+        if (dateCompare !== 0) return dateCompare;
+        return left.freelanceName.localeCompare(right.freelanceName);
+      }
       const ascending = sort.endsWith("oldest");
       const basis = sort.startsWith("session") ? "sessionDate" : "bookingDate";
       const dateCompare = compareNullableDates(left[basis], right[basis], ascending);
@@ -404,6 +493,16 @@ export async function GET(request: NextRequest) {
   });
 
   const groups = Array.from(groupMap.values()).sort((left, right) => {
+    if (sort === "payment_unpaid_first") {
+      const leftHasPriority = left.unpaidCount > 0 ? 0 : 1;
+      const rightHasPriority = right.unpaidCount > 0 ? 0 : 1;
+      if (leftHasPriority !== rightHasPriority) return leftHasPriority - rightHasPriority;
+    }
+    if (sort === "payment_paid_first") {
+      const leftHasPriority = left.paidCount > 0 ? 0 : 1;
+      const rightHasPriority = right.paidCount > 0 ? 0 : 1;
+      if (leftHasPriority !== rightHasPriority) return leftHasPriority - rightHasPriority;
+    }
     if (right.unpaidTotal !== left.unpaidTotal) return right.unpaidTotal - left.unpaidTotal;
     if (right.unpaidCount !== left.unpaidCount) return right.unpaidCount - left.unpaidCount;
     return left.freelanceName.localeCompare(right.freelanceName);
@@ -418,6 +517,12 @@ export async function GET(request: NextRequest) {
       roles: roleOptions,
       bookingStatuses: resolvedBookingStatusOptions,
       eventTypes: eventTypeOptions,
+      tableColumnPreferences:
+        profileResult.data?.table_column_preferences &&
+        typeof profileResult.data.table_column_preferences === "object" &&
+        !Array.isArray(profileResult.data.table_column_preferences)
+          ? (profileResult.data.table_column_preferences as { team_payments?: unknown }).team_payments ?? null
+          : null,
       summary: {
         totalGroups: groups.length,
         totalJobs: filteredDetails.length,

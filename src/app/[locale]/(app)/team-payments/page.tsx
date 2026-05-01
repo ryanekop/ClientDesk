@@ -7,14 +7,21 @@ import {
     CheckCircle2,
     Edit2,
     ExternalLink,
+    Clock,
+    Briefcase,
+    Download,
     HandCoins,
     ListOrdered,
     Loader2,
     Search,
+    Settings2,
+    Users,
+    Wallet,
     X,
     XCircle,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
+import * as XLSX from "xlsx";
 
 import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { Button } from "@/components/ui/button";
@@ -24,22 +31,34 @@ import { FilterMultiSelect } from "@/components/ui/filter-multi-select";
 import { FilterSingleSelect } from "@/components/ui/filter-single-select";
 import { BookingDateRangePicker } from "@/components/ui/booking-date-range-picker";
 import { ManageActionToolbar } from "@/components/ui/manage-action-toolbar";
+import { MoneyVisibilityToggle } from "@/components/ui/money-visibility";
 import { PageHeader } from "@/components/ui/page-header";
+import { TableColumnManager } from "@/components/ui/table-column-manager";
 import { TablePagination } from "@/components/ui/table-pagination";
+import { useResizableTableColumns } from "@/components/ui/use-resizable-table-columns";
 import { fetchPaginatedJson } from "@/lib/pagination/http";
 import type { PaginatedQueryState } from "@/lib/pagination/types";
+import { useMoneyVisibility } from "@/hooks/use-money-visibility";
 import {
     areAllVisibleSelected,
     pruneSelection,
     toggleSelectAllVisible,
     toggleSelection,
 } from "@/lib/manage-selection";
+import {
+    areTableColumnPreferencesEqual,
+    lockBoundaryColumns,
+    mergeTableColumnPreferences,
+    updateTableColumnPreferenceMap,
+    type TableColumnPreference,
+} from "@/lib/table-column-prefs";
 import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/utils/supabase/client";
 
 type PaymentEntryStatus = "unpaid" | "paid";
 type PaymentStatusFilter = "all" | PaymentEntryStatus;
-type SortOrder = "booking_newest" | "booking_oldest" | "session_newest" | "session_oldest";
+type SortOrder = "booking_newest" | "booking_oldest" | "session_newest" | "session_oldest" | "payment_unpaid_first" | "payment_paid_first";
 type DateBasis = "booking_date" | "session_date";
 
 type PaymentDetail = {
@@ -76,6 +95,7 @@ type PaymentMetadata = {
     roles: string[];
     bookingStatuses: string[];
     eventTypes: string[];
+    tableColumnPreferences?: TableColumnPreference[] | null;
     summary: {
         totalGroups: number;
         totalJobs: number;
@@ -97,10 +117,29 @@ const DEFAULT_PER_PAGE = 10;
 const SEARCH_DEBOUNCE_MS = 400;
 const FILTER_STORAGE_PREFIX = "clientdesk:team-payments:filters";
 const ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:team-payments:items_per_page";
+const GROUP_COLUMN_IDS = ["name", "jobs", "paid_count", "unpaid_count", "unpaid_total", "actions"] as const;
+const DETAIL_COLUMN_IDS = ["booking", "event_type", "session_date", "service", "amount", "payment_status", "paid_at", "actions"] as const;
+const TEAM_PAYMENT_NON_RESIZABLE_COLUMN_IDS = ["select", "actions"];
+const TEAM_PAYMENT_COLUMN_MIN_WIDTHS: Record<string, number> = {
+    name: 220,
+    jobs: 96,
+    paid_count: 96,
+    unpaid_count: 120,
+    unpaid_total: 180,
+    booking: 220,
+    event_type: 140,
+    session_date: 150,
+    service: 220,
+    amount: 140,
+    payment_status: 150,
+    paid_at: 150,
+    actions: 220,
+};
 const EMPTY_METADATA: PaymentMetadata = {
     roles: [],
     bookingStatuses: [],
     eventTypes: [],
+    tableColumnPreferences: null,
     summary: {
         totalGroups: 0,
         totalJobs: 0,
@@ -109,6 +148,24 @@ const EMPTY_METADATA: PaymentMetadata = {
         unpaidTotal: 0,
     },
 };
+
+function createTeamPaymentColumns(t: ReturnType<typeof useTranslations<"TeamPayments">>): TableColumnPreference[] {
+    return lockBoundaryColumns([
+        { id: "name", label: t("freelance"), visible: true },
+        { id: "jobs", label: t("jobs"), visible: true },
+        { id: "paid_count", label: t("paid"), visible: true },
+        { id: "unpaid_count", label: t("unpaid"), visible: true },
+        { id: "unpaid_total", label: t("unpaidTotal"), visible: true },
+        { id: "booking", label: t("booking"), visible: true },
+        { id: "event_type", label: t("eventType"), visible: true },
+        { id: "session_date", label: t("sessionDate"), visible: true },
+        { id: "service", label: t("service"), visible: true },
+        { id: "amount", label: t("amount"), visible: true },
+        { id: "payment_status", label: t("paymentStatus"), visible: true },
+        { id: "paid_at", label: t("paidAt"), visible: true },
+        { id: "actions", label: t("actions"), visible: true },
+    ]);
+}
 
 function normalizeItemsPerPage(value: unknown) {
     const parsed = typeof value === "number" ? value : Number(value);
@@ -126,6 +183,8 @@ function normalizeSortOrder(value: unknown): SortOrder {
         value === "booking_oldest" ||
         value === "session_newest" ||
         value === "session_oldest" ||
+        value === "payment_unpaid_first" ||
+        value === "payment_paid_first" ||
         value === "booking_newest"
     )
         ? value
@@ -178,8 +237,14 @@ function statusBadgeClassName(status: PaymentEntryStatus) {
 export default function TeamPaymentsPage() {
     const locale = useLocale();
     const t = useTranslations("TeamPayments");
+    const supabase = React.useMemo(() => createClient(), []);
+    const { isMoneyVisible } = useMoneyVisibility();
+    const defaultColumns = React.useMemo(() => createTeamPaymentColumns(t), [t]);
     const [groups, setGroups] = React.useState<PaymentGroup[]>([]);
     const [metadata, setMetadata] = React.useState<PaymentMetadata>(EMPTY_METADATA);
+    const [columns, setColumns] = React.useState<TableColumnPreference[]>(defaultColumns);
+    const [columnManagerOpen, setColumnManagerOpen] = React.useState(false);
+    const [savingColumns, setSavingColumns] = React.useState(false);
     const [queryState, setQueryState] = React.useState<PaginatedQueryState>({
         page: 1,
         perPage: DEFAULT_PER_PAGE,
@@ -205,6 +270,14 @@ export default function TeamPaymentsPage() {
     const [editDraft, setEditDraft] = React.useState<EditDraft | null>(null);
     const [feedback, setFeedback] = React.useState("");
     const [updatingIds, setUpdatingIds] = React.useState<string[]>([]);
+    const [exporting, setExporting] = React.useState(false);
+    const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
+    const [resettingColumnWidths, setResettingColumnWidths] = React.useState(false);
+
+    const formatSensitiveCurrency = React.useCallback(
+        (amount: number) => isMoneyVisible ? formatCurrency(amount) : "Rp •••••••",
+        [isMoneyVisible],
+    );
 
     React.useEffect(() => {
         const timeout = window.setTimeout(() => {
@@ -212,6 +285,25 @@ export default function TeamPaymentsPage() {
         }, SEARCH_DEBOUNCE_MS);
         return () => window.clearTimeout(timeout);
     }, [searchQuery]);
+
+    React.useEffect(() => {
+        let active = true;
+        void (async () => {
+            const result = await supabase.auth.getUser();
+            if (!active) return;
+            setCurrentUserId(result.data.user?.id || null);
+        })();
+        return () => {
+            active = false;
+        };
+    }, [supabase]);
+
+    React.useEffect(() => {
+        setColumns((current) => {
+            const nextColumns = mergeTableColumnPreferences(defaultColumns, current);
+            return areTableColumnPreferencesEqual(current, nextColumns) ? current : nextColumns;
+        });
+    }, [defaultColumns]);
 
     React.useEffect(() => {
         try {
@@ -279,6 +371,36 @@ export default function TeamPaymentsPage() {
         sortOrder,
     ]);
 
+    const buildPaymentParams = React.useCallback((overrides?: Partial<{
+        page: number;
+        perPage: number;
+        search: string;
+    }>) => new URLSearchParams({
+        page: String(overrides?.page ?? queryState.page),
+        perPage: String(overrides?.perPage ?? queryState.perPage),
+        search: overrides?.search ?? debouncedSearchQuery,
+        paymentStatus,
+        roleFilters: JSON.stringify(roleFilters),
+        bookingStatusFilters: JSON.stringify(bookingStatusFilters),
+        eventTypeFilters: JSON.stringify(eventTypeFilters),
+        dateFrom: dateFromFilter,
+        dateTo: dateToFilter,
+        dateBasis,
+        sort: sortOrder,
+    }), [
+        bookingStatusFilters,
+        dateBasis,
+        dateFromFilter,
+        dateToFilter,
+        debouncedSearchQuery,
+        eventTypeFilters,
+        paymentStatus,
+        queryState.page,
+        queryState.perPage,
+        roleFilters,
+        sortOrder,
+    ]);
+
     const fetchPayments = React.useCallback(async (mode: "loading" | "refreshing" = "refreshing") => {
         if (!filtersHydrated) return;
         setQueryState((current) => ({
@@ -287,19 +409,7 @@ export default function TeamPaymentsPage() {
             isRefreshing: mode === "refreshing",
         }));
 
-        const params = new URLSearchParams({
-            page: String(queryState.page),
-            perPage: String(queryState.perPage),
-            search: debouncedSearchQuery,
-            paymentStatus,
-            roleFilters: JSON.stringify(roleFilters),
-            bookingStatusFilters: JSON.stringify(bookingStatusFilters),
-            eventTypeFilters: JSON.stringify(eventTypeFilters),
-            dateFrom: dateFromFilter,
-            dateTo: dateToFilter,
-            dateBasis,
-            sort: sortOrder,
-        });
+        const params = buildPaymentParams();
 
         try {
             const response = await fetchPaginatedJson<PaymentGroup, PaymentMetadata>(
@@ -307,6 +417,12 @@ export default function TeamPaymentsPage() {
             );
             setGroups(response.items);
             setMetadata(response.metadata || EMPTY_METADATA);
+            if (response.metadata?.tableColumnPreferences) {
+                setColumns((current) => {
+                    const nextColumns = mergeTableColumnPreferences(defaultColumns, response.metadata?.tableColumnPreferences || undefined);
+                    return areTableColumnPreferencesEqual(current, nextColumns) ? current : nextColumns;
+                });
+            }
             setQueryState((current) => ({
                 ...current,
                 totalItems: response.totalItems,
@@ -322,18 +438,9 @@ export default function TeamPaymentsPage() {
             }));
         }
     }, [
-        bookingStatusFilters,
-        dateBasis,
-        dateFromFilter,
-        dateToFilter,
-        debouncedSearchQuery,
-        eventTypeFilters,
+        buildPaymentParams,
+        defaultColumns,
         filtersHydrated,
-        paymentStatus,
-        queryState.page,
-        queryState.perPage,
-        roleFilters,
-        sortOrder,
         t,
     ]);
 
@@ -345,6 +452,40 @@ export default function TeamPaymentsPage() {
         () => groups.flatMap((group) => group.details.map((detail) => detail.id)),
         [groups],
     );
+    const visibleColumns = React.useMemo(
+        () => columns.filter((column) => column.visible),
+        [columns],
+    );
+    const groupVisibleColumns = React.useMemo(
+        () => visibleColumns.filter((column) => GROUP_COLUMN_IDS.includes(column.id as (typeof GROUP_COLUMN_IDS)[number])),
+        [visibleColumns],
+    );
+    const detailVisibleColumns = React.useMemo(
+        () => visibleColumns.filter((column) => DETAIL_COLUMN_IDS.includes(column.id as (typeof DETAIL_COLUMN_IDS)[number])),
+        [visibleColumns],
+    );
+    const tableColSpan = groupVisibleColumns.length + (isManageMode ? 1 : 0);
+    const {
+        getColumnWidthStyle,
+        getResizeHandleProps,
+        isColumnResizable,
+        isColumnBeingResized,
+        cancelActiveResize,
+        resetColumnWidths,
+    } = useResizableTableColumns({
+        enabled: !columnManagerOpen,
+        menuKey: "team_payments",
+        userId: currentUserId,
+        columns: visibleColumns,
+        nonResizableColumnIds: TEAM_PAYMENT_NON_RESIZABLE_COLUMN_IDS,
+        minWidthByColumnId: TEAM_PAYMENT_COLUMN_MIN_WIDTHS,
+    });
+
+    React.useEffect(() => {
+        if (columnManagerOpen) {
+            cancelActiveResize();
+        }
+    }, [cancelActiveResize, columnManagerOpen]);
 
     React.useEffect(() => {
         setSelectedEntryIds((current) => pruneSelection(current, visibleEntryIds));
@@ -380,6 +521,141 @@ export default function TeamPaymentsPage() {
         setSortOrder("booking_newest");
         setQueryState((current) => ({ ...current, page: 1 }));
     };
+
+    const invalidateProfilePublicCache = React.useCallback(async () => {
+        try {
+            await fetch("/api/internal/cache/invalidate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ scope: "profile" }),
+            });
+        } catch {
+            // Best effort cache invalidation.
+        }
+    }, []);
+
+    const handleColumnManagerOpenChange = React.useCallback((nextOpen: boolean) => {
+        setColumnManagerOpen(nextOpen);
+    }, []);
+
+    async function handleResetColumnWidths() {
+        setResettingColumnWidths(true);
+        try {
+            await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+            resetColumnWidths();
+            setColumnManagerOpen(false);
+        } finally {
+            setResettingColumnWidths(false);
+        }
+    }
+
+    async function saveColumnPreferences(nextColumns: TableColumnPreference[]) {
+        const normalizedColumns = lockBoundaryColumns(nextColumns);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        setSavingColumns(true);
+        try {
+            const { data: profile } = await supabase
+                .from("profiles")
+                .select("table_column_preferences")
+                .eq("id", user.id)
+                .single();
+            const payload = updateTableColumnPreferenceMap(
+                profile?.table_column_preferences,
+                "team_payments",
+                normalizedColumns,
+            );
+            await supabase
+                .from("profiles")
+                .update({ table_column_preferences: payload })
+                .eq("id", user.id);
+            await invalidateProfilePublicCache();
+            setColumns((current) =>
+                areTableColumnPreferencesEqual(current, normalizedColumns)
+                    ? current
+                    : normalizedColumns,
+            );
+            setColumnManagerOpen(false);
+        } finally {
+            setSavingColumns(false);
+        }
+    }
+
+    async function exportTeamPayments() {
+        setExporting(true);
+        try {
+            const allGroups: PaymentGroup[] = [];
+            let page = 1;
+            let totalItems = 0;
+
+            do {
+                const params = buildPaymentParams({ page, perPage: 100 });
+                const response = await fetchPaginatedJson<PaymentGroup, PaymentMetadata>(
+                    `/api/internal/freelance-payments?${params.toString()}`,
+                );
+                allGroups.push(...response.items);
+                totalItems = response.totalItems;
+                page += 1;
+            } while (allGroups.length < totalItems && page < 100);
+
+            const details = allGroups.flatMap((group) =>
+                group.details.map((detail) => ({
+                    group,
+                    detail,
+                })),
+            );
+            const wb = XLSX.utils.book_new();
+            const summaryData: Array<Array<string | number>> = [
+                [t("title"), "", ""],
+                ["", "", ""],
+                [t("summaryFreelancers"), allGroups.length, ""],
+                [t("summaryJobs"), details.length, ""],
+                [t("summaryUnpaid"), details.filter(({ detail }) => detail.status === "unpaid").length, ""],
+                [t("paid"), details.filter(({ detail }) => detail.status === "paid").length, ""],
+                [t("summaryUnpaidTotal"), details.filter(({ detail }) => detail.status === "unpaid").reduce((sum, { detail }) => sum + detail.amount, 0), ""],
+            ];
+            const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+            wsSummary["!cols"] = [{ wch: 28 }, { wch: 18 }, { wch: 18 }];
+            XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
+
+            const detailData = details.map(({ group, detail }) => ({
+                [t("freelance")]: group.freelanceName,
+                [t("role")]: group.role || "-",
+                [t("booking")]: detail.bookingCode,
+                "Klien": detail.clientName,
+                [t("eventType")]: detail.eventType,
+                [t("bookingDate")]: formatDate(detail.bookingDate, locale),
+                [t("sessionDate")]: formatDate(detail.sessionDate, locale),
+                [t("service")]: detail.serviceLabel,
+                [t("amount")]: detail.amount,
+                [t("paymentStatus")]: detail.status === "paid" ? t("paid") : t("unpaid"),
+                [t("paidAt")]: formatDate(detail.paidAt, locale),
+                [t("notes")]: detail.notes || "",
+            }));
+            const wsDetail = XLSX.utils.json_to_sheet(detailData);
+            wsDetail["!cols"] = [
+                { wch: 24 },
+                { wch: 16 },
+                { wch: 20 },
+                { wch: 24 },
+                { wch: 16 },
+                { wch: 16 },
+                { wch: 16 },
+                { wch: 24 },
+                { wch: 14 },
+                { wch: 16 },
+                { wch: 16 },
+                { wch: 28 },
+            ];
+            XLSX.utils.book_append_sheet(wb, wsDetail, "Detail Pembayaran Tim");
+            XLSX.writeFile(wb, `pembayaran_tim_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        } catch (error) {
+            setFeedback(error instanceof Error ? error.message : t("exportFailed"));
+        } finally {
+            setExporting(false);
+        }
+    }
 
     const hasActiveFilters =
         searchQuery.trim().length > 0 ||
@@ -462,6 +738,8 @@ export default function TeamPaymentsPage() {
         { value: "booking_oldest", label: t("bookingOldest") },
         { value: "session_newest", label: t("sessionNewest") },
         { value: "session_oldest", label: t("sessionOldest") },
+        { value: "payment_unpaid_first", label: t("paymentUnpaidFirst") },
+        { value: "payment_paid_first", label: t("paymentPaidFirst") },
     ];
     const roleOptions = metadata.roles.map((role) => ({ value: role, label: role }));
     const bookingStatusOptions = metadata.bookingStatuses.map((status) => ({ value: status, label: status }));
@@ -473,15 +751,52 @@ export default function TeamPaymentsPage() {
         </span>
     );
 
+    const renderDesktopHeaderLabel = (column: TableColumnPreference, label: React.ReactNode) => {
+        const resizeHandleProps = getResizeHandleProps(column.id);
+
+        return (
+            <div className={cn("relative flex min-w-0 items-center gap-2", column.id === "actions" && "justify-end")}>
+                <span className="truncate">{label}</span>
+                {isColumnResizable(column.id) && resizeHandleProps ? (
+                    <button
+                        type="button"
+                        aria-label={`Resize ${column.label}`}
+                        className={cn(
+                            "absolute -right-3 top-1/2 h-8 w-6 -translate-y-1/2 touch-none select-none cursor-col-resize rounded transition-colors",
+                            isColumnBeingResized(column.id)
+                                ? "bg-primary/10"
+                                : "hover:bg-muted-foreground/10",
+                        )}
+                        {...resizeHandleProps}
+                    >
+                        <span
+                            className={cn(
+                                "absolute left-1/2 top-1/2 h-4 w-px -translate-x-1/2 -translate-y-1/2 rounded-full",
+                                isColumnBeingResized(column.id)
+                                    ? "bg-primary"
+                                    : "bg-border",
+                            )}
+                        />
+                    </button>
+                ) : null}
+            </div>
+        );
+    };
+
     const renderDetailActions = (detail: PaymentDetail) => {
         const isUpdating = updatingIds.includes(detail.id);
         return (
-            <div className="flex items-center justify-end gap-1.5">
+            <div className="mt-4 flex items-center justify-start gap-2 border-t pt-3 md:mt-0 md:justify-end md:border-t-0 md:pt-0">
                 <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-8 gap-1.5 px-2"
+                    className={cn(
+                        "h-9 w-9 gap-1.5 rounded-lg px-0 md:h-8 md:w-auto md:px-2",
+                        detail.status === "paid"
+                            ? "text-red-700 hover:text-red-700 dark:text-red-300"
+                            : "text-emerald-700 hover:text-emerald-700 dark:text-emerald-300",
+                    )}
                     disabled={isUpdating}
                     onClick={() => void setPaymentStatusForIds([detail.id], detail.status === "paid" ? "unpaid" : "paid")}
                 >
@@ -500,7 +815,7 @@ export default function TeamPaymentsPage() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8"
+                    className="h-9 w-9 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300 md:h-8 md:w-8 md:border-transparent md:bg-transparent md:text-foreground md:hover:bg-muted"
                     onClick={() =>
                         setEditDraft({
                             id: detail.id,
@@ -513,7 +828,7 @@ export default function TeamPaymentsPage() {
                     <Edit2 className="h-3.5 w-3.5" />
                     <span className="sr-only">{t("edit")}</span>
                 </Button>
-                <Button asChild type="button" variant="ghost" size="icon" className="h-8 w-8">
+                <Button asChild type="button" variant="ghost" size="icon" className="h-9 w-9 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 md:h-8 md:w-8 md:border-transparent md:bg-transparent md:text-foreground md:hover:bg-muted">
                     <Link href={`/bookings/${detail.bookingId}`}>
                         <ExternalLink className="h-3.5 w-3.5" />
                         <span className="sr-only">{t("openBooking")}</span>
@@ -525,10 +840,52 @@ export default function TeamPaymentsPage() {
 
     const renderDetailRow = (detail: PaymentDetail) => {
         const isSelected = selectedEntryIds.includes(detail.id);
+        const detailCellClassName = "px-4 py-3 text-sm";
+        const renderDetailCell = (column: TableColumnPreference) => {
+            switch (column.id) {
+                case "booking":
+                    return (
+                        <td
+                            key={column.id}
+                            data-column-id={column.id}
+                            style={getColumnWidthStyle(column.id)}
+                            className={detailCellClassName}
+                        >
+                            <div className="font-medium">{detail.bookingCode}</div>
+                            <div className="text-xs text-muted-foreground">{detail.clientName}</div>
+                        </td>
+                    );
+                case "event_type":
+                    return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className={detailCellClassName}>{detail.eventType}</td>;
+                case "session_date":
+                    return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className={detailCellClassName}>{formatDate(detail.sessionDate, locale)}</td>;
+                case "service":
+                    return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className={detailCellClassName}>{detail.serviceLabel}</td>;
+                case "amount":
+                    return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className={cn(detailCellClassName, "font-medium")}>{formatSensitiveCurrency(detail.amount)}</td>;
+                case "payment_status":
+                    return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className={detailCellClassName}>{renderStatusBadge(detail.status)}</td>;
+                case "paid_at":
+                    return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className={detailCellClassName}>{formatDate(detail.paidAt, locale)}</td>;
+                case "actions":
+                    return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className="px-4 py-3 text-right">{renderDetailActions(detail)}</td>;
+                default:
+                    return null;
+            }
+        };
+
         return (
-            <tr key={detail.id} className="border-b bg-muted/20 last:border-b-0">
-                <td className="px-3 py-3">
-                    {isManageMode ? (
+            <tr
+                key={detail.id}
+                className={cn(
+                    "border-b last:border-b-0",
+                    isSelected
+                        ? "border-l-4 border-l-amber-400 bg-amber-100/70 dark:border-l-amber-500 dark:bg-amber-500/15"
+                        : "bg-transparent",
+                )}
+            >
+                {isManageMode ? (
+                    <td className="px-3 py-3">
                         <AppCheckbox
                             checked={isSelected}
                             onCheckedChange={() =>
@@ -536,54 +893,109 @@ export default function TeamPaymentsPage() {
                             }
                             aria-label={t("selectDetail")}
                         />
-                    ) : null}
-                </td>
-                <td className="px-4 py-3 text-sm">
-                    <div className="font-medium">{detail.bookingCode}</div>
-                    <div className="text-xs text-muted-foreground">{detail.clientName}</div>
-                </td>
-                <td className="px-4 py-3 text-sm">{detail.eventType}</td>
-                <td className="px-4 py-3 text-sm">{formatDate(detail.sessionDate, locale)}</td>
-                <td className="px-4 py-3 text-sm">{detail.serviceLabel}</td>
-                <td className="px-4 py-3 text-sm font-medium">{formatCurrency(detail.amount)}</td>
-                <td className="px-4 py-3 text-sm">{renderStatusBadge(detail.status)}</td>
-                <td className="px-4 py-3 text-sm">{formatDate(detail.paidAt, locale)}</td>
-                <td className="px-4 py-3 text-right">{renderDetailActions(detail)}</td>
+                    </td>
+                ) : null}
+                {detailVisibleColumns.map(renderDetailCell)}
             </tr>
         );
     };
 
     return (
         <div className="space-y-6">
-            <PageHeader>
-                <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <HandCoins className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0">
-                        <h1 className="truncate text-2xl font-semibold tracking-tight">{t("title")}</h1>
-                        <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
-                    </div>
+            <PageHeader
+                actions={(
+                    <>
+                        <MoneyVisibilityToggle className="hidden w-full md:inline-flex md:w-auto" />
+                        <Button
+                            type="button"
+                            className="hidden w-full gap-2 md:inline-flex md:w-auto"
+                            disabled={queryState.isLoading || exporting}
+                            onClick={() => { void exportTeamPayments(); }}
+                        >
+                            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                            Export Excel
+                        </Button>
+                        <TableColumnManager
+                            title={t("columnManagerTitle")}
+                            description={t("columnManagerDescription")}
+                            columns={columns}
+                            open={columnManagerOpen}
+                            onOpenChange={handleColumnManagerOpenChange}
+                            onChange={setColumns}
+                            onSave={() => saveColumnPreferences(columns)}
+                            onResetWidths={() => handleResetColumnWidths()}
+                            saving={savingColumns}
+                            resettingWidths={resettingColumnWidths}
+                            triggerClassName="hidden w-full md:inline-flex md:w-auto"
+                        />
+                    </>
+                )}
+            >
+                <div>
+                    <h2 className="text-2xl font-bold tracking-tight">{t("title")}</h2>
+                    <p className="text-muted-foreground">{t("description")}</p>
                 </div>
             </PageHeader>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-lg border bg-card p-4">
-                    <p className="text-xs font-medium text-muted-foreground">{t("summaryFreelancers")}</p>
-                    <p className="mt-1 text-2xl font-semibold">{metadata.summary.totalGroups}</p>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-lg bg-violet-100 dark:bg-violet-500/10">
+                            <Users className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                        </div>
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("summaryFreelancers")}</span>
+                    </div>
+                    <div className="text-2xl font-bold">{metadata.summary.totalGroups}</div>
                 </div>
-                <div className="rounded-lg border bg-card p-4">
-                    <p className="text-xs font-medium text-muted-foreground">{t("summaryJobs")}</p>
-                    <p className="mt-1 text-2xl font-semibold">{metadata.summary.totalJobs}</p>
+                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-lg bg-sky-100 dark:bg-sky-500/10">
+                            <Briefcase className="w-5 h-5 text-sky-600 dark:text-sky-400" />
+                        </div>
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("summaryJobs")}</span>
+                    </div>
+                    <div className="text-2xl font-bold">{metadata.summary.totalJobs}</div>
                 </div>
-                <div className="rounded-lg border bg-card p-4">
-                    <p className="text-xs font-medium text-muted-foreground">{t("summaryUnpaid")}</p>
-                    <p className="mt-1 text-2xl font-semibold text-amber-700 dark:text-amber-300">{metadata.summary.unpaidCount}</p>
+                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-500/10">
+                            <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("summaryUnpaid")}</span>
+                    </div>
+                    <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">{metadata.summary.unpaidCount}</div>
                 </div>
-                <div className="rounded-lg border bg-card p-4">
-                    <p className="text-xs font-medium text-muted-foreground">{t("summaryUnpaidTotal")}</p>
-                    <p className="mt-1 text-2xl font-semibold">{formatCurrency(metadata.summary.unpaidTotal)}</p>
+                <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 rounded-lg bg-green-100 dark:bg-green-500/10">
+                            <Wallet className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        </div>
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("summaryUnpaidTotal")}</span>
+                    </div>
+                    <div className="text-2xl font-bold">{formatSensitiveCurrency(metadata.summary.unpaidTotal)}</div>
                 </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 max-[360px]:grid-cols-1 md:hidden">
+                <MoneyVisibilityToggle className="w-full" />
+                <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={() => handleColumnManagerOpenChange(true)}
+                >
+                    <Settings2 className="h-4 w-4" />
+                    {t("manageColumns")}
+                </Button>
+                <Button
+                    type="button"
+                    className="col-span-2 w-full gap-2 max-[360px]:col-span-1"
+                    disabled={queryState.isLoading || exporting}
+                    onClick={() => { void exportTeamPayments(); }}
+                >
+                    {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    Export Excel
+                </Button>
             </div>
 
             <div className="space-y-3">
@@ -632,6 +1044,34 @@ export default function TeamPaymentsPage() {
                                 {t("resetFilters")}
                             </button>
                         ) : null}
+                        <ManageActionToolbar
+                            variant="payment-status"
+                            isManageMode={isManageMode}
+                            labels={{
+                                manage: t("manage"),
+                                selectAll: allVisibleSelected ? t("clearSelection") : t("selectAll"),
+                                deleteSelected: "",
+                                selectedCount: t("selectedCount", { count: selectedCount }),
+                                closeManage: t("closeManage"),
+                                markPaid: t("markPaid"),
+                                markUnpaid: t("markUnpaid"),
+                            }}
+                            selectedCount={selectedCount}
+                            onEnterManage={() => setIsManageMode(true)}
+                            onToggleSelectAll={() =>
+                                setSelectedEntryIds((current) => toggleSelectAllVisible(current, visibleEntryIds))
+                            }
+                            onMarkPaid={() => void setPaymentStatusForIds(selectedEntryIds, "paid")}
+                            onMarkUnpaid={() => void setPaymentStatusForIds(selectedEntryIds, "unpaid")}
+                            onCloseManage={() => {
+                                setIsManageMode(false);
+                                setSelectedEntryIds([]);
+                            }}
+                            selectAllDisabled={visibleEntryIds.length === 0}
+                            markPaidDisabled={selectedCount === 0}
+                            markUnpaidDisabled={selectedCount === 0}
+                            className="hidden md:flex"
+                        />
                     </div>
                 </div>
 
@@ -661,6 +1101,7 @@ export default function TeamPaymentsPage() {
                     selectAllDisabled={visibleEntryIds.length === 0}
                     markPaidDisabled={selectedCount === 0}
                     markUnpaidDisabled={selectedCount === 0}
+                    className="md:hidden"
                 />
 
                 <div className="flex w-full flex-col gap-2 sm:hidden">
@@ -804,13 +1245,20 @@ export default function TeamPaymentsPage() {
                     const isExpanded = expandedGroupIds.includes(group.freelanceId);
                     const groupEntryIds = group.details.map((detail) => detail.id);
                     const selectedInGroup = groupEntryIds.filter((id) => selectedEntryIds.includes(id));
+                    const isGroupHighlighted = isExpanded || selectedInGroup.length > 0;
                     const checkedState = selectedInGroup.length === 0
                         ? false
                         : selectedInGroup.length === groupEntryIds.length
                             ? true
                             : "indeterminate";
                     return (
-                        <div key={group.freelanceId} className="overflow-hidden rounded-lg border bg-card">
+                        <div
+                            key={group.freelanceId}
+                            className={cn(
+                                "overflow-hidden rounded-xl border bg-card shadow-sm",
+                                isGroupHighlighted && "border-amber-200 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-500/10",
+                            )}
+                        >
                             <div className="flex items-start gap-3 p-4">
                                 {isManageMode ? (
                                     <AppCheckbox
@@ -832,25 +1280,45 @@ export default function TeamPaymentsPage() {
                                     className="min-w-0 flex-1 text-left"
                                     onClick={() => toggleExpanded(group.freelanceId)}
                                 >
-                                    <div className="flex items-center gap-2">
-                                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                        <div className="min-w-0">
-                                            <p className="truncate text-sm font-semibold">{group.freelanceName}</p>
-                                            <p className="text-xs text-muted-foreground">{group.role || "-"}</p>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex min-w-0 items-start gap-2">
+                                            {isExpanded ? <ChevronDown className="mt-1 h-4 w-4" /> : <ChevronRight className="mt-1 h-4 w-4" />}
+                                            <div className="min-w-0">
+                                                <p className="truncate text-base font-semibold">{group.freelanceName}</p>
+                                                <p className="text-sm text-muted-foreground">{group.role || "-"}</p>
+                                            </div>
+                                        </div>
+                                        <div className="shrink-0 text-right">
+                                            <p className="text-xs text-muted-foreground">{t("summaryUnpaidTotal")}</p>
+                                            <p className="text-sm font-bold">{formatSensitiveCurrency(group.unpaidTotal)}</p>
                                         </div>
                                     </div>
-                                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                                        <span>{t("jobsCount", { count: group.totalJobs })}</span>
-                                        <span>{t("unpaidCount", { count: group.unpaidCount })}</span>
-                                        <span>{t("paidCount", { count: group.paidCount })}</span>
-                                        <span className="font-semibold">{formatCurrency(group.unpaidTotal)}</span>
+                                    <div className="mt-4 grid grid-cols-3 gap-3 border-t pt-3 text-sm">
+                                        <div>
+                                            <p className="text-muted-foreground">{t("jobs")}</p>
+                                            <p className="font-semibold">{group.totalJobs}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-muted-foreground">{t("unpaid")}</p>
+                                            <p className="font-semibold text-amber-700 dark:text-amber-300">{group.unpaidCount}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-muted-foreground">{t("paid")}</p>
+                                            <p className="font-semibold text-emerald-700 dark:text-emerald-300">{group.paidCount}</p>
+                                        </div>
                                     </div>
                                 </button>
                             </div>
                             {isExpanded ? (
-                                <div className="border-t">
+                                <div className="space-y-3 border-t p-3">
                                     {group.details.map((detail) => (
-                                        <div key={detail.id} className="space-y-3 border-b p-4 last:border-b-0">
+                                        <div
+                                            key={detail.id}
+                                            className={cn(
+                                                "rounded-xl border bg-background p-4 shadow-sm",
+                                                selectedEntryIds.includes(detail.id) && "border-l-4 border-l-amber-400 bg-amber-50/80 dark:border-l-amber-500 dark:bg-amber-500/10",
+                                            )}
+                                        >
                                             <div className="flex items-start gap-3">
                                                 {isManageMode ? (
                                                     <AppCheckbox
@@ -863,17 +1331,32 @@ export default function TeamPaymentsPage() {
                                                     />
                                                 ) : null}
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="text-sm font-semibold">{detail.bookingCode}</p>
-                                                    <p className="text-xs text-muted-foreground">{detail.clientName}</p>
+                                                    <p className="text-base font-semibold">{detail.bookingCode}</p>
+                                                    <p className="text-sm text-muted-foreground">{detail.clientName}</p>
                                                 </div>
                                                 {renderStatusBadge(detail.status)}
                                             </div>
-                                            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                                                <span>{detail.eventType}</span>
-                                                <span>{formatDate(detail.sessionDate, locale)}</span>
-                                                <span className="col-span-2">{detail.serviceLabel}</span>
-                                                <span className="font-semibold text-foreground">{formatCurrency(detail.amount)}</span>
-                                                <span>{formatDate(detail.paidAt, locale)}</span>
+                                            <div className="mt-4 space-y-2 border-t pt-3 text-sm">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span className="text-muted-foreground">{t("eventType")}</span>
+                                                    <span className="text-right font-medium">{detail.eventType}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span className="text-muted-foreground">{t("sessionDate")}</span>
+                                                    <span className="text-right font-medium">{formatDate(detail.sessionDate, locale)}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span className="text-muted-foreground">{t("service")}</span>
+                                                    <span className="text-right font-medium">{detail.serviceLabel}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span className="text-muted-foreground">{t("amount")}</span>
+                                                    <span className="text-right font-bold">{formatSensitiveCurrency(detail.amount)}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span className="text-muted-foreground">{t("paidAt")}</span>
+                                                    <span className="text-right font-medium">{formatDate(detail.paidAt, locale)}</span>
+                                                </div>
                                             </div>
                                             {renderDetailActions(detail)}
                                         </div>
@@ -887,24 +1370,31 @@ export default function TeamPaymentsPage() {
 
             <div className="hidden overflow-hidden rounded-xl border bg-card md:block">
                 <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1120px] text-left text-sm">
+                    <table className="w-max min-w-full border-separate border-spacing-0 text-left text-sm">
                         <thead className="border-b bg-muted/40 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             <tr>
-                                <th className="w-12 px-3 py-3" />
-                                <th className="px-4 py-3">{t("freelance")}</th>
-                                <th className="px-4 py-3">{t("jobs")}</th>
-                                <th className="px-4 py-3">{t("paid")}</th>
-                                <th className="px-4 py-3">{t("unpaid")}</th>
-                                <th className="px-4 py-3">{t("unpaidTotal")}</th>
-                                <th className="px-4 py-3 text-right">{t("actions")}</th>
+                                {isManageMode ? <th className="w-12 px-3 py-3" /> : null}
+                                {groupVisibleColumns.map((column) => (
+                                    <th
+                                        key={column.id}
+                                        data-column-id={column.id}
+                                        style={getColumnWidthStyle(column.id)}
+                                        className={cn(
+                                            "px-4 py-3",
+                                            column.id === "actions" && "text-right",
+                                        )}
+                                    >
+                                        {renderDesktopHeaderLabel(column, column.label)}
+                                    </th>
+                                ))}
                             </tr>
                         </thead>
                         <tbody>
                             {queryState.isLoading ? (
-                                <TableRowsSkeleton rows={Math.min(queryState.perPage, 8)} columns={7} />
+                                <TableRowsSkeleton rows={Math.min(queryState.perPage, 8)} columns={Math.max(tableColSpan, 1)} />
                             ) : groups.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                                    <td colSpan={Math.max(tableColSpan, 1)} className="px-4 py-12 text-center text-muted-foreground">
                                         {t("empty")}
                                     </td>
                                 </tr>
@@ -912,16 +1402,73 @@ export default function TeamPaymentsPage() {
                                 const isExpanded = expandedGroupIds.includes(group.freelanceId);
                                 const groupEntryIds = group.details.map((detail) => detail.id);
                                 const selectedInGroup = groupEntryIds.filter((id) => selectedEntryIds.includes(id));
+                                const isGroupHighlighted = isExpanded || selectedInGroup.length > 0;
                                 const checkedState = selectedInGroup.length === 0
                                     ? false
                                     : selectedInGroup.length === groupEntryIds.length
                                         ? true
                                         : "indeterminate";
+                                const renderGroupCell = (column: TableColumnPreference) => {
+                                    switch (column.id) {
+                                        case "name":
+                                            return (
+                                                <td
+                                                    key={column.id}
+                                                    data-column-id={column.id}
+                                                    style={getColumnWidthStyle(column.id)}
+                                                    className="px-4 py-4"
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        className="flex min-w-0 items-center gap-2 text-left"
+                                                        onClick={() => toggleExpanded(group.freelanceId)}
+                                                    >
+                                                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                        <span>
+                                                            <span className="block font-semibold">{group.freelanceName}</span>
+                                                            <span className="block text-xs text-muted-foreground">{group.role || "-"}</span>
+                                                        </span>
+                                                    </button>
+                                                </td>
+                                            );
+                                        case "jobs":
+                                            return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className="px-4 py-4">{group.totalJobs}</td>;
+                                        case "paid_count":
+                                            return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className="px-4 py-4">{group.paidCount}</td>;
+                                        case "unpaid_count":
+                                            return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className="px-4 py-4">{group.unpaidCount}</td>;
+                                        case "unpaid_total":
+                                            return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className="px-4 py-4 font-semibold">{formatSensitiveCurrency(group.unpaidTotal)}</td>;
+                                        case "actions":
+                                            return (
+                                                <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className="px-4 py-4 text-right">
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="gap-1.5"
+                                                        onClick={() => toggleExpanded(group.freelanceId)}
+                                                    >
+                                                        {isExpanded ? t("hideDetails") : t("showDetails")}
+                                                    </Button>
+                                                </td>
+                                            );
+                                        default:
+                                            return null;
+                                    }
+                                };
                                 return (
                                     <React.Fragment key={group.freelanceId}>
-                                        <tr className="border-b hover:bg-muted/30">
-                                            <td className="px-3 py-4">
-                                                {isManageMode ? (
+                                        <tr
+                                            className={cn(
+                                                "border-b",
+                                                isGroupHighlighted
+                                                    ? "bg-amber-50/80 dark:bg-amber-500/10"
+                                                    : "hover:bg-muted/30",
+                                            )}
+                                        >
+                                            {isManageMode ? (
+                                                <td className="px-3 py-4">
                                                     <AppCheckbox
                                                         checked={checkedState}
                                                         onCheckedChange={() =>
@@ -934,56 +1481,39 @@ export default function TeamPaymentsPage() {
                                                         }
                                                         aria-label={t("selectGroup")}
                                                     />
-                                                ) : null}
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <button
-                                                    type="button"
-                                                    className="flex min-w-0 items-center gap-2 text-left"
-                                                    onClick={() => toggleExpanded(group.freelanceId)}
-                                                >
-                                                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                                    <span>
-                                                        <span className="block font-semibold">{group.freelanceName}</span>
-                                                        <span className="block text-xs text-muted-foreground">{group.role || "-"}</span>
-                                                    </span>
-                                                </button>
-                                            </td>
-                                            <td className="px-4 py-4">{group.totalJobs}</td>
-                                            <td className="px-4 py-4">{group.paidCount}</td>
-                                            <td className="px-4 py-4">{group.unpaidCount}</td>
-                                            <td className="px-4 py-4 font-semibold">{formatCurrency(group.unpaidTotal)}</td>
-                                            <td className="px-4 py-4 text-right">
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="gap-1.5"
-                                                    onClick={() => toggleExpanded(group.freelanceId)}
-                                                >
-                                                    {isExpanded ? t("hideDetails") : t("showDetails")}
-                                                </Button>
-                                            </td>
+                                                </td>
+                                            ) : null}
+                                            {groupVisibleColumns.map(renderGroupCell)}
                                         </tr>
                                         {isExpanded ? (
                                             <tr>
-                                                <td colSpan={7} className="p-0">
-                                                    <table className="w-full text-left">
-                                                        <thead className="border-b bg-muted/20 text-xs text-muted-foreground">
-                                                            <tr>
-                                                                <th className="w-12 px-3 py-2" />
-                                                                <th className="px-4 py-2">{t("booking")}</th>
-                                                                <th className="px-4 py-2">{t("eventType")}</th>
-                                                                <th className="px-4 py-2">{t("sessionDate")}</th>
-                                                                <th className="px-4 py-2">{t("service")}</th>
-                                                                <th className="px-4 py-2">{t("amount")}</th>
-                                                                <th className="px-4 py-2">{t("paymentStatus")}</th>
-                                                                <th className="px-4 py-2">{t("paidAt")}</th>
-                                                                <th className="px-4 py-2 text-right">{t("actions")}</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>{group.details.map(renderDetailRow)}</tbody>
-                                                    </table>
+                                                <td
+                                                    colSpan={Math.max(tableColSpan, 1)}
+                                                    className="bg-amber-50/80 p-0 dark:bg-amber-500/10"
+                                                >
+                                                    <div className="ml-10 border-l border-amber-200/80 dark:border-amber-500/20">
+                                                        <table className="w-max min-w-full border-separate border-spacing-0 text-left">
+                                                            <thead className="border-b border-amber-100/80 bg-transparent text-xs text-muted-foreground dark:border-amber-500/20">
+                                                                <tr>
+                                                                    {isManageMode ? <th className="w-12 px-3 py-2" /> : null}
+                                                                    {detailVisibleColumns.map((column) => (
+                                                                        <th
+                                                                            key={column.id}
+                                                                            data-column-id={column.id}
+                                                                            style={getColumnWidthStyle(column.id)}
+                                                                            className={cn(
+                                                                                "px-4 py-2",
+                                                                                column.id === "actions" && "text-right",
+                                                                            )}
+                                                                        >
+                                                                            {renderDesktopHeaderLabel(column, column.label)}
+                                                                        </th>
+                                                                    ))}
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>{group.details.map(renderDetailRow)}</tbody>
+                                                        </table>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ) : null}

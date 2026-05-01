@@ -91,6 +91,9 @@
         "filterButton": "Filter",
         "sort": "Sort",
         "resetFilters": "Reset filters",
+        "manageColumns": "Manage Columns",
+        "columnManagerTitle": "Manage Team Payment Columns",
+        "columnManagerDescription": "Choose which columns appear in the team payment table. Freelance, Booking, and Actions always stay visible.",
         "manage": "Manage",
         "selectAll": "Select all",
         "clearSelection": "Clear selection",
@@ -122,6 +125,8 @@
         "bookingOldest": "Oldest booking",
         "sessionNewest": "Newest session",
         "sessionOldest": "Oldest session",
+        "paymentUnpaidFirst": "Unpaid first",
+        "paymentPaidFirst": "Paid first",
         "freelance": "Freelance",
         "jobs": "Jobs",
         "unpaidTotal": "Total unpaid",
@@ -147,7 +152,8 @@
         "close": "Close",
         "empty": "No team payments yet.",
         "loadFailed": "Failed to load team payments.",
-        "updateFailed": "Failed to update team payment."
+        "updateFailed": "Failed to update team payment.",
+        "exportFailed": "Failed to export team payments."
     },
     "ComingSoonPage": {
         "badge": "Feature Roadmap",
