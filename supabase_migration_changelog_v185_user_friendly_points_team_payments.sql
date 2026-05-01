@@ -63,6 +63,41 @@ FROM (
       'Tabel desktop dan tampilan mobile dibuat lebih jelas agar detail booking di dalam tim lebih mudah dibaca.',
       'improvement',
       '2026-05-01T09:06:00Z'
+    ),
+    (
+      '1.8.5',
+      'Biaya operasional bisa disiapkan di paket',
+      'Admin bisa menambahkan daftar biaya operasional langsung di setiap paket agar tidak perlu mengetik ulang.',
+      'new',
+      '2026-05-01T09:07:00Z'
+    ),
+    (
+      '1.8.5',
+      'Biaya paket otomatis masuk ke booking',
+      'Saat paket dipilih, biaya operasional bawaan paket ikut muncul di detail booking beserta nama dan nominalnya.',
+      'improvement',
+      '2026-05-01T09:08:00Z'
+    ),
+    (
+      '1.8.5',
+      'Biaya operasional booking tetap fleksibel',
+      'Biaya yang sudah masuk ke booking tetap bisa diubah, dihapus, atau ditambah tanpa mengubah paket asalnya.',
+      'improvement',
+      '2026-05-01T09:09:00Z'
+    ),
+    (
+      '1.8.5',
+      'Fixed cost keuangan ditambahkan',
+      'Admin bisa mencatat biaya rutin bulanan atau tahunan dari Settings > Keuangan.',
+      'new',
+      '2026-05-01T09:10:00Z'
+    ),
+    (
+      '1.8.5',
+      'Laporan keuangan lebih real-time',
+      'Dashboard keuangan kini ikut menghitung fixed cost, termasuk biaya tahunan yang dibagi per bulan.',
+      'improvement',
+      '2026-05-01T09:11:00Z'
     )
 ) AS entry(version, title, description, badge, published_at)
 WHERE NOT EXISTS (
