@@ -52,6 +52,10 @@ import {
     updateTableColumnPreferenceMap,
     type TableColumnPreference,
 } from "@/lib/table-column-prefs";
+import {
+    normalizeOperationalCostPricelistItems,
+    type OperationalCostPricelistItem,
+} from "@/lib/operational-costs";
 import { Link } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
@@ -76,6 +80,7 @@ type PaymentDetail = {
     status: PaymentEntryStatus;
     paidAt: string | null;
     notes: string;
+    freelancePricelist: unknown;
 };
 
 type PaymentGroup = {
@@ -110,6 +115,7 @@ type EditDraft = {
     title: string;
     amount: string;
     notes: string;
+    pricelistItems: OperationalCostPricelistItem[];
 };
 
 const PAYMENT_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
@@ -450,6 +456,16 @@ export default function TeamPaymentsPage() {
 
     const visibleEntryIds = React.useMemo(
         () => groups.flatMap((group) => group.details.map((detail) => detail.id)),
+        [groups],
+    );
+    const normalizedGroups = React.useMemo(
+        () => groups.map((group) => ({
+            ...group,
+            details: group.details.map((detail) => ({
+                ...detail,
+                freelancePricelist: detail.freelancePricelist ?? group.pricelist,
+            })),
+        })),
         [groups],
     );
     const visibleColumns = React.useMemo(
@@ -819,9 +835,10 @@ export default function TeamPaymentsPage() {
                     onClick={() =>
                         setEditDraft({
                             id: detail.id,
-                            title: `${detail.bookingCode} - ${detail.clientName}`,
+                            title: `${detail.clientName} - ${detail.bookingCode}`,
                             amount: formatRupiahInput(detail.amount),
                             notes: detail.notes,
+                            pricelistItems: normalizeOperationalCostPricelistItems(detail.freelancePricelist),
                         })
                     }
                 >
@@ -851,8 +868,8 @@ export default function TeamPaymentsPage() {
                             style={getColumnWidthStyle(column.id)}
                             className={detailCellClassName}
                         >
-                            <div className="font-medium">{detail.bookingCode}</div>
-                            <div className="text-xs text-muted-foreground">{detail.clientName}</div>
+                            <div className="font-medium">{detail.clientName}</div>
+                            <div className="text-xs text-muted-foreground">{detail.bookingCode}</div>
                         </td>
                     );
                 case "event_type":
@@ -1241,7 +1258,7 @@ export default function TeamPaymentsPage() {
                     <CardListSkeleton count={Math.min(queryState.perPage, 4)} />
                 ) : groups.length === 0 ? (
                     <div className="rounded-lg border py-12 text-center text-sm text-muted-foreground">{t("empty")}</div>
-                ) : groups.map((group) => {
+                ) : normalizedGroups.map((group) => {
                     const isExpanded = expandedGroupIds.includes(group.freelanceId);
                     const groupEntryIds = group.details.map((detail) => detail.id);
                     const selectedInGroup = groupEntryIds.filter((id) => selectedEntryIds.includes(id));
@@ -1331,8 +1348,8 @@ export default function TeamPaymentsPage() {
                                                     />
                                                 ) : null}
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="text-base font-semibold">{detail.bookingCode}</p>
-                                                    <p className="text-sm text-muted-foreground">{detail.clientName}</p>
+                                                    <p className="text-base font-semibold">{detail.clientName}</p>
+                                                    <p className="text-sm text-muted-foreground">{detail.bookingCode}</p>
                                                 </div>
                                                 {renderStatusBadge(detail.status)}
                                             </div>
@@ -1398,7 +1415,7 @@ export default function TeamPaymentsPage() {
                                         {t("empty")}
                                     </td>
                                 </tr>
-                            ) : groups.map((group) => {
+                            ) : normalizedGroups.map((group) => {
                                 const isExpanded = expandedGroupIds.includes(group.freelanceId);
                                 const groupEntryIds = group.details.map((detail) => detail.id);
                                 const selectedInGroup = groupEntryIds.filter((id) => selectedEntryIds.includes(id));
@@ -1542,6 +1559,46 @@ export default function TeamPaymentsPage() {
                     {editDraft ? (
                         <div className="space-y-4">
                             <p className="text-sm text-muted-foreground">{editDraft.title}</p>
+                            <div className="space-y-2">
+                                <div>
+                                    <p className="text-xs font-medium text-muted-foreground">
+                                        {t("pricelistOptions")}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {t("pricelistOptionsDescription")}
+                                    </p>
+                                </div>
+                                {editDraft.pricelistItems.length > 0 ? (
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        {editDraft.pricelistItems.map((item) => (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                className="flex items-center justify-between gap-3 rounded-md border bg-muted/10 px-3 py-2 text-left text-sm transition hover:border-foreground/40 hover:bg-muted/30"
+                                                onClick={() =>
+                                                    setEditDraft((current) =>
+                                                        current
+                                                            ? {
+                                                                ...current,
+                                                                amount: formatRupiahInput(item.amount),
+                                                            }
+                                                            : current,
+                                                    )
+                                                }
+                                            >
+                                                <span className="min-w-0 truncate">{item.label}</span>
+                                                <span className="shrink-0 font-medium">
+                                                    {formatSensitiveCurrency(item.amount)}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="rounded-md border border-dashed bg-muted/10 px-3 py-3 text-xs text-muted-foreground">
+                                        {t("pricelistOptionsEmpty")}
+                                    </div>
+                                )}
+                            </div>
                             <div className="space-y-1.5">
                                 <label className="text-xs font-medium text-muted-foreground">{t("amount")}</label>
                                 <input

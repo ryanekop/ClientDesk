@@ -83,6 +83,7 @@ type PaymentDetail = {
   status: PaymentEntryStatus;
   paidAt: string | null;
   notes: string;
+  freelancePricelist: unknown;
 };
 
 type PaymentGroup = {
@@ -221,7 +222,11 @@ function getMatchedOperationalCostAmount(
   }, 0);
 }
 
-async function ensureMissingEntries(supabase: Awaited<ReturnType<typeof requireRouteUser>>["supabase"], userId: string) {
+async function ensureMissingEntries(
+  supabase: Awaited<ReturnType<typeof requireRouteUser>>["supabase"],
+  userId: string,
+  autofillFromOperationalCosts: boolean,
+) {
   const [junctionResult, legacyResult] = await Promise.all([
     supabase
       .from("booking_freelance")
@@ -241,20 +246,24 @@ async function ensureMissingEntries(supabase: Awaited<ReturnType<typeof requireR
       ? junctionResult.data.map((row) => ({
         booking_id: row.booking_id,
         freelance_id: row.freelance_id,
-        amount: getMatchedOperationalCostAmount(
-          readMaybeSingle(row.bookings)?.operational_costs,
-          readMaybeSingle(row.freelance),
-        ),
+        amount: autofillFromOperationalCosts
+          ? getMatchedOperationalCostAmount(
+            readMaybeSingle(row.bookings)?.operational_costs,
+            readMaybeSingle(row.freelance),
+          )
+          : 0,
       }))
       : []),
     ...(Array.isArray(legacyResult.data)
       ? legacyResult.data.map((row) => ({
         booking_id: row.id,
         freelance_id: row.freelance_id,
-        amount: getMatchedOperationalCostAmount(
-          row.operational_costs,
-          readMaybeSingle(row.freelance),
-        ),
+        amount: autofillFromOperationalCosts
+          ? getMatchedOperationalCostAmount(
+            row.operational_costs,
+            readMaybeSingle(row.freelance),
+          )
+          : 0,
       }))
       : []),
   ];
@@ -297,7 +306,15 @@ export async function GET(request: NextRequest) {
   const { errorResponse, supabase, user } = await requireRouteUser();
   if (errorResponse || !user) return errorResponse;
 
-  await ensureMissingEntries(supabase, user.id);
+  const { data: autofillProfile } = await supabase
+    .from("profiles")
+    .select("team_payment_autofill_from_operational_costs")
+    .eq("id", user.id)
+    .single();
+  const autofillFromOperationalCosts =
+    autofillProfile?.team_payment_autofill_from_operational_costs !== false;
+
+  await ensureMissingEntries(supabase, user.id, autofillFromOperationalCosts);
 
   const searchParams = request.nextUrl.searchParams;
   const page = parsePositiveInt(searchParams.get("page"), DEFAULT_PAGE);
@@ -400,10 +417,10 @@ export async function GET(request: NextRequest) {
         status: normalizeEntryStatus(entry.status),
         paidAt: entry.paid_at,
         notes: entry.notes || "",
+        freelancePricelist: freelance.pricelist ?? null,
         freelanceName: freelance.name || "-",
         freelanceRole: freelance.role || "-",
         freelanceStatus: freelance.status || "",
-        freelancePricelist: freelance.pricelist ?? null,
       }];
     });
 
@@ -481,6 +498,7 @@ export async function GET(request: NextRequest) {
       status: item.status,
       paidAt: item.paidAt,
       notes: item.notes,
+      freelancePricelist: item.freelancePricelist,
     });
     group.totalJobs += 1;
     if (item.status === "paid") {

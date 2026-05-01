@@ -161,7 +161,7 @@ const BASE_FINANCE_COLUMNS: TableColumnPreference[] = [
     { id: "addon", label: "Add-on", visible: true },
     { id: "discount", label: "Diskon", visible: true },
     { id: "dp_paid", label: "DP Dibayar", visible: true },
-    { id: "remaining", label: "Sisa", visible: true },
+    { id: "remaining", label: "Belum Dibayar", visible: true },
     { id: "status", label: "Status", visible: true },
     { id: "actions", label: "Aksi", visible: true, locked: true, pin: "right" },
 ];
@@ -175,7 +175,7 @@ const FINANCE_COLUMN_MIN_WIDTHS: Record<string, number> = {
     addon: 124,
     discount: 120,
     dp_paid: 128,
-    remaining: 132,
+    remaining: 150,
     status: 116,
 };
 const FINANCE_MANAGE_SELECT_COLUMN: TableColumnPreference = {
@@ -1600,7 +1600,7 @@ export default function FinancePage() {
             case "discount":
                 return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("diskon"));
             case "remaining":
-                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("sisa"));
+                return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("belumDibayar"));
             case "status":
                 return renderDesktopHeaderCell(column, "px-6 py-4 font-medium text-muted-foreground", t("status"));
             case "actions":
@@ -2193,7 +2193,7 @@ export default function FinancePage() {
                     "DP Terverifikasi": b.dp_verified_amount || 0,
                     "Refund DP": b.dp_refund_amount || 0,
                     "Pemasukan Bersih": getNetVerifiedRevenue(b),
-                    "Sisa": isCancelledBooking(b) ? 0 : getRemainingFinalPayment({
+                    "Belum Dibayar": isCancelledBooking(b) ? 0 : getRemainingFinalPayment({
                         total_price: b.total_price,
                         dp_paid: b.dp_paid,
                         final_adjustments: b.final_adjustments,

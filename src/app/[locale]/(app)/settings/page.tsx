@@ -417,6 +417,7 @@ type Profile = {
   default_wa_target?: "client" | "freelancer" | null;
   booking_table_color_enabled?: boolean | null;
   finance_table_color_enabled?: boolean | null;
+  team_payment_autofill_from_operational_costs?: boolean | null;
   bank_accounts?: unknown;
   invoice_payment_accounts_enabled?: boolean | null;
   invoice_payment_bank_account_ids?: string[] | null;
@@ -936,6 +937,7 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "default_wa_target",
   "booking_table_color_enabled",
   "finance_table_color_enabled",
+  "team_payment_autofill_from_operational_costs",
   "bank_accounts",
   "invoice_payment_accounts_enabled",
   "invoice_payment_bank_account_ids",
@@ -1380,6 +1382,10 @@ export default function SettingsPage() {
     React.useState(false);
   const [financeTableColorEnabled, setFinanceTableColorEnabled] =
     React.useState(false);
+  const [
+    teamPaymentAutofillFromOperationalCosts,
+    setTeamPaymentAutofillFromOperationalCosts,
+  ] = React.useState(true);
   const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([]);
   const [invoicePaymentAccountsEnabled, setInvoicePaymentAccountsEnabled] =
     React.useState(false);
@@ -2168,6 +2174,9 @@ export default function SettingsPage() {
     setFinanceTableColorEnabled(
       Boolean((prof as any)?.finance_table_color_enabled),
     );
+    setTeamPaymentAutofillFromOperationalCosts(
+      (prof as any)?.team_payment_autofill_from_operational_costs !== false,
+    );
     setBankAccounts(normalizeBankAccounts((prof as any)?.bank_accounts));
     setInvoicePaymentAccountsEnabled(
       Boolean((prof as any)?.invoice_payment_accounts_enabled),
@@ -2769,6 +2778,8 @@ export default function SettingsPage() {
       await saveProfilePatch({
         invoice_payment_accounts_enabled: invoicePaymentAccountsEnabled,
         invoice_payment_bank_account_ids: normalizedSelectedIds,
+        team_payment_autofill_from_operational_costs:
+          teamPaymentAutofillFromOperationalCosts,
         operational_cost_templates: normalizedTemplates,
         finance_fixed_operational_costs: normalizedFixedCosts,
       });
@@ -5869,6 +5880,32 @@ export default function SettingsPage() {
                     })
                   )}
                 </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+              <div className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <h3 className="font-semibold">
+                    Autofill Pembayaran Tim
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Isi nominal awal pembayaran freelance dari biaya operasional di edit booking saat entry baru dibuat.
+                  </p>
+                </div>
+                <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={teamPaymentAutofillFromOperationalCosts}
+                    onChange={(event) =>
+                      setTeamPaymentAutofillFromOperationalCosts(
+                        event.target.checked,
+                      )
+                    }
+                    className="h-4 w-4 accent-primary"
+                  />
+                  Aktif
+                </label>
               </div>
             </div>
 

@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   tracking_video_links_visible_from_status TEXT DEFAULT 'File Siap',
   fastpik_default_selection_enabled BOOLEAN DEFAULT TRUE,
   fastpik_default_download_enabled BOOLEAN DEFAULT TRUE,
+  team_payment_autofill_from_operational_costs BOOLEAN NOT NULL DEFAULT TRUE,
   finance_fixed_operational_costs JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
