@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   tracking_video_links_visible_from_status TEXT DEFAULT 'File Siap',
   fastpik_default_selection_enabled BOOLEAN DEFAULT TRUE,
   fastpik_default_download_enabled BOOLEAN DEFAULT TRUE,
+  finance_fixed_operational_costs JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS services (
   is_public BOOLEAN DEFAULT true,
   affects_schedule BOOLEAN DEFAULT true,
   color TEXT NOT NULL DEFAULT '#000000' CHECK (color ~* '^#[0-9a-f]{6}$'),
+  default_operational_costs JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

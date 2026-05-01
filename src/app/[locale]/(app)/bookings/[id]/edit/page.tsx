@@ -68,14 +68,17 @@ import {
 } from "@/lib/final-settlement";
 import {
     appendUniqueOperationalCosts,
+    buildOperationalCostFromDefaultItem,
     buildOperationalCostFromTemplateItem,
     getNetRevenueAfterOperationalCosts,
     getOperationalCostsTotal,
     normalizeOperationalCostPricelistItems,
     normalizeOperationalCosts,
     normalizeOperationalCostTemplates,
+    normalizeDefaultOperationalCosts,
     type OperationalCost,
     type OperationalCostTemplate,
+    type DefaultOperationalCostItem,
 } from "@/lib/operational-costs";
 import {
     buildEditableSpecialOfferSnapshot,
@@ -252,6 +255,7 @@ type Service = {
     sort_order?: number | null;
     event_types?: string[] | null;
     city_codes?: string[] | null;
+    default_operational_costs?: DefaultOperationalCostItem[] | null;
 };
 type Freelance = {
     id: string;
@@ -287,6 +291,24 @@ type EditableOperationalCost = {
     amount: number | "";
     created_at: string;
 };
+
+function buildPackageDefaultCostSignature(
+    mainIds: string[],
+    mainQuantities: BookingServiceQuantityMap,
+    addonIds: string[],
+    addonQuantities: BookingServiceQuantityMap,
+) {
+    return JSON.stringify({
+        main: mainIds.map((serviceId) => [
+            serviceId,
+            mainQuantities[serviceId] || 1,
+        ]),
+        addon: addonIds.map((serviceId) => [
+            serviceId,
+            addonQuantities[serviceId] || 1,
+        ]),
+    });
+}
 
 const BOOKING_EDIT_NON_ADMIN_SELECT = [
     "id",
@@ -668,6 +690,8 @@ export default function EditBookingPage() {
     const { canWriteBookings } = useBookingWriteAccess();
     const operationalCostsSectionRef = React.useRef<HTMLDivElement | null>(null);
     const focusOperationalCostsHandledRef = React.useRef(false);
+    const packageDefaultCostsHydratedRef = React.useRef(false);
+    const packageDefaultCostsSignatureRef = React.useRef("");
     const focusTarget = searchParams.get("focus");
     const safeReturnTo = normalizeSafeEditorReturnTo(searchParams.get("returnTo"));
     const detailHref = `/bookings/${id}`;
@@ -786,7 +810,7 @@ export default function EditBookingPage() {
                     .select(userIsAdmin ? "*" : BOOKING_EDIT_NON_ADMIN_SELECT)
                     .eq("id", id)
                     .single(),
-                supabase.from("services").select("id, name, price, original_price, description, color, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types").eq("user_id", user.id).eq("is_active", true),
+                supabase.from("services").select("id, name, price, original_price, description, color, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types, default_operational_costs").eq("user_id", user.id).eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email, role, tags, pricelist").eq("user_id", user.id).eq("status", "active"),
                 supabase.from("booking_freelance").select("freelance_id").eq("booking_id", id),
                 supabase.from("booking_services").select("service_id, kind, sort_order, quantity").eq("booking_id", id).order("sort_order", { ascending: true }),
@@ -886,50 +910,51 @@ export default function EditBookingPage() {
                 const bookingServices = (bsRows || []) as Array<{ service_id: string; kind: string; quantity?: number | null }>;
                 const selectedMainIds = bookingServices.filter((row) => row.kind === "main").map((row) => row.service_id);
                 const selectedAddons = bookingServices.filter((row) => row.kind === "addon").map((row) => row.service_id);
-                setSelectedServiceIds(selectedMainIds.length > 0 ? selectedMainIds : booking.service_id ? [booking.service_id] : []);
-                setSelectedServiceQuantities(
-                    normalizeBookingServiceQuantityMap(
+                const resolvedMainIds = selectedMainIds.length > 0 ? selectedMainIds : booking.service_id ? [booking.service_id] : [];
+                const resolvedMainQuantities = normalizeBookingServiceQuantityMap(
+                    Object.fromEntries(
+                        bookingServices
+                            .filter((row) => row.kind === "main")
+                            .map((row) => [row.service_id, row.quantity ?? 1]),
+                    ),
+                    {
+                        selectedIds: resolvedMainIds,
+                    },
+                );
+                setSelectedServiceIds(resolvedMainIds);
+                setSelectedServiceQuantities(resolvedMainQuantities);
+                let resolvedAddonIds = selectedAddons;
+                let resolvedAddonQuantities: BookingServiceQuantityMap = {};
+                if (selectedAddons.length > 0) {
+                    resolvedAddonQuantities = normalizeBookingServiceQuantityMap(
                         Object.fromEntries(
                             bookingServices
-                                .filter((row) => row.kind === "main")
+                                .filter((row) => row.kind === "addon")
                                 .map((row) => [row.service_id, row.quantity ?? 1]),
                         ),
-                        {
-                            selectedIds:
-                                selectedMainIds.length > 0
-                                    ? selectedMainIds
-                                    : booking.service_id
-                                        ? [booking.service_id]
-                                        : [],
-                        },
-                    ),
-                );
-                if (selectedAddons.length > 0) {
-                    setSelectedAddonIds(selectedAddons);
-                    setSelectedAddonQuantities(
-                        normalizeBookingServiceQuantityMap(
-                            Object.fromEntries(
-                                bookingServices
-                                    .filter((row) => row.kind === "addon")
-                                    .map((row) => [row.service_id, row.quantity ?? 1]),
-                            ),
-                            { selectedIds: selectedAddons },
-                        ),
+                        { selectedIds: selectedAddons },
                     );
                 } else {
                     const legacyAddonIds = Array.isArray(booking.extra_fields?.addon_ids)
                         ? booking.extra_fields.addon_ids.filter((id: unknown): id is string => typeof id === "string")
                         : [];
-                    setSelectedAddonIds(legacyAddonIds);
-                    setSelectedAddonQuantities(
-                        normalizeBookingServiceQuantityMap(
-                            Object.fromEntries(
-                                legacyAddonIds.map((addonId: string) => [addonId, 1]),
-                            ),
-                            { selectedIds: legacyAddonIds },
+                    resolvedAddonIds = legacyAddonIds;
+                    resolvedAddonQuantities = normalizeBookingServiceQuantityMap(
+                        Object.fromEntries(
+                            legacyAddonIds.map((addonId: string) => [addonId, 1]),
                         ),
+                        { selectedIds: legacyAddonIds },
                     );
                 }
+                setSelectedAddonIds(resolvedAddonIds);
+                setSelectedAddonQuantities(resolvedAddonQuantities);
+                packageDefaultCostsSignatureRef.current = buildPackageDefaultCostSignature(
+                    resolvedMainIds,
+                    resolvedMainQuantities,
+                    resolvedAddonIds,
+                    resolvedAddonQuantities,
+                );
+                packageDefaultCostsHydratedRef.current = true;
                 // Load multi-freelancer from junction table, fallback to old column
                 const junctionIds = ((bfRows || []) as Array<{ freelance_id: string | null }>)
                     .map((row) => row.freelance_id)
@@ -1401,6 +1426,53 @@ export default function EditBookingPage() {
         () => addonServices.filter((service) => selectedAddonIds.includes(service.id)),
         [addonServices, selectedAddonIds],
     );
+    React.useEffect(() => {
+        if (!isCurrentUserAdmin || !packageDefaultCostsHydratedRef.current) return;
+
+        const signature = buildPackageDefaultCostSignature(
+            selectedServiceIds,
+            selectedMainQuantities,
+            selectedAddonIds,
+            selectedAddonQuantityMap,
+        );
+        if (signature === packageDefaultCostsSignatureRef.current) return;
+        packageDefaultCostsSignatureRef.current = signature;
+
+        const nextCosts: OperationalCost[] = [
+            ...selectedMainServices.flatMap((service) =>
+                normalizeDefaultOperationalCosts(service.default_operational_costs).map((item) =>
+                    buildOperationalCostFromDefaultItem(item, {
+                        quantity: selectedMainQuantities[service.id] || 1,
+                    }),
+                ),
+            ),
+            ...selectedAddonServices.flatMap((service) =>
+                normalizeDefaultOperationalCosts(service.default_operational_costs).map((item) =>
+                    buildOperationalCostFromDefaultItem(item, {
+                        quantity: selectedAddonQuantityMap[service.id] || 1,
+                    }),
+                ),
+            ),
+        ];
+        if (nextCosts.length === 0) return;
+
+        setOperationalCostItems((current) =>
+            toEditableOperationalCosts(
+                appendUniqueOperationalCosts(
+                    normalizeEditableOperationalCosts(current),
+                    nextCosts,
+                ),
+            ),
+        );
+    }, [
+        isCurrentUserAdmin,
+        selectedAddonIds,
+        selectedAddonQuantityMap,
+        selectedAddonServices,
+        selectedMainQuantities,
+        selectedMainServices,
+        selectedServiceIds,
+    ]);
     const selectedServiceSelections = React.useMemo<BookingServiceSelection[]>(
         () => [
             ...selectedMainServices.map((service, index) => ({
@@ -1756,7 +1828,7 @@ export default function EditBookingPage() {
             is_public: true,
             color: resolveHexColor(defaultServiceColor, "#000000"),
             sort_order: services.filter((service) => !service.is_addon).length,
-        }).select("id, name, price, original_price, description, color, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types").single();
+        }).select("id, name, price, original_price, description, color, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types, default_operational_costs").single();
         if (!error && data) {
             const s = data as Service;
             setServices(prev => [...prev, s].sort(compareServicesByCatalogOrder));

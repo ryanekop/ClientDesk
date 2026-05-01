@@ -85,6 +85,10 @@ import {
   buildServiceSoftPalette,
   resolveHexColor,
 } from "@/lib/service-colors";
+import {
+  normalizeDefaultOperationalCosts,
+  type DefaultOperationalCostItem,
+} from "@/lib/operational-costs";
 import { cn } from "@/lib/utils";
 import {
   type BulkActionKind,
@@ -108,6 +112,7 @@ type Service = {
   sort_order: number;
   created_at: string;
   event_types: string[] | null;
+  default_operational_costs?: DefaultOperationalCostItem[] | null;
 };
 
 type ServiceGroupKey = "main" | "addon";
@@ -140,6 +145,7 @@ const ALL_CITIES_SCOPE_SUMMARY: ServiceCityScopeSummary = {
   visibleLabels: [],
   hiddenCount: 0,
 };
+const SERVICE_INPUT_CLASS = "placeholder:text-muted-foreground h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 md:text-sm";
 
 function normalizeServiceItemsPerPage(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
@@ -168,6 +174,17 @@ function parseOptionalRupiahNumber(
   const parsed = Number(digits);
   if (!Number.isFinite(parsed)) return null;
   return Math.max(Math.trunc(parsed), 0);
+}
+
+function createDefaultOperationalCostItem(): DefaultOperationalCostItem {
+  return {
+    id:
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? `default_cost_${crypto.randomUUID()}`
+        : `default_cost_${Math.random().toString(36).slice(2, 12)}`,
+    label: "",
+    amount: 0,
+  };
 }
 
 function formatRupiahInput(value: string | number | null | undefined) {
@@ -621,6 +638,20 @@ function ServiceCard({
         ) : null}
       </div>
 
+      {normalizeDefaultOperationalCosts(service.default_operational_costs).length > 0 ? (
+        <div className="mt-3 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+          Biaya operasional default:{" "}
+          <span className="font-semibold text-foreground">
+            {formatCurrency(
+              normalizeDefaultOperationalCosts(service.default_operational_costs).reduce(
+                (sum, item) => sum + item.amount,
+                0,
+              ),
+            )}
+          </span>
+        </div>
+      ) : null}
+
       {!manageMode ? (
       <div className="mt-auto flex items-center gap-2 border-t pt-3">
         <Button variant="outline" size="sm" className="flex-1 gap-1.5" onClick={onEdit}>
@@ -726,11 +757,17 @@ export default function ServicesPage() {
   const [addColorInput, setAddColorInput] = React.useState("#000000");
   const [addPriceInput, setAddPriceInput] = React.useState("");
   const [addOriginalPriceInput, setAddOriginalPriceInput] = React.useState("");
+  const [addDefaultOperationalCosts, setAddDefaultOperationalCosts] = React.useState<
+    DefaultOperationalCostItem[]
+  >([]);
   const [editIsAddon, setEditIsAddon] = React.useState(false);
   const [editAffectsSchedule, setEditAffectsSchedule] = React.useState(true);
   const [editColorInput, setEditColorInput] = React.useState("#000000");
   const [editPriceInput, setEditPriceInput] = React.useState("");
   const [editOriginalPriceInput, setEditOriginalPriceInput] = React.useState("");
+  const [editDefaultOperationalCosts, setEditDefaultOperationalCosts] = React.useState<
+    DefaultOperationalCostItem[]
+  >([]);
   const [mainPage, setMainPage] = React.useState(1);
   const [addonPage, setAddonPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(
@@ -1181,8 +1218,41 @@ export default function ServicesPage() {
       setAddColorInput(profileBrandColor);
       setAddPriceInput("");
       setAddOriginalPriceInput("");
+      setAddDefaultOperationalCosts([]);
     }
   }, [isAddOpen, profileBrandColor]);
+
+  function addDefaultOperationalCost(mode: "add" | "edit") {
+    const setter =
+      mode === "add" ? setAddDefaultOperationalCosts : setEditDefaultOperationalCosts;
+    setter((current) => [...current, createDefaultOperationalCostItem()]);
+  }
+
+  function updateDefaultOperationalCost(
+    mode: "add" | "edit",
+    itemId: string,
+    field: "label" | "amount",
+    value: string,
+  ) {
+    const setter =
+      mode === "add" ? setAddDefaultOperationalCosts : setEditDefaultOperationalCosts;
+    setter((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              [field]: field === "amount" ? parseRupiahNumber(value) : value,
+            }
+          : item,
+      ),
+    );
+  }
+
+  function removeDefaultOperationalCost(mode: "add" | "edit", itemId: string) {
+    const setter =
+      mode === "add" ? setAddDefaultOperationalCosts : setEditDefaultOperationalCosts;
+    setter((current) => current.filter((item) => item.id !== itemId));
+  }
 
   async function persistNormalizedGroup(
     groupKey: ServiceGroupKey,
@@ -1233,6 +1303,9 @@ export default function ServicesPage() {
       const originalPrice = parseOptionalRupiahNumber(
         formData.get("original_price"),
       );
+      const defaultOperationalCosts = normalizeDefaultOperationalCosts(
+        addDefaultOperationalCosts,
+      );
       const { count } = await supabase
         .from("services")
         .select("id", { count: "exact", head: true })
@@ -1261,6 +1334,7 @@ export default function ServicesPage() {
           is_public: isPublic,
           affects_schedule: affectsSchedule,
           sort_order: nextSortOrder,
+          default_operational_costs: defaultOperationalCosts,
           event_types:
             formData.getAll("event_types").length > 0
               ? (formData.getAll("event_types") as string[])
@@ -1312,6 +1386,9 @@ export default function ServicesPage() {
       const originalPrice = parseOptionalRupiahNumber(
         formData.get("original_price"),
       );
+      const defaultOperationalCosts = normalizeDefaultOperationalCosts(
+        editDefaultOperationalCosts,
+      );
       const previousGroupKey = getServiceGroupKey(editingService);
       const nextGroupKey: ServiceGroupKey = nextIsAddon ? "addon" : "main";
       const nextSortOrder =
@@ -1344,6 +1421,7 @@ export default function ServicesPage() {
           is_public: nextIsPublic,
           affects_schedule: nextAffectsSchedule,
           sort_order: nextSortOrder,
+          default_operational_costs: defaultOperationalCosts,
           event_types:
             formData.getAll("event_types").length > 0
               ? (formData.getAll("event_types") as string[])
@@ -1435,6 +1513,9 @@ export default function ServicesPage() {
     setEditColorInput(resolveHexColor(service.color, profileBrandColor));
     setEditPriceInput(formatRupiahInput(service.price));
     setEditOriginalPriceInput(formatRupiahInput(service.original_price || ""));
+    setEditDefaultOperationalCosts(
+      normalizeDefaultOperationalCosts(service.default_operational_costs),
+    );
     setIsEditOpen(true);
   }
 
@@ -1540,6 +1621,9 @@ export default function ServicesPage() {
           affects_schedule: sourceService.affects_schedule,
           is_public: sourceService.is_public,
           sort_order: nextSortOrder,
+          default_operational_costs: normalizeDefaultOperationalCosts(
+            sourceService.default_operational_costs,
+          ),
           event_types: sourceService.event_types?.length
             ? sourceService.event_types
             : null,
@@ -1608,6 +1692,98 @@ export default function ServicesPage() {
 
   function handleDragStart(event: DragStartEvent) {
     setActiveDragId(String(event.active.id));
+  }
+
+  function renderDefaultOperationalCostsEditor(
+    mode: "add" | "edit",
+    items: DefaultOperationalCostItem[],
+  ) {
+    return (
+      <div className="space-y-3 rounded-lg border bg-muted/10 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <label className="text-sm font-medium">Biaya operasional default</label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Item ini akan otomatis masuk ke detail booking saat paket dipilih, lalu tetap bisa diedit di booking.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => addDefaultOperationalCost(mode)}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Tambah Biaya
+          </Button>
+        </div>
+        {items.length === 0 ? (
+          <div className="rounded-md border border-dashed bg-background/70 px-3 py-3 text-xs text-muted-foreground">
+            Belum ada biaya operasional default.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {items.map((item, index) => (
+              <div
+                key={item.id}
+                className="grid gap-3 rounded-md border bg-background p-3 md:grid-cols-[minmax(0,1fr)_180px_auto]"
+              >
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Nama Biaya {index + 1}
+                  </label>
+                  <input
+                    value={item.label}
+                    onChange={(event) =>
+                      updateDefaultOperationalCost(
+                        mode,
+                        item.id,
+                        "label",
+                        event.target.value,
+                      )
+                    }
+                    placeholder="Contoh: Biaya cetak album"
+                    className={SERVICE_INPUT_CLASS}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Nominal
+                  </label>
+                  <input
+                    value={formatRupiahInput(item.amount)}
+                    onChange={(event) =>
+                      updateDefaultOperationalCost(
+                        mode,
+                        item.id,
+                        "amount",
+                        event.target.value,
+                      )
+                    }
+                    inputMode="numeric"
+                    placeholder="500.000"
+                    className={SERVICE_INPUT_CLASS}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => removeDefaultOperationalCost(mode, item.id)}
+                    aria-label={`Hapus biaya operasional default ${index + 1}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -2036,6 +2212,7 @@ export default function ServicesPage() {
                     mobileTitle="Kota / Kabupaten"
                   />
                 </div>
+                {renderDefaultOperationalCostsEditor("add", addDefaultOperationalCosts)}
                 <DialogFooter>
                   <Button
                     type="submit"
@@ -2395,6 +2572,7 @@ export default function ServicesPage() {
             setEditColorInput(profileBrandColor);
             setEditPriceInput("");
             setEditOriginalPriceInput("");
+            setEditDefaultOperationalCosts([]);
           }
         }}
       >
@@ -2609,6 +2787,7 @@ export default function ServicesPage() {
                   mobileTitle="Kota / Kabupaten"
                 />
               </div>
+              {renderDefaultOperationalCostsEditor("edit", editDefaultOperationalCosts)}
               <DialogFooter>
                 <Button
                   type="submit"

@@ -27,6 +27,22 @@ export type OperationalCostPricelistItem = {
   amount: number;
 };
 
+export type DefaultOperationalCostItem = {
+  id: string;
+  label: string;
+  amount: number;
+};
+
+export type FixedOperationalCost = {
+  id: string;
+  label: string;
+  amount: number;
+  frequency: "monthly" | "yearly";
+  starts_on: string;
+  ends_on: string | null;
+  is_active: boolean;
+};
+
 type NetRevenueAfterOperationalCostsInput = Parameters<
   typeof getNetVerifiedRevenueAmount
 >[0] & {
@@ -181,6 +197,77 @@ export function normalizeOperationalCostPricelistItems(value: unknown): Operatio
     .filter((item) => item.label.length > 0 && item.amount > 0);
 }
 
+export function normalizeDefaultOperationalCosts(value: unknown): DefaultOperationalCostItem[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+
+  return value
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .map((item, index) => {
+      const rawId =
+        typeof item.id === "string" && item.id.trim().length > 0
+          ? item.id.trim()
+          : createOperationalCostId("default_cost");
+      const id = seen.has(rawId) ? `${rawId}_${index + 1}` : rawId;
+      seen.add(id);
+
+      return {
+        id,
+        label:
+          typeof item.label === "string" && item.label.trim().length > 0
+            ? item.label.trim()
+            : typeof item.name === "string" && item.name.trim().length > 0
+              ? item.name.trim()
+              : "",
+        amount: toNonNegativeMoney(item.amount ?? item.price),
+      };
+    })
+    .filter((item) => item.label.length > 0 && item.amount > 0);
+}
+
+function normalizeDateString(value: unknown) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : "";
+}
+
+export function normalizeFixedOperationalCosts(value: unknown): FixedOperationalCost[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const today = new Date().toISOString().slice(0, 10);
+
+  return value
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .map((item, index) => {
+      const rawId =
+        typeof item.id === "string" && item.id.trim().length > 0
+          ? item.id.trim()
+          : createOperationalCostId("fixed_cost");
+      const id = seen.has(rawId) ? `${rawId}_${index + 1}` : rawId;
+      seen.add(id);
+      const frequency: FixedOperationalCost["frequency"] =
+        item.frequency === "yearly" ? "yearly" : "monthly";
+      const startsOn = normalizeDateString(item.starts_on ?? item.start_date) || today;
+      const endsOn = normalizeDateString(item.ends_on ?? item.end_date) || null;
+
+      return {
+        id,
+        label:
+          typeof item.label === "string" && item.label.trim().length > 0
+            ? item.label.trim()
+            : typeof item.name === "string" && item.name.trim().length > 0
+              ? item.name.trim()
+              : "",
+        amount: toNonNegativeMoney(item.amount ?? item.price),
+        frequency,
+        starts_on: startsOn,
+        ends_on: endsOn && endsOn >= startsOn ? endsOn : null,
+        is_active: item.is_active !== false,
+      };
+    })
+    .filter((item) => item.label.length > 0 && item.amount > 0);
+}
+
 export function buildOperationalCostFromTemplateItem(
   item: Pick<OperationalCostTemplateItem, "label" | "amount">,
   options?: { labelPrefix?: string },
@@ -192,6 +279,20 @@ export function buildOperationalCostFromTemplateItem(
     amount: item.amount,
     created_at: new Date().toISOString(),
   };
+}
+
+export function buildOperationalCostFromDefaultItem(
+  item: Pick<DefaultOperationalCostItem, "label" | "amount">,
+  options?: { labelPrefix?: string; quantity?: number },
+): OperationalCost {
+  const quantity = Math.max(Math.floor(options?.quantity || 1), 1);
+  return buildOperationalCostFromTemplateItem(
+    {
+      label: item.label,
+      amount: item.amount * quantity,
+    },
+    options?.labelPrefix ? { labelPrefix: options.labelPrefix } : undefined,
+  );
 }
 
 export function getOperationalCostDedupeKey(item: Pick<OperationalCost, "label" | "amount">) {

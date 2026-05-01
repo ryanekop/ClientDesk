@@ -149,7 +149,9 @@ import {
   type FastpikLinkDisplayMode,
 } from "@/lib/fastpik-link-display";
 import {
+  normalizeFixedOperationalCosts,
   normalizeOperationalCostTemplates,
+  type FixedOperationalCost,
   type OperationalCostTemplate,
 } from "@/lib/operational-costs";
 import {
@@ -461,6 +463,7 @@ type Profile = {
   seo_settlement_meta_description?: string | null;
   seo_settlement_meta_keywords?: string | null;
   operational_cost_templates?: OperationalCostTemplate[] | null;
+  finance_fixed_operational_costs?: FixedOperationalCost[] | null;
 };
 
 type Template = {
@@ -494,6 +497,14 @@ function createOperationalCostTemplateId(prefix: "template" | "item") {
   }
 
   return `cost_${prefix}_${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function createFixedOperationalCostId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `fixed_cost_${crypto.randomUUID()}`;
+  }
+
+  return `fixed_cost_${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function formatOperationalCostAmount(value: number) {
@@ -966,6 +977,7 @@ const PROFILE_SETTINGS_SELECT_COLUMNS = [
   "seo_settlement_meta_description",
   "seo_settlement_meta_keywords",
   "operational_cost_templates",
+  "finance_fixed_operational_costs",
 ] as const;
 
 // Google Calendar SVG Logo (official 2020)
@@ -1375,6 +1387,9 @@ export default function SettingsPage() {
     React.useState<string[]>([]);
   const [operationalCostTemplates, setOperationalCostTemplates] =
     React.useState<OperationalCostTemplate[]>([]);
+  const [fixedOperationalCosts, setFixedOperationalCosts] = React.useState<
+    FixedOperationalCost[]
+  >([]);
 
   // Calendar event format
   const [calendarEventFormats, setCalendarEventFormats] = React.useState<
@@ -1864,7 +1879,9 @@ export default function SettingsPage() {
       ...(role === "admin"
         ? PROFILE_SETTINGS_SELECT_COLUMNS
         : PROFILE_SETTINGS_SELECT_COLUMNS.filter(
-            (column) => column !== "operational_cost_templates",
+            (column) =>
+              column !== "operational_cost_templates" &&
+              column !== "finance_fixed_operational_costs",
           )),
     ];
     let data: Record<string, unknown> | null = null;
@@ -2162,6 +2179,9 @@ export default function SettingsPage() {
     );
     setOperationalCostTemplates(
       normalizeOperationalCostTemplates((prof as any)?.operational_cost_templates),
+    );
+    setFixedOperationalCosts(
+      normalizeFixedOperationalCosts((prof as any)?.finance_fixed_operational_costs),
     );
     const savedWa = prof?.whatsapp_number || "";
     const matchedCode = COUNTRY_CODES.find((c) => savedWa.startsWith(c.code));
@@ -2674,6 +2694,47 @@ export default function SettingsPage() {
     );
   }
 
+  function addFixedOperationalCost() {
+    setFixedOperationalCosts((prev) => [
+      ...prev,
+      {
+        id: createFixedOperationalCostId(),
+        label: "",
+        amount: 0,
+        frequency: "monthly",
+        starts_on: new Date().toISOString().slice(0, 10),
+        ends_on: null,
+        is_active: true,
+      },
+    ]);
+  }
+
+  function updateFixedOperationalCost(
+    itemId: string,
+    field: keyof FixedOperationalCost,
+    value: string | boolean,
+  ) {
+    setFixedOperationalCosts((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              [field]:
+                field === "amount"
+                  ? parseOperationalCostAmount(String(value))
+                  : field === "ends_on"
+                    ? String(value).trim() || null
+                    : value,
+            }
+          : item,
+      ),
+    );
+  }
+
+  function removeFixedOperationalCost(itemId: string) {
+    setFixedOperationalCosts((prev) => prev.filter((item) => item.id !== itemId));
+  }
+
   function toggleInvoicePaymentBankAccount(bankId: string) {
     setInvoicePaymentBankAccountIds((current) => {
       const normalized = normalizeInvoicePaymentBankAccountIds(current);
@@ -2703,13 +2764,17 @@ export default function SettingsPage() {
     try {
       const normalizedTemplates =
         normalizeOperationalCostTemplates(operationalCostTemplates);
+      const normalizedFixedCosts =
+        normalizeFixedOperationalCosts(fixedOperationalCosts);
       await saveProfilePatch({
         invoice_payment_accounts_enabled: invoicePaymentAccountsEnabled,
         invoice_payment_bank_account_ids: normalizedSelectedIds,
         operational_cost_templates: normalizedTemplates,
+        finance_fixed_operational_costs: normalizedFixedCosts,
       });
       setInvoicePaymentBankAccountIds(normalizedSelectedIds);
       setOperationalCostTemplates(normalizedTemplates);
+      setFixedOperationalCosts(normalizedFixedCosts);
       setSavedMsg(settingsSavedMessage);
       showSettingsSavedToast();
       setTimeout(() => setSavedMsg(""), 3000);
@@ -5804,6 +5869,161 @@ export default function SettingsPage() {
                     })
                   )}
                 </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+              <div className="flex flex-col gap-3 border-b px-6 py-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="font-semibold">Fixed Biaya Operasional</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Catat biaya rutin bulanan atau tahunan agar laba bersih di dashboard keuangan lebih real-time.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={addFixedOperationalCost}
+                >
+                  <Plus className="h-4 w-4" />
+                  Tambah Fixed Cost
+                </Button>
+              </div>
+              <div className="space-y-4 p-6">
+                {fixedOperationalCosts.length === 0 ? (
+                  <div className="rounded-lg border border-dashed bg-muted/10 px-4 py-5 text-sm text-muted-foreground">
+                    Belum ada fixed biaya operasional.
+                  </div>
+                ) : (
+                  fixedOperationalCosts.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="grid gap-3 rounded-lg border bg-muted/10 p-4 lg:grid-cols-[minmax(0,1fr)_180px_150px_150px_150px_auto_auto]"
+                    >
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Nama Biaya {index + 1}
+                        </label>
+                        <input
+                          value={item.label}
+                          onChange={(event) =>
+                            updateFixedOperationalCost(
+                              item.id,
+                              "label",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="Contoh: Sewa studio"
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Nominal (Rp)
+                        </label>
+                        <input
+                          value={formatOperationalCostAmount(item.amount)}
+                          onChange={(event) =>
+                            updateFixedOperationalCost(
+                              item.id,
+                              "amount",
+                              event.target.value,
+                            )
+                          }
+                          inputMode="numeric"
+                          placeholder="0"
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Frekuensi
+                        </label>
+                        <select
+                          value={item.frequency}
+                          onChange={(event) =>
+                            updateFixedOperationalCost(
+                              item.id,
+                              "frequency",
+                              event.target.value,
+                            )
+                          }
+                          className={selectClass}
+                        >
+                          <option value="monthly">Bulanan</option>
+                          <option value="yearly">Tahunan</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Mulai
+                        </label>
+                        <input
+                          type="date"
+                          value={item.starts_on}
+                          onChange={(event) =>
+                            updateFixedOperationalCost(
+                              item.id,
+                              "starts_on",
+                              event.target.value,
+                            )
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Selesai
+                        </label>
+                        <input
+                          type="date"
+                          value={item.ends_on || ""}
+                          onChange={(event) =>
+                            updateFixedOperationalCost(
+                              item.id,
+                              "ends_on",
+                              event.target.value,
+                            )
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+                      <label className="flex items-end gap-2 pb-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={item.is_active}
+                          onChange={(event) =>
+                            updateFixedOperationalCost(
+                              item.id,
+                              "is_active",
+                              event.target.checked,
+                            )
+                          }
+                          className="h-4 w-4 accent-primary"
+                        />
+                        Aktif
+                      </label>
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => removeFixedOperationalCost(item.id)}
+                          aria-label={`Hapus fixed cost ${index + 1}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {item.frequency === "yearly" ? (
+                        <p className="text-xs text-muted-foreground lg:col-span-7">
+                          Masuk dashboard sebagai prorata bulanan: {formatOperationalCostAmount(Math.floor(item.amount / 12)) || "0"} per bulan.
+                        </p>
+                      ) : null}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 

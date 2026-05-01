@@ -103,6 +103,11 @@ import {
     resolveSplitFreelancerSessionKeys,
     type SessionFreelancerAssignments,
 } from "@/lib/freelancer-session-assignments";
+import {
+    buildOperationalCostFromDefaultItem,
+    normalizeDefaultOperationalCosts,
+    type DefaultOperationalCostItem,
+} from "@/lib/operational-costs";
 
 const inputClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]";
 const textareaClass = "placeholder:text-muted-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none";
@@ -212,6 +217,7 @@ type Service = {
     sort_order?: number | null;
     event_types?: string[] | null;
     city_codes?: string[] | null;
+    default_operational_costs?: DefaultOperationalCostItem[] | null;
 };
 type Freelance = {
     id: string;
@@ -222,6 +228,7 @@ type Freelance = {
 };
 type LocationCoords = { lat: number | null; lng: number | null };
 type ProfileRow = {
+    role?: string | null;
     custom_client_statuses?: string[] | null;
     form_sections?: unknown;
     form_event_types?: string[] | null;
@@ -465,6 +472,7 @@ export default function NewBookingPage() {
         title: string;
         message: string;
     }>({ open: false, title: "", message: "" });
+    const [isCurrentUserAdmin, setIsCurrentUserAdmin] = React.useState(false);
     const { canWriteBookings } = useBookingWriteAccess();
 
     const showFeedback = React.useCallback((message: string, title?: string) => {
@@ -506,11 +514,11 @@ export default function NewBookingPage() {
             const [{ data: svcs }, { data: frees }, { data: prof }, { data: cityRefs }] = await Promise.all([
                 supabase
                     .from("services")
-                    .select("id, name, price, original_price, description, color, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types")
+                    .select("id, name, price, original_price, description, color, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types, default_operational_costs")
                     .eq("user_id", user.id)
                     .eq("is_active", true),
                 supabase.from("freelance").select("id, name, google_email, role, tags").eq("user_id", user.id).eq("status", "active"),
-                supabase.from("profiles").select("custom_client_statuses, form_sections, form_event_types, custom_event_types, form_brand_color, team_badge_colors").eq("id", user.id).single(),
+                supabase.from("profiles").select("role, custom_client_statuses, form_sections, form_event_types, custom_event_types, form_brand_color, team_badge_colors").eq("id", user.id).single(),
                 supabase
                     .from("region_city_references")
                     .select("city_code, city_name, province_code, province_name")
@@ -541,6 +549,7 @@ export default function NewBookingPage() {
                 serviceCityCodesMap.set(row.service_id, current);
             });
             const profileRow = (prof ?? null) as ProfileRow | null;
+            setIsCurrentUserAdmin((profileRow?.role || "").trim().toLowerCase() === "admin");
             setDefaultServiceColor(
                 resolveHexColor(profileRow?.form_brand_color, "#000000"),
             );
@@ -1177,7 +1186,7 @@ export default function NewBookingPage() {
             is_public: true,
             color: resolveHexColor(defaultServiceColor, "#000000"),
             sort_order: services.filter((service) => !service.is_addon).length,
-        }).select("id, name, price, original_price, description, color, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types").single();
+        }).select("id, name, price, original_price, description, color, duration_minutes, affects_schedule, is_addon, is_public, sort_order, event_types, default_operational_costs").single();
         if (!error && data) {
             const s = data as Service;
             setServices(prev => [...prev, s].sort(compareServicesByCatalogOrder));
@@ -1408,6 +1417,22 @@ export default function NewBookingPage() {
                 accommodationFee: accommodationFeeValue,
                 discountAmount: discountAmountValue,
             });
+            const defaultOperationalCosts = [
+                ...selectedMainServices.flatMap((service) =>
+                    normalizeDefaultOperationalCosts(service.default_operational_costs).map((item) =>
+                        buildOperationalCostFromDefaultItem(item, {
+                            quantity: selectedMainQuantities[service.id] || 1,
+                        }),
+                    ),
+                ),
+                ...selectedAddonServices.flatMap((service) =>
+                    normalizeDefaultOperationalCosts(service.default_operational_costs).map((item) =>
+                        buildOperationalCostFromDefaultItem(item, {
+                            quantity: selectedAddonQuantityMap[service.id] || 1,
+                        }),
+                    ),
+                ),
+            ];
             const customFieldSnapshots = buildCustomFieldSnapshots(
                 activeFormLayout,
                 normalizedEventType || "Umum",
@@ -1507,6 +1532,9 @@ export default function NewBookingPage() {
                 drive_folder_url: driveFolderUrl || null,
                 video_drive_folder_url: videoDriveFolderUrl || null,
                 portfolio_url: portfolioUrl || null,
+                ...(isCurrentUserAdmin
+                    ? { operational_costs: defaultOperationalCosts }
+                    : {}),
                 extra_fields: nextExtraFieldsPayload,
             };
 
