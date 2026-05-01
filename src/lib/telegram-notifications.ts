@@ -26,6 +26,7 @@ type TelegramLocale = "id" | "en";
 
 type TelegramProfile = {
   id: string;
+  tenant_id?: string | null;
   studio_name?: string | null;
   telegram_notifications_enabled?: boolean | null;
   telegram_chat_id?: string | null;
@@ -93,6 +94,62 @@ function fromTable(supabase: SupabaseLike, table: string): SupabaseQueryBuilder 
 
 function normalizeTelegramLocale(value: unknown): TelegramLocale {
   return value === "en" ? "en" : "id";
+}
+
+function normalizeOrigin(candidate: string | null | undefined): string | null {
+  if (!candidate || typeof candidate !== "string") return null;
+  try {
+    return new URL(candidate.trim()).origin;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeTenantDomainOrigin(domain: string | null | undefined): string | null {
+  if (!domain || typeof domain !== "string") return null;
+  const trimmed = domain.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
+    const hostname = parsed.hostname.trim().toLowerCase();
+    if (!hostname) return null;
+    return `https://${hostname}${parsed.port ? `:${parsed.port}` : ""}`;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveTelegramPublicOrigin(args: {
+  supabase: SupabaseLike;
+  profile: TelegramProfile;
+  fallbackPublicOrigin?: string | null;
+}) {
+  const tenantId =
+    typeof args.profile.tenant_id === "string" ? args.profile.tenant_id.trim() : "";
+
+  if (tenantId) {
+    try {
+      const { data, error } = await fromTable(args.supabase, "tenants")
+        .select("domain, is_active")
+        .eq("id", tenantId)
+        .eq("is_active", true)
+        .single<{ domain?: string | null; is_active?: boolean | null }>();
+
+      if (!error) {
+        const tenantOrigin = normalizeTenantDomainOrigin(data?.domain);
+        if (tenantOrigin) return tenantOrigin;
+      }
+    } catch (error) {
+      console.warn("[Telegram] Failed to resolve tenant public origin:", error);
+    }
+  }
+
+  return (
+    normalizeOrigin(args.fallbackPublicOrigin) ||
+    normalizeOrigin(process.env.NEXT_PUBLIC_SITE_URL) ||
+    null
+  );
 }
 
 function telegramEnabled(profile: TelegramProfile | null | undefined) {
@@ -285,9 +342,14 @@ export async function notifyTelegramNewBooking(args: {
 
   const locale = normalizeTelegramLocale(args.profile.telegram_language);
   const booking = args.booking;
-  const detailLink = args.publicOrigin
+  const publicOrigin = await resolveTelegramPublicOrigin({
+    supabase: args.supabase,
+    profile: args.profile,
+    fallbackPublicOrigin: args.publicOrigin,
+  });
+  const detailLink = publicOrigin
     ? buildBookingDetailLink({
-        publicOrigin: args.publicOrigin,
+        publicOrigin,
         locale,
         bookingId: booking.id,
       })
@@ -349,9 +411,14 @@ export async function notifyTelegramSettlementSubmitted(args: {
 
   const locale = normalizeTelegramLocale(args.profile.telegram_language);
   const booking = args.booking;
-  const detailLink = args.publicOrigin
+  const publicOrigin = await resolveTelegramPublicOrigin({
+    supabase: args.supabase,
+    profile: args.profile,
+    fallbackPublicOrigin: args.publicOrigin,
+  });
+  const detailLink = publicOrigin
     ? buildBookingDetailLink({
-        publicOrigin: args.publicOrigin,
+        publicOrigin,
         locale,
         bookingId: booking.id,
       })
@@ -464,18 +531,23 @@ export async function notifyTelegramSessionReminder(args: {
 
   const locale = normalizeTelegramLocale(args.profile.telegram_language);
   const templates = await loadReminderTemplates(args.supabase, args.profile.id);
+  const publicOrigin = await resolveTelegramPublicOrigin({
+    supabase: args.supabase,
+    profile: args.profile,
+    fallbackPublicOrigin: args.publicOrigin,
+  });
   const waMessage = buildReminderWhatsAppMessage({
     booking: args.booking,
     session: args.session,
     profile: args.profile,
     templates,
-    publicOrigin: args.publicOrigin,
+    publicOrigin,
   });
   const waNumber = normalizeWhatsAppNumber(args.booking.client_whatsapp);
   const waUrl = waNumber ? buildWhatsAppUrl(waNumber, waMessage) : null;
-  const detailLink = args.publicOrigin
+  const detailLink = publicOrigin
     ? buildBookingDetailLink({
-        publicOrigin: args.publicOrigin,
+        publicOrigin,
         locale,
         bookingId: args.booking.id,
       })

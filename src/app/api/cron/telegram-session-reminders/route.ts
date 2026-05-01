@@ -7,6 +7,7 @@ import {
 
 type TelegramProfileRow = {
   id: string;
+  tenant_id: string | null;
   studio_name: string | null;
   telegram_notifications_enabled: boolean | null;
   telegram_chat_id: string | null;
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
   const { data: profiles, error: profilesError } = await supabase
     .from("profiles")
     .select(
-      "id, studio_name, telegram_notifications_enabled, telegram_chat_id, telegram_language, telegram_notify_session_h1",
+      "id, tenant_id, studio_name, telegram_notifications_enabled, telegram_chat_id, telegram_language, telegram_notify_session_h1",
     )
     .eq("telegram_notifications_enabled", true)
     .not("telegram_chat_id", "is", null)

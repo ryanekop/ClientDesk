@@ -23,6 +23,7 @@ import { notifyTelegramSettlementSubmitted } from "@/lib/telegram-notifications"
 
 type VendorRecord = {
   id: string;
+  tenant_id?: string | null;
   vendor_slug: string | null;
   qris_image_url: string | null;
   qris_drive_file_id: string | null;
@@ -49,6 +50,7 @@ const supabaseAdmin = createClient(
 
 const VENDOR_SELECT_COLUMNS = [
   "id",
+  "tenant_id",
   "vendor_slug",
   "qris_image_url",
   "qris_drive_file_id",

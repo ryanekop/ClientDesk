@@ -95,6 +95,7 @@ import { notifyTelegramNewBooking } from "@/lib/telegram-notifications";
 
 type VendorRecord = {
     id: string;
+    tenant_id?: string | null;
     vendor_slug?: string | null;
     studio_name?: string | null;
     whatsapp_number?: string | null;
@@ -324,6 +325,7 @@ function getPublicBookingProcessingErrorMessage(error: unknown) {
 
 const VENDOR_SELECT_COLUMNS = [
     "id",
+    "tenant_id",
     "vendor_slug",
     "studio_name",
     "whatsapp_number",
