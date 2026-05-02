@@ -63,6 +63,41 @@ FROM (
       'Jika tenant belum punya domain, link Telegram tetap memakai link ClientDesk seperti sebelumnya.',
       'fix',
       '2026-05-02T09:06:00Z'
+    ),
+    (
+      '1.8.6',
+      'Pembayaran tim bisa dicicil',
+      'Admin bisa mengisi DP pembayaran tim, lalu sisa yang belum dibayar dihitung otomatis.',
+      'improvement',
+      '2026-05-02T09:07:00Z'
+    ),
+    (
+      '1.8.6',
+      'Tanggal bayar bisa diedit',
+      'Tanggal pelunasan pembayaran tim bisa diatur manual saat mengedit pembayaran.',
+      'improvement',
+      '2026-05-02T09:08:00Z'
+    ),
+    (
+      '1.8.6',
+      'Sisa pembayaran lebih mudah dilihat',
+      'Kolom Belum Bayar diberi warna agar sisa pembayaran tim lebih cepat terbaca.',
+      'improvement',
+      '2026-05-02T09:09:00Z'
+    ),
+    (
+      '1.8.6',
+      'Pembayaran tim bisa dihapus manual',
+      'Jika ada data pembayaran yang nyangkut, admin bisa menghapusnya setelah konfirmasi.',
+      'improvement',
+      '2026-05-02T09:10:00Z'
+    ),
+    (
+      '1.8.6',
+      'Freelance dilepas ikut bersih',
+      'Saat freelance dihapus dari booking, data pembayaran tim terkait ikut dibersihkan.',
+      'fix',
+      '2026-05-02T09:11:00Z'
     )
 ) AS entry(version, title, description, badge, published_at)
 WHERE NOT EXISTS (

@@ -2229,6 +2229,21 @@ export default function EditBookingPage() {
                 settlement_status: nextSettlementStatus,
                 is_fully_paid: isFullyPaid,
             });
+            const [existingFreelancerRowsResult, existingBookingFreelancerResult] = await Promise.all([
+                supabase
+                    .from("booking_freelance")
+                    .select("freelance_id")
+                    .eq("booking_id", id),
+                supabase
+                    .from("bookings")
+                    .select("freelance_id")
+                    .eq("id", id)
+                    .single(),
+            ]);
+            if (existingFreelancerRowsResult.error || existingBookingFreelancerResult.error) {
+                showFeedback(tBookingEditor("failedSaveChanges"));
+                return;
+            }
 
             const { error } = await supabase.from("bookings").update({
                 client_name: clientName,
@@ -2283,8 +2298,33 @@ export default function EditBookingPage() {
             }
             await invalidateBookingPublicCache();
 
-            // Sync junction table
-            await supabase.from("booking_freelance").delete().eq("booking_id", id);
+            // Sync junction table without dropping payment entries for freelancers that remain assigned.
+            const existingFreelancerIds = Array.from(new Set(
+                [
+                    ...((existingFreelancerRowsResult.data || []) as Array<{ freelance_id: string | null }>)
+                    .map((row) => row.freelance_id)
+                    .filter((freelancerId): freelancerId is string => Boolean(freelancerId)),
+                    ...(existingBookingFreelancerResult.data?.freelance_id
+                        ? [existingBookingFreelancerResult.data.freelance_id]
+                        : []),
+                ],
+            ));
+            const nextFreelancerIdSet = new Set(freelancerIdsForSave);
+            const existingFreelancerIdSet = new Set(existingFreelancerIds);
+            const removedFreelancerIds = existingFreelancerIds.filter((freelancerId) => !nextFreelancerIdSet.has(freelancerId));
+            const addedFreelancerIds = freelancerIdsForSave.filter((freelancerId) => !existingFreelancerIdSet.has(freelancerId));
+            if (removedFreelancerIds.length > 0) {
+                await supabase
+                    .from("booking_freelance")
+                    .delete()
+                    .eq("booking_id", id)
+                    .in("freelance_id", removedFreelancerIds);
+                await supabase
+                    .from("freelance_payment_entries")
+                    .delete()
+                    .eq("booking_id", id)
+                    .in("freelance_id", removedFreelancerIds);
+            }
             await supabase.from("booking_services").delete().eq("booking_id", id);
             const bookingServiceRows = toBookingServicesPayload([
                 ...buildBookingServicePayloadItemsFromSelection(
@@ -2306,9 +2346,9 @@ export default function EditBookingPage() {
                     bookingServiceRows,
                 );
             }
-            if (freelancerIdsForSave.length > 0) {
+            if (addedFreelancerIds.length > 0) {
                 await supabase.from("booking_freelance").insert(
-                    freelancerIdsForSave.map((freelancerId) => ({ booking_id: id, freelance_id: freelancerId })),
+                    addedFreelancerIds.map((freelancerId) => ({ booking_id: id, freelance_id: freelancerId })),
                 );
             }
 

@@ -9,12 +9,12 @@ import {
     Clock,
     Briefcase,
     Download,
-    HandCoins,
     Info,
     ListOrdered,
     Loader2,
     Search,
     Settings2,
+    Trash2,
     Users,
     Wallet,
     X,
@@ -25,6 +25,7 @@ import * as XLSX from "xlsx";
 
 import { AppCheckbox } from "@/components/ui/app-checkbox";
 import { ActionIconButton } from "@/components/ui/action-icon-button";
+import { ActionConfirmDialog } from "@/components/ui/action-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -78,6 +79,8 @@ type PaymentDetail = {
     bookingStatus: string;
     serviceLabel: string;
     amount: number;
+    dpAmount: number;
+    unpaidAmount: number;
     status: PaymentEntryStatus;
     paidAt: string | null;
     notes: string;
@@ -115,6 +118,8 @@ type EditDraft = {
     id: string;
     title: string;
     amount: string;
+    dpAmount: string;
+    paidAt: string;
     notes: string;
     pricelistItems: OperationalCostPricelistItem[];
 };
@@ -126,7 +131,7 @@ const FILTER_STORAGE_PREFIX = "clientdesk:team-payments:filters";
 const ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:team-payments:items_per_page";
 const TEAM_PAYMENTS_BOOKING_DETAIL_FROM = encodeURIComponent("/team-payments");
 const GROUP_COLUMN_IDS = ["name", "jobs", "paid_count", "unpaid_count", "unpaid_total", "actions"] as const;
-const DETAIL_COLUMN_IDS = ["booking", "event_type", "session_date", "service", "amount", "payment_status", "paid_at", "actions"] as const;
+const DETAIL_COLUMN_IDS = ["booking", "event_type", "session_date", "service", "amount", "dp_amount", "unpaid_amount", "payment_status", "paid_at", "actions"] as const;
 const TEAM_PAYMENT_NON_RESIZABLE_COLUMN_IDS = ["select", "actions"];
 const TEAM_PAYMENT_COLUMN_MIN_WIDTHS: Record<string, number> = {
     name: 220,
@@ -139,6 +144,8 @@ const TEAM_PAYMENT_COLUMN_MIN_WIDTHS: Record<string, number> = {
     session_date: 150,
     service: 220,
     amount: 140,
+    dp_amount: 140,
+    unpaid_amount: 150,
     payment_status: 150,
     paid_at: 150,
     actions: 220,
@@ -169,6 +176,8 @@ function createTeamPaymentColumns(t: ReturnType<typeof useTranslations<"TeamPaym
         { id: "session_date", label: t("sessionDate"), visible: true },
         { id: "service", label: t("service"), visible: true },
         { id: "amount", label: t("amount"), visible: true },
+        { id: "dp_amount", label: t("dpAmount"), visible: true },
+        { id: "unpaid_amount", label: t("unpaidAmount"), visible: true },
         { id: "payment_status", label: t("paymentStatus"), visible: true },
         { id: "paid_at", label: t("paidAt"), visible: true },
         { id: "actions", label: t("actions"), visible: true },
@@ -231,9 +240,26 @@ function formatRupiahInput(value: number) {
     return new Intl.NumberFormat("id-ID").format(Math.max(Math.floor(value), 0));
 }
 
+function formatDateInputValue(value: string | null) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toISOString().slice(0, 10);
+}
+
 function parseRupiahInput(value: string) {
     const digitsOnly = value.replace(/\D+/g, "");
     return digitsOnly ? Number(digitsOnly) : 0;
+}
+
+function getRemainingPaymentAmount(amount: string, dpAmount: string) {
+    return Math.max(parseRupiahInput(amount) - parseRupiahInput(dpAmount), 0);
+}
+
+function unpaidAmountClassName(value: number) {
+    return value > 0
+        ? "font-semibold text-orange-700 dark:text-orange-300"
+        : "font-semibold text-green-600 dark:text-green-400";
 }
 
 function statusBadgeClassName(status: PaymentEntryStatus) {
@@ -280,6 +306,7 @@ export default function TeamPaymentsPage() {
     const [selectedEntryIds, setSelectedEntryIds] = React.useState<string[]>([]);
     const [expandedGroupIds, setExpandedGroupIds] = React.useState<string[]>([]);
     const [editDraft, setEditDraft] = React.useState<EditDraft | null>(null);
+    const [deleteTarget, setDeleteTarget] = React.useState<PaymentDetail | null>(null);
     const [feedback, setFeedback] = React.useState("");
     const [updatingIds, setUpdatingIds] = React.useState<string[]>([]);
     const [exporting, setExporting] = React.useState(false);
@@ -635,7 +662,7 @@ export default function TeamPaymentsPage() {
                 [t("summaryJobs"), details.length, ""],
                 [t("summaryUnpaid"), details.filter(({ detail }) => detail.status === "unpaid").length, ""],
                 [t("paid"), details.filter(({ detail }) => detail.status === "paid").length, ""],
-                [t("summaryUnpaidTotal"), details.filter(({ detail }) => detail.status === "unpaid").reduce((sum, { detail }) => sum + detail.amount, 0), ""],
+                [t("summaryUnpaidTotal"), details.filter(({ detail }) => detail.status === "unpaid").reduce((sum, { detail }) => sum + detail.unpaidAmount, 0), ""],
             ];
             const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
             wsSummary["!cols"] = [{ wch: 28 }, { wch: 18 }, { wch: 18 }];
@@ -651,6 +678,8 @@ export default function TeamPaymentsPage() {
                 [t("sessionDate")]: formatDate(detail.sessionDate, locale),
                 [t("service")]: detail.serviceLabel,
                 [t("amount")]: detail.amount,
+                [t("dpAmount")]: detail.dpAmount,
+                [t("unpaidAmount")]: detail.unpaidAmount,
                 [t("paymentStatus")]: detail.status === "paid" ? t("paid") : t("unpaid"),
                 [t("paidAt")]: formatDate(detail.paidAt, locale),
                 [t("notes")]: detail.notes || "",
@@ -666,6 +695,8 @@ export default function TeamPaymentsPage() {
                 { wch: 16 },
                 { wch: 24 },
                 { wch: 14 },
+                { wch: 14 },
+                { wch: 16 },
                 { wch: 16 },
                 { wch: 16 },
                 { wch: 28 },
@@ -730,6 +761,8 @@ export default function TeamPaymentsPage() {
                 body: JSON.stringify({
                     id: editDraft.id,
                     amount: parseRupiahInput(editDraft.amount),
+                    dpAmount: parseRupiahInput(editDraft.dpAmount),
+                    paidAt: editDraft.paidAt || null,
                     notes: editDraft.notes,
                 }),
             });
@@ -738,6 +771,29 @@ export default function TeamPaymentsPage() {
                 throw new Error(message || t("updateFailed"));
             }
             setEditDraft(null);
+            await fetchPayments("refreshing");
+        } catch (error) {
+            setFeedback(error instanceof Error ? error.message : t("updateFailed"));
+        } finally {
+            setUpdatingIds([]);
+        }
+    };
+
+    const deletePaymentEntry = async () => {
+        if (!deleteTarget) return;
+        setUpdatingIds([deleteTarget.id]);
+        try {
+            const response = await fetch("/api/internal/freelance-payments", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: deleteTarget.id }),
+            });
+            if (!response.ok) {
+                const message = await response.text().catch(() => "");
+                throw new Error(message || t("updateFailed"));
+            }
+            setSelectedEntryIds((current) => current.filter((id) => id !== deleteTarget.id));
+            setDeleteTarget(null);
             await fetchPayments("refreshing");
         } catch (error) {
             setFeedback(error instanceof Error ? error.message : t("updateFailed"));
@@ -834,6 +890,8 @@ export default function TeamPaymentsPage() {
                             id: detail.id,
                             title: `${detail.clientName} - ${detail.bookingCode}`,
                             amount: formatRupiahInput(detail.amount),
+                            dpAmount: formatRupiahInput(detail.dpAmount),
+                            paidAt: formatDateInputValue(detail.paidAt),
                             notes: detail.notes,
                             pricelistItems: normalizeOperationalCostPricelistItems(detail.freelancePricelist),
                         })
@@ -848,6 +906,16 @@ export default function TeamPaymentsPage() {
                         <span className="sr-only">{t("openBooking")}</span>
                     </ActionIconButton>
                 </Link>
+                <ActionIconButton
+                    type="button"
+                    tone="red"
+                    title={t("deletePayment")}
+                    disabled={isUpdating}
+                    onClick={() => setDeleteTarget(detail)}
+                >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span className="sr-only">{t("deletePayment")}</span>
+                </ActionIconButton>
             </div>
         );
     };
@@ -877,6 +945,10 @@ export default function TeamPaymentsPage() {
                     return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className={detailCellClassName}>{detail.serviceLabel}</td>;
                 case "amount":
                     return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className={cn(detailCellClassName, "font-medium")}>{formatSensitiveCurrency(detail.amount)}</td>;
+                case "dp_amount":
+                    return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className={detailCellClassName}>{formatSensitiveCurrency(detail.dpAmount)}</td>;
+                case "unpaid_amount":
+                    return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className={cn(detailCellClassName, unpaidAmountClassName(detail.unpaidAmount))}>{formatSensitiveCurrency(detail.unpaidAmount)}</td>;
                 case "payment_status":
                     return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className={detailCellClassName}>{renderStatusBadge(detail.status)}</td>;
                 case "paid_at":
@@ -1368,6 +1440,14 @@ export default function TeamPaymentsPage() {
                                                     <span className="text-right font-bold">{formatSensitiveCurrency(detail.amount)}</span>
                                                 </div>
                                                 <div className="flex items-center justify-between gap-3">
+                                                    <span className="text-muted-foreground">{t("dpAmount")}</span>
+                                                    <span className="text-right font-medium">{formatSensitiveCurrency(detail.dpAmount)}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <span className="text-muted-foreground">{t("unpaidAmount")}</span>
+                                                    <span className={cn("text-right", unpaidAmountClassName(detail.unpaidAmount))}>{formatSensitiveCurrency(detail.unpaidAmount)}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-3">
                                                     <span className="text-muted-foreground">{t("paidAt")}</span>
                                                     <span className="text-right font-medium">{formatDate(detail.paidAt, locale)}</span>
                                                 </div>
@@ -1432,17 +1512,13 @@ export default function TeamPaymentsPage() {
                                                     style={getColumnWidthStyle(column.id)}
                                                     className="px-4 py-4"
                                                 >
-                                                    <button
-                                                        type="button"
-                                                        className="flex min-w-0 items-center gap-2 text-left"
-                                                        onClick={() => toggleExpanded(group.freelanceId)}
-                                                    >
+                                                    <div className="flex min-w-0 items-center gap-2 text-left">
                                                         {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                                                         <span>
                                                             <span className="block font-semibold">{group.freelanceName}</span>
                                                             <span className="block text-xs text-muted-foreground">{group.role || "-"}</span>
                                                         </span>
-                                                    </button>
+                                                    </div>
                                                 </td>
                                             );
                                         case "jobs":
@@ -1452,16 +1528,19 @@ export default function TeamPaymentsPage() {
                                         case "unpaid_count":
                                             return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className="px-4 py-4">{group.unpaidCount}</td>;
                                         case "unpaid_total":
-                                            return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className="px-4 py-4 font-semibold">{formatSensitiveCurrency(group.unpaidTotal)}</td>;
+                                            return <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className={cn("px-4 py-4", unpaidAmountClassName(group.unpaidTotal))}>{formatSensitiveCurrency(group.unpaidTotal)}</td>;
                                         case "actions":
                                             return (
                                                 <td key={column.id} data-column-id={column.id} style={getColumnWidthStyle(column.id)} className="px-4 py-4 text-right">
                                                     <Button
                                                         type="button"
-                                                        variant="ghost"
+                                                        variant="outline"
                                                         size="sm"
-                                                        className="gap-1.5"
-                                                        onClick={() => toggleExpanded(group.freelanceId)}
+                                                        className="gap-1.5 border-blue-200 bg-blue-50 text-blue-700 shadow-sm hover:bg-blue-100 hover:text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/20"
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            toggleExpanded(group.freelanceId);
+                                                        }}
                                                     >
                                                         {isExpanded ? t("hideDetails") : t("showDetails")}
                                                     </Button>
@@ -1475,14 +1554,15 @@ export default function TeamPaymentsPage() {
                                     <React.Fragment key={group.freelanceId}>
                                         <tr
                                             className={cn(
-                                                "border-b",
+                                                "cursor-pointer border-b",
                                                 isGroupHighlighted
                                                     ? "bg-amber-50/80 dark:bg-amber-500/10"
                                                     : "hover:bg-muted/30",
                                             )}
+                                            onClick={() => toggleExpanded(group.freelanceId)}
                                         >
                                             {isManageMode ? (
-                                                <td className="px-3 py-4">
+                                                <td className="px-3 py-4" onClick={(event) => event.stopPropagation()}>
                                                     <AppCheckbox
                                                         checked={checkedState}
                                                         onCheckedChange={() =>
@@ -1615,6 +1695,43 @@ export default function TeamPaymentsPage() {
                                 />
                             </div>
                             <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">{t("dpAmount")}</label>
+                                <input
+                                    value={editDraft.dpAmount}
+                                    onChange={(event) =>
+                                        setEditDraft((current) =>
+                                            current
+                                                ? {
+                                                    ...current,
+                                                    dpAmount: formatRupiahInput(parseRupiahInput(event.target.value)),
+                                                }
+                                                : current,
+                                        )
+                                    }
+                                    inputMode="numeric"
+                                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">{t("unpaidAmount")}</label>
+                                <input
+                                    value={formatRupiahInput(getRemainingPaymentAmount(editDraft.amount, editDraft.dpAmount))}
+                                    readOnly
+                                    className="h-9 w-full rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground outline-none"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">{t("paidAt")}</label>
+                                <input
+                                    type="date"
+                                    value={editDraft.paidAt}
+                                    onChange={(event) =>
+                                        setEditDraft((current) => current ? { ...current, paidAt: event.target.value } : current)
+                                    }
+                                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
                                 <label className="text-xs font-medium text-muted-foreground">{t("notes")}</label>
                                 <textarea
                                     value={editDraft.notes}
@@ -1638,6 +1755,20 @@ export default function TeamPaymentsPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <ActionConfirmDialog
+                open={Boolean(deleteTarget)}
+                onOpenChange={(open) => {
+                    if (!open) setDeleteTarget(null);
+                }}
+                title={t("deletePayment")}
+                message={t("deletePaymentConfirm")}
+                cancelLabel={t("cancel")}
+                confirmLabel={t("delete")}
+                confirmVariant="destructive"
+                loading={deleteTarget ? updatingIds.includes(deleteTarget.id) : false}
+                onConfirm={() => void deletePaymentEntry()}
+            />
 
             <Dialog open={Boolean(feedback)} onOpenChange={(open) => !open && setFeedback("")}>
                 <DialogContent>

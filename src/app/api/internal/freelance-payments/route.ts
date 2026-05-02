@@ -57,6 +57,7 @@ type BookingRow = {
 type PaymentEntryRow = {
   id: string;
   amount: number | null;
+  dp_amount: number | null;
   status: PaymentEntryStatus | string | null;
   paid_at: string | null;
   notes: string | null;
@@ -80,6 +81,8 @@ type PaymentDetail = {
   bookingStatus: string;
   serviceLabel: string;
   amount: number;
+  dpAmount: number;
+  unpaidAmount: number;
   status: PaymentEntryStatus;
   paidAt: string | null;
   notes: string;
@@ -104,6 +107,13 @@ type EnrichedPaymentDetail = PaymentDetail & {
   freelanceRole: string;
   freelanceStatus: string;
   freelancePricelist: unknown;
+};
+
+type PaymentPatchRow = {
+  id: string;
+  amount: number | null;
+  dp_amount: number | null;
+  paid_at: string | null;
 };
 
 function parsePositiveInt(value: string | null, fallback: number) {
@@ -335,6 +345,7 @@ export async function GET(request: NextRequest) {
       .select(`
         id,
         amount,
+        dp_amount,
         status,
         paid_at,
         notes,
@@ -399,6 +410,10 @@ export async function GET(request: NextRequest) {
         statuses: bookingStatusOptions,
       }) || fallbackStatus;
 
+      const amount = Math.max(Number(entry.amount) || 0, 0);
+      const dpAmount = Math.max(Number(entry.dp_amount) || 0, 0);
+      const unpaidAmount = Math.max(amount - dpAmount, 0);
+
       return [{
         id: entry.id,
         bookingId: booking.id,
@@ -413,7 +428,9 @@ export async function GET(request: NextRequest) {
           kind: "main",
           fallback: legacyService?.name || "-",
         }),
-        amount: Math.max(Number(entry.amount) || 0, 0),
+        amount,
+        dpAmount,
+        unpaidAmount,
         status: normalizeEntryStatus(entry.status),
         paidAt: entry.paid_at,
         notes: entry.notes || "",
@@ -495,6 +512,8 @@ export async function GET(request: NextRequest) {
       bookingStatus: item.bookingStatus,
       serviceLabel: item.serviceLabel,
       amount: item.amount,
+      dpAmount: item.dpAmount,
+      unpaidAmount: item.unpaidAmount,
       status: item.status,
       paidAt: item.paidAt,
       notes: item.notes,
@@ -505,7 +524,7 @@ export async function GET(request: NextRequest) {
       group.paidCount += 1;
     } else {
       group.unpaidCount += 1;
-      group.unpaidTotal += item.amount;
+      group.unpaidTotal += item.unpaidAmount;
     }
     groupMap.set(item.freelanceId, group);
   });
@@ -548,7 +567,7 @@ export async function GET(request: NextRequest) {
         unpaidCount: filteredDetails.filter((item) => item.status !== "paid").length,
         unpaidTotal: filteredDetails
           .filter((item) => item.status !== "paid")
-          .reduce((sum, item) => sum + item.amount, 0),
+          .reduce((sum, item) => sum + item.unpaidAmount, 0),
       },
     },
   });
@@ -565,6 +584,20 @@ function normalizeAmount(value: unknown) {
   return Number.isFinite(parsed) ? Math.max(Math.floor(parsed), 0) : null;
 }
 
+function normalizePaidAt(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return undefined;
+  }
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+    return undefined;
+  }
+  return date.toISOString();
+}
+
 export async function PATCH(request: NextRequest) {
   const { errorResponse, supabase, user } = await requireRouteUser();
   if (errorResponse || !user) return errorResponse;
@@ -579,36 +612,130 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "No payment entries selected" }, { status: 400 });
   }
 
-  const patch: Record<string, unknown> = {};
-  if (body.status === "paid") {
-    patch.status = "paid";
-    patch.paid_at = new Date().toISOString();
-  } else if (body.status === "unpaid") {
-    patch.status = "unpaid";
-    patch.paid_at = null;
-  }
+  const hasStatus = body.status === "paid" || body.status === "unpaid";
+  const hasAmount = Object.prototype.hasOwnProperty.call(body, "amount");
+  const hasDpAmount = Object.prototype.hasOwnProperty.call(body, "dpAmount");
+  const hasNotes = Object.prototype.hasOwnProperty.call(body, "notes");
+  const hasPaidAt = Object.prototype.hasOwnProperty.call(body, "paidAt");
 
-  if (Object.prototype.hasOwnProperty.call(body, "amount")) {
-    const amount = normalizeAmount(body.amount);
+  const now = new Date().toISOString();
+  const basePatch: Record<string, unknown> = {};
+  let amount: number | null = null;
+  let dpAmount: number | null = null;
+  let paidAt: string | null | undefined;
+
+  if (hasAmount) {
+    amount = normalizeAmount(body.amount);
     if (amount === null) {
       return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
     }
-    patch.amount = amount;
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, "notes")) {
-    patch.notes = typeof body.notes === "string" && body.notes.trim().length > 0
+  if (hasDpAmount) {
+    dpAmount = normalizeAmount(body.dpAmount);
+    if (dpAmount === null) {
+      return NextResponse.json({ error: "Invalid DP amount" }, { status: 400 });
+    }
+  }
+
+  if (hasNotes) {
+    basePatch.notes = typeof body.notes === "string" && body.notes.trim().length > 0
       ? body.notes.trim()
       : null;
   }
 
-  if (Object.keys(patch).length === 0) {
+  if (hasPaidAt) {
+    paidAt = normalizePaidAt(body.paidAt);
+    if (paidAt === undefined) {
+      return NextResponse.json({ error: "Invalid paid date" }, { status: 400 });
+    }
+  }
+
+  if (!hasStatus && !hasAmount && !hasDpAmount && !hasNotes && !hasPaidAt) {
     return NextResponse.json({ error: "No changes provided" }, { status: 400 });
+  }
+
+  const { data: rows, error: rowError } = await supabase
+    .from("freelance_payment_entries")
+    .select("id, amount, dp_amount, paid_at")
+    .eq("user_id", user.id)
+    .in("id", ids);
+
+  if (rowError) {
+    return NextResponse.json({ error: rowError.message }, { status: 500 });
+  }
+
+  if (!rows || rows.length === 0) {
+    return NextResponse.json({ error: "No payment entries found" }, { status: 404 });
+  }
+
+  const updates = (rows as PaymentPatchRow[]).map((row) => {
+    const nextAmount = amount ?? Math.max(Number(row.amount) || 0, 0);
+    let nextDpAmount = dpAmount ?? Math.max(Number(row.dp_amount) || 0, 0);
+    let nextPaidAt = hasPaidAt ? (paidAt ?? null) : row.paid_at;
+    let nextStatus: PaymentEntryStatus | null = null;
+
+    if (body.status === "paid") {
+      nextDpAmount = nextAmount;
+      nextStatus = "paid";
+      nextPaidAt = now;
+    } else if (body.status === "unpaid") {
+      nextStatus = "unpaid";
+      nextPaidAt = null;
+    } else if (hasAmount || hasDpAmount || hasPaidAt) {
+      if (nextDpAmount >= nextAmount) {
+        nextStatus = "paid";
+        nextPaidAt = nextPaidAt || now;
+      } else {
+        nextStatus = "unpaid";
+        nextPaidAt = null;
+      }
+    }
+
+    return {
+      id: row.id,
+      patch: {
+        ...basePatch,
+        ...(hasAmount ? { amount: nextAmount } : {}),
+        ...(hasDpAmount || body.status === "paid" ? { dp_amount: nextDpAmount } : {}),
+        ...(nextStatus ? { status: nextStatus, paid_at: nextPaidAt } : {}),
+      },
+    };
+  });
+
+  const updateResults = await Promise.all(updates.map(({ id, patch }) =>
+    supabase
+      .from("freelance_payment_entries")
+      .update(patch)
+      .eq("user_id", user.id)
+      .eq("id", id),
+  ));
+
+  const error = updateResults.find((result) => result.error)?.error;
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(request: NextRequest) {
+  const { errorResponse, supabase, user } = await requireRouteUser();
+  if (errorResponse || !user) return errorResponse;
+
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body) {
+    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  }
+
+  const ids = normalizeIds(body.ids ?? (body.id ? [body.id] : []));
+  if (ids.length === 0) {
+    return NextResponse.json({ error: "No payment entries selected" }, { status: 400 });
   }
 
   const { error } = await supabase
     .from("freelance_payment_entries")
-    .update(patch)
+    .delete()
     .eq("user_id", user.id)
     .in("id", ids);
 
