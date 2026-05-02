@@ -197,6 +197,7 @@ const FINANCE_ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:finance:items_per_page
 const FINANCE_PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 const FINANCE_DEFAULT_ITEMS_PER_PAGE = 10;
 const SEARCH_DEBOUNCE_MS = 400;
+const INVOICE_SETTLEMENT_BOOKING_DETAIL_FROM = encodeURIComponent("/invoice-pelunasan");
 type FinanceSortOrder = (typeof FINANCE_SORT_ORDERS)[number];
 type FinanceDateBasis = "booking_date" | "session_date";
 
@@ -266,6 +267,10 @@ function normalizeSelectedFilterValues(values: string[], options: string[]) {
     }
 
     return normalized;
+}
+
+function getInvoiceSettlementBookingDetailHref(bookingId: string) {
+    return `/bookings/${bookingId}?from=${INVOICE_SETTLEMENT_BOOKING_DETAIL_FROM}`;
 }
 
 function parseLegacyOrMultiFilterValue(value: unknown) {
@@ -1712,7 +1717,7 @@ export default function FinancePage() {
                         <div className="flex items-center justify-end gap-1.5 whitespace-nowrap pr-1">
                             {isManageMode ? null : (
                                 <>
-                            <Link href={`/bookings/${booking.id}`}>
+                            <Link href={getInvoiceSettlementBookingDetailHref(booking.id)}>
                                 <ActionIconButton tone="slate" title={tf("detailBooking")}>
                                     <Info className="w-4 h-4" />
                                 </ActionIconButton>
@@ -2681,7 +2686,7 @@ export default function FinancePage() {
                             </div>
                             {!isManageMode ? (
                             <div className="flex flex-wrap items-center gap-1 pt-1 border-t">
-                                <Link href={`/bookings/${b.id}`}>
+                                <Link href={getInvoiceSettlementBookingDetailHref(b.id)}>
                                     <ActionIconButton tone="slate" title={tf("detailBooking")}>
                                         <Info className="w-4 h-4" />
                                     </ActionIconButton>

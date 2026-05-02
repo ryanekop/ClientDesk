@@ -6,11 +6,11 @@ import {
     ChevronRight,
     CheckCircle2,
     Edit2,
-    ExternalLink,
     Clock,
     Briefcase,
     Download,
     HandCoins,
+    Info,
     ListOrdered,
     Loader2,
     Search,
@@ -24,6 +24,7 @@ import { useLocale, useTranslations } from "next-intl";
 import * as XLSX from "xlsx";
 
 import { AppCheckbox } from "@/components/ui/app-checkbox";
+import { ActionIconButton } from "@/components/ui/action-icon-button";
 import { Button } from "@/components/ui/button";
 import { CardListSkeleton, TableRowsSkeleton } from "@/components/ui/data-skeletons";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -123,6 +124,7 @@ const DEFAULT_PER_PAGE = 10;
 const SEARCH_DEBOUNCE_MS = 400;
 const FILTER_STORAGE_PREFIX = "clientdesk:team-payments:filters";
 const ITEMS_PER_PAGE_STORAGE_PREFIX = "clientdesk:team-payments:items_per_page";
+const TEAM_PAYMENTS_BOOKING_DETAIL_FROM = encodeURIComponent("/team-payments");
 const GROUP_COLUMN_IDS = ["name", "jobs", "paid_count", "unpaid_count", "unpaid_total", "actions"] as const;
 const DETAIL_COLUMN_IDS = ["booking", "event_type", "session_date", "service", "amount", "payment_status", "paid_at", "actions"] as const;
 const TEAM_PAYMENT_NON_RESIZABLE_COLUMN_IDS = ["select", "actions"];
@@ -238,6 +240,10 @@ function statusBadgeClassName(status: PaymentEntryStatus) {
     return status === "paid"
         ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
         : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300";
+}
+
+function getTeamPaymentBookingDetailHref(bookingId: string) {
+    return `/bookings/${bookingId}?from=${TEAM_PAYMENTS_BOOKING_DETAIL_FROM}`;
 }
 
 export default function TeamPaymentsPage() {
@@ -803,16 +809,10 @@ export default function TeamPaymentsPage() {
         const isUpdating = updatingIds.includes(detail.id);
         return (
             <div className="mt-4 flex items-center justify-start gap-2 border-t pt-3 md:mt-0 md:justify-end md:border-t-0 md:pt-0">
-                <Button
+                <ActionIconButton
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                        "h-9 w-9 gap-1.5 rounded-lg px-0 md:h-8 md:w-auto md:px-2",
-                        detail.status === "paid"
-                            ? "text-red-700 hover:text-red-700 dark:text-red-300"
-                            : "text-emerald-700 hover:text-emerald-700 dark:text-emerald-300",
-                    )}
+                    tone={detail.status === "paid" ? "red" : "green"}
+                    title={detail.status === "paid" ? t("markUnpaid") : t("markPaid")}
                     disabled={isUpdating}
                     onClick={() => void setPaymentStatusForIds([detail.id], detail.status === "paid" ? "unpaid" : "paid")}
                 >
@@ -823,15 +823,12 @@ export default function TeamPaymentsPage() {
                     ) : (
                         <CheckCircle2 className="h-3.5 w-3.5" />
                     )}
-                    <span className="hidden xl:inline">
-                        {detail.status === "paid" ? t("markUnpaid") : t("markPaid")}
-                    </span>
-                </Button>
-                <Button
+                    <span className="sr-only">{detail.status === "paid" ? t("markUnpaid") : t("markPaid")}</span>
+                </ActionIconButton>
+                <ActionIconButton
                     type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300 md:h-8 md:w-8 md:border-transparent md:bg-transparent md:text-foreground md:hover:bg-muted"
+                    tone="blue"
+                    title={t("edit")}
                     onClick={() =>
                         setEditDraft({
                             id: detail.id,
@@ -844,13 +841,13 @@ export default function TeamPaymentsPage() {
                 >
                     <Edit2 className="h-3.5 w-3.5" />
                     <span className="sr-only">{t("edit")}</span>
-                </Button>
-                <Button asChild type="button" variant="ghost" size="icon" className="h-9 w-9 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 md:h-8 md:w-8 md:border-transparent md:bg-transparent md:text-foreground md:hover:bg-muted">
-                    <Link href={`/bookings/${detail.bookingId}`}>
-                        <ExternalLink className="h-3.5 w-3.5" />
+                </ActionIconButton>
+                <Link href={getTeamPaymentBookingDetailHref(detail.bookingId)}>
+                    <ActionIconButton tone="slate" title={t("openBooking")}>
+                        <Info className="h-3.5 w-3.5" />
                         <span className="sr-only">{t("openBooking")}</span>
-                    </Link>
-                </Button>
+                    </ActionIconButton>
+                </Link>
             </div>
         );
     };

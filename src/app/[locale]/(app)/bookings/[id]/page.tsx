@@ -730,6 +730,16 @@ function isAddonAvailableForEvent(service: AddonService, eventType: string | nul
     );
 }
 
+const BOOKING_DETAIL_BACK_HREFS = new Set([
+    "/bookings",
+    "/invoice-pelunasan",
+    "/team-payments",
+]);
+
+function normalizeBookingDetailBackHref(value: string | null) {
+    return value && BOOKING_DETAIL_BACK_HREFS.has(value) ? value : "/bookings";
+}
+
 export default function BookingDetailPage() {
     const params = useParams();
     const router = useRouter();
@@ -742,6 +752,10 @@ export default function BookingDetailPage() {
     const bookingsPath = `/${locale}/bookings`;
     const bookingDetailPath = `/${locale}/bookings/${id}`;
     const postSaveState = searchParams.get("saved");
+    const backHref = React.useMemo(
+        () => normalizeBookingDetailBackHref(searchParams.get("from")),
+        [searchParams],
+    );
     const [booking, setBooking] = React.useState<Booking | null>(null);
     const [loading, setLoading] = React.useState(true);
     const [isCurrentUserAdmin, setIsCurrentUserAdmin] = React.useState(false);
@@ -2967,7 +2981,7 @@ export default function BookingDetailPage() {
             {/* Header */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
-                    <Link href="/bookings">
+                    <Link href={backHref}>
                         <Button variant="ghost" size="icon" className="shrink-0">
                             <ArrowLeft className="w-4 h-4" />
                         </Button>
