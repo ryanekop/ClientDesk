@@ -205,6 +205,7 @@ export async function syncBookingCalendarEvent({
         eventId: previousEventId,
         summary,
         description,
+        location: sessionLocation,
         start: range.start,
         end: range.end,
         attendees: sessionAttendeeEmails,

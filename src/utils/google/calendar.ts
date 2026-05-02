@@ -37,6 +37,7 @@ export async function getCalendarClient(accessToken: string, refreshToken: strin
 type CalendarEventPayload = {
     summary: string;
     description?: string;
+    location?: string;
     start: GoogleCalendarDateTime;
     end: GoogleCalendarDateTime;
     attendees?: string[];
@@ -50,10 +51,12 @@ function normalizeAttendees(attendees?: string[]) {
 
 function buildEventRequestBody(event: CalendarEventPayload) {
     const attendeesList = normalizeAttendees(event.attendees);
+    const location = event.location?.trim();
 
     return {
         summary: event.summary,
         description: event.description || "",
+        ...(location && location !== "-" ? { location } : {}),
         start: {
             dateTime: event.start.dateTime,
             timeZone: event.start.timeZone || GOOGLE_TEMPLATE_TIMEZONE,
