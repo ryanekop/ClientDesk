@@ -35,6 +35,12 @@ import {
 } from "@/lib/final-settlement";
 import { buildDashboardOnboardingState } from "@/lib/onboarding";
 
+const DASHBOARD_BOOKING_DETAIL_FROM = encodeURIComponent("/dashboard");
+
+function getDashboardBookingDetailHref(bookingId: string) {
+  return `/bookings/${bookingId}?from=${DASHBOARD_BOOKING_DETAIL_FROM}`;
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const {
@@ -498,7 +504,7 @@ export default async function DashboardPage() {
                   >
                     <td className="px-6 py-3">
                       <Link
-                        href={`/bookings/${b.id}`}
+                        href={getDashboardBookingDetailHref(b.id)}
                         className="flex items-center gap-3 hover:underline"
                       >
                         <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">

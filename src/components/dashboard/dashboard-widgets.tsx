@@ -26,6 +26,12 @@ interface UpcomingBookingCardProps {
   booking: UpcomingBooking | null;
 }
 
+const DASHBOARD_WIDGET_BOOKING_DETAIL_FROM = encodeURIComponent("/dashboard");
+
+function getDashboardWidgetBookingDetailHref(locale: string, bookingId: string) {
+  return `/${locale}/bookings/${bookingId}?from=${DASHBOARD_WIDGET_BOOKING_DETAIL_FROM}`;
+}
+
 export function UpcomingBookingCard({ booking }: UpcomingBookingCardProps) {
   const locale = useLocale();
   const t = useTranslations("Dashboard");
@@ -98,7 +104,7 @@ export function UpcomingBookingCard({ booking }: UpcomingBookingCardProps) {
             {urgencyLabel}
           </span>
           <a
-            href={`/${locale}/bookings/${booking.id}`}
+            href={getDashboardWidgetBookingDetailHref(locale, booking.id)}
             className="p-1.5 rounded-md hover:bg-muted/50 transition-colors"
             title={t("lihatDetail")}
           >

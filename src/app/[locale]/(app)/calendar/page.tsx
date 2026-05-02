@@ -44,6 +44,7 @@ import {
 } from "@/utils/google/connected-account-client";
 
 const locales = { "id-ID": id };
+const CALENDAR_BOOKING_DETAIL_FROM = encodeURIComponent("/calendar");
 
 const localizer = dateFnsLocalizer({
     format, parse, startOfWeek, getDay, locales,
@@ -81,6 +82,10 @@ type GoogleOpenGuardState = {
     bookingCode?: string | null;
     sessionKey?: string | null;
 };
+
+function getCalendarBookingDetailHref(locale: string, bookingId: string) {
+    return `/${locale}/bookings/${bookingId}?from=${CALENDAR_BOOKING_DETAIL_FROM}`;
+}
 
 const FREELANCER_COLORS = ["#8b5cf6", "#ec4899", "#f97316", "#06b6d4", "#84cc16"];
 const CALENDAR_FETCH_BUFFER_DAYS = 21;
@@ -975,7 +980,7 @@ export default function CalendarPage() {
 
     function goToBookingDetail() {
         if (!selectedEvent?.bookingId) return;
-        router.push(`/${locale}/bookings/${selectedEvent.bookingId}`);
+        router.push(getCalendarBookingDetailHref(locale, selectedEvent.bookingId));
         setEventPopupOpen(false);
     }
 

@@ -139,6 +139,12 @@ type ClientStatusPageMetadata = {
     }>;
 };
 
+const CLIENT_STATUS_BOOKING_DETAIL_FROM = encodeURIComponent("/client-status");
+
+function getClientStatusBookingDetailHref(bookingId: string) {
+    return `/bookings/${bookingId}?from=${CLIENT_STATUS_BOOKING_DETAIL_FROM}`;
+}
+
 function ClientStatusBadge({
     status,
     statusStyle,
@@ -1653,7 +1659,7 @@ export default function ClientStatusPage() {
                 const desktopBadges = getFastpikStatusBadges(booking, locale);
                 return (
                     <td key={column.id} style={getDesktopColumnStyle(column.id)} className={getDesktopCellClassName(column.id, "px-4 py-3")}>
-                        <Link href={`/bookings/${booking.id}`} className="hover:underline">
+                        <Link href={getClientStatusBookingDetailHref(booking.id)} className="hover:underline">
                             <p className="text-sm font-medium leading-tight">{booking.client_name}</p>
                             <p className="text-[11px] text-muted-foreground">{booking.booking_code}</p>
                             {desktopBadges.length > 0 ? (
@@ -2057,7 +2063,7 @@ export default function ClientStatusPage() {
                                         className="mt-0.5"
                                     />
                                 ) : null}
-                                <Link href={`/bookings/${b.id}`} className="hover:underline">
+                                <Link href={getClientStatusBookingDetailHref(b.id)} className="hover:underline">
                                     <p className="font-semibold">{b.client_name}</p>
                                     <p className="text-xs text-muted-foreground">{b.booking_code}</p>
                                     {mobileBadges.length > 0 ? (

@@ -732,6 +732,9 @@ function isAddonAvailableForEvent(service: AddonService, eventType: string | nul
 
 const BOOKING_DETAIL_BACK_HREFS = new Set([
     "/bookings",
+    "/calendar",
+    "/client-status",
+    "/dashboard",
     "/invoice-pelunasan",
     "/team-payments",
 ]);
